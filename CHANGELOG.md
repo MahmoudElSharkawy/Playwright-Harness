@@ -12,6 +12,9 @@ private incidents and delivery identifiers are intentionally not retained here.
 - Add native discovery and six-case host proof tooling with reference-read evidence,
   immutable-package checks and semantic comparison. See the M2 validation record for
   actual host outcomes; packaging or process exit alone is not a behavior proof.
+- Complete the six-case Windows proof through both native hosts. Record an explicit
+  available Claude model per attempt when its configured alias is unsupported; normalize
+  native Windows path escaping without relaxing file-content evidence requirements.
 - No bulk migration, production host adapters or executors are included.
 
 ## 3.0.1 — Unreleased

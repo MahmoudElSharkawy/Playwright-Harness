@@ -35,8 +35,11 @@ This detects package changes; it is not a filesystem access-control implementati
 
 ## Repeating the focused proof
 
-Use Node 24 and authenticated native Codex and Claude Code executables. Each run uses
-the host's configured model; the runner does not choose a substitute. On Windows,
+Use Node 24 and authenticated native Codex and Claude Code executables. Each run defaults
+to the host's configured model. Claude can receive an explicit model identifier as the
+fourth argument after `claude`, the state file and executable. Select it from the
+configured service's available models; aliases can resolve differently across CLI
+versions. The override is recorded with the attempt and does not modify host settings. On Windows,
 pass the native Claude executable rather than an npm command shim.
 
 From the package directory, in PowerShell:
@@ -47,6 +50,7 @@ node scripts/prove-skill.mjs prepare
 node scripts/prove-skill.mjs discover $state
 node scripts/prove-skill.mjs codex $state
 node scripts/prove-skill.mjs claude $state $claudeExecutable
+# Optional: append an explicit supported model identifier to the Claude command.
 node scripts/prove-skill.mjs assess $state
 ```
 

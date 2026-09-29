@@ -58,10 +58,10 @@ function prompt(host,state) {
  const invoke=host==='codex'?'$'+discovered:'/playwright-pom-harness:element-locators';
  return `${invoke}\nUse the discovered skill. Explicitly read its canonical SKILL.md file and required references to decide the six cases in locator-cases.json, even if the host already expanded the skill instructions. This is read-only: do not edit files, run browsers, call APIs/databases or use web tools. Return only the requested structured choices and package-relative paths of references you actually read. For each case, use one strategy from the schema, an appropriate locatorName, private=true or false, usesIndex=true or false, and a short reason. Resolve linked skill paths to their real directory when locating references. Do not guess unavailable references; report any inability in the reason. Package/project/run root conventions are part of the proof, not permission to write package content.`;
 }
-async function runHost(state,host,executable) {
+async function runHost(state,host,executable,model) {
  const {packageRoot,projectRoot,runRoot}=state.roots;
  const args=host==='codex'?['exec','--ignore-user-config','--ephemeral','--sandbox','read-only',...(process.platform==='win32'?['-c','windows.sandbox="elevated"']:[]),'-c','web_search="disabled"','-C',projectRoot,'--json','--output-schema',join(runRoot,'output-schema.json'),'-o',join(runRoot,'codex-answer.json'),'-']
- :['--print','--setting-sources','user','--settings',JSON.stringify({disableAllHooks:true}),'--strict-mcp-config','--tools','Read,Glob,Grep,Skill','--allowedTools','Read,Glob,Grep,Skill','--permission-prompts','none','--no-session-persistence','--plugin-dir',packageRoot,'--add-dir',packageRoot,'--output-format','stream-json','--verbose','--json-schema',JSON.stringify(schema)];
+ :['--print',...(model?['--model',model]:[]),'--setting-sources','user','--settings',JSON.stringify({disableAllHooks:true}),'--strict-mcp-config','--tools','Read,Glob,Grep,Skill','--allowedTools','Read,Glob,Grep,Skill','--permission-prompts','none','--no-session-persistence','--plugin-dir',packageRoot,'--add-dir',packageRoot,'--output-format','stream-json','--verbose','--json-schema',JSON.stringify(schema)];
  const out=join(runRoot,`${host}-events.jsonl`),err=join(runRoot,`${host}-stderr.txt`);
  if(existsSync(out) || existsSync(join(runRoot,`${host}-process.json`)))throw new Error('prepare a fresh proof instead of overwriting attempt history');
  writeFileSync(out,'');writeFileSync(err,'');
@@ -72,7 +72,7 @@ async function runHost(state,host,executable) {
  const timeout=setTimeout(()=>{timedOut=true;child.kill();},240000);
  const code=await new Promise((resolve,reject)=>{child.on('error',reject);child.on('close',resolve);});clearTimeout(timeout);
  const unchanged=JSON.stringify(snapshot(packageRoot))===JSON.stringify(state.before);
- writeFileSync(join(runRoot,`${host}-process.json`),JSON.stringify({exitCode:code,timedOut,packageUnchanged:unchanged}));
+ writeFileSync(join(runRoot,`${host}-process.json`),JSON.stringify({exitCode:code,timedOut,packageUnchanged:unchanged,modelOverride:model??null}));
  if(code!==0 || !unchanged)throw new Error('native run failed or package changed; inspect consumer run evidence');
  console.log(JSON.stringify({host,status:'PROCESS_COMPLETED',packageUnchanged:unchanged}));
 }
@@ -93,6 +93,7 @@ function assess(state) {
  const report={status:parity?'PASS':'INCOMPLETE',semanticParity:parity,hosts:reports};writeFileSync(join(runRoot,'assessment.json'),JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2));if(!parity)process.exitCode=1;
 }
 try {
- const [command,stateFile,executable]=process.argv.slice(2);
- if(command==='prepare')prepare();else {const state=load(stateFile);if(command==='discover')await discover(state,executable||'codex');else if(['codex','claude'].includes(command))await runHost(state,command,executable||command);else if(command==='assess')assess(state);else throw new Error('unknown proof command');}
+ const [command,stateFile,executable,model]=process.argv.slice(2);
+ if(process.argv.length>6 || (model && command!=='claude'))throw new Error('model override is only supported for the Claude proof');
+ if(command==='prepare')prepare();else {const state=load(stateFile);if(command==='discover')await discover(state,executable||'codex');else if(['codex','claude'].includes(command))await runHost(state,command,executable||command,model);else if(command==='assess')assess(state);else throw new Error('unknown proof command');}
 } catch {console.error('Skill proof did not complete; inspect only the consumer run evidence. No source excerpts emitted.');process.exitCode=2;}

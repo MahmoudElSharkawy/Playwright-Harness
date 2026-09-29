@@ -49,6 +49,12 @@ test('failed reads and quoted filenames without file contents are not proof',t=>
   const data=fixture(t);data.events[0].item.exit_code=1;assert.equal(assessHost(data).status,'FAIL');
   data.events[0].item.exit_code=0;data.events[0].item.aggregated_output='Could not read reference';assert.equal(assessHost(data).status,'FAIL');
 });
+test('native command path escaping does not lose successful file-read evidence',t=>{
+  const data=fixture(t);
+  for(const e of data.events)if(e.item)e.item.command=e.item.command.replaceAll('\\','\\\\').replaceAll('/','//');
+  assert.equal(assessHost(data).status,'PASS');
+  data.events[0].item.aggregated_output='Wrong content';assert.equal(assessHost(data).status,'FAIL');
+});
 test('Claude tool errors or unmatched tool result ids cannot prove a read',t=>{
   const data=fixture(t,'claude');data.events[1].message.content[0].is_error=true;assert.equal(assessHost(data).status,'FAIL');
   data.events[1].message.content[0].is_error=false;data.events[1].message.content[0].tool_use_id='unknown';assert.equal(assessHost(data).status,'FAIL');

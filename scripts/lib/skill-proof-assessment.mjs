@@ -25,9 +25,11 @@ function observedRead(host,events,path,projectRoot,content) {
     const item=event.item;
     if(event.type!=='item.completed' || item?.type!=='command_execution' || item.exit_code!==0 || item.status!=='completed')return false;
     if(!/\b(?:Get-Content|cat)\b/.test(item.command))return false;
-    const command=item.command.replaceAll('\\','/');
+    // Native Windows event commands can escape each backslash a second time.
+    const slashPath=value=>value.replace(/[\\/]+/g,'/');
+    const command=slashPath(item.command);
     const relativePath=path.startsWith(projectRoot)?path.slice(projectRoot.length+1):null;
-    const pathNamed=command.includes(path.replaceAll('\\','/')) || (relativePath && command.includes(relativePath.replaceAll('\\','/')));
+    const pathNamed=command.includes(slashPath(path)) || (relativePath && command.includes(slashPath(relativePath)));
     return pathNamed && normalize(item.aggregated_output??'').includes(normalize(content));
   });
   const reads=events.flatMap(e=>e.type==='assistant'?e.message?.content??[]:[]).filter(b=>b.type==='tool_use' && b.name==='Read' && typeof b.input?.file_path==='string' && samePath(resolve(projectRoot,b.input.file_path),path));
