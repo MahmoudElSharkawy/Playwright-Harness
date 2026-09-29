@@ -1,0 +1,48 @@
+{
+  "name": "playwright-pom-harness",
+  "version": "3.0.1",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "description": "Portable Playwright POM skills, lifecycle hooks and package validation.",
+  "scripts": {
+    "check:syntax": "node scripts/validate-package.mjs syntax",
+    "check:json": "node scripts/validate-package.mjs json",
+    "check:links": "node scripts/validate-package.mjs links",
+    "check:privacy": "node scripts/validate-package.mjs privacy",
+    "check:secrets": "node scripts/validate-package.mjs secrets",
+    "check:provenance": "node scripts/validate-package.mjs provenance",
+    "check:publication": "node scripts/validate-package.mjs publication",
+    "check:conventions": "node scripts/check-conventions.mjs --root examples --fail-on-warn",
+    "test:conventions": "node --test harness-tests/conventions.test.mjs",
+    "test:validation": "node --test harness-tests/package-validation.test.mjs",
+    "test:fetch": "node scripts/fetch-ado-suite.mjs --self-test",
+    "typecheck:examples": "node examples/node_modules/typescript/bin/tsc --project examples/tsconfig.json --noEmit",
+    "test": "node --test harness-tests/*.test.mjs"
+  },
+  "files": [
+    "README.md",
+    "AGENTS.md",
+    "CLAUDE.md",
+    "CHANGELOG.md",
+    "VERSION",
+    "SECURITY.md",
+    "LICENSE",
+    "THIRD_PARTY_NOTICES.md",
+    ".env.example",
+    ".gitignore",
+    ".claude/settings.json",
+    ".claude/skills",
+    ".agentex/page-map/README.md",
+    ".agentex/page-map/_template.md",
+    "scripts",
+    "docs",
+    "harness-tests",
+    "examples",
+    "resources/Queries/README.md",
+    "resources/apisCollections/README.md"
+  ]
+}

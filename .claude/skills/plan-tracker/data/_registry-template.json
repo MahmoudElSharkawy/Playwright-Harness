@@ -1,0 +1,29 @@
+{
+  "$comment": "Plan-tracker structural registry TEMPLATE — copy to plan-<planId>.json in this folder (the id in the file name must match planId below) and fill in for YOUR ADO test plan. Structure only: branches (inScope flag), suites (branch = index into branches[]), cases with consolidation verdict (k=keep, d=drop-duplicate, f=fold-into-e2e, t=trivial) and review note, non-automatable rulings (manual map: caseId -> reason), and the filed-bugs registry (bugs map: bugId -> {sev, title, url, cases}). Progress/status does NOT live here — it lives in history.jsonl next to this file (append-only dated events). Rendered by scripts/generate-tracker.mjs.",
+  "planId": 0,
+  "names": [
+    "<owner display name — assign events reference these>"
+  ],
+  "branches": [
+    { "name": "<top-level plan branch in automation scope>", "inScope": true },
+    { "name": "<a branch ruled out of automation scope>", "inScope": false }
+  ],
+  "suites": [
+    {
+      "branch": 0,
+      "id": 0,
+      "name": "<suite name>",
+      "cases": [
+        {
+          "id": 0,
+          "title": "<test case title as it reads in ADO>",
+          "desc": "<one-line behavior summary from the consolidation review>",
+          "verdict": "k",
+          "note": "<review note: why kept/dropped/folded, evidence pointers>"
+        }
+      ]
+    }
+  ],
+  "manual": {},
+  "bugs": {}
+}

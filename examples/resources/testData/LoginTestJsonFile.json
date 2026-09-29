@@ -1,0 +1,19 @@
+{
+  "tc12345": {
+    "username": "userTc12345",
+    "email": "qa.tc12345",
+    "password": "<password-placeholder>"
+  },
+  "tc12346": {
+    "username": "userTc12346",
+    "email": "qa.tc12346",
+    "password": "<password-placeholder>",
+    "wrongPassword": "<different-invalid-password>"
+  },
+  "confirmationMessages": {
+    "welcomeMsg": "Welcome back!"
+  },
+  "errorMessages": {
+    "wrongPasswordMsg": "Your email or password is incorrect!"
+  }
+}

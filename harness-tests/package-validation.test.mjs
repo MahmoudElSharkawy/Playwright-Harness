@@ -1,0 +1,65 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {mkdtempSync,mkdirSync,writeFileSync,rmSync,realpathSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join,relative,isAbsolute} from 'node:path';
+import {secretFindings,privacyFindings,inventory,localLinkFindings,publicationFindings} from '../scripts/lib/package-validation.mjs';
+
+function temporary(t) {
+ const base=realpathSync(tmpdir()), root=mkdtempSync(join(base,'pom-validation-'));
+ t.after(()=>{const rel=relative(base,realpathSync(root));assert(!isAbsolute(rel) && rel.startsWith('pom-validation-'));rmSync(root,{recursive:true});});return root;
+}
+test('credential scanning does not exempt a line with another env reference or suppression',()=>{
+ const marker='synthetic-value-for-test';const hits=secretFindings('fixture.ts',`const pass${'word'} = "${marker}"; // conventions-ok process.env.OTHER`);
+ assert.equal(hits.length,1);assert(!JSON.stringify(hits).includes(marker));
+});
+test('placeholder and env references do not masquerade as credentials',()=>{
+ for(const value of ['process.env.TEST_PASSWORD','"<secret-ref>"','"${SECRET_REF}"','"{{SECRET_REF}}"']) assert.deepEqual(secretFindings('fixture.ts',`const pass${'word'} = ${value};`),[]);
+});
+test('short and static backtick credentials are not exempt',()=>{
+ for(const quote of ['"',"'",'`']) for(const name of ['pass'+'word','dbPass'+'word','clientSe'+'cret','apiTo'+'ken']) assert.equal(secretFindings('fixture.ts',`const ${name} = ${quote}x${quote};`).length,1);
+});
+test('known token and connection shapes are detected without echoing values',()=>{
+ for(const text of ['ghp_'+'a'.repeat(35),'-----BEGIN '+'PRIVATE KEY-----',['Pwd','synthetic-connection-value'].join('=')]) assert(secretFindings('fixture.ts',text).length>0);
+});
+test('a package name ending in token is not a credential field',()=>{
+ assert.deepEqual(secretFindings('package-lock.json','{"jsonwebtoken":"^9.0.0"}'),[]);
+});
+test('privacy distinguishes public references from private coordinates',()=>{
+ assert.equal(privacyFindings('guide.md','https://playwright.dev/docs/intro https://example.test/demo').length,0);
+ for(const text of [['https:','','dev.azure.com','private-organization','project'].join('/'),'10.'+'25.30.40','C:'+'\\Users\\LocalOwner\\project']) assert(privacyFindings('guide.md',text).length>0);
+});
+test('empty runtime histories pass but populated histories fail',()=>{
+ assert.equal(privacyFindings('events.jsonl','\n').length,0);assert.equal(privacyFindings('events.jsonl','{"event":"run"}').length,1);
+});
+test('a dynamic URL path does not exempt a literal private host',()=>{
+ const url=['https:','','internal-host.local','${recordId}'].join('/');
+ assert(privacyFindings('guide.md',url).some(f=>f.rule==='unreviewed-url'));
+ assert.equal(privacyFindings('guide.md',['https:','','${configuredHost}','path'].join('/')).length,0);
+});
+test('dynamic userinfo or port does not exempt a literal hostname',()=>{
+ const withUserInfo=['https:','','${account}:${credential}@internal-host.local','path'].join('/');
+ assert.deepEqual(privacyFindings('guide.md',withUserInfo).map(f=>f.rule),['url-userinfo','unreviewed-url']);
+ const withPort=['https:','','internal-host.local:${port}','path'].join('/');
+ assert(privacyFindings('guide.md',withPort).some(f=>f.rule==='unreviewed-url'));
+});
+test('inventory excludes protected recovery, local secrets and installed dependencies',t=>{
+ const root=temporary(t);writeFileSync(join(root,'README.md'),'safe');
+ for(const dir of ['.m1-private','node_modules','.validation']) {mkdirSync(join(root,dir));writeFileSync(join(root,dir,'sample'),'excluded');}
+ writeFileSync(join(root,'.env'),'excluded');writeFileSync(join(root,'unexpected.bin'),'unknown');
+ const result=inventory(root);assert.deepEqual(result.files,['README.md']);assert.equal(result.unexpected.length,1);assert.equal(result.excluded.length,4);
+});
+test('links verify existing targets, missing targets, encoding and containment',t=>{
+ const root=temporary(t);mkdirSync(join(root,'docs'));writeFileSync(join(root,'README.md'),'safe');
+ const r=localLinkFindings(root,'docs/guide.md','[ok](../README.md) [missing](no.md) [escape](../../outside.md) [invalid](%zz) [remote](https://example.test)');
+ assert.equal(r.links,4);assert.deepEqual(r.findings.map(f=>f.rule),['missing-link-target','link-outside-package','invalid-link-encoding']);
+});
+test('fenced examples and comments are not rendered local links',t=>{
+ const root=temporary(t);const r=localLinkFindings(root,'README.md','<!-- [comment](missing.md) -->\n```md\n[fenced](missing.md)\n```\n');assert.equal(r.links,0);
+});
+test('package inspection rejects bundled dependencies, recovery material and missing public files',()=>{
+ const scope={files:['README.md','package.json','package-lock.json'],unexpected:[]};
+ assert.deepEqual(publicationFindings(scope,['README.md','package.json']),[]);
+ assert.equal(publicationFindings(scope,['package.json','examples/node_modules/dependency.js','.m1-private/recovery.dpapi']).length,3);
+ assert(publicationFindings(scope,[]).length>0);
+});

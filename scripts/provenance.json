@@ -1,0 +1,37 @@
+{
+  "originalMaterial": "owner-cleared",
+  "targetLicense": "MIT",
+  "publicationAuthorized": false,
+  "sources": [
+    {
+      "scope": "supplied original package",
+      "version": "3.0.0",
+      "status": "owner-cleared",
+      "license": "MIT"
+    },
+    {
+      "scope": "M1 changes",
+      "status": "created for this project",
+      "targetLicense": "MIT"
+    },
+    {
+      "scope": "AgenTeX research",
+      "repository": "https://github.com/MhmdElGazzar/agentex",
+      "commit": "439307c126ae36c3451c61a16dc4bf6e28e612bf",
+      "license": "MIT",
+      "codeCopied": false
+    },
+    {
+      "scope": "Playwright CLI research",
+      "repository": "https://github.com/microsoft/playwright-cli",
+      "commit": "74354ecc7a43da16d91a9bc54fa8db8283a3fcf5",
+      "license": "Apache-2.0",
+      "codeCopied": false
+    }
+  ],
+  "ownerAttestation": {
+    "date": "2026-09-29",
+    "scope": "Supplied original harness material",
+    "statement": "Owner confirmed the necessary rights to release under MIT in this task."
+  }
+}

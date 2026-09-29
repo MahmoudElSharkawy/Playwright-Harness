@@ -1,0 +1,100 @@
+# Example skeleton — adapt to your project (ships with the harness package).
+#
+# github-actions-playwright.yml — PR-validation run of the generated Playwright
+# specs, for GitHub-hosted repos. Copy to .github/workflows/playwright.yml.
+#
+# SCOPE — CI validation only: the harness's delivery scripts
+# (scripts/fetch-ado-suite.mjs, scripts/ado-pr.mjs, scripts/publish-ado-results.mjs)
+# speak the Azure DevOps REST API. On a GitHub-hosted project this workflow runs
+# the specs and publishes the report artifacts; the automate-suite pipeline's
+# fetch/publish legs still need an Azure DevOps test plan (they work fine from a
+# GitHub repo — only the work-item/test-point round-trip is ADO's).
+#
+# RUNNER REALITY: a hosted ubuntu-latest runner may have NO route to your test
+# environment (app URLs and DB hosts that are VPN/internal-only), so
+# environment-targeting specs fail on connectivity until you wire a self-hosted
+# runner — then change `runs-on:` to your runner label.
+#
+# SECRETS: specs read env vars (.env locally). For CI, add the keys from
+# .env.example as GitHub Actions secrets (Settings → Secrets and variables →
+# Actions), then uncomment the env mapping on the run step.
+#
+# Deliberately headless & non-interactive: AUTO_ALLURE_OPEN=false suppresses the
+# Allure auto-open, PW_TEST_HTML_REPORT_OPEN=never suppresses the HTML report
+# server (both would hang a CI runner — see the automate-suite playbook §5).
+
+name: Playwright tests
+
+on:
+  pull_request:
+    branches: [master] # MUST match your default branch (master vs main) or it never fires
+  workflow_dispatch: {} # manual runs
+
+jobs:
+  test:
+    runs-on: ubuntu-latest # TODO: self-hosted label (see RUNNER REALITY above)
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Playwright specs
+        id: run_specs
+        run: CI=true AUTO_ALLURE_OPEN=false PW_TEST_HTML_REPORT_OPEN=never npx playwright test --project=chromium
+        continue-on-error: true # reporting below must run even when tests fail
+        # env:                  # uncomment after adding the repo secrets
+        #   DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+        #   SQLCMDPASSWORD: ${{ secrets.SQLCMDPASSWORD }}
+        #   APP_LOGIN_PASSWORD: ${{ secrets.APP_LOGIN_PASSWORD }}
+
+      # GitHub has no built-in Tests tab; the JUnit file the reporters already
+      # produce (reports/junit/results.xml) can feed a checks-annotating action —
+      # e.g. dorny/test-reporter — if your org allows third-party actions:
+      # - name: Publish test results as a check
+      #   uses: dorny/test-reporter@v1
+      #   if: always()
+      #   with:
+      #     name: Playwright results
+      #     path: reports/junit/results.xml
+      #     reporter: java-junit
+
+      - name: Publish HTML report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: reports/playwright-report
+          retention-days: 30
+
+      - name: Publish Allure single-file report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-report
+          path: allure-report/index.html
+          retention-days: 30
+
+      - name: Publish CTRF results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ctrf-report
+          path: ctrf
+          retention-days: 30
+
+      # Fail the job if the run step failed (kept explicit because the run step
+      # uses continue-on-error so the artifacts above always publish):
+      - name: Reflect test outcome
+        if: always()
+        run: |
+          if [ "${{ steps.run_specs.outcome }}" = "failure" ]; then exit 1; fi

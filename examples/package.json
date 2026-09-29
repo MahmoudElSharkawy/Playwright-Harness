@@ -1,0 +1,34 @@
+{
+  "name": "your-repo",
+  "version": "1.0.0",
+  "description": "Playwright/TypeScript POM test automation for <your application>, with the AI harness (skills + hooks + ADO pipeline). Example skeleton — ships with the harness package; the name MUST match your repository (design-conventions, Repo shell & README).",
+  "scripts": {
+    "test": "npx playwright test",
+    "fetch:suite": "node scripts/fetch-ado-suite.mjs",
+    "check:conventions": "node scripts/check-conventions.mjs",
+    "harness:metrics": "node scripts/harness-metrics.mjs",
+    "publish:results": "node scripts/publish-ado-results.mjs",
+    "tracker": "node scripts/generate-tracker.mjs"
+  },
+  "license": "UNLICENSED",
+  "type": "commonjs",
+  "devDependencies": {
+    "@playwright/cli": "^0.1.18",
+    "@playwright/test": "^1.62.1",
+    "@types/mssql": "^12.3.0",
+    "@types/node": "^24.0.0",
+    "allure-commandline": "^2.43.0",
+    "allure-playwright": "^3.10.2",
+    "dotenv": "^17.4.2",
+    "mssql": "^12.7.0",
+    "playwright": "^1.62.1",
+    "playwright-ctrf-json-reporter": "^0.0.29",
+    "typescript": "^7.0.2",
+    "allure-js-commons": "^3.10.2",
+    "pdf-parse": "^2.4.5"
+  },
+  "private": true,
+  "engines": {
+    "node": ">=24 <25"
+  }
+}

@@ -1,0 +1,88 @@
+# Example skeleton — adapt to your project (ships with the harness package).
+#
+# azure-pipelines.yml — PR-validation run of the generated Playwright specs.
+#
+# TRIGGERING (Azure Repos): PRs targeting master run this via the Build Validation
+# branch policy on master (start it non-blocking until your agent pool is proven —
+# flip to blocking then). The YAML `pr:` keyword is ignored for Azure Repos;
+# `trigger: none` below stops per-push CI. No nightly schedule — PR-validation only;
+# add a `schedules:` block if your team wants one.
+#
+# AGENT REALITY: a hosted ubuntu-latest agent may have NO route to your test
+# environment (app URLs and DB hosts that are VPN/internal-only), so
+# environment-targeting specs fail on connectivity until DevOps provides an internal
+# agent pool — then change `pool:` to `pool: { name: <internal-pool> }` and link the
+# variable group below.
+#
+# SECRETS: specs read env vars (.env locally). For CI, create a variable group
+# "<your-repo>-secrets" (Library → Variable groups) with the keys from
+# .env.example (DB_USER, DB_PASSWORD, SQLCMDPASSWORD marked secret; the
+# APP_LOGIN_* values; the non-secret *_SERVER/_PORT/_NAME coordinates), then
+# uncomment the variables block and the env mapping.
+#
+# Deliberately headless & non-interactive: AUTO_ALLURE_OPEN=false suppresses the
+# Allure auto-open, PW_TEST_HTML_REPORT_OPEN=never suppresses the HTML report server
+# (both would hang a CI agent — see the automate-suite playbook §5).
+
+trigger: none            # PR builds come from the master Build Validation policy
+
+# variables:
+#   - group: <your-repo>-secrets
+
+pool:
+  vmImage: ubuntu-latest # TODO: internal pool (see AGENT REALITY above)
+
+steps:
+  - checkout: self
+
+  - task: NodeTool@0
+    inputs:
+      versionSpec: "24.x"
+    displayName: Use Node 24
+
+  - script: npm ci
+    displayName: Install dependencies
+
+  - script: npx playwright install --with-deps chromium
+    displayName: Install Chromium
+
+  - script: CI=true AUTO_ALLURE_OPEN=false PW_TEST_HTML_REPORT_OPEN=never npx playwright test --project=chromium
+    displayName: Run Playwright specs
+    # Keep the failed step failed; condition: always() below still publishes reports.
+    # env:                # uncomment with the variable group (secrets need explicit mapping)
+    #   DB_PASSWORD: $(DB_PASSWORD)
+    #   SQLCMDPASSWORD: $(SQLCMDPASSWORD)
+    #   APP_LOGIN_PASSWORD: $(APP_LOGIN_PASSWORD)
+
+  - task: PublishTestResults@2
+    condition: always()
+    displayName: Publish results to the Tests tab
+    inputs:
+      testResultsFormat: JUnit
+      testResultsFiles: reports/junit/results.xml
+      searchFolder: $(System.DefaultWorkingDirectory)
+      testRunTitle: Playwright — $(Build.SourceBranchName)
+      mergeTestResults: true
+      failTaskOnFailedTests: true
+
+  - publish: reports/playwright-report
+    artifact: playwright-report
+    condition: always()
+    displayName: Publish HTML report
+
+  - publish: allure-report/index.html
+    artifact: allure-report
+    condition: always()
+    displayName: Publish Allure single-file report
+
+  - publish: ctrf
+    artifact: ctrf-report
+    condition: always()
+    displayName: Publish CTRF results
+
+  # Round-trip to ADO test points (opt-in): enable after linking the variable group,
+  # and per automated suite. VERIFY writes _verify-state.json locally, so CI-side
+  # publishing instead maps CTRF results; wire this only once a suite is stable.
+  # - script: AZURE_PAT=$(AZURE_PAT) node scripts/publish-ado-results.mjs --suite <suiteId>
+  #   displayName: Publish outcomes to ADO
+  #   condition: always()

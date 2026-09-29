@@ -1,0 +1,126 @@
+import { readdirSync, readFileSync, lstatSync, existsSync, realpathSync } from 'node:fs';
+import { join, relative, resolve, isAbsolute } from 'node:path';
+
+const OMIT_DIRS = new Set(['.git', 'node_modules', '.m1-private', '.validation', 'test-results', 'playwright-report', 'blob-report', 'allure-results', 'allure-report', 'reports', 'ctrf', 'executions', '.playwright-cli']);
+const ROOT_FILES = new Set(['README.md', 'AGENTS.md', 'CLAUDE.md', 'CHANGELOG.md', 'VERSION', '.env.example', '.gitignore', 'package.json', 'package-lock.json', 'SECURITY.md', 'LICENSE', 'THIRD_PARTY_NOTICES.md']);
+const PUBLIC_PREFIXES = ['scripts/', 'harness-tests/', 'docs/', 'examples/', '.claude/skills/'];
+const EXTRA_FILES = new Set(['.claude/settings.json', '.agentex/page-map/README.md', '.agentex/page-map/_template.md', 'resources/Queries/README.md', 'resources/apisCollections/README.md']);
+
+export function inventory(root) {
+  root = realpathSync(root);
+  const files = [], excluded = [], unexpected = [];
+  function walk(directory) {
+    for (const item of readdirSync(directory, { withFileTypes: true })) {
+      const absolute = join(directory, item.name);
+      const file = relative(root, absolute).replaceAll('\\', '/');
+      if (item.isSymbolicLink()) { unexpected.push({ file, rule: 'symbolic-link' }); continue; }
+      if (item.isDirectory()) {
+        if (OMIT_DIRS.has(item.name) || ['test', '.harness'].includes(file)) { excluded.push(file); continue; }
+        walk(absolute); continue;
+      }
+      if (!item.isFile()) continue;
+      if ((/^\.env(?:\.|$)/.test(item.name) && item.name !== '.env.example') || /\.(dpapi|pfx|key|tgz|zip)$/.test(item.name) || file === '.claude/settings.local.json') { excluded.push(file); continue; }
+      const allowed = ROOT_FILES.has(file) || EXTRA_FILES.has(file) || PUBLIC_PREFIXES.some(prefix => file.startsWith(prefix));
+      if (!allowed) { unexpected.push({ file, rule: 'unclassified-file' }); continue; }
+      files.push(file);
+    }
+  }
+  walk(root);
+  return { files: files.sort(), excluded: excluded.sort(), unexpected };
+}
+
+export function secretFindings(file, text) {
+  const findings = [];
+  const placeholder = value => value === '' || /^(?:<[^<>]+>|\$\{[^}]+\}|\{\{[^}]+\}\}|\[REDACTED\])$/.test(value);
+  const assignment = /\b([A-Za-z_][A-Za-z0-9_-]*)['"]?\s*[:=]\s*(['"`])([^'"`\r\n]+)\2/g;
+  const credentialName = name => /^(?:password|passwd|pwd|api[_-]?key|access[_-]?token|refresh[_-]?token|token|secret|pat)$/i.test(name)
+    || /(?:Password|Passwd|ApiKey|Token|Secret|[_-](?:password|token|secret|api_key|PASSWORD|TOKEN|SECRET|API_KEY))$/.test(name);
+  const connection = /\b(?:Password|Pwd)\s*=\s*([^;\s'"`]+)/gi;
+  text.split(/\r?\n/).forEach((line, index) => {
+    const categories = new Set();
+    if (/-----BEGIN (?:[A-Z]+ )?PRIVATE KEY-----/.test(line)) categories.add('private-key');
+    if (/\beyJ[A-Za-z0-9_-]{15,}\.[A-Za-z0-9_-]{10,}(?:\.[A-Za-z0-9_-]+)?/.test(line)) categories.add('jwt');
+    if (/\b(?:gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,}|AKIA[A-Z0-9]{16})\b/.test(line)) categories.add('access-key');
+    for (const match of line.matchAll(assignment)) if (credentialName(match[1]) && !placeholder(match[3])) categories.add('credential-assignment');
+    for (const match of line.matchAll(connection)) if (!placeholder(match[1]) && !/^(?:process\.env|\$\{|@|<|\{)/.test(match[1])) categories.add('connection-credential');
+    // Neither a convention suppression nor an unrelated env reference exempts a secret.
+    for (const rule of categories) findings.push({ file, line: index + 1, rule });
+  });
+  return findings;
+}
+
+const PUBLIC_HOSTS = new Set(['github.com', 'raw.githubusercontent.com', 'playwright.dev', 'nodejs.org', 'www.npmjs.com', 'registry.npmjs.org', 'learn.microsoft.com', 'code.claude.com', 'learn.chatgpt.com', 'developers.openai.com', 'json.schemastore.org', 'www.w3.org', 'www.typescriptlang.org', 'allurereport.org', 'mit-license.org', 'opensource.org', 'aka.ms', 'go.microsoft.com']);
+// Reviewed upstream funding links present in the dependency lockfile; no host-wide exception.
+const PUBLIC_METADATA_URLS=new Set(['https://www.patreon.com/feross','https://feross.org/support','https://dotenvx.com/','https://opencollective.com/fastify','https://opencollective.com/express']);
+export function privacyFindings(file, text) {
+  const findings = [];
+  const push = (line, rule) => findings.push({ file, line, rule });
+  text.split(/\r?\n/).forEach((line, index) => {
+    const n = index + 1;
+    if (/(?:[A-Za-z]:[\\/](?:Users|Documents and Settings)[\\/][^\s/\\]+|\/(?:Users|home)\/[A-Za-z0-9._-]+\/|\bDESKTOP-[A-Z0-9]+\b)/.test(line)) push(n, 'machine-identity');
+    if (/\b(?:10\.\d{1,3}|192\.168|172\.(?:1[6-9]|2\d|3[01]))\.\d{1,3}\.\d{1,3}\b/.test(line)) push(n, 'private-network-coordinate');
+    if (/\bPR\s*[!#]\d+|\bmerged\s+as\s+PR\b/i.test(line)) push(n, 'historical-delivery-record');
+    for (const m of line.matchAll(/https?:\/\/[^\s<>"'`)\]]+/g)) {
+      const value = m[0];
+      const authority=value.match(/^https?:\/\/([^/]+)/)?.[1];
+      if (!authority) continue;
+      const userInfoEnd=authority.lastIndexOf('@');
+      if (userInfoEnd>=0) push(n,'url-userinfo');
+      const hostAndPort=authority.slice(userInfoEnd+1);
+      const rawHost=hostAndPort.startsWith('[')?hostAndPort.slice(0,hostAndPort.indexOf(']')+1):hostAndPort.split(':')[0];
+      if (!rawHost || rawHost.includes('${')) continue; // only a dynamic hostname has no literal host to classify
+      let url; try { url = new URL(value.replace(authority,rawHost)); } catch { continue; }
+      const host = url.hostname;
+      const synthetic = host === 'localhost' || host === '127.0.0.1' || host === 'example.com' || host.endsWith('.example.com') || host.endsWith('.test') || host.endsWith('.invalid');
+      if (host === 'dev.azure.com') {
+        const organization=value.replace(/^https?:\/\/[^/]+\//,'').split('/')[0];
+        if (!organization.startsWith('${') && !/^(?:your-org|example-org)$/.test(organization)) push(n, 'organization-url');
+      } else if (!synthetic && !PUBLIC_HOSTS.has(host) && !PUBLIC_METADATA_URLS.has(url.href)) push(n, 'unreviewed-url');
+    }
+  });
+  if (/\.jsonl$/.test(file) && text.trim()) push(1, 'populated-runtime-history');
+  if (/\.claude\/skills\/plan-tracker\/data\/plan-/.test(file)) push(1, 'populated-plan-registry');
+  if (file === '.env.example') text.split(/\r?\n/).forEach((line, i) => { if (/^[A-Z][A-Z0-9_]*=.+/.test(line)) push(i + 1, 'env-example-value'); });
+  return findings;
+}
+
+export function localLinkFindings(root, file, text) {
+  const findings = [];
+  let links = 0;
+  // Fenced examples and HTML comments are prose examples, not rendered links.
+  const visible = text.replace(/<!--[^]*?-->/g, match => match.replace(/[^\n]/g, ' ')).replace(/(^|\n)\s*(```|~~~)[^\n]*\n[^]*?\n\s*\2[^\n]*/g, match => match.replace(/[^\n]/g, ' '));
+  for (const match of visible.matchAll(/!?\[[^\]\n]*\]\((<[^>]+>|[^\s)]+)(?:\s+"[^"]*")?\)/g)) {
+    let target = match[1].replace(/^<|>$/g, '');
+    if (/^(?:[a-z][a-z0-9+.-]*:|#)/i.test(target)) continue;
+    target = target.split('#')[0].split('?')[0];
+    if (!target) continue;
+    links++;
+    try { target = decodeURIComponent(target); } catch { findings.push({ file, line: 1, rule: 'invalid-link-encoding' }); continue; }
+    const destination = resolve(root, file, '..', target);
+    const rel = relative(root, destination);
+    const line = visible.slice(0, match.index).split('\n').length;
+    if (isAbsolute(rel) || rel === '..' || /^\.\.[\\/]/.test(rel)) findings.push({ file, line, rule: 'link-outside-package' });
+    else if (!existsSync(destination)) findings.push({ file, line, rule: 'missing-link-target' });
+  }
+  return { links, findings };
+}
+
+export function readSource(root, file) {
+  const absolute = join(root, file);
+  if (lstatSync(absolute).isSymbolicLink()) throw new Error('symlink refused');
+  return readFileSync(absolute, 'utf8');
+}
+
+export function publicationFindings(scope, paths) {
+  const allowed=new Set(scope.files);
+  const packed=new Set(paths);
+  const findings=[...scope.unexpected];
+  if (!paths.length || packed.size!==paths.length) findings.push({file:'package.json',rule:'invalid-packed-scope'});
+  for(const file of packed) if (!allowed.has(file)) findings.push({file,rule:'unexpected-packed-file'});
+  for(const file of allowed) {
+    // npm never ships the root lockfile or nested packaging-control files.
+    if (file==='package-lock.json' || file.endsWith('/.npmignore')) continue;
+    if (!packed.has(file)) findings.push({file,rule:'missing-packed-file'});
+  }
+  return findings;
+}

@@ -1,0 +1,41 @@
+
+# Playwright
+# Private M1 recovery and local validation output never belong in source/package artifacts.
+/.m1-private/
+/.validation/
+/.harness/runs/
+/.harness/state/
+/.harness/knowledge-candidates/
+*.dpapi
+*.pfx
+*.key
+node_modules/
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+playwright/.auth/
+allure-report/
+allure-results/
+reports/
+ctrf/
+# Claude Code: shared team settings (.claude/settings.json) ARE committed.
+# Only the personal local file is ignored — it holds per-user env/secrets.
+.claude/settings.local.json
+.env
+.env.*
+!.env.example
+
+# playwright-cli transient scratch (snapshots/console dumps) — recreated on every browser run
+.playwright-cli/
+
+# AgenTeX run artifacts (reports, screenshots, logs per run)
+/executions/
+# Imported manual cases can contain private source content.
+/test/
+# AgenTeX — never commit these: they hold live credentials
+test/.auth/
+# and this one is only a cache — ui-check re-fetches these design baselines
+test/.ui-baselines/
+# and this one is only a cache too — tracker field metadata, safe to delete, rebuilt on demand
+.agentex/cache/

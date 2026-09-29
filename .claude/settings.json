@@ -1,0 +1,72 @@
+{
+  "enabledPlugins": {},
+  "permissions": {
+    "allow": [
+      "Bash",
+      "PowerShell",
+      "Read",
+      "Edit",
+      "Write",
+      "NotebookEdit",
+      "WebFetch",
+      "WebSearch",
+      "Bash(npx playwright-cli:*)",
+      "Bash(npx playwright test:*)",
+      "Bash(npm install *)",
+      "Bash(npm run fetch:suite:*)",
+      "Bash(node scripts/fetch-ado-suite.mjs:*)",
+      "Bash(node scripts/publish-ado-results.mjs:*)",
+      "Bash(node scripts/ado-pr.mjs:*)",
+      "Bash(node scripts/check-conventions.mjs:*)",
+      "Bash(az boards:*)",
+      "Bash(az devops:*)",
+      "Bash(az extension:*)",
+      "Bash(az --version)",
+      "Bash(az login:*)",
+      "Bash(az account:*)",
+      "Bash(curl:*)",
+      "Bash(sqlcmd:*)"
+    ],
+    "ask": [
+      "Bash(npx playwright-cli close-all:*)",
+      "Bash(npx playwright-cli kill-all:*)",
+      "Bash(az boards work-item delete:*)"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(./secrets/**)",
+      "Bash(rm -rf:*)"
+    ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          { "type": "command", "command": "node scripts/hooks/guard.mjs session-start", "timeout": 10 }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          { "type": "command", "command": "node scripts/hooks/guard.mjs pre-bash", "timeout": 10 }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          { "type": "command", "command": "node scripts/hooks/guard.mjs post-bash", "timeout": 10 }
+        ]
+      },
+      {
+        "matcher": "Edit|Write|NotebookEdit",
+        "hooks": [
+          { "type": "command", "command": "node scripts/hooks/guard.mjs post-edit", "timeout": 15 }
+        ]
+      }
+    ]
+  }
+}

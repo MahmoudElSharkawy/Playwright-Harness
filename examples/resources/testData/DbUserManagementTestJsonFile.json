@@ -1,0 +1,11 @@
+{
+  "tc12347": {
+    "username": "userTc12347",
+    "email": "qa.tc12347",
+    "password": "<password-placeholder>"
+  },
+  "userCreatedResponse": {
+    "status": 201,
+    "message": "User created successfully"
+  }
+}
