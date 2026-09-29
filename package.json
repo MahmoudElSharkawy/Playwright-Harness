@@ -1,6 +1,6 @@
 {
   "name": "playwright-pom-harness",
-  "version": "3.0.1",
+  "version": "3.0.2",
   "private": true,
   "license": "MIT",
   "type": "module",
@@ -21,7 +21,9 @@
     "test:validation": "node --test harness-tests/package-validation.test.mjs",
     "test:fetch": "node scripts/fetch-ado-suite.mjs --self-test",
     "typecheck:examples": "node examples/node_modules/typescript/bin/tsc --project examples/tsconfig.json --noEmit",
-    "test": "node --test harness-tests/*.test.mjs"
+    "test": "node --test harness-tests/*.test.mjs",
+    "test:roots": "node --test harness-tests/skill-roots.test.mjs",
+    "test:skill-proof": "node --test harness-tests/skill-proof-assessment.test.mjs"
   },
   "files": [
     "README.md",
@@ -43,6 +45,8 @@
     "harness-tests",
     "examples",
     "resources/Queries/README.md",
-    "resources/apisCollections/README.md"
+    "resources/apisCollections/README.md",
+    ".agents/skills",
+    ".claude-plugin/plugin.json"
   ]
 }

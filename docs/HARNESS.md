@@ -1,13 +1,15 @@
 # Playwright POM Harness reference
 
-This document describes the supplied package after the M1 baseline work. Canonical
+This document describes the M1 baseline and the representative M2 skill work. Canonical
 POM rules live in the skill library. It does not claim that the later provider-neutral
 executors or host integrations already exist.
 
 ## Components
 
-- Thirteen skills in `.claude/skills`: ten POM convention skills and the automation,
-  independent-review and plan-tracker workflows.
+- Thirteen skills: twelve remain in `.claude/skills`; `element-locators` is maintained
+  in `.agents/skills` with compatibility redirects at its previous locations.
+- A Claude plugin manifest exposes the representative canonical skill. Native Codex
+  discovery uses a consumer link to that same directory in the isolated M2 proof.
 - Nine original Node scripts for convention checks, Claude hooks, ADO operations,
   metrics and tracker rendering, supplemented by M1 package-validation tooling.
 - Optional synthetic TypeScript framework examples in `examples`.
@@ -58,8 +60,14 @@ The validated package baseline is Node 24. Read the [adoption protocol](../READM
 before installing into a fresh repository or an existing framework. Package maintenance
 must not overwrite an adopter's framework or team customizations.
 
-## M1 and later work
+## M1, representative M2 proof and later work
 
-M1 addresses privacy, provenance and truthful validation only. Canonical skill
-migration, host packaging, UI/API/DB executors and ADO restructuring remain later
-milestones. See [M1 validation](M1-VALIDATION.md) and [provenance](PROVENANCE.md).
+M1 addresses privacy, provenance and truthful validation. M2 separates package,
+consumer and run roots and tests one canonical skill through native host mechanisms.
+The proof tooling is not a production adapter or execution context. It compares six
+locator decisions and actual reference reads, not raw host artifact equality.
+See [the proof guide](M2-SKILL-PROOF.md), [M2 validation](M2-VALIDATION.md),
+[M1 validation](M1-VALIDATION.md) and [provenance](PROVENANCE.md).
+
+Bulk migration remains gated on both hosts passing M2 and authorization for M3.
+UI/API/DB executors and ADO restructuring remain later milestones.

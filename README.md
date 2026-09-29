@@ -3,13 +3,15 @@
 A project-agnostic packaging of a battle-tested Claude Code harness for
 Playwright/TypeScript Page-Object-Model test frameworks. It ships three things:
 
-1. **A convention skill library** (`.claude/skills/`) — 13 skills: ten that encode the
+1. **A convention skill library** — 13 skills: ten that encode the
    framework's design law (folder layout, naming, POM layering, locators, actions,
    validations, test data, service classes, utils) plus three process skills:
    `framework-review` (independent convention review with a verdict), `automate-suite`
    (an end-to-end Azure DevOps suite → refined specs → executed runs → generated POM
    automation pipeline), and `plan-tracker` (a plan-scope progress dashboard rendered
    from a committed registry + append-only history ledger).
+   M2 moves only `element-locators` into `.agents/skills/`; its old Claude path is a
+   redirect. The other twelve skills remain in `.claude/skills/`.
 2. **Lifecycle hooks** (`.claude/settings.json` + `scripts/hooks/guard.mjs`) —
    session-start reminders, advisory checks for direct master/main pushes and
    re-running an identical failed `npx playwright test` command until something
@@ -34,6 +36,10 @@ publication candidate until the provenance and owner-dependent items in
 [docs/M1-VALIDATION.md](docs/M1-VALIDATION.md) are cleared. Do not interpret a
 clean syntax or convention result as a public-release approval.
 
+M2's representative skill proof and its current host gates are documented in
+[the proof guide](docs/M2-SKILL-PROOF.md) and [validation record](docs/M2-VALIDATION.md).
+This is not full workflow parity or authorization to migrate the other skills.
+
 ## Package contents
 
 ```
@@ -46,6 +52,8 @@ playwright-pom-harness/
 ├── .env.example               ← keys the scripts and configs read (copy to .env, fill in)
 ├── .gitignore                 ← ready-made ignores: .env, run artifacts, personal settings
 ├── docs/HARNESS.md            ← the full architecture reference — read this first
+├── .agents/skills/element-locators/ ← one canonical skill and its maintained playbook
+├── .claude-plugin/plugin.json ← Claude plugin manifest exposing that canonical skill
 ├── .claude/
 │   ├── settings.json          ← permissions + hook wiring (review before adopting — see note)
 │   └── skills/                ← the 13-skill convention library + library index (README.md)
@@ -84,9 +92,12 @@ playwright-pom-harness/
 
 ## Install into a project
 
-1. **Copy** `.claude/`, `scripts/`, `docs/`, `.agentex/`, `resources/`, `CLAUDE.md`,
+1. **Copy/merge** `.claude/`, `.agents/skills/element-locators/`, `scripts/`, `docs/`, `.agentex/`, `resources/`, `CLAUDE.md`,
    and `.gitignore` to the repo root. If the repo already has a `CLAUDE.md`,
-   `.claude/settings.json`, or `.gitignore`, merge instead of overwrite.
+   `.claude/settings.json`, an existing skill, or `.gitignore`, merge instead of overwrite.
+   Keep the canonical locator directory with its Claude redirects; copying only
+   `.claude/` would leave those references broken. The separate immutable-package
+   experiment in the M2 guide is not yet a general adoption installer.
 2. **Edit `CLAUDE.md`**: replace `<your-repo>` in the title. The rest is
    project-agnostic and works as-is.
 3. **Wire npm scripts** (optional convenience — the scripts also run via `node` directly;
@@ -134,7 +145,7 @@ which case applies:
 
 - **Case A — fresh repo** (no Playwright framework yet): run install steps 1–7
   above in full, seeding the code layers from `examples/`.
-- **Case B — existing framework**: install only the harness layers (`.claude/`,
+- **Case B — existing framework**: install only the harness layers (`.claude/`, `.agents/skills/element-locators/`,
   `scripts/`, `docs/`, `.agentex/`, the `resources/` library contracts,
   `CLAUDE.md`, `.gitignore`) and do NOT copy `examples/` over existing code. Map
   the repo's existing folders to the skill library's layer map (`src/pages`,
@@ -244,6 +255,8 @@ npm run check:links
 npm run check:conventions
 npm run test:conventions
 npm run test:validation
+npm run test:roots
+npm run test:skill-proof
 npm run test:fetch
 npm run check:privacy
 npm run check:secrets

@@ -11,6 +11,12 @@ The original source is the supplied version 3.0.0 package. M1 sanitizes that mat
 and adds project-specific validation code. Protected recovery/accounting records are
 excluded from publication; no original private incident is republished as research.
 
+M2 relocates one owner-cleared skill and adds project-specific root/proof tooling.
+Official Codex and Claude documentation informed native discovery and packaging;
+no upstream implementation was copied. The local Claude test CLI and Python skill
+validator dependencies are development tools in ignored storage, not bundled source
+or dependencies of the published package. Their upstream licenses continue to apply.
+
 AgenTeX (MIT) and Microsoft Playwright CLI (Apache-2.0) were inspected as references.
 No upstream implementation was copied into M1. Exact research revisions are recorded
 in [the provenance inventory](../scripts/provenance.json). Architectural ideas and links

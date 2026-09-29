@@ -3,8 +3,8 @@ import { join, relative, resolve, isAbsolute } from 'node:path';
 
 const OMIT_DIRS = new Set(['.git', 'node_modules', '.m1-private', '.validation', 'test-results', 'playwright-report', 'blob-report', 'allure-results', 'allure-report', 'reports', 'ctrf', 'executions', '.playwright-cli']);
 const ROOT_FILES = new Set(['README.md', 'AGENTS.md', 'CLAUDE.md', 'CHANGELOG.md', 'VERSION', '.env.example', '.gitignore', 'package.json', 'package-lock.json', 'SECURITY.md', 'LICENSE', 'THIRD_PARTY_NOTICES.md']);
-const PUBLIC_PREFIXES = ['scripts/', 'harness-tests/', 'docs/', 'examples/', '.claude/skills/'];
-const EXTRA_FILES = new Set(['.claude/settings.json', '.agentex/page-map/README.md', '.agentex/page-map/_template.md', 'resources/Queries/README.md', 'resources/apisCollections/README.md']);
+const PUBLIC_PREFIXES = ['scripts/', 'harness-tests/', 'docs/', 'examples/', '.claude/skills/', '.agents/skills/'];
+const EXTRA_FILES = new Set(['.claude/settings.json', '.claude-plugin/plugin.json', '.agentex/page-map/README.md', '.agentex/page-map/_template.md', 'resources/Queries/README.md', 'resources/apisCollections/README.md']);
 
 export function inventory(root) {
   root = realpathSync(root);

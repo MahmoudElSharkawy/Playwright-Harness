@@ -1,5 +1,9 @@
 # Skill Library — Playwright/TypeScript Test Framework
 
+M2 maintains only `element-locators` in [the canonical directory](../../.agents/skills/element-locators/SKILL.md).
+Its previous skill/playbook paths below are compatibility redirects. The other twelve
+skills have not moved; see [M2 validation](../../docs/M2-VALIDATION.md) before migrating more.
+
 Convention skills for this repository, structured SHAFT-style: each skill is a thin
 `SKILL.md` router plus a detailed `references/playbook.md`. The entry point is
 **[pom-architecture](pom-architecture/SKILL.md)**; its

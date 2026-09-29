@@ -1,0 +1,10 @@
+{
+  "cases": [
+    { "id": "stable-id", "element": "Save button", "attributes": { "id": "save-record", "name": "save", "data-qa": "save-action" }, "question": "Choose a new page-class locator." },
+    { "id": "name-attribute", "element": "Email input", "attributes": { "name": "email", "data-qa": "login-email" }, "question": "Choose a new page-class locator." },
+    { "id": "test-attribute", "element": "Country input", "attributes": { "data-qa": "country" }, "question": "There is no stable id or name. Choose a new page-class locator." },
+    { "id": "dynamic-card", "element": "View button in a product card", "context": "Cards are reordered at runtime. The caller supplies the unique product title. Each card has class product-card and contains a button with data-qa=view-product.", "question": "Design a private Locator-returning method without depending on card position." },
+    { "id": "collection", "element": "All product cards", "context": "Multiple .product-card nodes are expected; the caller needs the complete collection for count validation.", "question": "Choose the collection locator; no single-card action is requested." },
+    { "id": "upload", "element": "Attachment file input", "context": "A visually hidden input[type=file] is the unique upload control. The visible styled button has id=upload-button.", "question": "Choose the locator on which to call setInputFiles." }
+  ]
+}

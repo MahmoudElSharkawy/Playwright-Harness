@@ -15,6 +15,12 @@
       "targetLicense": "MIT"
     },
     {
+      "scope": "M2 changes",
+      "status": "created for this project; canonical skill adapted from owner-cleared supplied material",
+      "targetLicense": "MIT",
+      "thirdPartyCodeCopied": false
+    },
+    {
       "scope": "AgenTeX research",
       "repository": "https://github.com/MhmdElGazzar/agentex",
       "commit": "439307c126ae36c3451c61a16dc4bf6e28e612bf",

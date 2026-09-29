@@ -3,6 +3,17 @@
 Package versions belong to this package, not to adopting applications. Historical
 private incidents and delivery identifiers are intentionally not retained here.
 
+## 3.0.2 — Unreleased
+
+- M2 only: maintain `element-locators` in `.agents/skills` and retain thin redirects
+  at its existing Claude paths. The other twelve skills remain in place.
+- Add a Claude plugin manifest pointing directly to the canonical skill directory.
+- Add separate package, consumer and run roots with overwrite/escape refusal fixtures.
+- Add native discovery and six-case host proof tooling with reference-read evidence,
+  immutable-package checks and semantic comparison. See the M2 validation record for
+  actual host outcomes; packaging or process exit alone is not a behavior proof.
+- No bulk migration, production host adapters or executors are included.
+
 ## 3.0.1 — Unreleased
 
 - M1: replace private ledgers and prerequisites with clean templates; sanitize
