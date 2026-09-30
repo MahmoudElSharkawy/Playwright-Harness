@@ -28,6 +28,12 @@ M6 connects those records to [sequential native browser execution](docs/M6-BROWS
 including owned cleanup, effect-aware recovery and sanitized evidence. Browser actions
 use official CLI arguments. See [M6 validation](docs/M6-VALIDATION.md) for current gates.
 
+M7 adds the [shared API runtime](docs/M7-API.md) for configured CRUD, typed inputs and
+outputs, sanitized evidence and effect-aware recovery. Catalogs, helpers, inline
+definitions and dynamic exploration share the same controls. See
+[M7 validation](docs/M7-VALIDATION.md) for its acceptance status. Database execution
+remains a later milestone.
+
 ## Install into a project
 
 Keep this package in its own directory; do not overlay it on application code.
@@ -120,6 +126,7 @@ hosts or external integration tests passed.
 | `scripts/load-local-source.mjs` | Validate local scenarios and record source provenance |
 | `scripts/spikes/playwright-cli` | Development-only pinned native CLI viability probes |
 | `scripts/lib/execution-core` | Shared execution records, policy decisions and result/evidence validation |
+| `scripts/lib/api` | Shared sequential API execution, credential binding, evidence and recovery |
 | `scripts/check-conventions.mjs` | Mechanical POM convention checks |
 | `scripts/hooks/guard.mjs` | Optional advisory Claude hooks |
 | `scripts/generate-tracker.mjs`, `scripts/harness-metrics.mjs` | Consumer reporting tools |
@@ -144,6 +151,7 @@ npm run check:syntax
 npm run check:json
 npm run check:links
 npm run check:conventions
+npm run test:api
 npm test
 npm run test:fetch
 npm run check:privacy

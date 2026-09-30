@@ -4,6 +4,12 @@
   "publicationAuthorized": false,
   "sources": [
     {
+      "scope": "M7 changes",
+      "status": "created for this project using Node built-ins; no additional dependency",
+      "targetLicense": "MIT",
+      "thirdPartyCodeCopied": false
+    },
+    {
       "scope": "supplied original package",
       "version": "3.0.0",
       "status": "owner-cleared",

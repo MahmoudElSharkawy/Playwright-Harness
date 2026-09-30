@@ -38,6 +38,11 @@ reuses the exact separately installed M4 CLI graph as an optional browser runtim
 no upstream implementation or skill content is copied into project source. Required
 Apache-2.0 dependency notices remain applicable and unchanged.
 
+M7 adds project-authored API execution and synthetic HTTP fixtures using Node built-ins.
+No third-party implementation was copied and no dependency was added. Required
+dependency notices remain unchanged. The root lockfile's package metadata now matches
+the package version; its dependency graph is unchanged.
+
 AgenTeX (MIT) and Microsoft Playwright CLI (Apache-2.0) were inspected as references.
 No upstream implementation was copied into M1. Exact research revisions are recorded
 in [the provenance inventory](../scripts/provenance.json). Architectural ideas and links

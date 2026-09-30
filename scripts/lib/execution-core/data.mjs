@@ -35,7 +35,14 @@ export function data(value, maxBytes = 1024 * 1024) {
       if (array) requireThat(/^(0|[1-9][0-9]*)$/.test(name) && Number(name) < item.length, 'Invalid JSON array property.');
       const property = Object.getOwnPropertyDescriptor(item, name);
       requireThat(property.enumerable && Object.hasOwn(property, 'value'), 'Accessors are not execution data.');
-      requireThat(!/^(?:password|passwd|pwd|secret|token|authorization|cookie|set-cookie|connectionString|apiKey|accessToken|refreshToken)$/i.test(name), 'Use a protected reference for sensitive data.');
+      // A definition may name a sensitive wire field without containing its value.
+      // Only one plain, accessor-free binding reference is serializable there.
+      const candidate = property.value;
+      const bindingSlot = candidate && typeof candidate === 'object' && Object.getPrototypeOf(candidate) === Object.prototype
+        && Reflect.ownKeys(candidate).length === 1 && Object.hasOwn(candidate, '$input')
+        && Object.hasOwn(Object.getOwnPropertyDescriptor(candidate, '$input'), 'value')
+        && identifier(Object.getOwnPropertyDescriptor(candidate, '$input').value);
+      requireThat(!/^(?:password|passwd|pwd|secret|token|authorization|cookie|set-cookie|connectionString|apiKey|accessToken|refreshToken)$/i.test(name) || bindingSlot, 'Use a protected reference for sensitive data.');
       result[name] = copy(property.value, depth + 1);
     }
     if (array) requireThat(Object.keys(result).length === item.length, 'Sparse arrays are not execution data.');

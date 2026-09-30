@@ -3,6 +3,16 @@
 Package versions belong to this package, not to adopting applications. Historical
 private incidents and delivery identifiers are intentionally not retained here.
 
+## 3.0.7 — Unreleased
+
+- M7: add one deterministic API runtime for catalog, helper, inline and dynamic
+  exploratory operations under the same frozen environment capabilities.
+- Support bound JSON requests, typed extraction, reliable checks, bounded native
+  HTTP(S), credential refresh, effect-aware recovery and sanitized evidence.
+- Record optional fixture cleanup, conditional restoration and intentional retention;
+  validate CRUD, transport failures and policy controls with local HTTP fixtures.
+- Align the root lockfile's package version with the manifest; dependency graph unchanged.
+
 ## 3.0.6 — Unreleased
 
 - M6: integrate owned sequential browser sessions with the proven native Playwright

@@ -2,6 +2,18 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createRun, defineOperation, authorizeOperation, checkExecutionWindow, typedValue} from '../scripts/lib/execution-core/index.mjs';
 import {environment, operation, runInput} from './fixtures/execution-core.mjs';
+import {data} from '../scripts/lib/execution-core/data.mjs';
+
+test('sensitive wire-field definitions permit only exact plain data binding references', () => {
+  assert.deepEqual(data({password: {$input: 'credentialValue'}}), {password: {$input: 'credentialValue'}});
+  for (const invalid of [String(1234), 1234, null, {$input: ''}, {$input: 'bad identifier'}, {$input: 'safe', extra: true}, {nested: {$input: 'safe'}}, [{$input: 'safe'}]]) {
+    assert.throws(() => data({password: invalid}), /protected reference/);
+  }
+  let reads = 0; const accessor = {};
+  Object.defineProperty(accessor, '$input', {enumerable: true, get: () => {reads++; return 'safe';}});
+  assert.throws(() => data({password: accessor}), /protected reference/); assert.equal(reads, 0);
+  const inherited = Object.create({$input: 'safe'}); assert.throws(() => data({password: inherited}), /protected reference/);
+});
 
 test('run freezes capabilities, target/credential references, definitions, knowledge and limits without aliasing inputs', () => {
   const input = runInput({knowledge: [{id: 'fact', version: 'v1', reviewed: true, content: {heading: 'Synthetic'}}]});

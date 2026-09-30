@@ -16,7 +16,13 @@ They do not invoke a host, CLI, API or database, or schedule scenarios.
 M6 adds [sequential browser integration](M6-BROWSER.md). The browser layer manages
 ownership, policy, evidence and core result records; the official native CLI still
 owns mechanics. M6 adds optional browser targets and intent capabilities without
-changing existing consumer configuration. API/DB dispatch remains deferred.
+changing existing consumer configuration.
+
+M7 adds [shared sequential API execution](M7-API.md) through Node's HTTP(S) transport.
+All valid operation sources use identical configured capabilities, target and credential
+binding, evidence and M5 result validation. Ordinary test-profile mutations require no
+per-operation harness approval. Cleanup follows intent; the caller sequences the
+scenario. Database dispatch and cross-family orchestration remain later milestones.
 
 ## Package and consumer responsibilities
 
@@ -39,7 +45,8 @@ The local loader validates neutral scenarios, steps, expectations and optional e
 references without ADO configuration or network access. It records a source fingerprint
 and reports counts with `executed: false`. Environment modes and separate targets are
 validated configuration. M5 computes effective capability decisions from it;
-operation dispatch remains unimplemented.
+browser/API libraries now dispatch operations; source-to-execution orchestration is
+still later work.
 
 Legacy ADO retrieval → refinement → AgenTeX exploration → POM generation → independent
 review → scoped verification → authorized delivery remains compatibility guidance.
