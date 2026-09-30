@@ -128,6 +128,7 @@ permissions, reliable test verdicts or remote branch policies.
 ## Package validation and release
 
 ```sh
+npm ci --prefix scripts/spikes/playwright-cli --ignore-scripts
 npm run check:syntax
 npm run check:json
 npm run check:links
@@ -141,6 +142,9 @@ npm run check:publication
 npm ci --prefix examples --ignore-scripts
 npm run typecheck:examples
 ```
+
+The package tests inspect the separately installed, pinned CLI configuration resolver.
+They do not require a browser download; live M4 probes have separate prerequisites.
 
 The convention gate checks `examples` with warnings treated as errors. Zero scope or
 an unresolved Git base fails. JSON parsing is not schema validation; link checks cover

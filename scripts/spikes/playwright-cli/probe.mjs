@@ -8,16 +8,21 @@ import {createHash,randomBytes} from 'node:crypto';
 import assert from 'node:assert/strict';
 import {startFixture} from './fixture.mjs';
 import {classifyReply,assessProbe,requiredChecks,pin} from './assessment.mjs';
-import {prepareOutput} from './output.mjs';
+import {prepareOutput,resolvePackageRoot,snapshotPackage} from './output.mjs';
+import {nativeEnvironment,verifyNativeProfile} from './profile.mjs';
+import {verifyRequiredEvidence} from './evidence.mjs';
 
-const packageRoot=dirname(fileURLToPath(import.meta.url));
-const cli=join(packageRoot,'node_modules/@playwright/cli/playwright-cli.js');
+const spikeRoot=dirname(fileURLToPath(import.meta.url));
+const packageRoot=await resolvePackageRoot(spikeRoot);
+const cli=join(spikeRoot,'node_modules/@playwright/cli/playwright-cli.js');
 const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
 const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 const outputArgument=process.argv[2];
 if(!outputArgument || process.argv.length!==3 || !['win32','linux'].includes(process.platform))throw new Error('usage: node probe.mjs <new ignored output directory>; Windows or Linux required');
 const fault=process.env.M4_PROBE_FAULT??null;
 if(fault!==null && !['sentinel-crash','cleanup-failure'].includes(fault))throw new Error('unsupported fixed M4 fault probe');
+let env;
+try {env=await nativeEnvironment();}catch {console.error(JSON.stringify({status:'BLOCKED',reason:'M4 requires neutral native configuration: no Playwright overrides or existing global CLI config; values are not read or logged'}));process.exit(2);}
 const runRoot=await prepareOutput(packageRoot,outputArgument);
 
 async function processCall(executable,args,{deadline=30000,cwd=runRoot,env=process.env}={}) {
@@ -42,14 +47,16 @@ if(process.platform==='win32') {
 await mkdir(join(runRoot,'private'),{mode:0o700});
 await mkdir(join(runRoot,'evidence'),{mode:0o700});
 await mkdir(join(runRoot,'raw'),{mode:0o700});
-const report={platform:process.platform,node:process.version,pin:{...pin,lockSha256:sha(await readFile(join(packageRoot,'package-lock.json')))},checks:[],events:[],artifacts:[],attachment:'disabled; borrowed resources are outside this owned-only spike'};
+const report={platform:process.platform,node:process.version,pin:{...pin,lockSha256:sha(await readFile(join(spikeRoot,'package-lock.json')))},checks:[],events:[],artifacts:[],attachment:'disabled; borrowed resources are outside this owned-only spike'};
 const nonce=randomBytes(6).toString('hex');
 const sessions={a:`m4_${nonce}_a`,b:`m4_${nonce}_b`,restore:`m4_${nonce}_restore`,deadline:`m4_${nonce}_deadline`,crash:`m4_${nonce}_crash`};
 const owned=new Map();
 let finalizing=false,injectedCleanupFailure=false;
-const env={...process.env,CI:'1',NO_UPDATE_NOTIFIER:'1'};
 const config=join(runRoot,'cli.json');
 await writeFile(config,JSON.stringify({browser:{browserName:'chromium',isolated:true,launchOptions:{headless:true,channel:'chrome-for-testing',...(process.platform==='linux'?{chromiumSandbox:false}:{})}},timeouts:{action:1200,navigation:1800},outputDir:join(runRoot,'evidence')}));
+try {report.profile=await verifyNativeProfile(spikeRoot,config,runRoot,env);}catch {console.error(JSON.stringify({status:'BLOCKED',reason:'Pinned native profile preflight failed before browser launch; no raw configuration emitted'}));process.exit(2);}
+report.checks.push({name:'native-profile',status:'PASS',observation:'Pinned native resolver verified owned isolated headless Chromium, neutral native configuration and protected evidence output before launch.'});
+console.log(JSON.stringify(report.checks.at(-1)));
 const fixture=await startFixture();
 
 async function inventory(directory) {
@@ -62,12 +69,12 @@ async function inventory(directory) {
   return result.sort();
 }
 async function packageDigest() {
-  const files=await inventory(packageRoot);
-  return {files:files.length,digest:sha(await Promise.all(files.map(async file=>`${relative(packageRoot,file)}:${sha(await readFile(file))}`)).then(values=>values.join('\n')))};
+  return await snapshotPackage(packageRoot,spikeRoot);
 }
 const beforePackage=await packageDigest();
 
 async function invoke(session,args,deadline=30000) {
+  if(args[0]==='open')await verifyNativeProfile(spikeRoot,config,runRoot,env);
   const number=report.events.length+1;
   const started=performance.now();
   const reply=await processCall(process.execPath,[cli,'--json',`-s=${session}`,...args],{env,deadline});
@@ -162,9 +169,9 @@ try {
   await check('version-pin',async()=>{
     const reply=await processCall(process.execPath,[cli,'--version'],{env});
     assert.equal(reply.exitCode,0);assert.equal(reply.stdout.trim(),pin.cli);
-    assert.equal(JSON.parse(await readFile(join(packageRoot,'node_modules/@playwright/cli/package.json'),'utf8')).version,pin.cli);
-    assert.equal(JSON.parse(await readFile(join(packageRoot,'node_modules/playwright/package.json'),'utf8')).version,pin.playwright);
-    assert.equal(JSON.parse(await readFile(join(packageRoot,'node_modules/playwright-core/package.json'),'utf8')).version,pin.playwright);
+    assert.equal(JSON.parse(await readFile(join(spikeRoot,'node_modules/@playwright/cli/package.json'),'utf8')).version,pin.cli);
+    assert.equal(JSON.parse(await readFile(join(spikeRoot,'node_modules/playwright/package.json'),'utf8')).version,pin.playwright);
+    assert.equal(JSON.parse(await readFile(join(spikeRoot,'node_modules/playwright-core/package.json'),'utf8')).version,pin.playwright);
     return `CLI ${pin.cli}; Playwright ${pin.playwright}; resolved lock SHA-256 recorded.`;
   });
   await check('named-session-isolation',async()=>{
@@ -196,11 +203,7 @@ try {
     expectOk(await invoke(sessions.a,['requests']),'request capture failed');
     expectOk(await invoke(sessions.a,['tracing-stop']),'trace stop failed');
     const files=await inventory(join(runRoot,'evidence'));
-    const png=await readFile(join(runRoot,'evidence','page.png'));
-    assert.equal(png.subarray(0,8).toString('hex'),'89504e470d0a1a0a');
-    for(const extension of ['.trace','.network','.yml'])assert.ok(files.some(file=>file.endsWith(extension)),'missing native evidence');
-    const trace=files.find(file=>file.endsWith('.trace'));
-    assert.ok((await readFile(trace,'utf8')).includes('snapshot'),'trace lacks DOM observations');
+    verifyRequiredEvidence(new Map(await Promise.all(files.map(async file=>[relative(runRoot,file).replaceAll('\\','/'),await readFile(file)]))));
     for(const file of files) {const bytes=await readFile(file);assert.ok(bytes.length>0,'empty evidence');report.artifacts.push({path:relative(runRoot,file).replaceAll('\\','/'),bytes:bytes.length,sha256:sha(bytes)});}
     return 'Native PNG, snapshots, trace/DOM and network resources are nonempty; relative locations and integrity hashes recorded.';
   });

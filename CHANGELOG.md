@@ -13,6 +13,9 @@ private incidents and delivery identifiers are intentionally not retained here.
 - Record the required noninteractive invocation profile and version-specific output
   behavior without creating a second browser command language or a harness executor.
 - Extend provenance checking to the spike's separately installed dependencies.
+- Resolve M4 review findings with a neutral native-profile preflight, complete
+  package output protection and mandatory evidence-category validation. Preserve
+  the original review and run history; acceptance requires fresh independent review.
 
 ## 3.0.3 — Unreleased
 

@@ -1,5 +1,5 @@
 /** M4-only assessment. Not a harness executor or a browser command API. */
-export const requiredChecks=['version-pin','named-session-isolation','state-restore-actual-session','snapshot-current-reference','evidence-capture','native-error-exit','native-timeout','outer-deadline','daemon-crash','stale-authentication','owned-cleanup','package-immutable'];
+export const requiredChecks=['native-profile','version-pin','named-session-isolation','state-restore-actual-session','snapshot-current-reference','evidence-capture','native-error-exit','native-timeout','outer-deadline','daemon-crash','stale-authentication','owned-cleanup','package-immutable'];
 export const pin={cli:'0.1.22',playwright:'1.64.0-alpha-1790635538000'};
 
 export function classifyReply(reply) {

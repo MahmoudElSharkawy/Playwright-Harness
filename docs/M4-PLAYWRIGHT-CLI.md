@@ -27,6 +27,23 @@ Scoped Git attributes preserve LF in the spike lockfile on both platforms, so
 checkout newline conversion cannot change its frozen byte fingerprint. npm retains
 the lockfile and scoped Git attributes, and omits `.npmignore` controls.
 
+## Native profile preflight
+
+The fixed spike refuses inherited `PLAYWRIGHT_MCP_*`, `PLAYWRIGHT_CLI_*` and
+`PWTEST_*` settings and any existing native global CLI configuration. It checks
+existence without reading configuration or authentication values. A refusal exits
+with `BLOCKED` before creating a run or launching a browser; use a neutral account
+or environment for this development experiment. Existing user configuration is
+never moved, deleted or rewritten.
+
+Child CLI processes receive a frozen allowlist of necessary system settings plus
+the configured browser installation path and noninteractive flags. The exact
+pinned native configuration resolver verifies isolated, owned, headless Chromium,
+the pinned channel, timeouts and protected evidence location before launch and
+again before each `open`. Its version-specific resolver is used only for this M4
+preflight; browser mechanics still use public CLI commands. A pin update must
+revalidate this internal inspection point as part of the spike.
+
 ## Native invocation findings
 
 - Spawn the installed CLI entrypoint using Node, `shell: false` and an argument array.
@@ -77,6 +94,13 @@ npm run probe:cli -- '.validation/m4/windows/final/run with spaces'
 ```
 
 Use a new output directory for each attempt; existing run directories are refused.
+Inside a development checkout, only Git-ignored `.validation/m4` storage is
+permitted. Other output must be outside the complete installed harness package.
+Both lexical paths and resolved ancestry are checked before creating directories;
+aliases cannot redirect output into package `docs`, `scripts`, skills or other
+source content. The standalone container permits external output only. Package
+immutability covers all publication-source files and the spike's installed native
+dependencies; private recovery and runtime storage are excluded from hashing.
 The probe restricts Windows ACLs to the executing account and Linux directories to
 mode 0700. Authentication state is synthetic, stored privately, and deleted during
 cleanup. Never use this fixture as a place for real credentials.
@@ -104,12 +128,20 @@ npm run test:cli-spike
 node scripts/spikes/playwright-cli/assess.mjs '.validation/m4/windows/final/run with spaces/report.json' '.validation/m4/linux/final/run with spaces/report.json'
 ```
 
-The offline assessor requires both distinct platforms, all twelve checks, explicit
+The offline assessor requires both distinct platforms, all thirteen checks, explicit
 identical version/lock pins, nonempty coherent native command history covering the
 fixed success/error/deadline probes, complete cleanup facts and valid artifact
-integrity. Unit fixtures test rejection of empty, failed and incomplete receipts;
+integrity. It also requires the fixed screenshot and initial reference snapshot,
+native DOM trace observations and the associated network evidence. Missing required
+categories, truncated/malformed content and matching hashes for unrelated content
+cannot satisfy the evidence gate. Unit fixtures test rejection of empty, failed and incomplete receipts;
 they are not browser integration evidence.
 Actual outcomes and counts are in [M4 validation](M4-VALIDATION.md).
+
+Install the separate spike dependencies with `npm ci` before running
+`npm run test:cli-spike` or the complete package test suite. The focused profile
+tests inspect the installed pinned native resolver using synthetic configuration;
+they do not launch browsers or read actual user configuration.
 
 Two development-only fixed fault injections exercise finalization:
 `M4_PROBE_FAULT=sentinel-crash` kills the owned sentinel daemon;

@@ -1,5 +1,10 @@
 # M4 validation record
 
+The original implementation and review history below are retained. A subsequent
+independent Astra review found three blocking defects. Their corrective validation
+and current acceptance status are recorded in [M4 review resolution](M4-REVIEW-RESOLUTION.md).
+The earlier approval below is historical and does not approve those later repairs.
+
 Scope: focused official Playwright CLI viability spike, 2026-09-30. No execution
 core, browser executor, API/DB runtime, parallel harness dispatcher or new host
 adapter was implemented. M1–M3 history is retained on the existing `main` branch.

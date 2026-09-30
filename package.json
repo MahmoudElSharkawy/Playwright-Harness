@@ -26,7 +26,7 @@
     "test:skill-proof": "node --test harness-tests/skill-proof-assessment.test.mjs",
     "test:adoption": "node --test harness-tests/adoption.test.mjs",
     "test:local-source": "node --test harness-tests/local-source.test.mjs",
-    "test:cli-spike": "node --test harness-tests/cli-spike-assessment.test.mjs",
+    "test:cli-spike": "node --test harness-tests/cli-spike-assessment.test.mjs harness-tests/cli-spike-profile.test.mjs",
     "probe:cli": "node scripts/spikes/playwright-cli/probe.mjs"
   },
   "files": [

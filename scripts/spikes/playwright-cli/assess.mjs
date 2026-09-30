@@ -4,12 +4,13 @@ import {readFile,realpath} from 'node:fs/promises';
 import {resolve,dirname,relative,isAbsolute,sep} from 'node:path';
 import {createHash} from 'node:crypto';
 import {assessPlatforms} from './assessment.mjs';
+import {verifyRequiredEvidence} from './evidence.mjs';
 
 async function loadReceipt(path) {
   const report=JSON.parse(await readFile(path,'utf8'));
   const root=await realpath(dirname(path));
   if(!Array.isArray(report.artifacts) || !report.artifacts.length)throw new Error('missing artifact inventory');
-  const names=new Set();
+  const names=new Set(),files=new Map();
   for(const artifact of report.artifacts) {
     if(typeof artifact.path!=='string' || isAbsolute(artifact.path) || artifact.path.includes('\\') || names.has(artifact.path))throw new Error('invalid artifact association');
     const file=await realpath(resolve(root,artifact.path));
@@ -18,7 +19,9 @@ async function loadReceipt(path) {
     names.add(artifact.path);
     const bytes=await readFile(file);
     if(bytes.length===0 || bytes.length!==artifact.bytes || createHash('sha256').update(bytes).digest('hex')!==artifact.sha256)throw new Error('artifact integrity failure');
+    files.set(artifact.path,bytes);
   }
+  verifyRequiredEvidence(files);
   return report;
 }
 
