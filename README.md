@@ -18,6 +18,12 @@ synthetic probes validate owned browser sessions on Windows and Linux without
 implementing a harness executor. See [the spike guide](docs/M4-PLAYWRIGHT-CLI.md)
 and [actual M4 validation](docs/M4-VALIDATION.md).
 
+M5 adds [minimal execution contracts](docs/M5-EXECUTION-CORE.md): frozen inputs,
+capability decisions, typed bindings, effects, recovery, required lifecycle results
+and verified evidence. These are deterministic library functions; they do not
+dispatch browser, API or database operations. Run their focused tests with
+`npm run test:core`. See [M5 validation](docs/M5-VALIDATION.md) for acceptance status.
+
 ## Install into a project
 
 Keep this package in its own directory; do not overlay it on application code.
@@ -109,6 +115,7 @@ hosts or external integration tests passed.
 | `scripts/adopt-project.mjs` | Consumer onboarding and known-legacy migration |
 | `scripts/load-local-source.mjs` | Validate local scenarios and record source provenance |
 | `scripts/spikes/playwright-cli` | Development-only pinned native CLI viability probes |
+| `scripts/lib/execution-core` | Shared execution records, policy decisions and result/evidence validation |
 | `scripts/check-conventions.mjs` | Mechanical POM convention checks |
 | `scripts/hooks/guard.mjs` | Optional advisory Claude hooks |
 | `scripts/generate-tracker.mjs`, `scripts/harness-metrics.mjs` | Consumer reporting tools |

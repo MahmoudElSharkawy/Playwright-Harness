@@ -8,6 +8,11 @@ M4 adds [a pinned official CLI viability spike](M4-PLAYWRIGHT-CLI.md) with synth
 Windows/Linux fixtures. Browser mechanics remain native; no new command language,
 shared execution contract or scenario executor is introduced.
 
+M5 adds [shared execution contracts](M5-EXECUTION-CORE.md) as deterministic library
+functions. They freeze effective M3 configuration, record typed values and effects,
+decide capability/recovery policy and validate complete evidence-backed results.
+They do not invoke a host, CLI, API or database, or schedule scenarios.
+
 ## Package and consumer responsibilities
 
 Canonical skills, references, templates and scripts live in the immutable package.
@@ -28,7 +33,8 @@ refusal. See [the adoption guide](M3-ADOPTION.md) and the
 The local loader validates neutral scenarios, steps, expectations and optional external
 references without ADO configuration or network access. It records a source fingerprint
 and reports counts with `executed: false`. Environment modes and separate targets are
-validated configuration, not implemented operation dispatch or execution policy.
+validated configuration. M5 computes effective capability decisions from it;
+operation dispatch remains unimplemented.
 
 Legacy ADO retrieval → refinement → AgenTeX exploration → POM generation → independent
 review → scoped verification → authorized delivery remains compatibility guidance.
@@ -70,7 +76,8 @@ platform; it is not full generation/review/verification parity.
 See [M1 validation](M1-VALIDATION.md), [M2 validation](M2-VALIDATION.md),
 [the proof guide](M2-SKILL-PROOF.md) and [provenance](PROVENANCE.md).
 See [M4 validation](M4-VALIDATION.md) for the pinned CLI gate and its scope limits.
-The minimal execution core and executors remain later milestones. Keep native CLI
+See [M5 validation](M5-VALIDATION.md) for the minimal core's actual checks. Executors
+remain later milestones. Keep native CLI
 invocation/reply interpretation behind a narrow version-specific boundary; the
 harness layer owns identity, policy, evidence, ownership and cleanup. No second
 browser command language or generic workflow engine is introduced.

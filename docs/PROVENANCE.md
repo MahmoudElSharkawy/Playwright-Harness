@@ -29,6 +29,10 @@ retain Apache-2.0 licenses and upstream notices. The provenance check now audits
 records across the example and spike locks. Container and browser distributions are
 development tools only; their redistribution is outside this source-package audit.
 
+M5 adds project-specific execution contracts and regression fixtures using Node
+built-ins and existing project configuration/root validation. No third-party source
+was copied, no runtime dependency was added, and the dependency notices are unchanged.
+
 AgenTeX (MIT) and Microsoft Playwright CLI (Apache-2.0) were inspected as references.
 No upstream implementation was copied into M1. Exact research revisions are recorded
 in [the provenance inventory](../scripts/provenance.json). Architectural ideas and links

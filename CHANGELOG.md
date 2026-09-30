@@ -3,6 +3,18 @@
 Package versions belong to this package, not to adopting applications. Historical
 private incidents and delivery identifiers are intentionally not retained here.
 
+## 3.0.5 — Unreleased
+
+- M5 only: add deterministic execution records and validators for frozen run inputs,
+  environment capabilities, operation provenance and typed value bindings.
+- Track invocation/attempt identities, phases, effect certainty, finite recovery,
+  affected-row expectations and optional lifecycle obligations according to intent.
+- Validate required observations, artifact ownership/integrity and complete results;
+  preserve assertion failures and allow safely recovered passes with full history.
+- Keep catalogs, helpers and inline definitions as peers, and allow permitted
+  uncataloged exploration. No executor, SQL parser, browser command language or
+  generic workflow engine is introduced.
+
 ## 3.0.4 — Unreleased
 
 - M4 only: pin the official Playwright CLI and resolved dependencies in a separate
