@@ -7,7 +7,7 @@ const rules=new Map([
   ['test-attribute',['test-attribute','input']], ['dynamic-card',['scoped-dynamic','button']],
   ['collection',['collection','list']], ['upload',['raw-file-input','input']],
 ]);
-const references=['.claude/skills/pom-architecture/references/design-conventions.md','.agents/skills/element-locators/references/playbook.md'];
+const references=['.agents/skills/pom-architecture/references/design-conventions.md','.agents/skills/element-locators/references/playbook.md'];
 const skill='.agents/skills/element-locators/SKILL.md';
 const textContent=value=>typeof value==='string'?value:Array.isArray(value)?value.map(v=>v.type==='text'?v.text:'').join('\n'):'';
 const normalize=text=>text.replaceAll('\r','').split('\n').map(line=>line.replace(/^\s*\d+[→\t]/,'').trimEnd()).join('\n').trim();
@@ -36,7 +36,7 @@ function observedRead(host,events,path,projectRoot,content) {
   return reads.some(read=>events.some(e=>e.type==='user' && (e.message?.content??[]).some(result=>result.type==='tool_result' && result.tool_use_id===read.id && result.is_error!==true && normalize(textContent(result.content)).includes(normalize(content)))));
 }
 
-export function assessHost({host,answer,events,processResult,roots,packageUnchanged,discovery}) {
+export function assessHost({host,answer,events,processResult,roots,packageUnchanged,discovery,expectedSkills}) {
   const choices=Array.isArray(answer?.choices)?answer.choices:[];
   const declared=Array.isArray(answer?.referencesRead)?answer.referencesRead:[];
   const requirements={
@@ -55,11 +55,13 @@ export function assessHost({host,answer,events,processResult,roots,packageUnchan
   const skillPath=join(roots.packageRoot,skill);
   if(host==='codex') {
     requirements.nativeDiscovery=discovery?.found?.length===1 && discovery.errors?.length===0 && discovery.found[0].enabled!==false && samePath(discovery.found[0].path,skillPath);
+    if(expectedSkills)requirements.libraryDiscovery=expectedSkills.length>0 && discovery?.library?.length===expectedSkills.length && expectedSkills.every(name=>discovery.library.filter(s=>s.name===name && s.valid===true).length===1);
     requirements.completedTurn=events.some(e=>e.type==='turn.completed') && !events.some(e=>e.type==='turn.failed');
   } else {
     const init=events.find(e=>e.type==='system' && e.subtype==='init');
     const plugins=init?.plugins?.filter(p=>p.name==='playwright-pom-harness')??[];
     requirements.nativePlugin=plugins.length===1 && samePath(plugins[0].path,roots.packageRoot) && init.skills?.includes('playwright-pom-harness:element-locators');
+    if(expectedSkills)requirements.libraryDiscovery=expectedSkills.length>0 && expectedSkills.every(name=>init?.skills?.filter(s=>s==='playwright-pom-harness:'+name).length===1);
     const result=events.findLast(e=>e.type==='result');
     requirements.completedTurn=result?.is_error===false && result?.structured_output!==undefined;
   }

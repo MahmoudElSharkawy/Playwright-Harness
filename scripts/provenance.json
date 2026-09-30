@@ -21,6 +21,12 @@
       "thirdPartyCodeCopied": false
     },
     {
+      "scope": "M3 changes",
+      "status": "created for this project; remaining skills migrated from owner-cleared supplied material",
+      "targetLicense": "MIT",
+      "thirdPartyCodeCopied": false
+    },
+    {
       "scope": "AgenTeX research",
       "repository": "https://github.com/MhmdElGazzar/agentex",
       "commit": "439307c126ae36c3451c61a16dc4bf6e28e612bf",

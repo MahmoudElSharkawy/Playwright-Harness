@@ -3,12 +3,12 @@
  * generate-tracker.mjs — render the plan-tracker HTML report from the
  * plan-tracker skill's committed data (registry + append-only history).
  *
- * Reads:   .claude/skills/plan-tracker/data/plan-<planId>.json (structural registry:
+ * Reads:   .harness/state/tracker/plan-<planId>.json (structural registry:
  *              branches, suites, cases with verdict/note, manual rulings, filed bugs
- *              — discovered automatically; create yours from _registry-template.json)
- *          .claude/skills/plan-tracker/data/history.jsonl      (append-only dated
+ *              — discovered automatically; create yours from registry-template.json)
+ *          .harness/state/tracker/history.jsonl      (append-only dated
  *              status events; later lines win — the progress source of truth)
- *          .claude/skills/plan-tracker/assets/tracker-template.html
+ *          .agents/skills/plan-tracker/assets/tracker-template.html
  *          test/ado-suite-<id>/_verify-state.json               (--sync only: live
  *              pipeline state, diffed into a new history event)
  * Writes:  reports/tracker/plan-<planId>-tracker.html           (gitignored output)
@@ -41,11 +41,13 @@
 import { readFileSync, writeFileSync, appendFileSync, mkdirSync, readdirSync, existsSync, statSync } from 'node:fs';
 import { resolve, dirname, join, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {projectArgument,consumerPath} from './lib/consumer-paths.mjs';
 
-const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const SKILL_DIR = join(ROOT, '.claude', 'skills', 'plan-tracker');
-const DATA_DIR = join(SKILL_DIR, 'data');
-const HISTORY_PATH = join(DATA_DIR, 'history.jsonl');
+const {roots,args}=projectArgument();
+const ROOT = roots.projectRoot;
+const SKILL_DIR = join(roots.packageRoot, '.agents', 'skills', 'plan-tracker');
+const DATA_DIR = consumerPath(roots,'.harness/state/tracker');
+const HISTORY_PATH = consumerPath(roots,join(DATA_DIR, 'history.jsonl'));
 const TEMPLATE_PATH = join(SKILL_DIR, 'assets', 'tracker-template.html');
 const SUITES_DIR = join(ROOT, 'test');
 
@@ -60,7 +62,6 @@ const warn = (msg) => console.warn(`[generate-tracker] ${msg}`);
 
 // ---------- CLI ----------
 
-const args = process.argv.slice(2);
 const opts = { sync: false, archive: false, dryRun: false, json: false, out: null, plan: null };
 for (let i = 0; i < args.length; i++) {
   const a = args[i];
@@ -78,7 +79,7 @@ for (let i = 0; i < args.length; i++) {
   if (a === '--out') {
     const v = args[i + 1];
     if (v === undefined || v.startsWith('--')) fail(1, 'option --out needs a value — see the header of scripts/generate-tracker.mjs for usage');
-    opts.out = resolve(ROOT, v);
+    opts.out = consumerPath(roots,v);
     i++;
     continue;
   }
@@ -89,12 +90,12 @@ for (let i = 0; i < args.length; i++) {
 
 let REGISTRY_PATH;
 if (opts.plan) {
-  REGISTRY_PATH = join(DATA_DIR, `plan-${opts.plan}.json`);
+  REGISTRY_PATH = consumerPath(roots,join(DATA_DIR, `plan-${opts.plan}.json`));
 } else {
   const found = existsSync(DATA_DIR) ? readdirSync(DATA_DIR).filter((f) => /^plan-\d+\.json$/.test(f)).sort() : [];
-  if (found.length === 0) fail(2, `no plan registry in ${DATA_DIR} — create plan-<planId>.json there from _registry-template.json (see the plan-tracker SKILL.md)`);
+  if (found.length === 0) fail(2, `no plan registry in ${DATA_DIR} — create plan-<planId>.json there from registry-template.json (see the plan-tracker SKILL.md)`);
   if (found.length > 1) fail(1, `multiple plan registries in ${DATA_DIR} (${found.join(', ')}) — pick one with --plan <id>`);
-  REGISTRY_PATH = join(DATA_DIR, found[0]);
+  REGISTRY_PATH = consumerPath(roots,join(DATA_DIR, found[0]));
 }
 
 // ---------- load inputs ----------
@@ -111,7 +112,7 @@ if (!Array.isArray(registry?.names) || !Array.isArray(registry?.branches) || !Ar
   fail(3, 'malformed plan registry: expected top-level names[], branches[], suites[]');
 }
 if (!Number.isInteger(registry?.planId)) fail(3, 'malformed plan registry: expected a numeric top-level planId');
-if (!opts.out) opts.out = join(ROOT, 'reports', 'tracker', `plan-${registry.planId}-tracker.html`);
+if (!opts.out) opts.out = consumerPath(roots,`reports/tracker/plan-${registry.planId}-tracker.html`);
 for (const su of registry.suites) {
   if (!Array.isArray(su?.cases)) fail(3, `malformed plan registry: suite ${su && su.id} has no cases array`);
 }
@@ -312,7 +313,7 @@ if (opts.dryRun) {
   if (opts.archive) {
     const archiveDir = join(dirname(opts.out), 'archive');
     mkdirSync(archiveDir, { recursive: true });
-    const archivePath = join(archiveDir, `${basename(opts.out, '.html')}-${stampFile}.html`);
+    const archivePath = consumerPath(roots,join(archiveDir, `${basename(opts.out, '.html')}-${stampFile}.html`));
     writeFileSync(archivePath, html);
     console.log(`Archived ${archivePath}`);
   }

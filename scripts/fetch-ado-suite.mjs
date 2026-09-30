@@ -33,7 +33,8 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { resolve, join, relative } from 'node:path';
 
-const ROOT = resolve(import.meta.dirname, '..');
+import {projectArgument,consumerPath} from './lib/consumer-paths.mjs';
+let ROOT, roots;
 
 // ---------- tiny helpers ----------
 
@@ -43,9 +44,9 @@ function fail(code, msg) {
 }
 
 function loadDotEnv() {
-  const p = join(ROOT, '.env');
+  const p = consumerPath(roots,'.env');
   if (!existsSync(p)) return;
-  for (const line of readFileSync(p, 'utf8').split(/\r?\n/)) {
+  for (const line of readFileSync(consumerPath(roots,p), 'utf8').split(/\r?\n/)) {
     const m = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/);
     if (!m) continue;
     const [, k, raw] = m;
@@ -294,7 +295,10 @@ function selfTest() {
 // ---------- main ----------
 
 async function main() {
-  const args = process.argv.slice(2);
+  if(process.argv.includes('--self-test')) return selfTest();
+  const invocation=projectArgument();
+  roots=invocation.roots;ROOT=roots.projectRoot;
+  const args=invocation.args;
   const opt = (name) => {
     const i = args.indexOf(name);
     if (i < 0) return undefined;
@@ -306,7 +310,7 @@ async function main() {
   if (has('--self-test')) return selfTest();
 
   loadDotEnv();
-  const cfg = readJsonIfExists(join(ROOT, 'config', 'project.json')) || {};
+  const cfg = readJsonIfExists(consumerPath(roots,'config/project.json')) || {};
   const az = cfg.azure || {};
   // org may be a bare name ("your-org") or a full collection URL (legacy AZURE_URL style)
   const org = opt('--org') || az.org || process.env.AZURE_ORG || process.env.AZURE_URL;
@@ -428,17 +432,17 @@ async function main() {
 
   // ---- target URL from the requested (or default) environment ----
   const envName = opt('--env') || cfg.defaultEnvironment || 'qc';
-  const envCfg = readJsonIfExists(join(ROOT, 'environments', `${envName}.json`)) || {};
+  const envCfg = readJsonIfExists(consumerPath(roots,`environments/${envName}.json`)) || {};
   const target = envCfg.portalUrl || '';
 
   // ---- write specs ----
-  const outRoot = resolve(ROOT, opt('--out') || 'test');
-  const folder = join(outRoot, `ado-suite-${suiteId}`);
+  const outRoot = consumerPath(roots,opt('--out') || 'test');
+  const folder = consumerPath(roots,join(outRoot, `ado-suite-${suiteId}`));
   const dry = has('--dry-run');
   if (!dry) mkdirSync(folder, { recursive: true });
 
   // A refetch must never wipe pipeline state written by later phases.
-  const previous = readJsonIfExists(join(folder, '_suite.json')) || {};
+  const previous = readJsonIfExists(consumerPath(roots,join(folder, '_suite.json'))) || {};
   const carried = {};
   for (const key of ['explore', 'resolvedSpecFiles', 'pr', 'markedAutomated']) {
     if (previous[key] !== undefined) carried[key] = previous[key];
@@ -483,7 +487,7 @@ async function main() {
 
     const file = `tc-${tc.id}-${slugify(tc.title)}.md`;
     const spec = renderSpec({ tc, planId, suiteId, suiteName, target, org: orgDisplay, project });
-    const outPath = join(folder, file);
+    const outPath = consumerPath(roots,join(folder, file));
     // A "## Refinement log" marks a spec the REFINE phase has restructured — those
     // survive refetch so refinement work isn't silently lost. --force overwrites.
     const existing = !dry && existsSync(outPath) ? readFileSync(outPath, 'utf8') : '';
@@ -507,8 +511,8 @@ async function main() {
   }
 
   if (!dry) {
-    writeFileSync(join(folder, '_suite.json'), JSON.stringify(manifest, null, 2), 'utf8');
-    console.log(`[written] ${relative(ROOT, join(folder, '_suite.json'))}`);
+    writeFileSync(consumerPath(roots,join(folder, '_suite.json')), JSON.stringify(manifest, null, 2), 'utf8');
+    console.log(`[written] ${relative(ROOT, consumerPath(roots,join(folder, '_suite.json')))}`);
   }
   console.log(`\nDone: ${manifest.cases.length} test case(s) from plan ${planId} / suite ${suiteId} ("${suiteName}").`);
   console.log(`Next: /execute-test ado-suite-${suiteId}/  →  generate ${manifest.suggestedSpecFile}  →  npx playwright test ${manifest.suggestedSpecFile} --project=chromium`);

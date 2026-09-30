@@ -94,3 +94,12 @@ full execution parity or the later generation/review/verification lifecycle proo
 Unit tests cover root containment and false-pass prevention using synthetic tool
 events. They are not substitutes for native authenticated host runs. The proof is
 currently evaluated on Windows only; Linux host behavior remains unperformed.
+
+## M3 library extension
+
+Use `prepare-library` instead of `prepare` to exercise the M3 adopter in the isolated
+consumer and require native discovery of every canonical skill on both hosts. The
+remaining commands are unchanged. The six-case behavioral assessment stays focused
+on element-locators; full-library discovery is not behavioral coverage of all skills.
+Current references resolve to canonical `.agents/skills` siblings. Historical M2
+results remain recorded against their original package snapshot.

@@ -3,8 +3,8 @@
  * harness-metrics.mjs — aggregate the harness pipeline's on-disk state into one report.
  *
  * Reads:   test/ado-suite-<id>/_suite.json + _verify-state.json    (pipeline/verify state)
- *          .agentex/page-map/*.md                                  (per-page "Drift ledger" tables)
- *          .claude/skills/framework-review/class-ledger.md         (review finding-class rows)
+ *          .harness/knowledge/ui/*.md                                  (per-page "Drift ledger" tables)
+ *          .harness/state/review/class-ledger.md         (review finding-class rows)
  * Prints:  automation coverage per suite and in total (passed + fixme over total cases),
  *          fix-round/greens stats, the classification breakdown, the NEEDS-HUMAN QUEUE
  *          (terminal cases awaiting a person: rounds exhausted, blocked, app-defect
@@ -21,11 +21,13 @@
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {projectArgument,consumerPath} from './lib/consumer-paths.mjs';
 
-const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const {roots}=projectArgument();
+const ROOT = roots.projectRoot;
 const SUITES_DIR = join(ROOT, 'test');
-const PAGE_MAP_DIR = join(ROOT, '.agentex', 'page-map');
-const CLASS_LEDGER = join(ROOT, '.claude', 'skills', 'framework-review', 'class-ledger.md');
+const PAGE_MAP_DIR = consumerPath(roots,'.harness/knowledge/ui');
+const CLASS_LEDGER = consumerPath(roots,'.harness/state/review/class-ledger.md');
 const DRIFT_FLAG_AT = 3; // three drift entries for one element = wrong strategy, not unlucky
 const ROUND_CAP = 3;     // fix rounds per case, cumulative — cap reached + still failing = terminal
 const HUMAN_CLASSES = ['app-defect', 'environment', 'unclassified'];
@@ -111,7 +113,7 @@ function needsHumanQueue(suites) {
   return queue;
 }
 
-// ---------- locator drift (.agentex/page-map/*.md "Drift ledger" tables) ----------
+// ---------- locator drift (.harness/knowledge/ui/*.md "Drift ledger" tables) ----------
 
 const isTableSeparator = (l) => /^\|[\s:|-]+\|?$/.test(l);
 const rowCells = (l) => l.split('|').slice(1, -1).map((c) => c.trim());
@@ -233,9 +235,9 @@ function main() {
 
   out.push('', '== LOCATOR DRIFT ==');
   if (!drift) {
-    out.push('no page map found (.agentex/page-map/)');
+    out.push('no page map found (.harness/knowledge/ui/)');
   } else if (!drift.pages.length) {
-    out.push('no page-map drift ledgers found (.agentex/page-map/)');
+    out.push('no page-map drift ledgers found (.harness/knowledge/ui/)');
   } else {
     out.push(renderTable(['page', 'drift entries'], drift.pages.map((p) => [p.page, p.entries])));
     if (drift.flagged.length) {
@@ -249,7 +251,7 @@ function main() {
 
   out.push('', '== REVIEW FINDINGS ==');
   if (!findings) {
-    out.push('no class ledger found (.claude/skills/framework-review/class-ledger.md)');
+    out.push('no class ledger found (.harness/state/review/class-ledger.md)');
   } else if (!findings.totalRows) {
     out.push('ledger empty — no findings recorded');
   } else {

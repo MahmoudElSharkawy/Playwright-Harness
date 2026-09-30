@@ -17,20 +17,22 @@
 
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
 import { execSync, execFileSync } from 'node:child_process';
+import {consumerRoots,consumerPath} from '../lib/consumer-paths.mjs';
 
-const ROOT = resolve(import.meta.dirname, '..', '..');
+const PACKAGE_ROOT = resolve(import.meta.dirname, '..', '..');
+let ROOT;
+let roots;
 
 function readStdin() {
   try { return JSON.parse(readFileSync(0, 'utf8')); } catch { return {}; }
 }
 
 function ledgerPath(sessionId) {
-  const dir = join(tmpdir(), 'playwright-pom-guard');
+  const dir = consumerPath(roots,'.harness/state/hooks');
   mkdirSync(dir, { recursive: true });
-  return join(dir, createHash('sha256').update(String(sessionId || 'unknown')).digest('hex').slice(0, 24) + '.json');
+  return consumerPath(roots,join(dir, createHash('sha256').update(String(sessionId || 'unknown')).digest('hex').slice(0, 24) + '.json'));
 }
 function readLedger(sessionId) {
   try { return JSON.parse(readFileSync(ledgerPath(sessionId), 'utf8')); } catch { return {}; }
@@ -83,13 +85,15 @@ function pushTargetsDefault(command) {
 function main() {
   const mode = process.argv[2];
   const input = readStdin();
+  roots=consumerRoots(input.cwd || process.cwd());
+  ROOT=roots.projectRoot;
   const sessionId = input.session_id;
 
   if (mode === 'session-start') {
     console.log(
       'playwright-pom harness reminders: (1) skill-first rule — route every framework task via the CLAUDE.md ' +
       'intent table before touching files; (2) all changes happen on a purposefully-named feature branch, never ' +
-      'on master — the pipeline ends with a PR; (3) run `node scripts/check-conventions.mjs --changed` before committing.');
+      'on master — the pipeline ends with a PR; (3) run the installed convention checker with the consumer root before committing.');
     return 0;
   }
 
@@ -161,7 +165,7 @@ function main() {
     // Warn-only convention lint on the edited framework file.
     if (!filePath || !/[\\/](tests|pages|apis|dbs|utils|config)[\\/].*\.(ts|js|mjs)$/.test(filePath)) return 0;
     try {
-      const out = execFileSync(process.execPath, [join(ROOT, 'scripts', 'check-conventions.mjs'), '--quiet', '--files', filePath],
+      const out = execFileSync(process.execPath, [join(PACKAGE_ROOT, 'scripts', 'check-conventions.mjs'), '--root',ROOT,'--quiet', '--files', filePath],
         { cwd: ROOT, encoding: 'utf8', timeout: 12000 });
       if (/\b[1-9]\d* new WARN/.test(out)) { // fresh warnings exit 0 — relay them anyway
         console.error('convention check (warn-only) for the file you just edited:\n' + out.trim());

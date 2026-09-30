@@ -10,6 +10,6 @@ exactly — it defines orientation (fresh repo vs existing framework), the hard 
 (merge-never-overwrite, package `VERSION` ownership, derive-only team libraries,
 baseline discipline), the verification gates, and the report format.
 
-After adoption, the repo's `CLAUDE.md` plus `.claude/skills/` become your operating
-contract there: skill-first routing for every framework task, feature branches only,
+After adoption, the repo's `CLAUDE.md` plus `.agents/skills/` become your operating
+contract there: skill-first routing for every framework task, the ongoing feature branch,
 delivery through pull requests.

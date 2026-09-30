@@ -17,6 +17,11 @@ no upstream implementation was copied. The local Claude test CLI and Python skil
 validator dependencies are development tools in ignored storage, not bundled source
 or dependencies of the published package. Their upstream licenses continue to apply.
 
+M3 migrates the remaining owner-cleared skills and adds project-specific adoption,
+configuration and local-source tools. No third-party implementation was copied and
+no new runtime dependency was added. Legacy-source digests identify recognized
+instructions for safe migration; they do not contain private historical values.
+
 AgenTeX (MIT) and Microsoft Playwright CLI (Apache-2.0) were inspected as references.
 No upstream implementation was copied into M1. Exact research revisions are recorded
 in [the provenance inventory](../scripts/provenance.json). Architectural ideas and links

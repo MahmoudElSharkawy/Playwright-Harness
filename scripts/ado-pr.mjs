@@ -17,16 +17,17 @@ import { readFileSync, existsSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { execSync } from 'node:child_process';
 
-const ROOT = resolve(import.meta.dirname, '..');
+import {projectArgument,consumerPath} from './lib/consumer-paths.mjs';
+let ROOT, roots;
 
 function fail(code, msg) {
   console.error(`[ado-pr] ERROR: ${msg}`);
   process.exit(code);
 }
 function loadDotEnv() {
-  const p = join(ROOT, '.env');
+  const p = consumerPath(roots,'.env');
   if (!existsSync(p)) return;
-  for (const line of readFileSync(p, 'utf8').split(/\r?\n/)) {
+  for (const line of readFileSync(consumerPath(roots,p), 'utf8').split(/\r?\n/)) {
     const m = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/);
     if (m && process.env[m[1]] === undefined) process.env[m[1]] = m[2].trim().replace(/^["']|["']$/g, '');
   }
@@ -51,7 +52,10 @@ async function ado(url, { method = 'GET', body } = {}) {
 }
 
 async function main() {
-  const args = process.argv.slice(2);
+
+  const parsed=projectArgument();
+  roots=parsed.roots;ROOT=roots.projectRoot;
+  const args=parsed.args;
   const opt = (n) => {
     const i = args.indexOf(n);
     if (i < 0) return undefined;
@@ -61,7 +65,7 @@ async function main() {
   const has = (n) => args.includes(n);
 
   loadDotEnv();
-  const cfg = JSON.parse(readFileSync(join(ROOT, 'config', 'project.json'), 'utf8'));
+  const cfg = JSON.parse(readFileSync(consumerPath(roots,'config/project.json'), 'utf8'));
   const az = cfg.azure || {};
   const pat = process.env.AZURE_DEVOPS_EXT_PAT || process.env.AZURE_PAT;
   if (!az.org || !az.project) fail(1, 'azure.org/project missing in config/project.json');
@@ -71,9 +75,9 @@ async function main() {
 
   const title = opt('--title');
   const descFile = opt('--description-file');
-  if (descFile && !existsSync(resolve(ROOT, descFile))) fail(1, `description file not found: ${descFile} (resolved against the repo root)`);
+  if (descFile && !existsSync(consumerPath(roots,descFile))) fail(1, `description file not found: ${descFile} (resolved against the repo root)`);
   const description = opt('--description') ||
-    (descFile ? readFileSync(resolve(ROOT, descFile), 'utf8') : undefined);
+    (descFile ? readFileSync(consumerPath(roots,descFile), 'utf8') : undefined);
   if (!title || !description) fail(1, 'usage: node scripts/ado-pr.mjs --title "..." (--description "..." | --description-file <path>)');
 
   let source = opt('--source');

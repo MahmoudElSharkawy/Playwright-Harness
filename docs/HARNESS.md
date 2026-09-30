@@ -1,73 +1,71 @@
 # Playwright POM Harness reference
 
-This document describes the M1 baseline and the representative M2 skill work. Canonical
-POM rules live in the skill library. It does not claim that the later provider-neutral
-executors or host integrations already exist.
+M3 provides one canonical 13-skill library, thin native host packaging, safe consumer
+adoption, local-source loading and explicit environment-profile configuration. It
+does not implement the later browser/API/DB executors or full lifecycle parity.
 
-## Components
+## Package and consumer responsibilities
 
-- Thirteen skills: twelve remain in `.claude/skills`; `element-locators` is maintained
-  in `.agents/skills` with compatibility redirects at its previous locations.
-- A Claude plugin manifest exposes the representative canonical skill. Native Codex
-  discovery uses a consumer link to that same directory in the isolated M2 proof.
-- Nine original Node scripts for convention checks, Claude hooks, ADO operations,
-  metrics and tracker rendering, supplemented by M1 package-validation tooling.
-- Optional synthetic TypeScript framework examples in `examples`.
-- Empty review/prerequisite/knowledge templates and derive-only resource contracts.
+Canonical skills, references, templates and scripts live in the immutable package.
+Codex discovers consumer links to `.agents/skills`; Claude loads the same content
+through `.claude-plugin/plugin.json`. Old `.claude/skills` files are redirects.
+Resolve links before opening sibling references; never maintain host-specific rule
+copies. The separate consumer owns app code, local sources, `.harness` configuration,
+reviewed knowledge, candidates, reports and session state.
 
-## Existing lifecycle
+The adopter preflights conflicts and merges instructions/ignore rules. It preserves
+custom code, host settings and imported team libraries. Recognized legacy instructions
+can become redirects; mutable records migrate with source fingerprints and conflict
+refusal. See [the adoption guide](M3-ADOPTION.md) and the
+[required protocol](../README.md#for-ai-agents-adoption-protocol).
 
-Source retrieval → refinement → AgenTeX exploration → observation capture → POM
-generation → independent review → scoped Playwright Test verification → delivery.
-This is predominantly agent/skill orchestration, not an implemented neutral workflow
-runtime. ADO and AgenTeX remain dependencies of the existing automate-suite path.
-The convention skills can be used independently of that path.
+## Sources and workflow
 
-Preserve source intent, independent review, bounded repairs and two scoped green runs.
-API/DB services and utilities retain their responsibilities; tests orchestrate intent.
+The local loader validates neutral scenarios, steps, expectations and optional external
+references without ADO configuration or network access. It records a source fingerprint
+and reports counts with `executed: false`. Environment modes and separate targets are
+validated configuration, not implemented operation dispatch or execution policy.
 
-## Current boundaries and limitations
+Legacy ADO retrieval → refinement → AgenTeX exploration → POM generation → independent
+review → scoped verification → authorized delivery remains compatibility guidance.
+The local route currently supports loading/refinement inputs; integrating execution,
+generation, review and verification remains later work. Preserve source assertions,
+three cumulative repair rounds and two independent scoped green runs. Sequential
+execution remains the default; harness parallel dispatch stays deferred.
 
-- Hooks are advisory, fail-open helpers, not a security boundary. Their command-text
-  parsing does not enforce every shell spelling. CI and remote branch policies remain
-  necessary. No historical live-hook certification is claimed by this package.
-- The convention checker enforces a documented mechanical subset, not full TypeScript
-  semantics. It reports the files and rule applications actually evaluated.
-- API/DB utilities are examples, not the proposed future executors. Review their
-  runtime logging, retry and connection policies before using them with real systems.
-- Example specs require a deliberately configured application/database; listing or
-  typechecking them is not evidence that browser/database execution passed.
+Knowledge observations enter candidates and require review/sanitization before
+promotion. Active-run inputs do not silently change. Catalogs, deterministic helpers
+and fixed inline parameterized definitions remain valid peer execution sources for
+later integration. Cleanup follows intent/ownership; before-state capture is conditional,
+and intentionally persistent outcomes may remain.
 
-## Convention checker
+## Existing tools and limits
 
-Use `node scripts/check-conventions.mjs --root examples` for this package and the
-consumer framework root after adoption. `--files` takes paths relative to that root.
-`--changed` accepts `--base-ref`; failure to resolve Git state and zero relevant
-scope are errors, not passes. `--fail-on-warn` is used by the package gate.
-Baseline entries require a team decision and may not hide introduced violations.
+- The convention checker enforces a mechanical subset of POM conventions. Use the
+  installed script with `--root <consumer>`; file/rule counts must be nonzero.
+  Unresolved Git bases and empty scope fail. Never expand baselines to hide violations.
+- Tracker rendering and metrics read consumer state. Templates remain in the package;
+  a rendered empty report is not substantive validation coverage.
+- Optional Claude hooks use payload `cwd` (or the consumer working directory) and store
+  session records under consumer `.harness/state/hooks`. Adoption does not enable hooks
+  or copy broad host permissions. These helpers remain advisory and fail open.
+- Legacy ADO scripts select a consumer root, keep their existing configuration/workflow,
+  and require explicit authorization for external writes. They are not neutral adapters.
+- API/DB utilities in `examples` remain examples. Typechecking and test listing do not
+  prove browser/database execution against a configured system.
 
-## Data and recovery
+## Validation and future milestones
 
-Runtime outputs and private source imports stay ignored. Public templates contain no
-consumer data. Imported team resources are immutable; derive services/helpers or
-catalog candidates without copying sample identities. Knowledge promotion is reviewed.
-Cleanup follows scenario intent and ownership; intentionally persistent outcomes may
-remain. Before-state capture is only required for a defined restoration obligation.
+Node 24 is the supported package runtime. M1 establishes sanitized, owner-cleared
+source and truthful validation. M2 proved six representative locator decisions through
+both native hosts with actual skill/reference reads, immutable package checks and
+semantic comparison. M3 extends discovery to all 13 canonical skills and tests consumer
+adoption and local-source behavior. Native proof is specific to the tested hosts and
+platform; it is not full generation/review/verification parity.
 
-## Runtime and installation
-
-The validated package baseline is Node 24. Read the [adoption protocol](../README.md#for-ai-agents-adoption-protocol)
-before installing into a fresh repository or an existing framework. Package maintenance
-must not overwrite an adopter's framework or team customizations.
-
-## M1, representative M2 proof and later work
-
-M1 addresses privacy, provenance and truthful validation. M2 separates package,
-consumer and run roots and tests one canonical skill through native host mechanisms.
-The proof tooling is not a production adapter or execution context. It compares six
-locator decisions and actual reference reads, not raw host artifact equality.
-See [the proof guide](M2-SKILL-PROOF.md), [M2 validation](M2-VALIDATION.md),
-[M1 validation](M1-VALIDATION.md) and [provenance](PROVENANCE.md).
-
-Bulk migration remains gated on both hosts passing M2 and authorization for M3.
-UI/API/DB executors and ADO restructuring remain later milestones.
+See [M1 validation](M1-VALIDATION.md), [M2 validation](M2-VALIDATION.md),
+[the proof guide](M2-SKILL-PROOF.md) and [provenance](PROVENANCE.md).
+The pinned Playwright CLI spike, minimal execution core and executors remain later
+milestones. No second browser command language or generic workflow engine is introduced.
+Public delivery remains separately authorized and subject to unresolved historical
+credential revocation/rotation remediation.

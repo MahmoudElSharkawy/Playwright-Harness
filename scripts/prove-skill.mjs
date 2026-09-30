@@ -8,6 +8,7 @@ import {spawn,spawnSync} from 'node:child_process';
 import {createInterface} from 'node:readline';
 import {inventory} from './lib/package-validation.mjs';
 import {resolveSkillRoots,linkRepresentativeSkill} from './lib/skill-roots.mjs';
+import {adoptProject} from './lib/adoption.mjs';
 import {parseEvents,assessHost,semanticParity} from './lib/skill-proof-assessment.mjs';
 
 const sourceRoot=resolve(dirname(fileURLToPath(import.meta.url)),'..');
@@ -16,19 +17,21 @@ function snapshot(root) {
  const records=[];function walk(dir){for(const e of readdirSync(dir,{withFileTypes:true})){const p=join(dir,e.name);if(e.isSymbolicLink())throw new Error('package contains link');if(e.isDirectory())walk(p);else records.push([relative(root,p).replaceAll('\\','/'),createHash('sha256').update(readFileSync(p)).digest('hex')]);}}walk(root);return records.sort((a,b)=>a[0].localeCompare(b[0]));
 }
 function load(stateFile){const state=JSON.parse(readFileSync(stateFile,'utf8'));state.roots=resolveSkillRoots(state.roots);return state;}
-function prepare() {
- const workspace=join(sourceRoot,'.validation/m2',randomUUID());
+function prepare(library=false) {
+ const workspace=join(sourceRoot,library?'.validation/m3':'.validation/m2',randomUUID());
  const packageRoot=join(workspace,'package'),projectRoot=join(workspace,'consumer'),runRoot=join(projectRoot,'.harness/runs/locator-proof');
  mkdirSync(packageRoot,{recursive:true});mkdirSync(projectRoot);mkdirSync(runRoot,{recursive:true});
  const scope=inventory(sourceRoot);if(scope.unexpected.length)throw new Error('unclassified publication source');
  for(const file of scope.files){const dest=join(packageRoot,file);mkdirSync(dirname(dest),{recursive:true});cpSync(join(sourceRoot,file),dest);}
- const roots=resolveSkillRoots({packageRoot,projectRoot,runRoot});linkRepresentativeSkill(roots);
+ const roots=resolveSkillRoots({packageRoot,projectRoot,runRoot});
+ if(library)adoptProject({projectRoot,installedRoot:packageRoot,environment:'qa',mode:'test'});else linkRepresentativeSkill(roots);
  writeFileSync(join(projectRoot,'AGENTS.md'),'This is an isolated read-only locator proof. Use the discovered skill. Do not change files, execute a browser, contact test systems, or search outside the provided package and project.\n');
  writeFileSync(join(projectRoot,'CLAUDE.md'),'This is an isolated read-only locator proof. Load the supplied plugin skill. Do not edit files or contact test systems.\n');
  cpSync(join(sourceRoot,'harness-tests/fixtures/locator-proof.json'),join(projectRoot,'locator-cases.json'));
  const git=spawnSync('git',['init','--initial-branch=proof'],{cwd:projectRoot,encoding:'utf8'});if(git.status!==0)throw new Error('consumer Git boundary creation failed');
  writeFileSync(join(runRoot,'output-schema.json'),JSON.stringify(schema));
- const state={roots,before:snapshot(packageRoot),sourceSkillHash:createHash('sha256').update(readFileSync(join(sourceRoot,'.agents/skills/element-locators/SKILL.md'))).digest('hex')};
+ const expectedSkills=library?readdirSync(join(packageRoot,'.agents/skills')).filter(n=>existsSync(join(packageRoot,'.agents/skills',n,'SKILL.md'))).sort():['element-locators'];
+ const state={roots,expectedSkills,before:snapshot(packageRoot),sourceSkillHash:createHash('sha256').update(readFileSync(join(sourceRoot,'.agents/skills/element-locators/SKILL.md'))).digest('hex')};
  const stateFile=join(runRoot,'proof-state.json');writeFileSync(stateFile,JSON.stringify(state,null,2));
  console.log(JSON.stringify({stateFile,packageFiles:state.before.length}));
 }
@@ -42,15 +45,21 @@ async function discover(state,executable) {
  child.on('exit',()=>{for(const p of pending.values())p.reject(new Error('native discovery host exited'));});
  const timer=setTimeout(()=>child.kill(),30000);
  try {
-   await request('initialize',{clientInfo:{name:'pom_m2_proof',version:'3.0.2'}});child.stdin.write(JSON.stringify({method:'initialized',params:{}})+'\n');
+   await request('initialize',{clientInfo:{name:'pom_skill_proof',version:'3.0.3'}});child.stdin.write(JSON.stringify({method:'initialized',params:{}})+'\n');
    const result=await request('skills/list',{cwds:[state.roots.projectRoot],forceReload:true});
    writeFileSync(join(state.roots.runRoot,'codex-discovery-raw.json'),JSON.stringify(result,null,2));
    const entries=result.data??[];const found=entries.flatMap(e=>e.skills??[]).filter(s=>['element-locators','playwright-pom-harness:element-locators'].includes(s.name) && s.enabled!==false);
    const errors=entries.flatMap(e=>e.errors??[]);
-   writeFileSync(join(state.roots.runRoot,'codex-discovery.json'),JSON.stringify({found,errors},null,2));
+   const expected=state.expectedSkills??['element-locators'];
+   const library=expected.map(name=>{
+     const matches=entries.flatMap(e=>e.skills??[]).filter(s=>[name,'playwright-pom-harness:'+name].includes(s.name) && s.enabled!==false);
+     return {name,valid:matches.length===1 && realpathSync(matches[0].path)===realpathSync(join(state.roots.packageRoot,'.agents/skills',name,'SKILL.md'))};
+   });
+   writeFileSync(join(state.roots.runRoot,'codex-discovery.json'),JSON.stringify({found,errors,library},null,2));
+   if(!library.length || library.some(s=>!s.valid))throw new Error('library discovery incomplete');
    if(found.length!==1 || errors.length)throw new Error('native skill discovery was missing, ambiguous or invalid');
    if(realpathSync(found[0].path)!==realpathSync(join(state.roots.packageRoot,'.agents/skills/element-locators/SKILL.md')))throw new Error('discovered a different skill');
-   console.log(JSON.stringify({check:'native-codex-discovery',status:'PASS',matches:found.length}));
+   console.log(JSON.stringify({check:'native-codex-discovery',status:'PASS',matches:library.length}));
  } finally {clearTimeout(timer);lines.close();child.stdin.end();child.kill();}
 }
 function prompt(host,state) {
@@ -86,7 +95,7 @@ function assess(state) {
    const answerFile=join(runRoot,'codex-answer.json');
    const answer=host==='codex'?(existsSync(answerFile)?JSON.parse(readFileSync(answerFile,'utf8')):undefined):events.findLast(e=>e.type==='result')?.structured_output;
    const discovery=host==='codex'?JSON.parse(readFileSync(join(runRoot,'codex-discovery.json'),'utf8')):undefined;
-   reports.push(assessHost({host,answer,events,processResult,roots:state.roots,packageUnchanged:JSON.stringify(snapshot(packageRoot))===JSON.stringify(state.before),discovery}));
+   reports.push(assessHost({host,answer,events,processResult,roots:state.roots,packageUnchanged:JSON.stringify(snapshot(packageRoot))===JSON.stringify(state.before),discovery,expectedSkills:state.expectedSkills}));
   } catch {reports.push({host,status:'FAIL',reason:'missing or invalid evidence'});}
  }
  const parity=semanticParity(reports);
@@ -95,5 +104,5 @@ function assess(state) {
 try {
  const [command,stateFile,executable,model]=process.argv.slice(2);
  if(process.argv.length>6 || (model && command!=='claude'))throw new Error('model override is only supported for the Claude proof');
- if(command==='prepare')prepare();else {const state=load(stateFile);if(command==='discover')await discover(state,executable||'codex');else if(['codex','claude'].includes(command))await runHost(state,command,executable||command,model);else if(command==='assess')assess(state);else throw new Error('unknown proof command');}
+ if(['prepare','prepare-library'].includes(command))prepare(command==='prepare-library');else {const state=load(stateFile);if(command==='discover')await discover(state,executable||'codex');else if(['codex','claude'].includes(command))await runHost(state,command,executable||command,model);else if(command==='assess')assess(state);else throw new Error('unknown proof command');}
 } catch {console.error('Skill proof did not complete; inspect only the consumer run evidence. No source excerpts emitted.');process.exitCode=2;}

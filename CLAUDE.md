@@ -5,7 +5,7 @@
 
 ## Branch & delivery rule (repo-wide, with advisory hooks)
 
-**Never commit to or push master/main directly.** Every change — framework code,
+**Never commit to or push master/main directly.** Reuse the ongoing feature branch and add commits instead of creating a branch per milestone. Every change — framework code,
 skills, scripts, docs — rides a purposefully-named feature branch
 (`automation/ado-suite-<id>-<slug>` for pipeline output, `harness/<topic>` for
 harness work, `fix/<topic>` otherwise) and lands through a pull request
@@ -21,7 +21,7 @@ until something is edited (classify the failure instead).
 
 ## Skill-first rule (applies to every session in this repo)
 
-This repo ships a convention skill library in `.claude/skills/`. For **any** work on
+This repo ships a convention skill library in `.agents/skills/`. For **any** work on
 framework code — creating, extending, refactoring, or reviewing — invoke the matching
 skill(s) with the Skill tool **before** touching files, even when the user never mentions
 a skill by name. Infer the intent from the request and route via the table below. Never
@@ -47,7 +47,7 @@ router) and follow its routing table.
 | An `Apis<Domain>` / `Dbs<Domain>` class — endpoints (sourced from the team API-collection library `resources/apisCollections/`), SQL queries (sourced from the team library `resources/Queries/`), lifecycle | `service-classes` |
 | Anything in `utils/` — facades, logging, Allure attachments, global setup/teardown | `utility-classes` |
 | Review a diff/MR against the conventions, "run framework review", the GENERATE exit gate | `framework-review` — mechanical linter + §6 walk + verdict (independent reviewer, never the author) |
-| "Update / regenerate the plan tracker", "record these cases as done/blocked", "sync the tracker", "where are we on the plan" — any change to the tracked plan's progress or scope | `plan-tracker` — registry + append-only history in `.claude/skills/plan-tracker/data/`, rendered by `scripts/generate-tracker.mjs` |
+| "Update / regenerate the plan tracker", "record these cases as done/blocked", "sync the tracker", "where are we on the plan" — any change to the tracked plan's progress or scope | `plan-tracker` — registry + append-only history in `.agents/skills/plan-tracker/data/`, rendered by `scripts/generate-tracker.mjs` |
 | Folder layout, naming, where new code belongs, or a full MR/code review | `pom-architecture` |
 
 ## The common flow: automating a test case end-to-end

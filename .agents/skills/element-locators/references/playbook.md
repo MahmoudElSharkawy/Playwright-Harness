@@ -2,7 +2,7 @@
 
 Numbered practices for finding, naming, and declaring locators in this
 Playwright/TypeScript framework. Examples illustrate the convention; named page files are illustrative consumer paths.
-Shared law: [design-conventions](../../../../.claude/skills/pom-architecture/references/design-conventions.md).
+Shared law: [design-conventions](../../pom-architecture/references/design-conventions.md).
 
 ---
 
@@ -355,14 +355,14 @@ this.file = page.locator('//input[@type="file"]');
 This skill does **not** cover:
 
 - Where locator fields and dynamic locator methods sit in the class file, the
-  `// Locators` banner, or constructor wiring → [page-classes](../../../../.claude/skills/page-classes/SKILL.md)
+  `// Locators` banner, or constructor wiring → [page-classes](../../page-classes/SKILL.md)
 - Action-method bodies, Allure step titles, or what to do after locating
-  → [action-methods](../../../../.claude/skills/action-methods/SKILL.md)
+  → [action-methods](../../action-methods/SKILL.md)
 - Web-first assertions run against located elements
-  → [validation-methods](../../../../.claude/skills/validation-methods/SKILL.md)
+  → [validation-methods](../../validation-methods/SKILL.md)
 - `<op>_serviceName` / `<op>_query` string fields in `apis/`/`dbs/` classes (same
-  postfix convention, different layer) → [service-classes](../../../../.claude/skills/service-classes/SKILL.md)
-- Where expected texts and inputs live → [test-data](../../../../.claude/skills/test-data/SKILL.md)
+  postfix convention, different layer) → [service-classes](../../service-classes/SKILL.md)
+- Where expected texts and inputs live → [test-data](../../test-data/SKILL.md)
 
 ## Review checklist — locators
 

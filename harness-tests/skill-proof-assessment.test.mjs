@@ -10,7 +10,7 @@ function fixture(t,host='codex') {
   t.after(()=>{const path=relative(base,realpathSync(root));assert(!isAbsolute(path) && path.startsWith('pom-proof-'));rmSync(root,{recursive:true});});
   const roots={packageRoot:join(root,'package'),projectRoot:join(root,'consumer')};
   const skill='.agents/skills/element-locators/SKILL.md';
-  const references=['.claude/skills/pom-architecture/references/design-conventions.md','.agents/skills/element-locators/references/playbook.md'];
+  const references=['.agents/skills/pom-architecture/references/design-conventions.md','.agents/skills/element-locators/references/playbook.md'];
   const documents=[...references,skill].map(file=>[join(roots.packageRoot,file),`Synthetic ${file}\nSecond line.`]);
   documents.push([join(roots.projectRoot,'locator-cases.json'),'Synthetic six locator cases.']);
   const choices=[['stable-id','id','save_button'],['name-attribute','name','email_input'],['test-attribute','test-attribute','country_input'],['dynamic-card','scoped-dynamic','viewProduct_button'],['collection','collection','cards_list'],['upload','raw-file-input','attachment_input']].map(([caseId,strategy,locatorName])=>({caseId,strategy,locatorName,private:true,usesIndex:false,reason:'Synthetic rule application.'}));
@@ -91,4 +91,17 @@ test('semantic comparison tolerates wording and field names but not rule differe
 });
 test('malformed or empty event logs fail instead of silently dropping records',()=>{
   assert.throws(()=>parseEvents(''));assert.throws(()=>parseEvents('{}\nnot-json'));assert.deepEqual(parseEvents('{}\n'),[{}]);
+});
+
+test('library proof requires every expected native registration on both hosts',t=>{
+ for(const host of ['codex','claude']) {
+   const data=fixture(t,host);data.expectedSkills=['element-locators','action-methods'];
+   assert.equal(assessHost(data).status,'FAIL');
+   if(host==='codex')data.discovery.library=data.expectedSkills.map(name=>({name,valid:true}));
+   else data.events.find(e=>e.subtype==='init').skills.push('playwright-pom-harness:action-methods');
+   assert.equal(assessHost(data).status,'PASS');
+   if(host==='codex')data.discovery.library[1].valid=false;
+   else data.events.find(e=>e.subtype==='init').skills.push('playwright-pom-harness:action-methods');
+   assert.equal(assessHost(data).status,'FAIL');
+ }
 });

@@ -40,21 +40,22 @@ import { readFileSync, existsSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { createHash } from 'node:crypto';
 
-const ROOT = resolve(import.meta.dirname, '..');
+import {projectArgument,consumerPath} from './lib/consumer-paths.mjs';
+let ROOT, roots;
 
 function fail(code, msg) {
   console.error(`[publish-ado-results] ERROR: ${msg}`);
   process.exit(code);
 }
 function loadDotEnv() {
-  const p = join(ROOT, '.env');
+  const p = consumerPath(roots,'.env');
   if (!existsSync(p)) return;
-  for (const line of readFileSync(p, 'utf8').split(/\r?\n/)) {
+  for (const line of readFileSync(consumerPath(roots,p), 'utf8').split(/\r?\n/)) {
     const m = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/);
     if (m && process.env[m[1]] === undefined) process.env[m[1]] = m[2].trim().replace(/^["']|["']$/g, '');
   }
 }
-const readJson = (p) => JSON.parse(readFileSync(p, 'utf8'));
+const readJson = (p) => JSON.parse(readFileSync(consumerPath(roots,p), 'utf8'));
 
 let AUTH = '';
 async function ado(url, { method = 'GET', body, contentType = 'application/json' } = {}) {
@@ -82,7 +83,10 @@ async function adoJson(url, opts) {
 const OUTCOME_MAP = { passed: 'Passed', failed: 'Failed', blocked: 'Blocked', fixme: 'Failed' };
 
 async function main() {
-  const args = process.argv.slice(2);
+
+  const parsed=projectArgument();
+  roots=parsed.roots;ROOT=roots.projectRoot;
+  const args=parsed.args;
   const opt = (n) => {
     const i = args.indexOf(n);
     if (i < 0) return undefined;
@@ -93,7 +97,7 @@ async function main() {
   const dry = has('--dry-run');
 
   loadDotEnv();
-  const cfg = readJson(join(ROOT, 'config', 'project.json'));
+  const cfg = readJson(consumerPath(roots,'config/project.json'));
   const az = cfg.azure || {};
   const org = az.org, project = encodeURIComponent(az.project || '');
   const pat = process.env.AZURE_DEVOPS_EXT_PAT || process.env.AZURE_PAT;
@@ -123,7 +127,7 @@ async function main() {
     // multiline test( signatures pair correctly; a tms pairs with the NEAREST test() above it
     const titleByTc = new Map();
     for (const rel of specFiles) {
-      const p = join(ROOT, rel);
+      const p = consumerPath(roots,rel);
       if (!existsSync(p)) continue;
       const text = readFileSync(p, 'utf8');
       const titles = [...text.matchAll(/\btest(?:\.(?:fixme|skip|fail|only))?\s*\(\s*(['"`])([\s\S]*?)\1/g)]

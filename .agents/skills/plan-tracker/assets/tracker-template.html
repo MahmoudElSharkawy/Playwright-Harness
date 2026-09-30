@@ -341,7 +341,7 @@ button.chip:hover{background:var(--surface2)}
 
 <script>
 "use strict";
-/* Data injected by scripts/generate-tracker.mjs from .claude/skills/plan-tracker/data/
+/* Data injected by scripts/generate-tracker.mjs from .agents/skills/plan-tracker/data/
    (plan registry + folded history.jsonl). EMBED is the single source; the constants the
    hand-maintained version carried are derived from it so the rest of the page is unchanged.
    case tuple: [id, title, desc, verdict, note] — verdict: k=keep d=drop f=fold t=trivial */
@@ -365,7 +365,7 @@ let S = {names:EMBED.names.slice(0,2), cases:{}, open:{}};
 try{ const raw = localStorage.getItem(LSKEY); if(raw){ const p = JSON.parse(raw); if(p && p.cases) S = Object.assign(S,p); } }catch(e){}
 function save(){ try{ localStorage.setItem(LSKEY, JSON.stringify(S)); }catch(e){} }
 /* Repo-generated baseline: every regeneration re-applies the embedded statuses once
-   (folded from .claude/skills/plan-tracker/data/history.jsonl by scripts/generate-tracker.mjs).
+   (folded from .agents/skills/plan-tracker/data/history.jsonl by scripts/generate-tracker.mjs).
    Clicks made in the page persist locally only until the next regeneration — record real
    outcomes as history events (see the plan-tracker skill). Assignees: an embedded assignee
    wins when set; otherwise the locally-chosen one is kept. */

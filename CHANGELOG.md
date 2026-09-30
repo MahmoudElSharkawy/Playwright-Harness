@@ -3,6 +3,20 @@
 Package versions belong to this package, not to adopting applications. Historical
 private incidents and delivery identifiers are intentionally not retained here.
 
+## 3.0.3 — Unreleased
+
+- M3: migrate all thirteen skills into the canonical `.agents/skills` library;
+  retain thin legacy redirects and expose the same content to both native hosts.
+- Add consumer adoption with conflict preflight, instruction/configuration merges,
+  explicit environment selection, immutable package links and migration receipts.
+- Move review, prerequisite, tracker and hook state to consumer storage; preserve
+  imported team libraries and existing application/framework code.
+- Add bounded local-source validation with assertions, optional external references
+  and source fingerprints, without ADO configuration or operation execution.
+- Update installed tracker, metrics, hooks and legacy ADO root selection. Keep
+  sequential execution and reviewed knowledge promotion explicit.
+- No M4 spike, host adapter, executor, public push or release is included.
+
 ## 3.0.2 — Unreleased
 
 - M2 only: maintain `element-locators` in `.agents/skills` and retain thin redirects
