@@ -20,3 +20,19 @@ does not bundle them. The 28 optional packages for other platforms were not inst
 Principal dependencies include Playwright, TypeScript, Allure and pdf-parse
 (Apache-2.0), node-mssql and the CTRF reporter (MIT), and dotenv (BSD-2-Clause).
 Consult the resolved versions' own license/notice files before redistributing them.
+
+M4 installs `@playwright/cli` 0.1.22 and its exact Playwright/Playwright Core
+1.64.0-alpha-1790635538000 dependencies for development only. These three Apache-2.0
+packages and their registry integrity values are recorded in
+[the CLI dependency inventory](scripts/cli-dependency-licenses.json), also checked
+by `check:provenance`. Each installed package includes LICENSE; both Playwright
+packages also include NOTICE and ThirdPartyNotices.txt. Keep those files when
+redistributing the dependencies. The official CLI skill is read from the installed
+package, not copied or relicensed as a canonical harness skill.
+
+The Linux spike builds on the pinned official Node Debian container and downloads
+the pinned Chromium/browser components using Playwright's installer. Container OS
+packages and browser binaries are separate upstream distributions, not bundled in
+this source package. This audit does not clear redistribution of the image or
+browser binaries; preserve their upstream notices and audit that distribution before
+sharing it. No container image has been published.

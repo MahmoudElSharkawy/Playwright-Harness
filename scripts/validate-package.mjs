@@ -31,12 +31,15 @@ function run() {
     if (!existsSync(join(root,'LICENSE'))) findings.push({file:'LICENSE',rule:'public-license-not-applied'});
     if (!existsSync(join(root,'THIRD_PARTY_NOTICES.md'))) findings.push({file:'THIRD_PARTY_NOTICES.md',rule:'notices-missing'});
     if (!Array.isArray(status.sources) || !status.sources.length) findings.push({file:'scripts/provenance.json',rule:'source-inventory-empty'});
-    const dependencies=JSON.parse(readFileSync(join(root,'scripts/dependency-licenses.json'),'utf8'));
-    const lock=JSON.parse(readFileSync(join(root,'examples/package-lock.json'),'utf8'));
-    const locked=Object.entries(lock.packages).filter(([p])=>p);
-    dependencyRecords=dependencies.packages.length;
     const reviewed=new Set(['MIT','Apache-2.0','BSD-2-Clause','BSD-3-Clause','ISC','BlueOak-1.0.0','0BSD']);
-    if (!locked.length || locked.length!==dependencyRecords || locked.some(([path,p])=>!dependencies.packages.some(d=>d.path===path && d.version===p.version && d.license===p.license && d.resolved===p.resolved && d.integrity===p.integrity && reviewed.has(d.license)))) findings.push({file:'scripts/dependency-licenses.json',rule:'dependency-provenance-drift'});
+    dependencyRecords=0;
+    for (const [recordFile,lockFile] of [['scripts/dependency-licenses.json','examples/package-lock.json'],['scripts/cli-dependency-licenses.json','scripts/spikes/playwright-cli/package-lock.json']]) {
+      const dependencies=JSON.parse(readFileSync(join(root,recordFile),'utf8'));
+      const lock=JSON.parse(readFileSync(join(root,lockFile),'utf8'));
+      const locked=Object.entries(lock.packages).filter(([p])=>p);
+      dependencyRecords+=dependencies.packages.length;
+      if (dependencies.source!==lockFile || !locked.length || locked.length!==dependencies.packages.length || locked.some(([path,p])=>!dependencies.packages.some(d=>d.path===path && d.version===p.version && d.license===p.license && d.resolved===p.resolved && d.integrity===p.integrity && reviewed.has(d.license)))) findings.push({file:recordFile,rule:'dependency-provenance-drift'});
+    }
   } else for (const file of scope.files) {
     if (command==='syntax') {
       if (!/\.(mjs|cjs|js)$/.test(file)) continue;

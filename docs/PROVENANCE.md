@@ -22,6 +22,13 @@ configuration and local-source tools. No third-party implementation was copied a
 no new runtime dependency was added. Legacy-source digests identify recognized
 instructions for safe migration; they do not contain private historical values.
 
+M4 adds project-specific fixed viability probes and an assessor. No third-party
+implementation or official CLI skill is copied. The spike manifest and lockfile
+install the CLI separately; [its three resolved dependencies](../scripts/cli-dependency-licenses.json)
+retain Apache-2.0 licenses and upstream notices. The provenance check now audits 153
+records across the example and spike locks. Container and browser distributions are
+development tools only; their redistribution is outside this source-package audit.
+
 AgenTeX (MIT) and Microsoft Playwright CLI (Apache-2.0) were inspected as references.
 No upstream implementation was copied into M1. Exact research revisions are recorded
 in [the provenance inventory](../scripts/provenance.json). Architectural ideas and links

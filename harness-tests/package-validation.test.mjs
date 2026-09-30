@@ -62,4 +62,8 @@ test('package inspection rejects bundled dependencies, recovery material and mis
  assert.deepEqual(publicationFindings(scope,['README.md','package.json']),[]);
  assert.equal(publicationFindings(scope,['package.json','examples/node_modules/dependency.js','.m1-private/recovery.dpapi']).length,3);
  assert(publicationFindings(scope,[]).length>0);
+ const controlled={files:[...scope.files,'scripts/spike/.npmignore','scripts/spike/.gitattributes'],unexpected:[]};
+ assert.deepEqual(publicationFindings(controlled,['README.md','package.json','scripts/spike/.gitattributes']),[]);
+ assert(publicationFindings(controlled,['README.md','package.json']).some(f=>f.file==='scripts/spike/.gitattributes'));
+ assert(publicationFindings(controlled,['README.md','package.json','scripts/spike/.gitattributes','scripts/spike/node_modules/dependency.js']).length>0);
 });

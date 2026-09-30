@@ -39,6 +39,12 @@
       "commit": "74354ecc7a43da16d91a9bc54fa8db8283a3fcf5",
       "license": "Apache-2.0",
       "codeCopied": false
+    },
+    {
+      "scope": "M4 changes",
+      "status": "created for this project; native CLI consumed as a separately installed development dependency",
+      "targetLicense": "MIT",
+      "thirdPartyCodeCopied": false
     }
   ],
   "ownerAttestation": {

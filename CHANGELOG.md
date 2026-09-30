@@ -3,6 +3,17 @@
 Package versions belong to this package, not to adopting applications. Historical
 private incidents and delivery identifiers are intentionally not retained here.
 
+## 3.0.4 — Unreleased
+
+- M4 only: pin the official Playwright CLI and resolved dependencies in a separate
+  development spike, with fixed synthetic Windows/Linux browser probes.
+- Assess native session isolation, current snapshot references, authentication state,
+  evidence, error/timeout/crash handling and scoped resource cleanup. Preserve failed
+  attempts and require both platforms before a viable gate can pass.
+- Record the required noninteractive invocation profile and version-specific output
+  behavior without creating a second browser command language or a harness executor.
+- Extend provenance checking to the spike's separately installed dependencies.
+
 ## 3.0.3 — Unreleased
 
 - M3: migrate all thirteen skills into the canonical `.agents/skills` library;

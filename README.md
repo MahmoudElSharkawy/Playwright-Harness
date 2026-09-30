@@ -13,6 +13,11 @@ loading and deliberate environment-profile selection. It does not implement brow
 API or database executors or claim full workflow parity. The representative native
 host behavior proof is described in [M2 validation](docs/M2-VALIDATION.md).
 
+M4 adds a separate pinned official Playwright CLI viability spike. Its fixed
+synthetic probes validate owned browser sessions on Windows and Linux without
+implementing a harness executor. See [the spike guide](docs/M4-PLAYWRIGHT-CLI.md)
+and [actual M4 validation](docs/M4-VALIDATION.md).
+
 ## Install into a project
 
 Keep this package in its own directory; do not overlay it on application code.
@@ -103,6 +108,7 @@ hosts or external integration tests passed.
 | `.claude/skills` | Legacy Markdown redirects |
 | `scripts/adopt-project.mjs` | Consumer onboarding and known-legacy migration |
 | `scripts/load-local-source.mjs` | Validate local scenarios and record source provenance |
+| `scripts/spikes/playwright-cli` | Development-only pinned native CLI viability probes |
 | `scripts/check-conventions.mjs` | Mechanical POM convention checks |
 | `scripts/hooks/guard.mjs` | Optional advisory Claude hooks |
 | `scripts/generate-tracker.mjs`, `scripts/harness-metrics.mjs` | Consumer reporting tools |
@@ -147,4 +153,5 @@ notices retained. Historical credential revocation/rotation remains unresolved.
 The package is private; a clean validation run is not public-release authorization.
 
 See [M3 validation](docs/M3-VALIDATION.md) for actual adoption, local-source and
-native-host results, remaining limitations and the stopping point before M4.
+native-host results. [M4 validation](docs/M4-VALIDATION.md) records the focused CLI
+gate and the stopping point before execution-core implementation.

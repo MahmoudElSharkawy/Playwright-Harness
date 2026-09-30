@@ -1,6 +1,6 @@
 {
   "name": "playwright-pom-harness",
-  "version": "3.0.3",
+  "version": "3.0.4",
   "private": true,
   "license": "MIT",
   "type": "module",
@@ -25,7 +25,9 @@
     "test:roots": "node --test harness-tests/skill-roots.test.mjs",
     "test:skill-proof": "node --test harness-tests/skill-proof-assessment.test.mjs",
     "test:adoption": "node --test harness-tests/adoption.test.mjs",
-    "test:local-source": "node --test harness-tests/local-source.test.mjs"
+    "test:local-source": "node --test harness-tests/local-source.test.mjs",
+    "test:cli-spike": "node --test harness-tests/cli-spike-assessment.test.mjs",
+    "probe:cli": "node scripts/spikes/playwright-cli/probe.mjs"
   },
   "files": [
     "README.md",

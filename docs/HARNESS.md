@@ -4,6 +4,10 @@ M3 provides one canonical 13-skill library, thin native host packaging, safe con
 adoption, local-source loading and explicit environment-profile configuration. It
 does not implement the later browser/API/DB executors or full lifecycle parity.
 
+M4 adds [a pinned official CLI viability spike](M4-PLAYWRIGHT-CLI.md) with synthetic
+Windows/Linux fixtures. Browser mechanics remain native; no new command language,
+shared execution contract or scenario executor is introduced.
+
 ## Package and consumer responsibilities
 
 Canonical skills, references, templates and scripts live in the immutable package.
@@ -65,7 +69,10 @@ platform; it is not full generation/review/verification parity.
 
 See [M1 validation](M1-VALIDATION.md), [M2 validation](M2-VALIDATION.md),
 [the proof guide](M2-SKILL-PROOF.md) and [provenance](PROVENANCE.md).
-The pinned Playwright CLI spike, minimal execution core and executors remain later
-milestones. No second browser command language or generic workflow engine is introduced.
+See [M4 validation](M4-VALIDATION.md) for the pinned CLI gate and its scope limits.
+The minimal execution core and executors remain later milestones. Keep native CLI
+invocation/reply interpretation behind a narrow version-specific boundary; the
+harness layer owns identity, policy, evidence, ownership and cleanup. No second
+browser command language or generic workflow engine is introduced.
 Public delivery remains separately authorized and subject to unresolved historical
 credential revocation/rotation remediation.
