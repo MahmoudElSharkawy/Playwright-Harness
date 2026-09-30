@@ -13,6 +13,11 @@ functions. They freeze effective M3 configuration, record typed values and effec
 decide capability/recovery policy and validate complete evidence-backed results.
 They do not invoke a host, CLI, API or database, or schedule scenarios.
 
+M6 adds [sequential browser integration](M6-BROWSER.md). The browser layer manages
+ownership, policy, evidence and core result records; the official native CLI still
+owns mechanics. M6 adds optional browser targets and intent capabilities without
+changing existing consumer configuration. API/DB dispatch remains deferred.
+
 ## Package and consumer responsibilities
 
 Canonical skills, references, templates and scripts live in the immutable package.

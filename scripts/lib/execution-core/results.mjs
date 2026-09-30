@@ -99,7 +99,11 @@ export function assessRun(run, roots, input) {
       previousPhase = phase; previousEnd = attempt.endedAt;
       if (phase === 3) cleanupStartedAt ??= attempt.startedAt;
       const window = checkExecutionWindow(run, {phase: identity.phase, now: attempt.startedAt, ...(phase === 3 ? {cleanupStartedAt} : {})});
-      requireThat(window.allowed || (attempt.outcome === 'INFRASTRUCTURE_FAILURE' && attempt.failureClass === 'TIMEOUT' && attempt.effect.certainty === 'not-executed'), 'Operation started outside its execution deadline.');
+      // A refusal can be recorded after expiry without claiming that work started.
+      // The authorization check below also proves every POLICY refusal is genuine.
+      const unexecutedExpiry = attempt.effect.certainty === 'not-executed' &&
+        ((attempt.outcome === 'INFRASTRUCTURE_FAILURE' && attempt.failureClass === 'TIMEOUT') || (attempt.outcome === 'BLOCKED' && attempt.failureClass === 'POLICY'));
+      requireThat(window.allowed || unexecutedExpiry, 'Operation started outside its execution deadline.');
       const deadline = phase === 3 ? cleanupStartedAt + run.inputs.limits.cleanupTimeoutMs : run.deadlineAt;
       requireThat(attempt.outcome !== 'SUCCESS' || attempt.endedAt <= deadline, 'Successful operation exceeded its deadline.');
       const operation = operationMap.get(identity.operationId);

@@ -33,6 +33,11 @@ M5 adds project-specific execution contracts and regression fixtures using Node
 built-ins and existing project configuration/root validation. No third-party source
 was copied, no runtime dependency was added, and the dependency notices are unchanged.
 
+M6 adds project-authored browser integration and synthetic validation fixtures. It
+reuses the exact separately installed M4 CLI graph as an optional browser runtime;
+no upstream implementation or skill content is copied into project source. Required
+Apache-2.0 dependency notices remain applicable and unchanged.
+
 AgenTeX (MIT) and Microsoft Playwright CLI (Apache-2.0) were inspected as references.
 No upstream implementation was copied into M1. Exact research revisions are recorded
 in [the provenance inventory](../scripts/provenance.json). Architectural ideas and links

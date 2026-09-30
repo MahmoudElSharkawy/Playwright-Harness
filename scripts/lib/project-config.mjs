@@ -1,7 +1,7 @@
 import {readFileSync,statSync} from 'node:fs';
 import {consumerPath} from './consumer-paths.mjs';
 
-export const capabilityNames=['apiReads','apiMutations','apiExploration','dbSelect','dbDml','dbExploration','ddl','admin'];
+export const capabilityNames=['apiReads','apiMutations','apiExploration','dbSelect','dbDml','dbExploration','ddl','admin','browserReads','browserMutations','browserExploration'];
 export const identifier=value=>typeof value==='string' && /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/.test(value);
 export function object(value,label) {if(!value || typeof value!=='object' || Array.isArray(value))throw new Error(`Invalid ${label}.`);return value;}
 export function keys(value,allowed,label) {object(value,label);if(Object.keys(value).some(key=>!allowed.includes(key)))throw new Error(`Unknown field in ${label}.`);}
@@ -9,9 +9,19 @@ export function readJson(path) {try {if(statSync(path).size>2*1024*1024)throw ne
 const secretReference=value=>typeof value==='string' && /^env:[A-Z][A-Z0-9_]*$/.test(value);
 export function validateConfiguration(project,targets) {
   keys(project,['version','defaultEnvironment','environments'],'project configuration');
-  keys(targets,['api','databases'],'target configuration');
+  keys(targets,['api','databases','browser'],'target configuration');
   if(project.version!==1 || !identifier(project.defaultEnvironment))throw new Error('Invalid project version or default environment.');
   object(project.environments,'environments');object(targets.api,'API targets');object(targets.databases,'database targets');
+  object(targets.browser??{},'browser targets');
+  for(const [name,target] of Object.entries(targets.browser??{})) {
+    if(!identifier(name))throw new Error('Invalid browser target identifier.');
+    keys(target,['origins'],'browser target');
+    if(!Array.isArray(target.origins) || !target.origins.length || new Set(target.origins).size!==target.origins.length)throw new Error('Browser targets need explicit unique origins.');
+    for(const origin of target.origins) {
+      let url;try{url=new URL(origin);}catch{throw new Error('Invalid browser origin.');}
+      if(!['https:','http:'].includes(url.protocol) || origin!==url.origin)throw new Error('Browser targets require HTTP(S) origins without credentials, paths or wildcards.');
+    }
+  }
   for(const [name,target] of Object.entries(targets.api)) {
     if(!identifier(name))throw new Error('Invalid target identifier.');
     keys(target,['baseUrl','credentialRef'],'API target');
@@ -27,10 +37,10 @@ export function validateConfiguration(project,targets) {
   }
   for(const [name,environment] of Object.entries(project.environments)) {
     if(!identifier(name))throw new Error('Invalid environment identifier.');
-    keys(environment,['environmentMode','apiTargets','databaseTargets','capabilities'],'environment');
+    keys(environment,['environmentMode','apiTargets','databaseTargets','browserTargets','capabilities'],'environment');
     if(!['test','protected','custom'].includes(environment.environmentMode))throw new Error('Choose test, protected or custom explicitly.');
-    for(const [field,registry] of [['apiTargets',targets.api],['databaseTargets',targets.databases]]) {
-      const refs=environment[field];
+    for(const [field,registry] of [['apiTargets',targets.api],['databaseTargets',targets.databases],['browserTargets',targets.browser??{}]]) {
+      const refs=field==='browserTargets' ? environment[field]??[] : environment[field];
       if(!Array.isArray(refs) || refs.some(ref=>!identifier(ref) || !Object.hasOwn(registry,ref)) || new Set(refs).size!==refs.length)throw new Error('Unknown or duplicate environment target reference.');
     }
     if(environment.capabilities!==undefined) {
@@ -47,5 +57,5 @@ export function loadEnvironment(roots,name) {
   name=name??config.project.defaultEnvironment;
   if(!identifier(name) || !Object.hasOwn(config.project.environments,name))throw new Error('Unknown environment.');
   const environment=config.project.environments[name];
-  return {name,...environment,targets:{api:Object.fromEntries(environment.apiTargets.map(id=>[id,config.targets.api[id]])),databases:Object.fromEntries(environment.databaseTargets.map(id=>[id,config.targets.databases[id]]))}};
+  return {name,...environment,targets:{api:Object.fromEntries(environment.apiTargets.map(id=>[id,config.targets.api[id]])),databases:Object.fromEntries(environment.databaseTargets.map(id=>[id,config.targets.databases[id]])),...(environment.browserTargets?{browser:Object.fromEntries(environment.browserTargets.map(id=>[id,config.targets.browser[id]]))}:{})}};
 }

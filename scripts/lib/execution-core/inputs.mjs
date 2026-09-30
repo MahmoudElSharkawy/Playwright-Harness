@@ -3,7 +3,7 @@ import {validateConfiguration, capabilityNames} from '../project-config.mjs';
 import {data, frozen, fingerprint, requireThat, integer, id, revision, keys, oneOf, unique, typedValue, EVIDENCE_KINDS} from './data.mjs';
 
 const RUNS = new WeakSet();
-const FAMILY_CAPABILITIES = Object.freeze({api: ['apiReads', 'apiMutations'], database: ['dbSelect', 'dbDml', 'ddl', 'admin']});
+const FAMILY_CAPABILITIES = Object.freeze({api: ['apiReads', 'apiMutations'], database: ['dbSelect', 'dbDml', 'ddl', 'admin'], browser: ['browserReads', 'browserMutations']});
 const DEFAULT_LIMITS = Object.freeze({maxAttempts: 2, timeoutMs: 60000, cleanupTimeoutMs: 30000, maxValueBytes: 32768, maxEvidenceBytes: 8 * 1024 * 1024});
 
 /** Define intent/provenance, not transport commands. No catalog source receives extra permission. */
@@ -33,17 +33,18 @@ export function createRun(input) {
   const runId = input.id ?? randomUUID(), startedAt = input.startedAt ?? Date.now(); id(runId);
   requireThat(integer(startedAt), 'Invalid run start time.');
   const environment = data(input.environment);
-  keys(environment, ['name', 'environmentMode', 'apiTargets', 'databaseTargets', 'capabilities', 'targets'], 'effective environment');
+  keys(environment, ['name', 'environmentMode', 'apiTargets', 'databaseTargets', 'browserTargets', 'capabilities', 'targets'], 'effective environment');
   id(environment.name);
   const {name, targets, ...profile} = environment;
   validateConfiguration({version: 1, defaultEnvironment: name, environments: {[name]: profile}}, targets);
   const defaults = Object.fromEntries(capabilityNames.map(capability => [capability,
     profile.environmentMode === 'test' ? !['ddl', 'admin'].includes(capability)
-      : profile.environmentMode === 'protected' && ['apiReads', 'apiExploration', 'dbSelect', 'dbExploration'].includes(capability)]));
+      : profile.environmentMode === 'protected' && ['apiReads', 'apiExploration', 'dbSelect', 'dbExploration', 'browserReads', 'browserExploration'].includes(capability)]));
   environment.capabilities = {...defaults, ...profile.capabilities};
   // Only selected destinations and reference identities become active run inputs.
   environment.targets = {api: Object.fromEntries(profile.apiTargets.map(target => [target, targets.api[target]])),
-    databases: Object.fromEntries(profile.databaseTargets.map(target => [target, targets.databases[target]]))};
+    databases: Object.fromEntries(profile.databaseTargets.map(target => [target, targets.databases[target]])),
+    browser: Object.fromEntries((profile.browserTargets ?? []).map(target => [target, targets.browser[target]]))};
   const scenarios = data(input.scenarios);
   requireThat(Array.isArray(scenarios) && scenarios.length > 0 && scenarios.length <= 500, 'Run needs nonempty bounded scenario scope.');
   unique(scenarios.map(scenario => scenario.id), 'scenario identifiers');
@@ -95,8 +96,8 @@ export function authorizeOperation(run, input, supportedCapabilities = []) {
   const stable = run.inputs.operations.find(candidate => candidate.id === operation.id);
   let reason = null;
   if (exploration ? stable !== undefined : stable?.fingerprint !== operation.fingerprint) reason = 'DEFINITION_NOT_FROZEN';
-  else if (!Object.hasOwn(environment.targets[operation.family === 'api' ? 'api' : 'databases'], operation.target)) reason = 'TARGET_NOT_ENABLED';
-  else if (!environment.capabilities[operation.capability] || (exploration && !environment.capabilities[operation.family === 'api' ? 'apiExploration' : 'dbExploration'])) reason = 'CAPABILITY_DISABLED';
+  else if (!Object.hasOwn(environment.targets[{api: 'api', database: 'databases', browser: 'browser'}[operation.family]], operation.target)) reason = 'TARGET_NOT_ENABLED';
+  else if (!environment.capabilities[operation.capability] || (exploration && !environment.capabilities[{api: 'apiExploration', database: 'dbExploration', browser: 'browserExploration'}[operation.family]])) reason = 'CAPABILITY_DISABLED';
   else if (!supportedCapabilities.includes(operation.capability)) reason = 'UNSUPPORTED_CAPABILITY';
   return frozen({allowed: reason === null, reason, operationFingerprint: operation.fingerprint});
 }

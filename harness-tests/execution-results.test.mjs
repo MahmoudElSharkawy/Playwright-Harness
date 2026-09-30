@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {writeFileSync, unlinkSync, mkdirSync, symlinkSync, renameSync} from 'node:fs';
 import {join} from 'node:path';
 import {assessRun, registerEvidence, decideRecovery, attemptRecord} from '../scripts/lib/execution-core/index.mjs';
-import {fixture, operation, scope, value, attempt, retry, resource} from './fixtures/execution-core.mjs';
+import {fixture, operation, scope, value, attempt, retry, resource, environment} from './fixtures/execution-core.mjs';
 
 test('complete evidence-backed result derives counts, preserves selected outputs and is immutable', t => {
   const f = fixture(t), result = f.assess(); assert.equal(result.status, 'PASS'); assert.equal(result.stability, 'stable');
@@ -170,6 +170,21 @@ test('success outside the run deadline and renewed cleanup budgets are rejected'
   const cleanupOp = operation({id: 'cleanup'}), f = fixture(t, {operations: [operation(), cleanupOp], limits: {cleanupTimeoutMs: 20}});
   for (const [attemptId, time] of [['cleanup-1', 1200], ['cleanup-2', 1300]]) f.scenario.attempts.push(attempt(f.run, cleanupOp, {identity: {...f.current.identity, operationId: 'cleanup', invocationId: attemptId, attemptId, phase: 'CLEANUP'}, startedAt: time, endedAt: time + 5}));
   assert.throws(f.assess, /outside its execution deadline/);
+});
+
+for (const reason of ['disabled', 'unsupported']) test(`an unexecuted ${reason} operation records its policy refusal after expiry`, t => {
+  const f = fixture(t, {limits: {timeoutMs: 50}, ...(reason === 'disabled' ? {environment: environment('custom', {apiReads: false})} : {})});
+  if (reason === 'unsupported') f.current.supportedCapabilities = [];
+  Object.assign(f.current, {outcome: 'BLOCKED', failureClass: 'POLICY', outputs: [], effect: {certainty: 'not-executed', resourceIds: []}, assertions: [{id: 'visible', status: 'NOT_EVALUATED', reliable: false, evidenceIds: []}]});
+  f.scenario.outputRefs = [];
+  const result = f.assess(); assert.equal(result.status, 'BLOCKED'); assert.equal(result.scenarios[0].counts.notEvaluated, 1);
+  f.current.effect.certainty = 'none'; assert.throws(f.assess, /Blocked\/skipped operations cannot have executed effects/);
+});
+
+test('an enabled operation cannot fabricate a policy refusal to bypass the expired deadline', t => {
+  const f = fixture(t, {limits: {timeoutMs: 50}});
+  Object.assign(f.current, {outcome: 'BLOCKED', failureClass: 'POLICY', outputs: [], effect: {certainty: 'not-executed', resourceIds: []}, assertions: [{id: 'visible', status: 'NOT_EVALUATED', reliable: false, evidenceIds: []}]});
+  f.scenario.outputRefs = []; assert.throws(f.assess, /Policy-blocked attempt contradicts its capabilities/);
 });
 test('first-operation inputs bind frozen typed test data without fabricating a producer attempt', t => {
   const initial = {name: 'fixtureSeed', type: 'number', sensitivity: 'public', value: 7, producer: {runId: 'run-1', scenarioId: 'case-1', name: 'fixtureSeed'}};

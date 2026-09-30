@@ -24,6 +24,10 @@ and verified evidence. These are deterministic library functions; they do not
 dispatch browser, API or database operations. Run their focused tests with
 `npm run test:core`. See [M5 validation](docs/M5-VALIDATION.md) for acceptance status.
 
+M6 connects those records to [sequential native browser execution](docs/M6-BROWSER.md),
+including owned cleanup, effect-aware recovery and sanitized evidence. Browser actions
+use official CLI arguments. See [M6 validation](docs/M6-VALIDATION.md) for current gates.
+
 ## Install into a project
 
 Keep this package in its own directory; do not overlay it on application code.

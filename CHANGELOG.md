@@ -3,6 +3,14 @@
 Package versions belong to this package, not to adopting applications. Historical
 private incidents and delivery identifiers are intentionally not retained here.
 
+## 3.0.6 — Unreleased
+
+- M6: integrate owned sequential browser sessions with the proven native Playwright
+  CLI, shared result validation, finite recovery and intent-driven resource lifecycle.
+- Add optional browser target/capability configuration and protected evidence promotion.
+- Preserve native commands, failure history and scoped process cleanup; add live
+  browser acceptance fixtures without API/DB executors or parallel scheduling.
+
 ## 3.0.5 — Unreleased
 
 - M5 only: add deterministic execution records and validators for frozen run inputs,
