@@ -148,3 +148,10 @@ outside Git at `.m1-private/content-redaction-receipt.json`.
 The original-state accounting hashes still describe the pre-sanitization input.
 This cleanup does not establish credential revocation or change the owner-dependent
 public-release gate.
+
+A further owner-requested term and its compound fixture identifier were removed from
+the same retained archives. The follow-up checked 338 archive entries across the
+machine-protected recovery, its embedded ZIP, and the encrypted supplied ZIP; three
+changelog entries changed. The archived term has zero remaining matches, unrelated
+entries retained their content, and both protection mechanisms remain in place. The
+private follow-up receipt is `.m1-private/content-redaction-followup.json`.
