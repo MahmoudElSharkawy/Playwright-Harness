@@ -23,6 +23,28 @@ test('native cwd prefix must name exactly the authorized consumer and contain no
   assert.equal(workflowInvocation(prefixed, script), null);
 });
 
+test('unquoted native cwd accepts only a literal exact POSIX consumer path', () => {
+  const root = '/owned/consumer', prefixed = `cd ${root} && ${command}`;
+  assert.equal(workflowInvocation(prefixed, script, root), 'complete');
+  for (const path of ['/other/consumer', '$ROOT', '/owned/*', '/owned/cons?mer', '/owned/../consumer', '/owned/consumer;echo', '/owned/$(echo consumer)', '/owned/`echo consumer`']) {
+    assert.equal(workflowInvocation(`cd ${path} && ${command}`, script, root), null);
+  }
+  for (const text of [`${prefixed} && echo done`, `cd ${root} && echo done && ${command}`, `cd ${root}; ${command}`, `cd ${root}\n${command}`]) assert.equal(workflowInvocation(text, script, root), null);
+  assert.equal(workflowInvocation(prefixed, script), null);
+});
+
+test('unquoted consumer cwd still requires paired successful native receipt evidence', () => {
+  const root = '/owned/consumer';
+  for (const host of ['claude', 'codex']) {
+    const native = events(host, JSON.stringify(receipt), `cd ${root} && ${command}`);
+    assert.equal(observedWorkflowCommand(host, native, script, 'complete', expected, root), true);
+    assert.equal(observedWorkflowCommand(host, native, script, 'complete', expected, '/other/consumer'), false);
+    if (host === 'claude') native.at(-1).message.content[0].is_error = true;
+    else native[1].item.exit_code = 1;
+    assert.equal(observedWorkflowCommand(host, native, script, 'complete', expected, root), false);
+  }
+});
+
 test('Git Bash drive spelling is equivalent only on Windows and never authorizes another drive', () => {
   const nativeScript = 'C:/fixture package/workflow-command.mjs', root = 'C:/fixture consumer';
   assert.equal(workflowInvocation(`cd "/c/fixture consumer" && node "/c/fixture package/workflow-command.mjs" complete`, nativeScript, root), process.platform === 'win32' ? 'complete' : null);

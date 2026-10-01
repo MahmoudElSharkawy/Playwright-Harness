@@ -29,10 +29,10 @@ function nativeCommandBody(command, projectRoot) {
   }
   // Native Claude may name its existing consumer cwd. Accept only that exact directory,
   // followed by the fixed invocation; this is not permission for arbitrary shell chains.
-  const directory = text.match(/^cd (["'])([^\r\n]+)\1 && ([^\r\n]+)$/);
+  const directory = text.match(/^cd (?:(['"])([^\r\n]+)\1|(\/[A-Za-z0-9_./-]+)) && ([^\r\n]+)$/);
   if (directory) {
-    if (!projectRoot || canonical(directory[2]) !== canonical(projectRoot)) return null;
-    text = directory[3];
+    if (!projectRoot || canonical(directory[2] ?? directory[3]) !== canonical(projectRoot)) return null;
+    text = directory[4];
   }
   return text;
 }

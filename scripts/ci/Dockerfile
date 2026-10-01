@@ -6,7 +6,7 @@ ENV CI=1 NO_UPDATE_NOTIFIER=1 AUTO_ALLURE_OPEN=false PLAYWRIGHT_BROWSERS_PATH=/o
 RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/*
 COPY harness.tgz /tmp/harness.tgz
 RUN mkdir /seed /validation && tar -xzf /tmp/harness.tgz --strip-components=1 -C /seed && node /seed/scripts/ci/installed.mjs /validation/installed
-RUN node /validation/installed/installation/node_modules/playwright-pom-harness/scripts/spikes/playwright-cli/node_modules/playwright/cli.js install --with-deps chromium && node /validation/installed/installation/node_modules/playwright-pom-harness/examples/node_modules/playwright/cli.js install chromium
+RUN node /validation/installed/installation/node_modules/playwright-pom-harness/scripts/spikes/playwright-cli/node_modules/playwright/cli.js install --with-deps chromium && node /validation/installed/installation/node_modules/playwright-pom-harness/examples/node_modules/playwright/cli.js install chromium chrome && /opt/google/chrome/chrome --version
 # Native hosts are external development tools, not redistributed harness dependencies.
 RUN npm install --prefix /opt/hosts --ignore-scripts --no-audit --no-fund @anthropic-ai/claude-code@2.1.285 @openai/codex@0.159.2 && node /opt/hosts/node_modules/@anthropic-ai/claude-code/install.cjs && /opt/hosts/node_modules/.bin/claude --version && /opt/hosts/node_modules/.bin/codex --version
 WORKDIR /validation/installed/installation/node_modules/playwright-pom-harness
