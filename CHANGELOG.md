@@ -3,6 +3,15 @@
 Package versions belong to this package, not to adopting applications. Historical
 private incidents and delivery identifiers are intentionally not retained here.
 
+## 3.0.11 — Unreleased
+
+- M11: compare validated execution semantics across native Claude and Codex runs,
+  preserving business values, producer bindings, recovery and lifecycle decisions.
+- Add thin native hook payload translation and fixed browser/API/database host
+  proofs with native command receipts, immutable package checks and owned cleanup.
+- Keep host permissions separate from harness capabilities. Full workflow parity
+  and parallel execution remain deferred.
+
 ## 3.0.10 — Unreleased
 
 - M10: add PostgreSQL through the shared database runtime, using native positional

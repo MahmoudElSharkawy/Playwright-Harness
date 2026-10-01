@@ -4,6 +4,12 @@
   "publicationAuthorized": false,
   "sources": [
     {
+      "scope": "M11 changes",
+      "status": "Created for this project; official native host documentation informed payload adapters; no new dependency",
+      "targetLicense": "MIT",
+      "thirdPartyCodeCopied": false
+    },
+    {
       "scope": "M10 changes",
       "status": "Created for this project; node-postgres consumed as a separately installed MIT dependency",
       "targetLicense": "MIT",

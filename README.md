@@ -44,8 +44,12 @@ its required cleanup/restoration. See [M9 validation](docs/M9-VALIDATION.md).
 
 M10 adds [native PostgreSQL execution and database neutrality](docs/M10-POSTGRESQL.md)
 through the same database interface, with engine-specific SQL and types. See
-[M10 validation](docs/M10-VALIDATION.md). Full host parity, generation integration
-and parallel execution remain later milestones.
+[M10 validation](docs/M10-VALIDATION.md).
+
+M11 adds [execution and host parity](docs/M11-HOST-PARITY.md): semantic comparison
+of validated results, thin native hook payload adapters and fixed Claude/Codex
+execution probes. See [M11 validation](docs/M11-VALIDATION.md) for the actual gate
+status. Full generation/review/verification parity and concurrency remain later work.
 
 ## Install into a project
 
