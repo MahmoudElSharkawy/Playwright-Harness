@@ -49,7 +49,7 @@ through the same database interface, with engine-specific SQL and types. See
 M11 adds [execution and host parity](docs/M11-HOST-PARITY.md): semantic comparison
 of validated results, thin native hook payload adapters and fixed Claude/Codex
 execution probes. See [M11 validation](docs/M11-VALIDATION.md) for the actual gate
-status. Full generation/review/verification parity and concurrency remain later work.
+status. Full generation/review/verification parity is the separate M15 gate.
 
 M12 adds [optional ADO adapters](docs/M12-ADO.md) for retrieval, outcome publication,
 work-item linking and source-control delivery. Compatibility commands use explicit
@@ -66,6 +66,12 @@ Generated verification can capture native Allure detail in isolated consumer fol
 report generation runs after native flush. See [M14 validation](docs/M14-VALIDATION.md).
 The reporting follow-up uses Allure Report 3.19.1 on Node, without Java or changes
 to test/action code. See [Allure 3 validation](docs/ALLURE3-VALIDATION.md).
+
+M15 adds the [complete sequential Claude/Codex lifecycle proof](docs/M15-WORKFLOW-PARITY.md),
+from local source and actual native POM authoring through independent review, two
+scoped green runs, Allure 3 reporting and delivery readiness. See
+[M15 validation](docs/M15-VALIDATION.md) for actual gate status. Concurrency remains
+deferred; sequential execution is the default.
 
 ## Install into a project
 

@@ -4,6 +4,12 @@
   "publicationAuthorized": false,
   "sources": [
     {
+      "scope": "M15 changes",
+      "status": "Created for this project; fixed native workflow proof and semantic assessment reuse existing project fixtures and installed dependencies; no third-party implementation copied",
+      "targetLicense": "MIT",
+      "thirdPartyCodeCopied": false
+    },
+    {
       "scope": "Allure 3 reporting follow-up",
       "status": "Project-authored integration; pinned Allure 3.19.1 consumed through its official CLI; no upstream implementation copied. Complete resolved example dependency graph recorded separately.",
       "targetLicense": "MIT",

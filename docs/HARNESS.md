@@ -57,20 +57,22 @@ The local loader validates neutral scenarios, steps, expectations and optional e
 references without ADO configuration or network access. It records a source fingerprint
 and reports counts with `executed: false`. Environment modes and separate targets are
 validated configuration. M5 computes effective capability decisions from it;
-browser/API/database libraries now dispatch operations; source-to-execution integration is
-still later work.
+browser/API/database libraries dispatch operations. [M13](M13-GENERATION.md) binds
+assessed observations to unchanged source expectations and durable POM candidates.
 
 Legacy ADO retrieval → refinement → AgenTeX exploration → POM generation → independent
 review → scoped verification → authorized delivery remains compatibility guidance.
-The local route currently supports loading/refinement inputs; integrating execution,
-generation, review and verification remains later work. Preserve source assertions,
+The local route supports execution handoff, generation, independent review and
+verification. [M15](M15-WORKFLOW-PARITY.md) proves that full route through both native
+hosts, including [M14 reports](M14-REPORTING.md) and Allure 3; see its actual
+[validation status](M15-VALIDATION.md). Preserve source assertions,
 three cumulative repair rounds and two independent scoped green runs. Sequential
 execution remains the default; harness parallel dispatch stays deferred.
 
 Knowledge observations enter candidates and require review/sanitization before
 promotion. Active-run inputs do not silently change. Catalogs, deterministic helpers
-and fixed inline parameterized definitions remain valid peer execution sources for
-later integration. Cleanup follows intent/ownership; before-state capture is conditional,
+and fixed inline parameterized definitions remain valid peer execution sources.
+Cleanup follows intent/ownership; before-state capture is conditional,
 and intentionally persistent outcomes may remain.
 
 ## Existing tools and limits
@@ -102,8 +104,8 @@ platform; it is not full generation/review/verification parity.
 See [M1 validation](M1-VALIDATION.md), [M2 validation](M2-VALIDATION.md),
 [the proof guide](M2-SKILL-PROOF.md) and [provenance](PROVENANCE.md).
 See [M4 validation](M4-VALIDATION.md) for the pinned CLI gate and its scope limits.
-See [M5 validation](M5-VALIDATION.md) for the minimal core's actual checks. Executors
-remain later milestones. Keep native CLI
+See [M5 validation](M5-VALIDATION.md) for the minimal core's actual checks and
+[M15 validation](M15-VALIDATION.md) for complete sequential lifecycle parity. Keep native CLI
 invocation/reply interpretation behind a narrow version-specific boundary; the
 harness layer owns identity, policy, evidence, ownership and cleanup. No second
 browser command language or generic workflow engine is introduced.

@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.0.15 — M15 sequential workflow parity
+
+- Connect native Claude/Codex source refinement, observed execution, unreviewed knowledge candidates, actual POM authorship, independent review, two scoped green processes and Allure 3 reporting in a fixed acceptance proof.
+- Compare semantic outcomes and binding relationships while revalidating each run's original evidence, generated execution records and reports.
+- Include normal mutation autonomy, required cleanup/restoration and intentional persistence; retain controlled negative outcomes and sequential execution.
+- No new execution engine, browser command language, dependency or automatic external delivery.
+
 ## 3.0.14 — M14 reporting and Allure integration
 
 - Reporting follow-up: replace the Java generator with pinned Allure Report 3.19.1; retain test/action APIs, report locations, native status and harness verdict authority.
