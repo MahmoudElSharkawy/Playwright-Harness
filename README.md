@@ -40,8 +40,12 @@ coverage.
 
 M9 adds [sequential mixed execution](docs/M9-SEQUENTIAL.md): one scenario can prepare
 data through SQL/API, exercise the UI/API, verify through API/SQL and perform only
-its required cleanup/restoration. See [M9 validation](docs/M9-VALIDATION.md). PostgreSQL,
-full host parity, generation integration and parallel execution remain later milestones.
+its required cleanup/restoration. See [M9 validation](docs/M9-VALIDATION.md).
+
+M10 adds [native PostgreSQL execution and database neutrality](docs/M10-POSTGRESQL.md)
+through the same database interface, with engine-specific SQL and types. See
+[M10 validation](docs/M10-VALIDATION.md). Full host parity, generation integration
+and parallel execution remain later milestones.
 
 ## Install into a project
 
@@ -166,6 +170,7 @@ npm run check:conventions
 npm run test:api
 npm run test:database
 npm run test:sequential
+npm run test:postgresql
 npm test
 npm run test:fetch
 npm run check:privacy
@@ -185,6 +190,10 @@ requirements and the Linux-client option.
 `npm run probe:mixed` adds a synthetic SQL-backed HTTP/UI application and the pinned
 native browser to that real fixture. Its prerequisites and pinned Linux-client option
 are documented in the M9 guide.
+`npm run probe:postgresql` validates a disposable PostgreSQL instance.
+`npm run probe:database-neutrality` compares the same 12 scenarios on SQL Server and
+PostgreSQL; add `-- --linux-client` for pinned Linux clients. These probes require
+Docker and fail when a required instance or check is unavailable.
 
 The convention gate checks `examples` with warnings treated as errors. Zero scope or
 an unresolved Git base fails. JSON parsing is not schema validation; link checks cover

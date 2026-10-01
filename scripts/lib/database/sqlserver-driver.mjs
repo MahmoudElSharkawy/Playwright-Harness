@@ -1,15 +1,7 @@
 import sql from 'mssql';
-import {keys, requireThat, integer} from '../execution-core/data.mjs';
-
-export class DatabaseFailure extends Error {
-  constructor(classification, dispatched = false, reason = classification) {super(`Database execution failed: ${reason}.`); this.classification = classification; this.dispatched = dispatched; this.reason = reason;}
-}
-export async function bounded(action, signal) {
-  if (signal.aborted) throw new DatabaseFailure(signal.reason === 'TIMEOUT' ? 'TIMEOUT' : 'CANCELLED');
-  let cancel;
-  try {return await Promise.race([Promise.resolve().then(action), new Promise((_, reject) => {cancel = () => reject(new DatabaseFailure(signal.reason === 'TIMEOUT' ? 'TIMEOUT' : 'CANCELLED')); signal.addEventListener('abort', cancel, {once: true});})]);}
-  finally {signal.removeEventListener('abort', cancel);}
-}
+import {requireThat, integer} from '../execution-core/data.mjs';
+import {DatabaseFailure, credentials} from './shared.mjs';
+export {DatabaseFailure, bounded, credentials} from './shared.mjs';
 
 export function validateTarget(target) {
   requireThat(target?.engine === 'sqlserver' && typeof target.server === 'string' && /^[A-Za-z0-9.-]+$/.test(target.server)
@@ -18,13 +10,6 @@ export function validateTarget(target) {
   'SQL Server execution requires an explicit server, database and schema.');
   requireThat(!['master', 'model', 'msdb', 'tempdb'].includes(target.database.toLowerCase()) && !['sys', 'information_schema'].includes(target.schema.toLowerCase()), 'System databases/schemas are unsupported targets.');
 }
-export function credentials(value) {
-  keys(value, ['user', 'password'], 'SQL credential');
-  const {user, password: supplied} = value;
-  requireThat(typeof user === 'string' && user.length > 0 && user.length <= 128 && typeof supplied === 'string' && supplied.length > 0 && supplied.length <= 1024, 'SQL authentication requires credentials only, never connection overrides.');
-  return {user, password: supplied};
-}
-
 /** Values go exclusively to Request.input; identifiers never go through this path. */
 export function parameter(p) {
   const v = p.value;

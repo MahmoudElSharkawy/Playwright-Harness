@@ -43,6 +43,18 @@ No third-party implementation was copied and no dependency was added. Required
 dependency notices remain unchanged. The root lockfile's package metadata now matches
 the package version; its dependency graph is unchanged.
 
+M10 adds project-authored PostgreSQL execution and synthetic neutrality fixtures.
+Official PostgreSQL and node-postgres documentation informed the native interface;
+no upstream implementation was copied. The exact `pg` 8.23.1 dependency adds 14
+MIT/ISC packages to the 73-package M8 root graph. The
+[runtime inventory](../scripts/runtime-dependency-licenses.json) now covers 87
+records; the three lockfile inventories together cover 240. All 14 new installed
+packages carry their complete license notices, including the MIT sections in the
+`pg-types` and `pgpass` READMEs. Preserve those notices with installed dependencies.
+The pinned PostgreSQL development container is a separate upstream distribution,
+not bundled or relicensed under the harness MIT license. See
+[third-party notices](../THIRD_PARTY_NOTICES.md).
+
 AgenTeX (MIT) and Microsoft Playwright CLI (Apache-2.0) were inspected as references.
 No upstream implementation was copied into M1. Exact research revisions are recorded
 in [the provenance inventory](../scripts/provenance.json). Architectural ideas and links

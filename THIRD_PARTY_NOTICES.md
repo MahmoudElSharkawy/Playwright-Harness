@@ -51,3 +51,21 @@ not MIT software and is not bundled, published or cleared for redistribution her
 The pinned Node Linux client image is also an independent upstream distribution.
 See [Microsoft's container guide](https://learn.microsoft.com/en-us/sql/linux/install-upgrade/quickstart-install-docker?view=sql-server-ver17)
 and [the M8 guide](docs/M8-SQLSERVER.md) for the intended local validation use.
+
+M10 consumes [node-postgres](https://node-postgres.com/) (`pg` 8.23.1, MIT) as a
+separately installed runtime dependency. It adds 14 packages: `pg`, `pg-cloudflare`,
+`pg-connection-string`, `pg-int8`, `pg-pool`, `pg-protocol`, `pg-types`, `pgpass`,
+`postgres-array`, `postgres-bytea`, `postgres-date`, `postgres-interval`, `split2`
+and `xtend`. Their exact versions, MIT/ISC declarations and registry integrity
+values are recorded in the runtime inventory, now 87 records. All 14 installed
+packages were inspected for complete notices. Twelve include license files;
+`pg-types` includes its MIT notice in README.md (Brian M. Carlson, 2014), and
+`pgpass` includes its MIT notice in README.md (Hannes Hoerl, 2013-2016). Preserve
+those README license sections when redistributing installed dependencies. This
+source package copies no dependency implementation or license ownership.
+
+The local M10 proof uses a pinned official PostgreSQL 16 container. PostgreSQL uses
+[the PostgreSQL License](https://www.postgresql.org/about/licence/); its container
+OS and supporting software have their own terms. The image is not bundled,
+published or cleared for redistribution by this source-only audit. Consult the
+[M10 guide](docs/M10-POSTGRESQL.md) for the validation scope.

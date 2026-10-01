@@ -1,6 +1,6 @@
 {
   "name": "playwright-pom-harness",
-  "version": "3.0.9",
+  "version": "3.0.10",
   "private": true,
   "license": "MIT",
   "type": "module",
@@ -35,7 +35,10 @@
     "test:database": "node --test harness-tests/database-runtime.test.mjs",
     "probe:database": "node scripts/probes/sqlserver.mjs",
     "test:sequential": "node --test harness-tests/sequential-runtime.test.mjs",
-    "probe:mixed": "node scripts/probes/sqlserver.mjs --mixed"
+    "probe:mixed": "node scripts/probes/sqlserver.mjs --mixed",
+    "test:postgresql": "node --test harness-tests/postgresql-runtime.test.mjs harness-tests/database-neutrality-assessment.test.mjs",
+    "probe:postgresql": "node scripts/probes/postgresql.mjs",
+    "probe:database-neutrality": "node scripts/probes/database-neutrality.mjs"
   },
   "files": [
     "README.md",
@@ -62,6 +65,7 @@
     ".claude-plugin/plugin.json"
   ],
   "dependencies": {
-    "mssql": "12.7.2"
+    "mssql": "12.7.2",
+    "pg": "8.23.1"
   }
 }

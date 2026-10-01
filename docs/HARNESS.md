@@ -31,6 +31,11 @@ confidential-value knowledge and one cleanup budget. Native browser mechanics, H
 transport and SQL classification remain inside their existing integrations. There is
 no generic workflow engine or parallel scheduler.
 
+M10 adds [PostgreSQL and database neutrality](M10-POSTGRESQL.md). The database runtime
+selects one of two concrete native drivers; SQL syntax, parameter types and optional
+restoration tokens stay local to the engine. Results, authorization, source kinds,
+effects, recovery and lifecycle obligations use the existing shared contracts.
+
 ## Package and consumer responsibilities
 
 Canonical skills, references, templates and scripts live in the immutable package.

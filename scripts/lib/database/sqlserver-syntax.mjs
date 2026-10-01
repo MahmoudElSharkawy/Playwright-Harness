@@ -1,4 +1,20 @@
-import {requireThat} from '../execution-core/data.mjs';
+import {requireThat, keys, id, integer, oneOf} from '../execution-core/data.mjs';
+
+export function validateParameters(definition, classified) {
+  for (const p of definition.parameters ?? []) {
+    keys(p, ['name', 'type', 'input', 'length', 'precision', 'scale'], 'SQL parameter');
+    requireThat(typeof p.name === 'string' && /^[A-Za-z][A-Za-z0-9_]{0,79}$/.test(p.name), 'Invalid SQL parameter name.'); id(p.input);
+    oneOf(p.type, ['nvarchar', 'varchar', 'int', 'bigint', 'bit', 'float', 'decimal', 'datetime2', 'uniqueidentifier', 'varbinary']);
+    if (['nvarchar', 'varchar', 'varbinary'].includes(p.type)) requireThat(integer(p.length, 1, p.type === 'nvarchar' ? 4000 : 8000), 'Text/binary bindings need an explicit bounded length.');
+    else requireThat(p.length === undefined, 'Unexpected binding length.');
+    if (p.type === 'decimal') requireThat(integer(p.precision, 1, 38) && integer(p.scale, 0, p.precision), 'Decimal needs precision and scale.');
+    else requireThat(p.precision === undefined && p.scale === undefined, 'Unexpected decimal metadata.');
+  }
+  for (const token of classified.tokens.filter(t => t.kind === 'parameter' && !t.value.startsWith('@@'))) requireThat(definition.parameters?.some(p => `@${p.name}`.toLowerCase() === token.value.toLowerCase()), 'SQL value parameter is not declared.');
+}
+export function validateVersionParameter(version) {
+  requireThat(version.type === 'varbinary' && version.length === 8, 'Restoration binds an eight-byte SQL Server rowversion.');
+}
 
 /** A lexer for classification and binding locations, not a SQL grammar or compiler. */
 export function tokens(text) {

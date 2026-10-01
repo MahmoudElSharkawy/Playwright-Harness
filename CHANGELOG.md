@@ -3,6 +3,16 @@
 Package versions belong to this package, not to adopting applications. Historical
 private incidents and delivery identifiers are intentionally not retained here.
 
+## 3.0.10 — Unreleased
+
+- M10: add PostgreSQL through the shared database runtime, using native positional
+  binding, scoped privileges, read-only reads and precise native result conversion.
+- Preserve catalog/helper/inline/exploration peers, conditional restoration and
+  persistent outcomes; keep SQL syntax and version tokens inside concrete drivers.
+- Add real PostgreSQL safety/failure probes and semantic comparison of 12 shared
+  SQL Server/PostgreSQL scenarios on Windows and Linux clients.
+- Pin pg and its dependency graph and record the separate upstream notices.
+
 ## 3.0.9 — Unreleased
 
 - M9: share sequential scenario identities, bindings, effects and required lifecycle

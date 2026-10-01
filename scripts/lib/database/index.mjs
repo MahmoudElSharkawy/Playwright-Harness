@@ -5,7 +5,9 @@ import {requireRun} from '../execution-core/inputs.mjs';
 import {data, fingerprint, id, keys, oneOf, requireThat, typedValue, protectedReference} from '../execution-core/data.mjs';
 import {createScenarioState, requireScenarioState, initializeStorage, writeScenario, finishScenario, rememberSensitive, publicValue as checkedPublicValue} from '../sequential/state.mjs';
 import {databaseCapabilities, validateDatabaseOperation, bindDatabase, select, expected} from './definition.mjs';
-import {DatabaseFailure, bounded, credentials, validateTarget, executeSqlServer} from './sqlserver-driver.mjs';
+import {DatabaseFailure, bounded, credentials} from './shared.mjs';
+import * as sqlserver from './sqlserver-driver.mjs';
+import * as postgresql from './postgresql-driver.mjs';
 
 export {defineDatabaseOperation, databaseCapabilities} from './definition.mjs';
 const phases = {SETUP: 0, EXERCISE: 1, VERIFY: 2, CLEANUP: 3, RESTORE: 3};
@@ -15,9 +17,9 @@ function environmentCredential({reference}) {
   try {return JSON.parse(process.env[reference.slice(4)]);} catch {throw new DatabaseFailure('UNAVAILABLE');}
 }
 
-/** One sequential SQL Server scenario; ordinary services and either host use the same runtime. */
+/** One sequential database scenario; native SQL and types stay in the selected driver. */
 export function createDatabaseRuntime(run, inputRoots, {signal, resolveCredential = environmentCredential, resolveSensitive, storeSensitive, execution} = {}) {
-  requireRun(run); requireThat(run.inputs.scenarios.length === 1, 'M8 accepts one sequential database scenario per run.');
+  requireRun(run); requireThat(run.inputs.scenarios.length === 1, 'Database execution accepts one sequential scenario per run.');
   requireThat(signal === undefined || signal instanceof AbortSignal, 'Cancellation needs an AbortSignal.');
   for (const callback of [resolveCredential, resolveSensitive, storeSensitive]) requireThat(callback === undefined || typeof callback === 'function', 'Database resolvers must be functions.');
   const state = execution ? requireScenarioState(execution, run, inputRoots) : createScenarioState(run, inputRoots);
@@ -97,7 +99,10 @@ export function createDatabaseRuntime(run, inputRoots, {signal, resolveCredentia
           if (!authorization.allowed) {current.outcome = 'BLOCKED'; current.failureClass = 'POLICY';}
           else {
             if (controller.signal.aborted) throw new DatabaseFailure(controller.signal.reason === 'TIMEOUT' ? 'TIMEOUT' : 'CANCELLED');
-            const target = run.inputs.environment.targets.databases[operation.target]; validateTarget(target);
+            const target = run.inputs.environment.targets.databases[operation.target];
+            requireThat((d.engine ?? 'sqlserver') === target.engine, 'Database definition and configured target engines differ.');
+            const driver = target.engine === 'sqlserver' ? sqlserver : postgresql;
+            driver.validateTarget(target);
             if (!resolvedBindings) {
               const bindings = new Map();
               for (const input of inputs) {
@@ -114,10 +119,10 @@ export function createDatabaseRuntime(run, inputRoots, {signal, resolveCredentia
             }
             const request = bindDatabase(d, resolvedBindings);
             if (!authCache.has(operation.target)) {
-              const auth = credentials(await bounded(() => resolveCredential({reference: target.connectionRef, target: operation.target, destination: {server: target.server, port: target.port ?? 1433, database: target.database, schema: target.schema}, signal: controller.signal}), controller.signal));
+              const auth = credentials(await bounded(() => resolveCredential({reference: target.connectionRef, target: operation.target, destination: {server: target.server, port: target.port ?? (target.engine === 'sqlserver' ? 1433 : 5432), database: target.database, schema: target.schema}, signal: controller.signal}), controller.signal));
               remember(auth.user); remember(auth.password); authCache.set(operation.target, auth);
             }
-            response = await executeSqlServer(target, authCache.get(operation.target), request, {signal: controller.signal, timeoutMs: budget, maxRows: d.maxRows ?? 1000, maxResponseBytes: d.maxResponseBytes ?? 1048576});
+            response = await (target.engine === 'sqlserver' ? driver.executeSqlServer : driver.executePostgresql)(target, authCache.get(operation.target), request, {signal: controller.signal, timeoutMs: budget, maxRows: d.maxRows ?? 1000, maxResponseBytes: d.maxResponseBytes ?? 1048576});
             current.effect.certainty = operation.capability === 'dbSelect' ? 'none' : response.affectedRows === undefined ? 'uncertain' : response.affectedRows === 0 ? 'none' : 'confirmed';
             if (operation.capability === 'dbDml' && response.affectedRows !== undefined) current.effect.affectedRows = {actual: response.affectedRows, ...(d.affectedRows ? {expected: d.affectedRows} : {})};
             const responseId = evidence(current, 'response', {rowCount: response.rowCount, rowsAffected: response.rowsAffected, bytes: response.bytes});
