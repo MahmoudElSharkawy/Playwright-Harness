@@ -53,7 +53,8 @@ export function createRun(input) {
     requireThat(Array.isArray(scenario.expectations) && scenario.expectations.length > 0, 'Each scenario needs required expectations.');
     unique(scenario.expectations.map(expectation => expectation.id), 'expectation identifiers');
     for (const expectation of scenario.expectations) {
-      keys(expectation, ['id', 'description', 'operationId', 'invocationId', 'requiredEvidence'], 'expectation');
+      keys(expectation, ['id', 'description', 'operationId', 'invocationId', 'requiredEvidence', 'phase'], 'expectation');
+      if (expectation.phase !== undefined) oneOf(expectation.phase, ['SETUP', 'EXERCISE', 'VERIFY', 'CLEANUP', 'RESTORE']);
       id(expectation.id); id(expectation.operationId); id(expectation.invocationId);
       requireThat(typeof expectation.description === 'string' && expectation.description.trim().length > 0, 'Expectation description is required.');
       unique(expectation.requiredEvidence, 'required evidence kinds');

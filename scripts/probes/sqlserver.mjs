@@ -10,16 +10,20 @@ import {inventory} from '../lib/package-validation.mjs';
 import sql from 'mssql';
 
 export const sqlServerImage = 'mcr.microsoft.com/mssql/server@sha256:4402d880dd4c34bfa7d8705e56a86cd6c88da80a1f6bbbe741f999e76264a090';
-const name = `harness-m8-${randomUUID()}`, generate = () => `${randomBytes(32).toString('hex')}aA1!`;
-const linux = process.argv[2] === '--linux-client', clientName = `${name}-client`, networkName = `${name}-network`;
-if (process.argv.length > (linux ? 3 : 2)) throw new Error('Only --linux-client is supported.');
-const nodeImage = 'node@sha256:5711a0d445a1af54af9589066c646df387d1831a608226f4cd694fc59e745059';
+const args = process.argv.slice(2), linux = args.includes('--linux-client'), mixed = args.includes('--mixed');
+if (new Set(args).size !== args.length || args.some(arg => !['--linux-client','--mixed'].includes(arg) && !/^--browser-client-image=sha256:[a-f0-9]{64}$/.test(arg))) throw new Error('Unsupported probe option.');
+const browserImages = args.filter(arg => arg.startsWith('--browser-client-image='));
+if (browserImages.length > 1 || (linux && mixed ? browserImages.length !== 1 : browserImages.length !== 0)) throw new Error('Mixed Linux proof needs exactly one pinned browser-client image.');
+const milestone = mixed ? 'M9' : 'M8', suite = mixed ? 'harness-tests/mixed.integration.mjs' : 'harness-tests/sqlserver.integration.mjs';
+const name = `harness-${milestone.toLowerCase()}-${randomUUID()}`, generate = () => `${randomBytes(32).toString('hex')}aA1!`;
+const clientName = `${name}-client`, networkName = `${name}-network`;
+const nodeImage = mixed && linux ? browserImages[0].slice('--browser-client-image='.length) : 'node@sha256:5711a0d445a1af54af9589066c646df387d1831a608226f4cd694fc59e745059';
 const adminCredential = generate(), runnerCredential = generate();
 let created = false, clientCreated = false, networkCreated = false, staging, pool, status = 1, cleanup = false;
 const docker = (args, env = {}) => execFileSync('docker', args, {encoding: 'utf8', stdio: ['ignore','pipe','pipe'], timeout: 180000, env: {...process.env, MSSQL_SA_PASSWORD: adminCredential, ...env}}).trim();
 try {
   if (linux) {docker(['network','create',networkName]); networkCreated = true;}
-  docker(['run','--detach','--name',name,'--label','playwright-harness.milestone=M8',...(linux?['--network',networkName,'--network-alias','database']:[]),'--publish','127.0.0.1::1433','--env','ACCEPT_EULA=Y','--env','MSSQL_PID=Developer','--env','MSSQL_SA_PASSWORD',sqlServerImage]); created = true;
+  docker(['run','--detach','--name',name,'--label',`playwright-harness.milestone=${milestone}`,...(linux?['--network',networkName,'--network-alias','database']:[]),'--publish','127.0.0.1::1433','--env','ACCEPT_EULA=Y','--env','MSSQL_PID=Developer','--env','MSSQL_SA_PASSWORD',sqlServerImage]); created = true;
   const port = Number(docker(['inspect','--format','{{(index (index .NetworkSettings.Ports "1433/tcp") 0).HostPort}}',name]));
   const config = {server: 'localhost', port, user: 'sa', password: adminCredential, database: 'master', connectionTimeout: 2000, requestTimeout: 10000, options: {encrypt: true, trustServerCertificate: true}, pool: {min: 0, max: 4}};
   for (let i = 0; i < 90; i++) {
@@ -43,13 +47,13 @@ try {
     staging = mkdtempSync(join(tmpdir(),'harness-m8-public-')); const files = inventory(process.cwd()).files;
     writeFileSync(join(staging,'files.txt'), files.join('\n')+'\n');
     execFileSync('tar',['-cf',join(staging,'source.tar'),'-T',join(staging,'files.txt')],{stdio:'pipe'});
-    docker(['create','--name',clientName,'--init','--network',networkName,'--env','HARNESS_M8_TARGET','--env','M8_DB_CREDENTIAL','--env','HARNESS_M8_ADMIN','--entrypoint','sh',nodeImage,'-c',
-      'mkdir -m 700 /package && tar -xf /source.tar -C /package && cd /package && npm ci --ignore-scripts --no-audit --no-fund && node --version && node --test --test-concurrency=1 harness-tests/database-runtime.test.mjs harness-tests/sqlserver.integration.mjs'],testEnvironment); clientCreated=true;
+    docker(['create','--name',clientName,'--label',`playwright-harness.milestone=${milestone}`,'--init','--shm-size=1g','--network',networkName,'--env','HARNESS_M8_TARGET','--env','M8_DB_CREDENTIAL','--env','HARNESS_M8_ADMIN','--entrypoint','sh',nodeImage,'-c',
+      `mkdir -m 700 /package && tar -xf /source.tar -C /package && cd /package && npm ci --ignore-scripts --no-audit --no-fund && ${mixed?'mkdir -p scripts/spikes/playwright-cli/node_modules && cp -a /opt/m4/node_modules/. scripts/spikes/playwright-cli/node_modules/ && ':''}node --version && node --test --test-concurrency=1 ${mixed?'harness-tests/sequential-runtime.test.mjs':'harness-tests/database-runtime.test.mjs'} ${suite}`],testEnvironment); clientCreated=true;
     docker(['cp',join(staging,'source.tar'),`${clientName}:/source.tar`]);
   }
-  const child = linux ? spawn('docker',['start','-a',clientName],{stdio:'inherit'}) : spawn(process.execPath, ['--test','--test-concurrency=1','harness-tests/sqlserver.integration.mjs'], {stdio: 'inherit', env: {...process.env,...testEnvironment}});
+  const child = linux ? spawn('docker',['start','-a',clientName],{stdio:'inherit'}) : spawn(process.execPath, ['--test','--test-concurrency=1',suite], {stdio: 'inherit', env: {...process.env,...testEnvironment}});
   status = await new Promise(resolve => {child.once('error', () => resolve(1)); child.once('exit', code => resolve(code ?? 1));});
-  console.log(JSON.stringify({probe: 'sqlserver', status: status === 0 ? 'PASS' : 'FAIL', image: sqlServerImage, version, driver: 'mssql-12.7.2', ...(linux?{clientImage:nodeImage,platform:'linux'}:{node:process.version,platform:process.platform}), liveDatabase: true}));
+  console.log(JSON.stringify({probe: mixed ? 'mixed' : 'sqlserver', status: status === 0 ? 'PASS' : 'FAIL', image: sqlServerImage, version, driver: 'mssql-12.7.2', ...(linux?{clientImage:nodeImage,platform:'linux'}:{node:process.version,platform:process.platform}), liveDatabase: true, ...(mixed?{nativeBrowserRequired:true}:{} )}));
 } catch {console.error(JSON.stringify({probe: 'sqlserver', status: 'ERROR', reason: 'Fixture setup or runner failed; native output withheld.'}));}
 finally {
   if (pool) await pool.close().catch(() => {});

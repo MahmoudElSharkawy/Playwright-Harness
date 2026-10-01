@@ -22,7 +22,14 @@ M7 adds [shared sequential API execution](M7-API.md) through Node's HTTP(S) tran
 All valid operation sources use identical configured capabilities, target and credential
 binding, evidence and M5 result validation. Ordinary test-profile mutations require no
 per-operation harness approval. Cleanup follows intent; the caller sequences the
-scenario. Database dispatch and cross-family orchestration remain later milestones.
+scenario.
+
+M8 adds [SQL Server execution](M8-SQLSERVER.md), with real driver bindings and scoped
+privileges. M9 adds [a fixed sequential mixed lifecycle](M9-SEQUENTIAL.md). The three
+runtimes share scenario records, typed producer bindings, effect/lifecycle ownership,
+confidential-value knowledge and one cleanup budget. Native browser mechanics, HTTP
+transport and SQL classification remain inside their existing integrations. There is
+no generic workflow engine or parallel scheduler.
 
 ## Package and consumer responsibilities
 
@@ -45,7 +52,7 @@ The local loader validates neutral scenarios, steps, expectations and optional e
 references without ADO configuration or network access. It records a source fingerprint
 and reports counts with `executed: false`. Environment modes and separate targets are
 validated configuration. M5 computes effective capability decisions from it;
-browser/API libraries now dispatch operations; source-to-execution orchestration is
+browser/API/database libraries now dispatch operations; source-to-execution integration is
 still later work.
 
 Legacy ADO retrieval → refinement → AgenTeX exploration → POM generation → independent

@@ -36,7 +36,12 @@ definitions and dynamic exploration share the same controls. See
 M8 adds the [SQL Server runtime](docs/M8-SQLSERVER.md) with real driver binding,
 configured scope, affected-row expectations, protected evidence and optional guarded
 restoration. See [M8 validation](docs/M8-VALIDATION.md) for acceptance and real-instance
-coverage. Mixed execution and PostgreSQL remain later milestones.
+coverage.
+
+M9 adds [sequential mixed execution](docs/M9-SEQUENTIAL.md): one scenario can prepare
+data through SQL/API, exercise the UI/API, verify through API/SQL and perform only
+its required cleanup/restoration. See [M9 validation](docs/M9-VALIDATION.md). PostgreSQL,
+full host parity, generation integration and parallel execution remain later milestones.
 
 ## Install into a project
 
@@ -131,6 +136,8 @@ hosts or external integration tests passed.
 | `scripts/spikes/playwright-cli` | Development-only pinned native CLI viability probes |
 | `scripts/lib/execution-core` | Shared execution records, policy decisions and result/evidence validation |
 | `scripts/lib/api` | Shared sequential API execution, credential binding, evidence and recovery |
+| `scripts/lib/database` | Scoped SQL Server execution with actual driver binding and optional restoration |
+| `scripts/lib/sequential` | Fixed mixed lifecycle using one shared scenario record and the existing runtimes |
 | `scripts/check-conventions.mjs` | Mechanical POM convention checks |
 | `scripts/hooks/guard.mjs` | Optional advisory Claude hooks |
 | `scripts/generate-tracker.mjs`, `scripts/harness-metrics.mjs` | Consumer reporting tools |
@@ -158,6 +165,7 @@ npm run check:links
 npm run check:conventions
 npm run test:api
 npm run test:database
+npm run test:sequential
 npm test
 npm run test:fetch
 npm run check:privacy
@@ -174,6 +182,9 @@ The SQL Server runtime uses the root lockfile's pinned driver. `npm run probe:da
 separately provisions, tests and removes a disposable development SQL Server through
 Docker; it fails if the required real instance cannot run. See the M8 guide for its
 requirements and the Linux-client option.
+`npm run probe:mixed` adds a synthetic SQL-backed HTTP/UI application and the pinned
+native browser to that real fixture. Its prerequisites and pinned Linux-client option
+are documented in the M9 guide.
 
 The convention gate checks `examples` with warnings treated as errors. Zero scope or
 an unresolved Git base fails. JSON parsing is not schema validation; link checks cover

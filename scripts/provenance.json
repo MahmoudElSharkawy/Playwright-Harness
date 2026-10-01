@@ -4,6 +4,12 @@
   "publicationAuthorized": false,
   "sources": [
     {
+      "scope": "M9 changes",
+      "status": "Created for this project; reuses the existing pinned browser and SQL Server dependencies",
+      "targetLicense": "MIT",
+      "thirdPartyCodeCopied": false
+    },
+    {
       "scope": "M8 changes",
       "status": "Created for this project; node-mssql consumed as a separately installed MIT dependency",
       "targetLicense": "MIT",

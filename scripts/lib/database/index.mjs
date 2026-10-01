@@ -1,11 +1,9 @@
-import {mkdirSync, writeFileSync, lstatSync, realpathSync} from 'node:fs';
-import {dirname, join} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {isDeepStrictEqual} from 'node:util';
-import {authorizeOperation, checkExecutionWindow, attemptRecord, decideRecovery, registerEvidence, assessRun} from '../execution-core/index.mjs';
+import {authorizeOperation, checkExecutionWindow, attemptRecord, decideRecovery, registerEvidence} from '../execution-core/index.mjs';
 import {requireRun} from '../execution-core/inputs.mjs';
 import {data, fingerprint, id, keys, oneOf, requireThat, typedValue, protectedReference} from '../execution-core/data.mjs';
-import {resolveSkillRoots, realFuture} from '../skill-roots.mjs';
+import {createScenarioState, requireScenarioState, initializeStorage, writeScenario, finishScenario, rememberSensitive, publicValue as checkedPublicValue} from '../sequential/state.mjs';
 import {databaseCapabilities, validateDatabaseOperation, bindDatabase, select, expected} from './definition.mjs';
 import {DatabaseFailure, bounded, credentials, validateTarget, executeSqlServer} from './sqlserver-driver.mjs';
 
@@ -18,50 +16,26 @@ function environmentCredential({reference}) {
 }
 
 /** One sequential SQL Server scenario; ordinary services and either host use the same runtime. */
-export function createDatabaseRuntime(run, inputRoots, {signal, resolveCredential = environmentCredential, resolveSensitive, storeSensitive} = {}) {
+export function createDatabaseRuntime(run, inputRoots, {signal, resolveCredential = environmentCredential, resolveSensitive, storeSensitive, execution} = {}) {
   requireRun(run); requireThat(run.inputs.scenarios.length === 1, 'M8 accepts one sequential database scenario per run.');
   requireThat(signal === undefined || signal instanceof AbortSignal, 'Cancellation needs an AbortSignal.');
   for (const callback of [resolveCredential, resolveSensitive, storeSensitive]) requireThat(callback === undefined || typeof callback === 'function', 'Database resolvers must be functions.');
-  const roots = resolveSkillRoots(inputRoots), scope = run.inputs.scenarios[0];
-  mkdirSync(dirname(roots.runRoot), {recursive: true, mode: 0o700}); mkdirSync(roots.runRoot, {mode: 0o700}); mkdirSync(join(roots.runRoot, 'evidence'), {mode: 0o700});
-  const scenario = {id: scope.id, disposition: 'executed', attempts: [], resources: [], outputRefs: [], issues: []};
-  const observations = {scenarios: [scenario], operations: [], evidence: []}, histories = new Map(), authCache = new Map(), secrets = new Set();
+  const state = execution ? requireScenarioState(execution, run, inputRoots) : createScenarioState(run, inputRoots);
+  if (!execution) initializeStorage(state);
+  requireThat(state.storageReady, 'Shared storage must be initialized.');
+  const {roots, scope, scenario, observations, histories} = state, authCache = new Map();
+  state.releases.push(() => authCache.clear());
   let busy = false, finished = false, phaseNumber = 0, cleanupStartedAt;
   function write(path, value) {
-    for (const directory of [roots.runRoot, join(roots.runRoot, 'evidence')]) requireThat(!lstatSync(directory).isSymbolicLink() && realpathSync(directory) === directory && realFuture(directory) === directory, 'Database storage ownership changed.');
-    writeFileSync(join(roots.runRoot, path), JSON.stringify(data(value), null, 2), {flag: 'wx', mode: 0o600});
+    writeScenario(state, path, value);
   }
   function evidence(attempt, kind, value) {
     const artifactId = `artifact-${randomUUID()}`, path = `evidence/${artifactId}.json`;
     data(value, run.inputs.limits.maxEvidenceBytes); write(path, value);
     observations.evidence.push(registerEvidence(run, roots, {id: artifactId, identity: attempt.identity, kind, path, sanitized: true})); attempt.evidenceIds.push(artifactId); return artifactId;
   }
-  function decoded(value) {if (typeof value !== 'string') return undefined; try {return JSON.parse(value);} catch {return undefined;}}
-  function remember(value, depth = 0) {
-    requireThat(depth <= 32, 'Sensitive data exceeds structural limits.');
-    if (value && typeof value === 'object') Object.values(value).forEach(item => remember(item, depth + 1));
-    else if (value !== null && value !== undefined && value !== '') {
-      secrets.add(value); const parsed = decoded(value); if (parsed !== undefined) remember(parsed, depth + 1);
-    }
-  }
-  function publicValue(value) {
-    const checked = data(value, run.inputs.limits.maxValueBytes);
-    let nodes = 0;
-    function inspect(item, depth = 0) {
-      requireThat(++nodes <= 20000 && depth <= 32, 'Public data exceeds structural limits.');
-      if (typeof item === 'string') {
-        requireThat(![...secrets].some(secret => item.includes(String(secret)) || item.includes(encodeURIComponent(String(secret)))), 'Sensitive content cannot be a public database output.');
-        const parsed = decoded(item); if (parsed !== undefined) inspect(parsed, depth + 1);
-      }
-      else if (typeof item === 'number' || typeof item === 'boolean') requireThat(!secrets.has(item), 'Sensitive content cannot be a public database output.');
-      else if (item && typeof item === 'object') for (const [name, child] of Object.entries(item)) {
-        requireThat(!sensitiveKey(name), 'Sensitive fields require protected extraction.');
-        if (!Array.isArray(item)) inspect(name, depth + 1);
-        inspect(child, depth + 1);
-      }
-    }
-    inspect(checked); return checked;
-  }
+  const remember = value => rememberSensitive(state, value);
+  const publicValue = value => checkedPublicValue(state, value);
   function comparison(value) {try {return publicValue(value);} catch {return '[REDACTED OR UNAVAILABLE]';}}
   function getBindings(inputs) {
     const checked = inputs.map(value => typedValue(value, run.inputs.limits.maxValueBytes));
@@ -79,13 +53,14 @@ export function createDatabaseRuntime(run, inputRoots, {signal, resolveCredentia
       assertions: scope.expectations.filter(e => e.invocationId === invocationId && e.operationId === operation.id).map(e => ({id: e.id, status: 'NOT_EVALUATED', reliable: false, evidenceIds: []}))};
   }
   async function execute(options) {
-    requireThat(!busy && !finished, 'Database execution must be sequential inside its active runtime.');
+    requireThat(!busy && !finished && !state.busy && !state.finished, 'Database execution must be sequential inside its active runtime.');
     keys(options, ['operation','invocationId','phase','inputs','retry','resource','lifecycle'], 'database invocation');
     const operation = validateDatabaseOperation(options.operation), d = operation.definition, invocationId = options.invocationId, phase = options.phase ?? 'EXERCISE';
     id(invocationId); oneOf(phase, Object.keys(phases));
     const inputs = getBindings(options.inputs ?? []), retry = options.retry ?? true;
-    requireThat(typeof retry === 'boolean' && !histories.has(invocationId) && phases[phase] >= phaseNumber, 'Invalid sequential database invocation.');
+    requireThat(typeof retry === 'boolean' && !histories.has(invocationId) && phases[phase] >= state.phaseNumber, 'Invalid sequential database invocation.');
     const expectations = scope.expectations.filter(e => e.operationId === operation.id && e.invocationId === invocationId);
+    requireThat(expectations.every(item => item.phase === undefined || item.phase === phase), 'Database invocation differs from its frozen phase.');
     requireThat(expectations.length === d.checks.length && d.checks.every(c => expectations.some(e => e.id === c.id)) && expectations.every(e => e.requiredEvidence.every(kind => ['response','assertion','observation'].includes(kind))), 'Database checks must match frozen expectations and supported evidence.');
     for (const p of d.parameters ?? []) if (sensitiveKey(p.name)) requireThat(inputs.some(v => v.name === p.input && v.sensitivity === 'sensitive'), 'Sensitive SQL parameters need protected bindings.');
     const resource = options.resource === undefined ? undefined : data(options.resource), lifecycle = options.lifecycle === undefined ? undefined : data(options.lifecycle);
@@ -109,8 +84,8 @@ export function createDatabaseRuntime(run, inputRoots, {signal, resolveCredentia
     if (operation.source.kind === 'exploration') {
       const previous = observations.operations.find(item => item.id === operation.id); requireThat(!previous || previous.fingerprint === operation.fingerprint, 'Run-local database definition changed.'); if (!previous) observations.operations.push(operation);
     }
-    phaseNumber = phases[phase]; if (phaseNumber === 3) cleanupStartedAt ??= Date.now();
-    busy = true; const history = []; histories.set(invocationId, history); let resolvedBindings;
+    phaseNumber = state.phaseNumber = phases[phase]; if (phaseNumber === 3) state.cleanupStartedAt ??= Date.now(); cleanupStartedAt = state.cleanupStartedAt;
+    busy = state.busy = true; const history = []; histories.set(invocationId, history); let resolvedBindings;
     try {
       for (let number = 1; number <= run.inputs.limits.maxAttempts; number++) {
         const current = record(operation, invocationId, phase, number, inputs), controller = new AbortController(), window = checkExecutionWindow(run, {phase, signal, cleanupStartedAt});
@@ -194,12 +169,12 @@ export function createDatabaseRuntime(run, inputRoots, {signal, resolveCredentia
         if (!retry || !failure || !['TRANSPORT','TIMEOUT'].includes(failure.reason) || signal?.aborted && phaseNumber !== 3 || decideRecovery(run, history, {evidence: observations.evidence, roots, cleanupStartedAt}).action !== 'RETRY') return completed;
       }
       return history.at(-1);
-    } finally {busy = false;}
+    } finally {busy = state.busy = false;}
   }
-  function selectOutput(attempt, name) {requireThat(!finished && !busy && scenario.attempts.includes(attempt) && attempt.outputs.some(o => o.name === name), 'Output must belong to a completed database attempt.'); scenario.outputRefs.push({attemptId: attempt.identity.attemptId, name});}
+  function selectOutput(attempt, name) {requireThat(!finished && !state.finished && !state.busy && !busy && scenario.attempts.includes(attempt) && attempt.outputs.some(o => o.name === name), 'Output must belong to a completed database attempt.'); scenario.outputRefs.push({attemptId: attempt.identity.attemptId, name});}
   function finish() {
-    requireThat(!busy && !finished, 'Finish needs an idle active database runtime.'); finished = true; authCache.clear(); secrets.clear();
-    const result = assessRun(run, roots, observations); write('observations.json', observations); write('result.json', result); return result;
+    requireThat(!execution && !busy && !finished, 'Finish needs an idle active standalone database runtime.'); finished = true;
+    return finishScenario(state);
   }
   return Object.freeze({execute, selectOutput, finish});
 }

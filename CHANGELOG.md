@@ -3,6 +3,15 @@
 Package versions belong to this package, not to adopting applications. Historical
 private incidents and delivery identifiers are intentionally not retained here.
 
+## 3.0.9 — Unreleased
+
+- M9: share sequential scenario identities, bindings, effects and required lifecycle
+  records across the existing browser, API and SQL Server runtimes.
+- Add fixed setup/exercise/verify/cleanup callbacks, cross-runtime concurrency refusal,
+  shared cleanup deadlines and protected-value screening, and explicit unreached results.
+- Prove real mixed scenarios, partial setup, reconciliation, conditional restoration,
+  cleanup failures and intentional retention without new dependencies or a workflow DSL.
+
 ## 3.0.8 — Unreleased
 
 - M8: add sequential SQL Server execution with actual typed driver bindings,

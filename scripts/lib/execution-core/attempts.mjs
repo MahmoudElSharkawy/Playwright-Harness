@@ -41,6 +41,7 @@ export function attemptRecord(run, input) {
   unique(attempt.assertions.map(assertion => assertion.id), 'attempt assertions');
   const expectations = run.inputs.scenarios.find(scenario => scenario.id === attempt.identity.scenarioId).expectations
     .filter(expectation => expectation.operationId === attempt.identity.operationId && expectation.invocationId === attempt.identity.invocationId);
+  requireThat(expectations.every(expectation => expectation.phase === undefined || expectation.phase === attempt.identity.phase), 'Attempt phase differs from its frozen expectation.');
   for (const assertion of attempt.assertions) {
     keys(assertion, ['id', 'status', 'reliable', 'evidenceIds'], 'assertion'); id(assertion.id);
     requireThat(expectations.some(expectation => expectation.id === assertion.id), 'Assertion does not belong to this invocation.');

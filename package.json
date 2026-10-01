@@ -1,6 +1,6 @@
 {
   "name": "playwright-pom-harness",
-  "version": "3.0.8",
+  "version": "3.0.9",
   "private": true,
   "license": "MIT",
   "type": "module",
@@ -33,7 +33,9 @@
     "probe:browser": "node scripts/probes/browser.mjs",
     "test:api": "node --test harness-tests/api-runtime.test.mjs",
     "test:database": "node --test harness-tests/database-runtime.test.mjs",
-    "probe:database": "node scripts/probes/sqlserver.mjs"
+    "probe:database": "node scripts/probes/sqlserver.mjs",
+    "test:sequential": "node --test harness-tests/sequential-runtime.test.mjs",
+    "probe:mixed": "node scripts/probes/sqlserver.mjs --mixed"
   },
   "files": [
     "README.md",

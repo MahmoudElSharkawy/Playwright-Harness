@@ -1,11 +1,12 @@
 import {readFile, writeFile, lstat, realpath} from 'node:fs/promises';
 import {join, resolve} from 'node:path';
 import {randomUUID} from 'node:crypto';
-import {defineOperation, authorizeOperation, checkExecutionWindow, attemptRecord, decideRecovery, registerEvidence, assessRun} from '../execution-core/index.mjs';
+import {defineOperation, authorizeOperation, checkExecutionWindow, attemptRecord, decideRecovery, registerEvidence} from '../execution-core/index.mjs';
 import {requireRun} from '../execution-core/inputs.mjs';
 import {data, id, oneOf, typedValue} from '../execution-core/data.mjs';
 import {within} from '../skill-roots.mjs';
 import {prepareNativeSession, NativeFailure} from './native-cli.mjs';
+import {createScenarioState, requireScenarioState, acceptBrowserStorage, finishScenario, inputBindings, publicValue} from '../sequential/state.mjs';
 
 export const browserCapabilities = Object.freeze(['browserReads', 'browserMutations']);
 // Bound trusted asynchronous callbacks as well as native commands. This cannot preempt
@@ -36,19 +37,22 @@ export function browserLifecycleOperations(target) {
 }
 
 /** One sequential browser scenario. The callback uses the official native CLI, not a harness action language. */
-export async function runBrowserScenario(run, roots, {target, storageState, signal, nativeTimeoutMs, commandTimeoutMs} = {}, body) {
+export async function runBrowserScenario(run, roots, {target, storageState, signal, nativeTimeoutMs, commandTimeoutMs, execution, onUnavailable} = {}, body) {
   requireRun(run); id(target);
   if (run.inputs.scenarios.length !== 1 || typeof body !== 'function') throw new Error('M6 accepts one sequential browser scenario per run.');
   if (signal !== undefined && !(signal instanceof AbortSignal)) throw new Error('Cancellation needs an AbortSignal.');
   const scope = run.inputs.scenarios[0], lifecycle = browserLifecycleOperations(target);
+  const state = execution ? requireScenarioState(execution, run, roots) : createScenarioState(run, roots);
+  if (state.storageReady || state.busy) throw new Error('Browser session must acquire this scenario storage first.');
+  if (onUnavailable !== undefined && (!execution || typeof onUnavailable !== 'function')) throw new Error('Unavailable handling belongs to the mixed scenario owner.');
   for (const operation of lifecycle) if (!authorizeOperation(run, operation, browserCapabilities).allowed) throw new Error('Owned browser lifecycle is not frozen or permitted for this target.');
   const origins = run.inputs.environment.targets.browser[target].origins;
   const initialWindow = checkExecutionWindow(run, {phase: 'SETUP', signal});
   if (!initialWindow.allowed) throw new NativeFailure(initialWindow.reason === 'CANCELLED' ? 'CANCELLED' : 'TIMEOUT');
   const native = await prepareNativeSession(roots, {origins, storageState, ...(nativeTimeoutMs === undefined ? {} : {nativeTimeoutMs}), ...(commandTimeoutMs === undefined ? {} : {commandTimeoutMs})});
   roots = native.roots;
-  const scenario = {id: scope.id, disposition: 'executed', attempts: [], resources: [], outputRefs: [], issues: []};
-  const observations = {scenarios: [scenario], operations: [], evidence: []}, histories = new Map();
+  acceptBrowserStorage(state, roots);
+  const {scenario, observations, histories} = state;
   const activeAttempts = new Set();
   let busy = false, finished = false, cleanupStartedAt, phaseNumber = 0, scenarioFailure, bodyInterrupted = false;
   const indeterminate = () => {if (!scenario.issues.includes('indeterminate-outcome')) scenario.issues.push('indeterminate-outcome');};
@@ -58,11 +62,11 @@ export async function runBrowserScenario(run, roots, {target, storageState, sign
       inputs: data(inputs), outputs: [], assertions: scope.expectations.filter(item => item.operationId === operation.id && item.invocationId === invocationId).map(item => ({id: item.id, status: 'NOT_EVALUATED', reliable: false, evidenceIds: []})), evidenceIds: [], supportedCapabilities: [...browserCapabilities]};
   }
   function window(attempt, cleanup = false) {
-    const value = checkExecutionWindow(run, {phase: attempt.identity.phase, signal: cleanup ? undefined : signal, cleanupStartedAt});
+    const value = checkExecutionWindow(run, {phase: attempt.identity.phase, signal: cleanup ? undefined : signal, cleanupStartedAt: state.cleanupStartedAt});
     if (!value.allowed) throw new NativeFailure(value.reason === 'CANCELLED' ? 'CANCELLED' : 'TIMEOUT');
     return {timeoutMs: value.remainingMs, ...(cleanup ? {} : {signal})};
   }
-  const cleanupWindow = () => {cleanupStartedAt ??= Date.now(); return window({identity: {phase: 'CLEANUP'}}, true);};
+  const cleanupWindow = () => {state.cleanupStartedAt ??= Date.now(); cleanupStartedAt = state.cleanupStartedAt; return window({identity: {phase: 'CLEANUP'}}, true);};
   async function evidence(attempt, kind, bytes) {
     oneOf(kind, ['observation','assertion','response','snapshot','screenshot','trace','reconciliation','lifecycle']);
     const artifactId = `artifact-${randomUUID()}`, path = `evidence/${artifactId}`;
@@ -72,17 +76,29 @@ export async function runBrowserScenario(run, roots, {target, storageState, sign
     observations.evidence.push(artifact); attempt.evidenceIds.push(artifactId); return artifactId;
   }
   const observe = (attempt, kind, value) => evidence(attempt, kind, Buffer.from(JSON.stringify(data(value, run.inputs.limits.maxEvidenceBytes))));
+  const diagnostic = value => {try {return publicValue(state, value);} catch {return '[redacted]';}};
+  // Fixed native facts are not application data. A confidential value can itself be
+  // "OK" or true; matching it must not erase an executed effect or skip cleanup.
+  async function observeAutomatic(attempt, kind, value) {
+    try {return await observe(attempt, kind, value);} catch {
+      indeterminate();
+      if (attempt.outcome === 'SUCCESS') {attempt.outcome = 'INFRASTRUCTURE_FAILURE'; attempt.failureClass = 'EXECUTOR';}
+      return undefined;
+    }
+  }
   function finish(attempt) {attempt.endedAt = Date.now(); scenario.attempts.push(attemptRecord(run, attempt));}
   async function execute({operation, invocationId, phase = 'EXERCISE', inputs = [], retry = false}, action) {
-    if (busy || finished) throw new Error('Browser attempts must be sequential and inside the active scenario.');
+    if (busy || finished || state.busy || state.finished) throw new Error('Browser attempts must be sequential and inside the active scenario.');
     id(invocationId); oneOf(phase, ['SETUP','EXERCISE','VERIFY','CLEANUP','RESTORE']);
     const nextPhase = {SETUP: 0, EXERCISE: 1, VERIFY: 2, CLEANUP: 3, RESTORE: 3}[phase];
-    if (nextPhase < phaseNumber || histories.has(invocationId) || typeof action !== 'function' || typeof retry !== 'boolean') throw new Error('Invalid sequential invocation.');
+    if (nextPhase < state.phaseNumber || histories.has(invocationId) || typeof action !== 'function' || typeof retry !== 'boolean') throw new Error('Invalid sequential invocation.');
     if (operation.family !== 'browser' || operation.target !== target) throw new Error('Browser operation must use this session target.');
-    const authorization = authorizeOperation(run, operation, browserCapabilities); phaseNumber = nextPhase;
-    if (nextPhase === 3) cleanupStartedAt ??= Date.now();
+    inputs = inputBindings(state, inputs);
+    if (scope.expectations.some(item => item.invocationId === invocationId && item.operationId === operation.id && item.phase !== undefined && item.phase !== phase)) throw new Error('Browser invocation differs from its frozen phase.');
+    const authorization = authorizeOperation(run, operation, browserCapabilities); phaseNumber = state.phaseNumber = nextPhase;
+    if (nextPhase === 3) state.cleanupStartedAt ??= Date.now(); cleanupStartedAt = state.cleanupStartedAt;
     if (operation.source.kind === 'exploration' && !observations.operations.some(item => item.id === operation.id)) observations.operations.push(operation);
-    busy = true; const history = []; histories.set(invocationId, history);
+    busy = state.busy = true; const history = []; histories.set(invocationId, history);
     try {
       for (let number = 1; number <= run.inputs.limits.maxAttempts; number++) {
         const current = record(operation, invocationId, phase, number, inputs); let failure, dispatched = false, explicitEffect = false, active = true;
@@ -102,7 +118,7 @@ export async function runBrowserScenario(run, roots, {target, storageState, sign
                 catch (error) {dispatched ||= error.dispatched === true; failure ??= error; throw error;}
               })(), true);
             },
-            evidence: (kind, value) => {requireActive(); return track(observe(current, kind, value));},
+            evidence: (kind, value) => {requireActive(); return track(observe(current, kind, execution ? publicValue(state, value) : value));},
             artifact: (kind, filename, sanitize) => {requireActive(); return track((async () => {
               if (typeof sanitize !== 'function') throw new Error('Native artifacts require explicit sanitization before evidence registration.');
               const source = await realpath(resolve(native.workRoot, filename)), stat = await lstat(source);
@@ -115,7 +131,7 @@ export async function runBrowserScenario(run, roots, {target, storageState, sign
             assertion: input => {requireActive(); const value = data(input), index = current.assertions.findIndex(item => item.id === value.id); if (index < 0 || asserted.has(value.id)) throw new Error('Assertion is outside the frozen invocation or already recorded.'); asserted.add(value.id); current.assertions[index] = value;},
             effect: effect => {requireActive(); current.effect = data(effect); explicitEffect = true;},
             reconciliation: value => {requireActive(); current.reconciliation = data(value);},
-            output: input => {requireActive(); const value = typedValue({...data(input), producer: {runId: run.id, scenarioId: scope.id, attemptId: current.identity.attemptId, name: input.name}}, run.inputs.limits.maxValueBytes); current.outputs.push(value); return value;},
+            output: input => {requireActive(); if (execution && input.sensitivity === 'public') publicValue(state, input.value); const value = typedValue({...data(input), producer: {runId: run.id, scenarioId: scope.id, attemptId: current.identity.attemptId, name: input.name}}, run.inputs.limits.maxValueBytes); current.outputs.push(value); return value;},
             resource: value => {requireActive(); const resource = {...data(value), originAttemptId: current.identity.attemptId}; if (scenario.resources.some(item => item.id === resource.id)) throw new Error('Resource identity already exists.'); scenario.resources.push(resource);},
             lifecycle: (resourceId, value) => {
               requireActive(); const resource = scenario.resources.find(item => item.id === resourceId), update = data(value);
@@ -143,17 +159,19 @@ export async function runBrowserScenario(run, roots, {target, storageState, sign
             current.outcome = 'INFRASTRUCTURE_FAILURE'; current.failureClass = failure instanceof NativeFailure ? failure.classification : 'EXECUTOR';
             if (current.effect.certainty === 'none') current.effect.certainty = !dispatched ? 'not-executed' : operation.capability === 'browserReads' ? 'none' : 'uncertain';
             if (expired || (failure instanceof NativeFailure && failure.interrupted)) {
-              cleanupStartedAt ??= Date.now();
+              state.cleanupStartedAt ??= Date.now(); cleanupStartedAt = state.cleanupStartedAt;
               try {await native.interrupt({deadlineAt: cleanupStartedAt + run.inputs.limits.cleanupTimeoutMs});} catch {indeterminate();}
             }
           }
         }
-        await observe(current, 'observation', {nativeEvents: native.events.slice(eventStart), ...(failure ? {exception: failure.name, ...(typeof failure.code === 'string' ? {code: failure.code} : {})} : {})});
+        // Commands are caller-supplied strings. Exception names/codes are omitted;
+        // the fixed failure classification already records the useful outcome.
+        await observeAutomatic(current, 'observation', {nativeEvents: native.events.slice(eventStart).map(event => ({command: diagnostic(event.command), classification: event.classification, dispatched: event.dispatched})), ...(failure ? {failureClass: current.failureClass} : {})});
         finish(current); history.push(scenario.attempts.at(-1));
         if (finished || !retry || decideRecovery(run, history, {evidence: observations.evidence, roots, cleanupStartedAt}).action !== 'RETRY') return history.at(-1);
       }
       return history.at(-1);
-    } finally {busy = false;}
+    } finally {busy = state.busy = false;}
   }
   const setup = record(lifecycle[0], 'browser-session-setup', 'SETUP'), sessionResourceId = 'owned-browser-session';
   setup.effect = {certainty: 'confirmed', resourceIds: [sessionResourceId]};
@@ -168,9 +186,11 @@ export async function runBrowserScenario(run, roots, {target, storageState, sign
   }
   try {
     try {await native.open(window(setup));} catch (error) {openingFailure = error; setup.outcome = 'INFRASTRUCTURE_FAILURE'; setup.failureClass = error instanceof NativeFailure ? error.classification : 'EXECUTOR';}
-    await observe(setup, 'lifecycle', {sessionCreated: !openingFailure, ownership: 'harness'}); finish(setup);
-    if (!openingFailure) await boundedWork(() => body({attempt: launchAttempt, ownership: native.ownership}),
-      () => window({identity: {phase: phaseNumber === 3 ? 'CLEANUP' : 'EXERCISE'}}, phaseNumber === 3), signal);
+    await observeAutomatic(setup, 'lifecycle', {sessionCreated: !openingFailure, ownership: 'harness'}); finish(setup); histories.set(setup.identity.invocationId, [scenario.attempts.at(-1)]);
+    if (!openingFailure && execution) await body({attempt: launchAttempt, ownership: native.ownership});
+    else if (!openingFailure) await boundedWork(() => body({attempt: launchAttempt, ownership: native.ownership}),
+      () => window({identity: {phase: state.phaseNumber === 3 ? 'CLEANUP' : 'EXERCISE'}}, state.phaseNumber === 3), signal);
+    else if (execution) await onUnavailable?.();
     else for (const expectation of scope.expectations) if (!histories.has(expectation.invocationId)) {
       const operation = run.inputs.operations.find(item => item.id === expectation.operationId);
       if (!operation) throw new Error('Unopened browser has an unresolved exploratory operation.');
@@ -187,7 +207,7 @@ export async function runBrowserScenario(run, roots, {target, storageState, sign
     if (activeAttempts.size) {if (!bodyInterrupted) indeterminate(); await boundedWork(() => Promise.allSettled([...activeAttempts]), cleanupWindow).catch(() => indeterminate());}
     // A timed-out body may never reach a known frozen invocation. Preserve its
     // unevaluated expectations explicitly; never fabricate exploratory provenance.
-    if (scenarioFailure) for (const expectation of scope.expectations) if (!histories.has(expectation.invocationId)) {
+    if (scenarioFailure && !execution) for (const expectation of scope.expectations) if (!histories.has(expectation.invocationId)) {
       const operation = run.inputs.operations.find(item => item.id === expectation.operationId);
       if (!operation) {indeterminate(); continue;}
       const phase = phaseNumber === 3 ? 'CLEANUP' : phaseNumber === 2 ? 'VERIFY' : 'EXERCISE';
@@ -200,18 +220,16 @@ export async function runBrowserScenario(run, roots, {target, storageState, sign
       await observe(missing, 'observation', {invoked: false, reason: missing.failureClass}); finish(missing);
       histories.set(expectation.invocationId, [missing]);
     }
-    cleanupStartedAt ??= Date.now();
+    state.cleanupStartedAt ??= Date.now(); cleanupStartedAt = state.cleanupStartedAt; state.phaseNumber = 3;
     const cleanup = record(lifecycle[1], 'browser-session-cleanup', 'CLEANUP'); cleanup.inputs = [sessionValue];
     const cleanupExpired = cleanup.startedAt >= cleanupStartedAt + run.inputs.limits.cleanupTimeoutMs;
     const result = await native.close({deadlineAt: cleanupStartedAt + run.inputs.limits.cleanupTimeoutMs});
     cleanup.effect = {certainty: result.complete ? 'confirmed' : 'uncertain', resourceIds: [sessionResourceId]};
     if (!result.complete || Date.now() >= cleanupStartedAt + run.inputs.limits.cleanupTimeoutMs) {cleanup.outcome = 'INFRASTRUCTURE_FAILURE'; cleanup.failureClass = 'EXECUTOR';}
     if (cleanupExpired) {cleanup.outcome = 'INFRASTRUCTURE_FAILURE'; cleanup.failureClass = 'TIMEOUT'; cleanup.effect = {certainty: 'not-executed', resourceIds: []};}
-    const proof = await observe(cleanup, 'lifecycle', {...result, ...(scenarioFailure ? {scenarioFailure} : {})}); finish(cleanup);
-    sessionResource.lifecycle = {action: 'cleanup', status: cleanup.outcome === 'SUCCESS' ? 'completed' : 'failed', attemptId: cleanup.identity.attemptId, evidenceIds: [proof]};
+    const proof = await observeAutomatic(cleanup, 'lifecycle', {...result, ...(scenarioFailure ? {scenarioFailure} : {})}); finish(cleanup);
+    sessionResource.lifecycle = {action: 'cleanup', status: cleanup.outcome === 'SUCCESS' ? 'completed' : 'failed', attemptId: cleanup.identity.attemptId, evidenceIds: proof ? [proof] : []};
   }
-  await writeFile(join(roots.runRoot, 'observations.json'), JSON.stringify(data(observations), null, 2), {mode: 0o600, flag: 'wx'});
-  const result = assessRun(run, roots, observations);
-  await writeFile(join(roots.runRoot, 'result.json'), JSON.stringify(result, null, 2), {mode: 0o600, flag: 'wx'});
-  return result;
+  if (execution) return;
+  return finishScenario(state);
 }

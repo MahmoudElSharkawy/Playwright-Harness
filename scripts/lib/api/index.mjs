@@ -1,11 +1,9 @@
-import {mkdirSync, writeFileSync, lstatSync, realpathSync} from 'node:fs';
-import {dirname, join} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {isDeepStrictEqual} from 'node:util';
-import {authorizeOperation, checkExecutionWindow, attemptRecord, decideRecovery, registerEvidence, assessRun} from '../execution-core/index.mjs';
+import {authorizeOperation, checkExecutionWindow, attemptRecord, decideRecovery, registerEvidence} from '../execution-core/index.mjs';
 import {requireRun} from '../execution-core/inputs.mjs';
 import {data, fingerprint, id, keys, oneOf, requireThat, typedValue, protectedReference} from '../execution-core/data.mjs';
-import {resolveSkillRoots, realFuture} from '../skill-roots.mjs';
+import {createScenarioState, requireScenarioState, initializeStorage, writeScenario, finishScenario, rememberSensitive, publicValue as checkedPublicValue} from '../sequential/state.mjs';
 import {apiCapabilities, validateApiOperation, buildRequest, bind, select} from './definition.mjs';
 import {ApiFailure, send, bounded} from './transport.mjs';
 
@@ -36,24 +34,20 @@ function environmentCredential({reference}) {
  * Raw responses/authentication remain in memory. Only allowlisted extracted values and
  * sanitized comparison/transport facts are persisted. No host or reporting dependency.
  */
-export function createApiRuntime(run, inputRoots, {signal, resolveCredential = environmentCredential, resolveSensitive, storeSensitive} = {}) {
+export function createApiRuntime(run, inputRoots, {signal, resolveCredential = environmentCredential, resolveSensitive, storeSensitive, execution} = {}) {
   requireRun(run);
   requireThat(run.inputs.scenarios.length === 1, 'M7 accepts one sequential API scenario per run.');
   requireThat(signal === undefined || signal instanceof AbortSignal, 'Cancellation needs an AbortSignal.');
   for (const callback of [resolveCredential, resolveSensitive, storeSensitive]) requireThat(callback === undefined || typeof callback === 'function', 'API resolvers must be functions.');
-  const roots = resolveSkillRoots(inputRoots), scope = run.inputs.scenarios[0];
-  mkdirSync(dirname(roots.runRoot), {recursive: true, mode: 0o700});
-  mkdirSync(roots.runRoot, {mode: 0o700}); // A run directory must be fresh, never adopted or overwritten.
-  mkdirSync(join(roots.runRoot, 'evidence'), {mode: 0o700});
-  const scenario = {id: scope.id, disposition: 'executed', attempts: [], resources: [], outputRefs: [], issues: []};
-  const observations = {scenarios: [scenario], operations: [], evidence: []};
-  const histories = new Map(), credentials = new Map(), secretValues = new Set(), sensitiveScalars = new Set();
+  const state = execution ? requireScenarioState(execution, run, inputRoots) : createScenarioState(run, inputRoots);
+  if (!execution) initializeStorage(state);
+  requireThat(state.storageReady, 'Shared storage must be initialized.');
+  const {roots, scope, scenario, observations, histories} = state, credentials = new Map();
+  state.releases.push(() => credentials.clear());
   let busy = false, finished = false, phaseNumber = 0, cleanupStartedAt;
 
   function write(path, value) {
-    // Recheck ownership before writing, including replaced consumer directories/junctions.
-    for (const directory of [roots.runRoot, join(roots.runRoot, 'evidence')]) requireThat(!lstatSync(directory).isSymbolicLink() && realpathSync(directory) === directory && realFuture(directory) === directory, 'API storage ownership changed.');
-    writeFileSync(join(roots.runRoot, path), JSON.stringify(data(value), null, 2), {flag: 'wx', mode: 0o600});
+    writeScenario(state, path, value);
   }
   function evidence(attempt, kind, value) {
     const artifactId = `artifact-${randomUUID()}`, path = `evidence/${artifactId}.json`;
@@ -61,20 +55,8 @@ export function createApiRuntime(run, inputRoots, {signal, resolveCredential = e
     const record = registerEvidence(run, roots, {id: artifactId, identity: attempt.identity, kind, path, sanitized: true});
     observations.evidence.push(record); attempt.evidenceIds.push(artifactId); return artifactId;
   }
-  function remember(value) {
-    if (typeof value === 'string' && value.length) secretValues.add(value);
-    else if (typeof value === 'number' || typeof value === 'boolean') {sensitiveScalars.add(value); secretValues.add(String(value));}
-    else if (value && typeof value === 'object') Object.values(value).forEach(remember);
-  }
-  function publicValue(value) {
-    const checked = data(value, run.inputs.limits.maxValueBytes);
-    const inspect = item => {
-      if (typeof item === 'string') requireThat(![...secretValues].some(secret => item.includes(secret) || item.includes(encodeURIComponent(secret))), 'Sensitive content cannot be a public API output.');
-      else if (typeof item === 'number' || typeof item === 'boolean') requireThat(!sensitiveScalars.has(item), 'Sensitive content cannot be a public API output.');
-      else if (item && typeof item === 'object') for (const [name, child] of Object.entries(item)) {requireThat(!sensitiveKey(name), 'Sensitive fields require protected extraction.'); if (!Array.isArray(item)) inspect(name); inspect(child);}
-    };
-    inspect(checked); return checked;
-  }
+  const remember = value => rememberSensitive(state, value);
+  const publicValue = value => checkedPublicValue(state, value);
   function comparison(value) {
     try { return publicValue(value); } catch { return '[REDACTED OR UNAVAILABLE]'; }
   }
@@ -131,7 +113,7 @@ export function createApiRuntime(run, inputRoots, {signal, resolveCredential = e
 
   /** Execute one definition with typed bindings. Retry is finite and enabled only by established effect facts. */
   async function execute(options) {
-    requireThat(!busy && !finished, 'API execution must be sequential and inside the active runtime.');
+    requireThat(!busy && !finished && !state.busy && !state.finished, 'API execution must be sequential and inside the active runtime.');
     keys(options, ['operation', 'invocationId', 'phase', 'inputs', 'retry', 'resource', 'lifecycle'], 'API invocation');
     const operation = validateApiOperation(options.operation), definition = operation.definition;
     const invocationId = options.invocationId, phase = options.phase ?? 'EXERCISE'; id(invocationId); oneOf(phase, Object.keys(phases));
@@ -144,8 +126,9 @@ export function createApiRuntime(run, inputRoots, {signal, resolveCredential = e
     };
     checkPrivateBinding(definition.request);
     if (definition.recovery?.reconcile) checkPrivateBinding(definition.recovery.reconcile.request);
-    requireThat(typeof retry === 'boolean' && !histories.has(invocationId) && phases[phase] >= phaseNumber, 'Invalid sequential API invocation.');
+    requireThat(typeof retry === 'boolean' && !histories.has(invocationId) && phases[phase] >= state.phaseNumber, 'Invalid sequential API invocation.');
     const expected = scope.expectations.filter(item => item.operationId === operation.id && item.invocationId === invocationId);
+    requireThat(expected.every(item => item.phase === undefined || item.phase === phase), 'API invocation differs from its frozen phase.');
     requireThat(expected.length === definition.checks.length && definition.checks.every(check => expected.some(item => item.id === check.id)), 'API checks must match the frozen invocation expectations.');
     requireThat(expected.every(item => item.requiredEvidence.every(kind => ['response', 'assertion', 'observation'].includes(kind))), 'API assertions require supported evidence kinds.');
     const resource = options.resource === undefined ? undefined : data(options.resource), lifecycle = options.lifecycle === undefined ? undefined : data(options.lifecycle);
@@ -169,8 +152,8 @@ export function createApiRuntime(run, inputRoots, {signal, resolveCredential = e
       requireThat(!previous || previous.fingerprint === operation.fingerprint, 'Run-local API definition changed.');
       if (!previous) observations.operations.push(operation);
     }
-    phaseNumber = phases[phase]; if (phaseNumber === 3) cleanupStartedAt ??= Date.now();
-    busy = true; const history = []; histories.set(invocationId, history); let refresh = false, resolvedBindings;
+    phaseNumber = state.phaseNumber = phases[phase]; if (phaseNumber === 3) state.cleanupStartedAt ??= Date.now(); cleanupStartedAt = state.cleanupStartedAt;
+    busy = state.busy = true; const history = []; histories.set(invocationId, history); let refresh = false, resolvedBindings;
     try {
       for (let number = 1; number <= run.inputs.limits.maxAttempts; number++) {
         const current = record(operation, invocationId, phase, number, inputs), controller = new AbortController();
@@ -300,18 +283,18 @@ export function createApiRuntime(run, inputRoots, {signal, resolveCredential = e
         if (!retry || !transient || signal?.aborted && phaseNumber !== 3 || decideRecovery(run, history, {evidence: observations.evidence, roots, cleanupStartedAt}).action !== 'RETRY') return completed;
       }
       return history.at(-1);
-    } finally {busy = false;}
+    } finally {busy = state.busy = false;}
   }
 
   /** Select typed business outputs explicitly; finish never copies unrestricted response bodies. */
   function selectOutput(attempt, name) {
-    requireThat(!finished && !busy && scenario.attempts.includes(attempt) && attempt.outputs.some(output => output.name === name), 'Output must belong to a completed API attempt.');
+    requireThat(!finished && !state.finished && !state.busy && !busy && scenario.attempts.includes(attempt) && attempt.outputs.some(output => output.name === name), 'Output must belong to a completed API attempt.');
     scenario.outputRefs.push({attemptId: attempt.identity.attemptId, name});
   }
   /** Validate required scope, evidence integrity and intent-driven lifecycle obligations once. */
   function finish() {
-    requireThat(!busy && !finished, 'Finish needs an idle active API runtime.'); finished = true; credentials.clear(); secretValues.clear(); sensitiveScalars.clear();
-    const result = assessRun(run, roots, observations); write('observations.json', observations); write('result.json', result); return result;
+    requireThat(!execution && !busy && !finished, 'Finish needs an idle active standalone API runtime.'); finished = true;
+    return finishScenario(state);
   }
   return Object.freeze({execute, selectOutput, finish});
 }
