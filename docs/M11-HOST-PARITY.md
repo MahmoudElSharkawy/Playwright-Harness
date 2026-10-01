@@ -42,6 +42,11 @@ advisory convention guard. Claude Bash/PowerShell, Edit/Write and failure events
 and Codex Bash, text-block responses and apply_patch paths have distinct mappings.
 Unrecognized events do not claim an edit or command occurred. The legacy guard is
 still fail-open and is not a security boundary or the source of runtime permission.
+Codex pre-command denials use its structured `permissionDecision: "deny"` response
+at exit 0. This survives Windows PowerShell's conversion of an external exit 2 to
+shell exit 1. Claude retains its native exit-2 denial. The proof checks that the
+harmless denied command actually did not execute; a recorded guard rejection alone
+cannot pass that check.
 
 Configure optional hooks in the consumer, using absolute installed-package paths
 at adoption time. Do not copy maintained hook implementations into each consumer

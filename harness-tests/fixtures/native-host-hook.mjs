@@ -10,10 +10,12 @@ const child = spawnSync(process.execPath, [join(import.meta.dirname, '../../scri
 const command = input.tool_input?.command ?? '';
 const invocation = reviewedInvocation(command, join(import.meta.dirname, 'host-command.mjs'));
 const stage = invocation ?? (['Edit', 'Write', 'apply_patch'].includes(input.tool_name) ? 'edit' : 'other');
+let permissionDecision = null;
+try {const output = JSON.parse(child.stdout); if (output.hookSpecificOutput?.hookEventName === 'PreToolUse') permissionDecision = output.hookSpecificOutput.permissionDecision ?? null;} catch { /* Other native output is not a structured decision. */ }
 const directory = join(process.cwd(), '.harness'); mkdirSync(directory, {recursive: true});
 appendFileSync(join(directory, 'native-hooks.jsonl'), JSON.stringify({host, event: input.hook_event_name, tool: input.tool_name ?? null, toolUse: input.tool_use_id ?? null,
   session: typeof input.session_id === 'string' && input.session_id.length ? createHash('sha256').update(input.session_id).digest('hex') : null,
-  stage, reviewedCommand: invocation !== null, exitCode: child.status, mappedModes: guardEvents(host, input).map(event => event.mode),
+  stage, reviewedCommand: invocation !== null, exitCode: child.status, permissionDecision, mappedModes: guardEvents(host, input).map(event => event.mode),
   ...(stage === 'execute' && input.hook_event_name === 'PostToolUse' ? {executionReceipt: executionReceipt(input.tool_response)} : {})}) + '\n');
 // This proof has an explicit main-branch override and is not consumer adoption.
 if (input.hook_event_name !== 'SessionStart') {process.stdout.write(child.stdout ?? ''); process.stderr.write(child.stderr ?? '');}

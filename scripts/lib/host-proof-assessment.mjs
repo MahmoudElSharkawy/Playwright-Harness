@@ -47,7 +47,9 @@ export function assessNativeHost({host, processResult, events, hooks, digest, sc
       && post.toolUse === h.toolUse && post.exitCode === 0 && (stage === 'edit' || post.reviewedCommand === true)
       && post.mappedModes?.includes(stage === 'edit' ? 'post-edit' : 'post-bash')
       && (stage !== 'execute' || post.executionReceipt?.digest === digest && post.executionReceipt.cases === expectedCases)));
-  const denied = nativeHooks.some(h => h.event === 'PreToolUse' && h.stage === 'deny' && h.reviewedCommand === true && h.exitCode === 2 && typeof h.toolUse === 'string' && h.toolUse.length > 0) && !deniedMarker;
+  const denied = nativeHooks.some(h => h.event === 'PreToolUse' && h.stage === 'deny' && h.reviewedCommand === true
+    && (host === 'codex' ? h.exitCode === 0 && h.permissionDecision === 'deny' : h.exitCode === 2)
+    && typeof h.toolUse === 'string' && h.toolUse.length > 0) && !deniedMarker;
   const allowed = paired('ping') && allowedMarker, edited = paired('edit') && editedFile, executed = paired('execute');
   const passed = processResult.exitCode === 0 && !processResult.timedOut && processResult.packageUnchanged && packageUnchanged && infrastructureCleanup
     && success && receipt && oneSession && hookCoverage && denied && allowed && edited && executed;

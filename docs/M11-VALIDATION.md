@@ -1,9 +1,11 @@
 # M11 validation
 
-Status: **IMPLEMENTED; native Codex gate pending — not accepted**. M12 has not started.
+Status: **IMPLEMENTED; corrected Codex retest pending — not accepted**. M12 has not started.
 
-The implementation has independent review approval. Unit/fixture tests are not
-substituted for the missing complete native Codex run and paired comparison.
+The implementation and Windows hook correction have independent review approval.
+The approved native Codex run exposed the hook-denial defect; a fresh native proof
+of the corrected candidate remains required. Unit/fixture tests do not substitute
+for that gate.
 
 ## Package gates
 
@@ -23,8 +25,8 @@ Private receipts retain stdout, stderr and exit codes for every command.
 | `npm run test:database` | 57 tests; PASS |
 | `npm run test:sequential` | 13 tests; PASS |
 | `npm run test:postgresql` | 39 tests; PASS |
-| `npm run test:hosts` | 41 tests; PASS |
-| `npm test` | 464 tests; 464 pass, zero failures/skips/cancellations |
+| `npm run test:hosts` | 43 tests; PASS |
+| `npm test` | 466 tests; 466 pass, zero failures/skips/cancellations |
 | `npm run test:fetch` | Existing ADO parsing self-checks pass; no external ADO call |
 | `npm run typecheck:examples` | Existing example TypeScript project; PASS |
 | `npm run check:privacy` | 238 candidate files; PASS |
@@ -45,12 +47,22 @@ including dependency files; no package writes were detected.
 SQL Server reports 16.0.4295.3; PostgreSQL reports 16.14. Both use the already pinned
 container digests and dependency graphs.
 
-An earlier native Codex CLI 0.159.2 attempt completed the API/database portion.
-It did not pass browser execution or native hook trust. Native discovery explicitly
-reports the three local proof hooks as untrusted. A person-authorized trust decision
-is still pending; the one-run override has not been used. The final candidate must
-complete all 19 cases, hooks, cleanup and paired comparison before M11 is accepted.
-Native host completion alone is not acceptance. The retained failed
+After explicit person approval, native Codex CLI 0.159.2 completed all 19 cases with
+the one-run hook-trust override. Native execution, edit mapping, command receipt,
+package immutability and owned cleanup pass. All 19 cases are semantically equivalent
+to Claude. The aggregate proof still fails: the harmless denied-command marker was
+created despite the inner guard returning exit 2. A real PowerShell reproduction
+shows that external exit 2 becomes shell exit 1. The Codex adapter now emits the
+documented structured denial at exit 0, with a real PowerShell regression test and
+strict denial assessment. The failed native receipt remains intact; the corrected
+candidate has not yet passed a fresh native Codex proof.
+Independent review 4 approves the narrow correction and reproduces the structured
+denial through both Windows PowerShell and pwsh, including the actual proof hook
+wrapper. The fresh corrected Claude run passes all 19 cases, 44 required assertions,
+62 attempts, 205 artifacts, installed immutability and owned cleanup. A further
+one-run Codex trust approval is pending because the earlier permission covered one
+completed invocation. Global host settings were not changed.
+Native host completion alone is not acceptance. A previously retained failed
 browser attempt has `NEEDS_REVIEW`, with its cleanup uncertainty still visible.
 Earlier executable/path setup failures are also retained as failed attempts.
 
@@ -64,8 +76,10 @@ failures. The minimal fix restores that known output field; both the original
 reproduction and new guard-level regression checks now block unchanged failed-test
 retries. Independent review 3 is **APPROVE for implementation**, with all six findings
 closed. It verified the frozen patch/source hashes, the original stderr reproduction,
-41 focused tests and the nonzero convention gate. This is separate from the incomplete
-native parity gate. Changed package
+41 focused tests and the nonzero convention gate. Review 4 also closes the subsequently
+discovered Windows transport defect in code, with 43 focused checks. Its frozen
+incremental correction is seven files, +68/-25, based on `cf2ecf2`. Native acceptance
+remains separate. Changed package
 tooling has no POM-layer lint scope; zero changed convention files would be
 inapplicable, never a substantive pass. The example gate above provides nonzero
 convention coverage without changing baselines.
@@ -78,8 +92,8 @@ three BLOCKED and three NEEDS_REVIEW scenarios. These are expected scenario resu
 not 19 green business tests. It covers 44 required expectations, including deliberately
 missing or failed observations; every retained artifact is checked independently.
 
-Unperformed gates: complete native Codex proof, final cross-host semantic comparison,
-and native-host execution on other operating systems. The broader platform matrix
+Unperformed gates: corrected native Codex hook proof and final acceptance of the
+corrected candidate, and native-host execution on other operating systems. The broader platform matrix
 remains M17; full generation/review/verification workflow parity remains M15.
 No M12 work, public release or release tag is included. Historical credential revocation/rotation remains unconfirmed;
 no historical credential was accessed or tested for this milestone.

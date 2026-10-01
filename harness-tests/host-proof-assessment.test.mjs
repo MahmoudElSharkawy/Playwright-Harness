@@ -15,12 +15,18 @@ function proof(host) {
   const events = host === 'codex' ? [{type: 'turn.completed'}, {type: 'item.completed', item: {type: 'command_execution', command, exit_code: 0, aggregated_output: output}}]
     : [{type: 'result', is_error: false}, {type: 'assistant', message: {content: [{type: 'tool_use', id: 'native', name: 'Bash', input: {command}}]}},
       {type: 'user', message: {content: [{type: 'tool_result', tool_use_id: 'native', is_error: false, content: output}]}}];
-  const hooks = [{host, session: 'one', event: 'SessionStart', stage: 'other', exitCode: 0, mappedModes: ['session-start']}, {host, session: 'one', event: 'PreToolUse', stage: 'deny', reviewedCommand: true, toolUse: 'deny', exitCode: 2},
+  const hooks = [{host, session: 'one', event: 'SessionStart', stage: 'other', exitCode: 0, mappedModes: ['session-start']}, {host, session: 'one', event: 'PreToolUse', stage: 'deny', reviewedCommand: true, toolUse: 'deny', exitCode: host === 'codex' ? 0 : 2, permissionDecision: host === 'codex' ? 'deny' : null},
     ...['ping', 'edit', 'execute'].flatMap(stage => ['PreToolUse', 'PostToolUse'].map(event => ({host, session: 'one', event, stage, toolUse: stage, reviewedCommand: true, exitCode: 0,
       mappedModes: event === 'PostToolUse' ? [stage === 'edit' ? 'post-edit' : 'post-bash'] : [],
       ...(stage === 'execute' && event === 'PostToolUse' ? {executionReceipt: {digest, cases: expectedCases}} : {})})))];
   return {host, processResult: {exitCode: 0, timedOut: false, packageUnchanged: true, version: 'synthetic'}, events, hooks, digest, script, expectedCases, deniedMarker: false, allowedMarker: true, editedFile: true, infrastructureCleanup: true, packageUnchanged: true};
 }
+
+test('Codex proof rejects mere exit codes, allow decisions and executed denials', () => {
+  for (const mutate of [p => {p.hooks[1].permissionDecision = null; p.hooks[1].exitCode = 2;}, p => p.hooks[1].permissionDecision = 'allow', p => p.deniedMarker = true]) {
+    const p = proof('codex'); mutate(p); assert.equal(assessNativeHost(p).status, 'FAIL');
+  }
+});
 for (const host of ['claude', 'codex']) {
   test(`${host} accepts paired native command and hook receipts`, () => assert.equal(assessNativeHost(proof(host)).status, 'PASS'));
   test(`${host} final prose is never execution proof`, () => {
