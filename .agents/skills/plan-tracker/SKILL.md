@@ -34,9 +34,10 @@ node <packageRoot>/scripts/generate-tracker.mjs --archive        # also keep a t
 node <packageRoot>/scripts/generate-tracker.mjs --json           # machine-readable summary (for loops/agents)
 ```
 
-`--sync` maps pipeline state (`test/ado-suite-*/_verify-state.json`) to tracker
-status: `passed`→done · `fixme`/`blocked`→blocked · `failed` at the 3-round
-cap→blocked, else doing · `pending-confirmation`→doing. It never touches cases under
+`--sync` maps pipeline state (`_verify-state.json` in `test/ado-suite-*/` and
+`test/ado-story-*/`) to tracker status: `passed`→done · `fixme`/`blocked`→blocked ·
+`failed` at the 3-round cap→blocked, else doing · `pending-confirmation`→doing. A case
+whose folders disagree is skipped with a warning. It never touches cases under
 a `manual` ruling, and never overrides a history event newer than the verify-state
 file (team rulings outrank stale pipeline state — skips are warned). Run `--dry-run`
 first and read the would-be event before appending.

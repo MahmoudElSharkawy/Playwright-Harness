@@ -5,6 +5,7 @@
   "scripts": {
     "test": "npx playwright test",
     "fetch:suite": "node scripts/fetch-ado-suite.mjs",
+    "fetch:story": "node scripts/fetch-ado-story.mjs",
     "check:conventions": "node scripts/check-conventions.mjs",
     "harness:metrics": "node scripts/harness-metrics.mjs",
     "publish:results": "node scripts/publish-ado-results.mjs",

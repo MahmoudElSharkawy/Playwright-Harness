@@ -67,6 +67,11 @@ harness. Official Microsoft REST documentation informed request shapes; no upstr
 implementation was copied and no dependency or third-party notice changed. See
 [the adapter guide](M12-ADO.md) for the specific documentation references.
 
+The ADO story retrieval follow-up is project-authored and reuses the M12 transport,
+ownership checks and case reader. Official Microsoft link-type and work-item type
+category documentation informed relation handling; no upstream implementation was
+copied and no dependency was added.
+
 M13 generation and M14 reporting changes are project-authored. Official Allure
 documentation and the installed reporter/launcher interfaces informed M14 adapters;
 no upstream implementation was copied. Existing separately installed Allure tools
