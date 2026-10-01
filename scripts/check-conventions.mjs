@@ -242,7 +242,7 @@ function repoRules() {
 }
 
 /**
- * Delivery-artifact rules over test/ado-suite-* (the class-ledger PROPOSALS for the
+ * Delivery-artifact rules over test/ado-{suite,story}-* (the class-ledger PROPOSALS for the
  * traceability / verify-state contracts). Scoped to the suites whose artifacts are in the
  * diff (--changed / --files) or all suites on a full scan. Mechanisable halves only — the
  * semantic staleness of a table stays reviewer judgment.
@@ -356,9 +356,9 @@ function artifactRules(suiteDirs) {
 function suiteDirsInScope(mode) {
   const base = join(ROOT, 'test');
   if (!existsSync(base)) return [];
-  const all = readdirSync(base).filter((d) => /^ado-suite-\d+$/.test(d)).map((d) => join(base, d));
+  const all = readdirSync(base).filter((d) => /^ado-(?:suite|story)-\d+$/.test(d)).map((d) => join(base, d));
   if (mode !== 'changed') return all;
-  const touched = new Set(changedPaths().map((f) => (f.match(/^test\/(ado-suite-\d+)\//) || [])[1]).filter(Boolean));
+  const touched = new Set(changedPaths().map((f) => (f.match(/^test\/(ado-(?:suite|story)-\d+)\//) || [])[1]).filter(Boolean));
   return all.filter((d) => touched.has(basename(d)));
 }
 

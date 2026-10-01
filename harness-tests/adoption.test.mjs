@@ -64,6 +64,14 @@ test('tracker uses installed template and writes only consumer output; package o
  const script=join(packageRoot,'scripts/generate-tracker.mjs');const run=spawnSync(process.execPath,[script,'--project-root',root,'--json'],{encoding:'utf8'});assert.equal(run.status,0,run.stderr);assert(existsSync(join(root,'reports/tracker/plan-7-tracker.html')));
  const blocked=spawnSync(process.execPath,[script,'--project-root',root,'--out',join(packageRoot,'forbidden.html')],{encoding:'utf8'});assert.notEqual(blocked.status,0);assert(!existsSync(join(packageRoot,'forbidden.html')));
 });
+test('metrics and tracker sync read story-scoped verification folders but not look-alikes',t=>{
+ const root=project(t);adopt(root);put(root,'.harness/state/tracker/plan-7.json',JSON.stringify({planId:7,names:[],branches:[{name:'Synthetic',inScope:true}],suites:[{branch:0,id:10,name:'Synthetic',cases:[{id:7,title:'Synthetic case',desc:'fixture',verdict:'k',note:''}]}],manual:{},bugs:{}}));
+ put(root,'test/ado-story-300/_suite.json',JSON.stringify({storyId:300,cases:[{id:7}]}));put(root,'test/ado-story-300/_verify-state.json',JSON.stringify({cases:{7:{status:'passed',greens:2}}}));
+ put(root,'test/ado-other-300/_verify-state.json',JSON.stringify({cases:{8:{status:'passed',greens:2}}}));
+ const metrics=spawnSync(process.execPath,[join(packageRoot,'scripts/harness-metrics.mjs'),'--project-root',root,'--json'],{encoding:'utf8'});assert.equal(metrics.status,0,metrics.stderr);
+ assert.deepEqual(JSON.parse(metrics.stdout).suites.map(s=>[s.suite,s.passed]),[['ado-story-300',1]]);
+ const sync=spawnSync(process.execPath,[join(packageRoot,'scripts/generate-tracker.mjs'),'--project-root',root,'--sync','--dry-run'],{encoding:'utf8'});assert.equal(sync.status,0,sync.stderr);assert.match(sync.stdout,/"set":\{"done":\[7\]\}/);
+});
 
 test('recognized legacy instructions become redirects; originals need an exact normalized digest',t=>{
  const root=project(t),installed=project(t);
@@ -116,7 +124,7 @@ test('hook records stay consumer-specific and a linked ledger leaf cannot overwr
 
 test('legacy ADO entrypoints refuse the package as consumer before contacting a service',t=>{
  const root=project(t);put(root,'config/project.json','{"azure":{}}');
- for(const name of ['fetch-ado-suite','publish-ado-results','ado-pr','tag-ado-workitem','relink-ado-story']) {
+ for(const name of ['fetch-ado-suite','fetch-ado-story','publish-ado-results','ado-pr','tag-ado-workitem','relink-ado-story']) {
    const script=join(packageRoot,`scripts/${name}.mjs`);
    const wrong=spawnSync(process.execPath,[script,'--project-root',packageRoot],{encoding:'utf8',cwd:root});
    assert.notEqual(wrong.status,0);assert.match(wrong.stderr,/separate consumer/);

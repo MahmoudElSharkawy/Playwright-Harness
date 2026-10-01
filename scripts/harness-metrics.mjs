@@ -2,7 +2,7 @@
 /**
  * harness-metrics.mjs — aggregate the harness pipeline's on-disk state into one report.
  *
- * Reads:   test/ado-suite-<id>/_suite.json + _verify-state.json    (pipeline/verify state)
+ * Reads:   test/ado-{suite,story}-<id>/_suite.json + _verify-state.json (pipeline/verify state)
  *          .harness/knowledge/ui/*.md                                  (per-page "Drift ledger" tables)
  *          .harness/state/review/class-ledger.md         (review finding-class rows)
  * Prints:  automation coverage per suite and in total (passed + fixme over total cases),
@@ -40,13 +40,13 @@ function readJsonSafe(path) {
   catch (e) { warn(`skipped malformed ${path}: ${e.message}`); return null; }
 }
 
-// ---------- suites (test/ado-suite-*/) ----------
+// ---------- suites (test/ado-suite-*/ and story-scoped test/ado-story-*/) ----------
 
 function collectSuites() {
   if (!existsSync(SUITES_DIR)) return [];
   const suites = [];
   for (const entry of readdirSync(SUITES_DIR, { withFileTypes: true })) {
-    if (!entry.isDirectory() || !entry.name.startsWith('ado-suite-')) continue;
+    if (!entry.isDirectory() || !/^ado-(?:suite|story)-/.test(entry.name)) continue;
     const dir = join(SUITES_DIR, entry.name);
     const manifest = readJsonSafe(join(dir, '_suite.json'));
     const verify = readJsonSafe(join(dir, '_verify-state.json'));
@@ -210,7 +210,7 @@ function main() {
 
   out.push('== SUITES ==');
   if (!suiteStats.length) {
-    out.push('no pipeline state found (no test/ado-suite-*/ folder holds _suite.json or _verify-state.json)');
+    out.push('no pipeline state found (no test/ado-suite-*/ or test/ado-story-*/ folder holds _suite.json or _verify-state.json)');
   } else {
     const rows = suiteStats.map((s) => suiteRow(s.suite, s));
     if (suiteStats.length > 1) rows.push(suiteRow('TOTAL', totals));
