@@ -15,7 +15,7 @@ export class DbsObservations {
   ///// Actions
 
   async observe(definition: any, description: string) {
-    await step('Read the configured database observation', async () => {
+    await step(`Read database observation: ${description}`, async () => {
       this.result = await this.runtimeActions.observe(definition, description);
     });
   }
@@ -23,7 +23,7 @@ export class DbsObservations {
   ///// Validations
 
   async verifyObservation(key: string, expected: string) {
-    await step('Verify the row count and bound observation value', async () => {
+    await step(`Verify database observation ${key} has assessed status ${expected}`, async () => {
       await sourceExpectation(test, key, async () => {
         await expectToEqual('the assessed database result', this.result.status, expected);
       });

@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased — final-review corrections
+
+- Guarantee owned-browser cleanup after interrupted bodies or failed result recording, preserving frozen phases, assertion failures and the shared cleanup deadline.
+- Accept genuinely empty ADO metadata consistently through retrieval, conversion and legacy rendering; retain refinement for nonempty or malformed metadata.
+- Add identifying context and assessed-status wording to the four API/database reference-fixture business steps; verify actual Allure nesting and attachment associations.
+- Extend the installed browser gate to 38 exact native checks. Preserve public interfaces, dependency versions and normal execution policy.
+
 ## 3.0.17 — M17 CI and installed-package validation
 
 - Validate actual npm archives in fresh Windows/Linux installations, with pinned dependency provenance and package immutability checks.

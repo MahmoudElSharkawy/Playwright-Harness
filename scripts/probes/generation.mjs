@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Owned live M13 proof. Pauses for an actual independent review artifact before running generated tests.
 import assert from 'node:assert/strict';
-import {mkdtempSync, mkdirSync, cpSync, symlinkSync, writeFileSync, readFileSync, existsSync, realpathSync} from 'node:fs';
+import {mkdtempSync, mkdirSync, cpSync, symlinkSync, writeFileSync, readFileSync, existsSync, realpathSync, readdirSync} from 'node:fs';
 import {join, dirname, resolve} from 'node:path';
 import {tmpdir} from 'node:os';
 import {execFileSync} from 'node:child_process';
@@ -130,12 +130,33 @@ try {
   const status = await generationStatus(roots, fixture.source.id); success = status.status === 'READY';
   writeFileSync(join(audit, 'verification.json'), JSON.stringify({first, second, status, databases: databases.versions}, null, 2));
   if (reporting) {
-    const reports = [];
+    const reports = [], coverage = [];
     for (const verification of [first, second].filter(Boolean)) {
       assert.equal(verification.reporting?.status, 'CAPTURED');
+      const directory = join(projectRoot, verification.reporting.directory, 'allure-results');
+      const tests = readdirSync(directory).filter(name => name.endsWith('-result.json')).map(name => JSON.parse(readFileSync(join(directory, name), 'utf8')));
+      assert.equal(tests.length, fixture.cases.length);
+      let actions = 0, validations = 0, attachments = 0;
+      const descendants = step => [step, ...(step.steps ?? []).flatMap(descendants)];
+      for (const item of fixture.cases.filter(item => item.definition)) {
+        const matching = tests.filter(test => test.name === item.title); assert.equal(matching.length, 1);
+        const steps = (matching[0].steps ?? []).flatMap(descendants), family = item.definition.family === 'api' ? 'API' : 'database';
+        const action = steps.filter(step => step.name === `Read ${family} observation: ${item.description}`);
+        const validation = steps.filter(step => step.name === `Verify ${family} observation ${item.key} has assessed status ${item.expected}`);
+        assert.equal(action.length, 1); assert.equal(validation.length, 1); assert.equal(action[0].status, 'passed'); assert.equal(validation[0].status, 'passed');
+        const files = descendants(action[0]).flatMap(step => step.attachments ?? []);
+        for (const name of ['Harness execution result', 'Harness execution report']) {
+          const attached = files.filter(file => file.name === name); assert.equal(attached.length, 1);
+          assert.ok(existsSync(join(directory, attached[0].source))); attachments++;
+          if (name === 'Harness execution result') assert.equal(JSON.parse(readFileSync(join(directory, attached[0].source), 'utf8')).status, 'PASS');
+        }
+        actions++; validations++;
+      }
+      coverage.push({verificationId: verification.id, nativeTests: tests.length, actions, validations, harnessAttachments: attachments});
       const generated = await generateAllure(roots, verification.reporting.directory); reports.push(generated); assert.equal(generated.status, 'GENERATED');
     }
     writeFileSync(join(audit, 'reporting.json'), JSON.stringify(reports, null, 2));
+    writeFileSync(join(audit, 'business-step-coverage.json'), JSON.stringify(coverage, null, 2));
   }
   console.log(JSON.stringify({probe: 'generation', ...status, liveBrowser: true, liveApi: true, liveSqlServer: true, livePostgresql: true, nativeRunner: '1.63.0', cases: fixture.cases.length}));
 } catch (error) {

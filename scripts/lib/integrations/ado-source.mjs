@@ -1,6 +1,7 @@
 import {parseStepsXml, htmlToText} from './ado-steps.mjs';
 import {adoId, requireValue} from './config.mjs';
 import {validateLocalSource, loadLocalSource} from '../local-source.mjs';
+import {emptyAdoMetadata} from './ado-metadata.mjs';
 
 const fields = ['System.Id', 'System.Title', 'System.TeamProject', 'System.State', 'System.Tags', 'Microsoft.VSTS.Common.Priority', 'Microsoft.VSTS.TCM.Steps', 'Microsoft.VSTS.TCM.Parameters', 'Microsoft.VSTS.TCM.LocalDataSource'];
 
@@ -40,7 +41,7 @@ export function createAdoTestSource(client) {
             requireValue(!trail.includes(node.ref), 'ADO shared steps contain a cycle.');
             if (!shared.has(node.ref)) shared.set(node.ref, (await batch([node.ref])).get(node.ref));
             const item = shared.get(node.ref);
-            requireValue(!item.fields['Microsoft.VSTS.TCM.Parameters'] && !item.fields['Microsoft.VSTS.TCM.LocalDataSource'], 'Parameterized shared steps require explicit refinement.');
+            requireValue(emptyAdoMetadata(item.fields['Microsoft.VSTS.TCM.Parameters'], 'parameters') && emptyAdoMetadata(item.fields['Microsoft.VSTS.TCM.LocalDataSource'], 'NewDataSet'), 'Parameterized shared steps require explicit refinement.');
             result.push(...(await expand(item.fields['Microsoft.VSTS.TCM.Steps'], [...trail, node.ref])).map(step => ({...step, fromShared: node.ref})));
           }
           requireValue(result.length <= 1000 && shared.size <= 500, 'ADO expanded steps exceed scope limits.');
@@ -51,11 +52,11 @@ export function createAdoTestSource(client) {
       for (const id of ids) {
         const f = items.get(id).fields;
         requireValue(typeof f['System.Title'] === 'string' && f['System.Title'].trim(), 'ADO case title is missing.');
-        const dataTableXml = f['Microsoft.VSTS.TCM.LocalDataSource'] || null;
-        const dataTable = dataTableXml ? [...dataTableXml.matchAll(/<Table1>([\s\S]*?)<\/Table1>/g)].map(row => Object.fromEntries([...row[1].matchAll(/<([^>\/\s]+)>([\s\S]*?)<\/\1>/g)].map(cell => [cell[1], htmlToText(cell[2])]))) : null;
+        const dataTableXml = f['Microsoft.VSTS.TCM.LocalDataSource'] ?? null;
+        const dataTable = typeof dataTableXml === 'string' && !emptyAdoMetadata(dataTableXml, 'NewDataSet') ? [...dataTableXml.matchAll(/<Table1>([\s\S]*?)<\/Table1>/g)].map(row => Object.fromEntries([...row[1].matchAll(/<([^>\/\s]+)>([\s\S]*?)<\/\1>/g)].map(cell => [cell[1], htmlToText(cell[2])]))) : null;
         cases.push({id, title: f['System.Title'], state: f['System.State'] ?? '', priority: f['Microsoft.VSTS.Common.Priority'] ?? null,
           tags: String(f['System.Tags'] ?? '').split(';').map(tag => tag.trim()).filter(Boolean), steps: await expand(f['Microsoft.VSTS.TCM.Steps']),
-          parameters: f['Microsoft.VSTS.TCM.Parameters'] || null, dataTable, ...(dataTableXml ? {dataTableXml} : {})});
+          parameters: f['Microsoft.VSTS.TCM.Parameters'] ?? null, dataTable, ...(dataTableXml === null ? {} : {dataTableXml})});
       }
       return {planId, suiteId, suiteName: metadata.name, organizationUrl: client.configuration.organizationUrl, project: client.configuration.project, cases};
     }
@@ -66,7 +67,7 @@ export function createAdoTestSource(client) {
 export function adoSuiteToSource(suite) {
   const source = {version: 1, id: `ado-${adoId(suite.planId)}-${adoId(suite.suiteId)}`, title: suite.suiteName,
     scenarios: suite.cases.map(tc => {
-      requireValue(!tc.parameters && !tc.dataTable && !tc.dataTableXml, 'Parameterized ADO cases require explicit local-source refinement; legacy raw data is retained.');
+      requireValue(emptyAdoMetadata(tc.parameters, 'parameters') && emptyAdoMetadata(tc.dataTable, 'NewDataSet') && emptyAdoMetadata(tc.dataTableXml, 'NewDataSet'), 'Parameterized ADO cases require explicit local-source refinement; legacy raw data is retained.');
       return {id: `tc-${adoId(tc.id)}`, title: tc.title, externalReferences: [{system: 'ado', id: String(tc.id)}],
         steps: tc.steps.map(step => ({action: step.action, expected: step.expected ? [step.expected] : []}))};
     })};

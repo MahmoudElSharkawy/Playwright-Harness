@@ -6,7 +6,7 @@ import {requireRun} from '../execution-core/inputs.mjs';
 import {data, id, oneOf, typedValue} from '../execution-core/data.mjs';
 import {within} from '../skill-roots.mjs';
 import {prepareNativeSession, NativeFailure} from './native-cli.mjs';
-import {createScenarioState, requireScenarioState, acceptBrowserStorage, finishScenario, inputBindings, publicValue} from '../sequential/state.mjs';
+import {createScenarioState, requireScenarioState, acceptBrowserStorage, finishScenario, inputBindings, publicValue, phaseOrder} from '../sequential/state.mjs';
 
 export const browserCapabilities = Object.freeze(['browserReads', 'browserMutations']);
 // Bound trusted asynchronous callbacks as well as native commands. This cannot preempt
@@ -46,15 +46,27 @@ export async function runBrowserScenario(run, roots, {target, storageState, sign
   if (state.storageReady || state.busy) throw new Error('Browser session must acquire this scenario storage first.');
   if (onUnavailable !== undefined && (!execution || typeof onUnavailable !== 'function')) throw new Error('Unavailable handling belongs to the mixed scenario owner.');
   for (const operation of lifecycle) if (!authorizeOperation(run, operation, browserCapabilities).allowed) throw new Error('Owned browser lifecycle is not frozen or permitted for this target.');
+  const invocations = new Map();
+  for (const expectation of scope.expectations) {
+    const invocation = invocations.get(expectation.invocationId) ?? {invocationId: expectation.invocationId, operationId: expectation.operationId};
+    if (invocation.operationId !== expectation.operationId || invocation.phase !== undefined && expectation.phase !== undefined && invocation.phase !== expectation.phase) throw new Error('Frozen invocation has incompatible operations or phases.');
+    invocation.phase ??= expectation.phase; invocations.set(invocation.invocationId, invocation);
+  }
   const origins = run.inputs.environment.targets.browser[target].origins;
   const initialWindow = checkExecutionWindow(run, {phase: 'SETUP', signal});
   if (!initialWindow.allowed) throw new NativeFailure(initialWindow.reason === 'CANCELLED' ? 'CANCELLED' : 'TIMEOUT');
   const native = await prepareNativeSession(roots, {origins, storageState, ...(nativeTimeoutMs === undefined ? {} : {nativeTimeoutMs}), ...(commandTimeoutMs === undefined ? {} : {commandTimeoutMs})});
+  let nativeCleanup;
+  const closeOwnedSession = () => {
+    state.cleanupStartedAt ??= Date.now();
+    return nativeCleanup ??= native.close({deadlineAt: state.cleanupStartedAt + run.inputs.limits.cleanupTimeoutMs});
+  };
+  async function runOwnedScenario() {
   roots = native.roots;
   acceptBrowserStorage(state, roots);
   const {scenario, observations, histories} = state;
   const activeAttempts = new Set();
-  let busy = false, finished = false, cleanupStartedAt, phaseNumber = 0, scenarioFailure, bodyInterrupted = false;
+  let busy = false, finished = false, cleanupStartedAt, scenarioFailure, bodyInterrupted = false;
   const indeterminate = () => {if (!scenario.issues.includes('indeterminate-outcome')) scenario.issues.push('indeterminate-outcome');};
   function record(operation, invocationId, phase, number = 1, inputs = []) {
     const identity = {runId: run.id, scenarioId: scope.id, operationId: operation.id, invocationId, attemptId: `attempt-${randomUUID()}`, phase, number};
@@ -87,19 +99,45 @@ export async function runBrowserScenario(run, roots, {target, storageState, sign
     }
   }
   function finish(attempt) {attempt.endedAt = Date.now(); scenario.attempts.push(attemptRecord(run, attempt));}
+  async function missing(reason = 'UNAVAILABLE', beforePhase = Infinity) {
+    if (execution) return; // Mixed execution records its own frozen lifecycle scope.
+    const fallback = state.phaseNumber === 3 ? 'CLEANUP' : state.phaseNumber === 2 ? 'VERIFY' : 'EXERCISE';
+    const remaining = [...invocations.values()].filter(item => !histories.has(item.invocationId) &&
+      (beforePhase === Infinity || item.phase !== undefined && phaseOrder[item.phase] < beforePhase))
+      .map(item => ({...item, phase: item.phase ?? fallback})).sort((a, b) => phaseOrder[a.phase] - phaseOrder[b.phase]);
+    for (const invocation of remaining) {
+      const operation = run.inputs.operations.find(item => item.id === invocation.operationId);
+      if (!operation) throw new Error('Unreached browser invocation has unresolved exploratory provenance.');
+      const nextPhase = phaseOrder[invocation.phase];
+      if (nextPhase < state.phaseNumber) throw new Error('Unreached invocation would reverse the recorded phase history.');
+      state.phaseNumber = nextPhase;
+      if (nextPhase === 3) state.cleanupStartedAt ??= Date.now();
+      // An empty history is an integrity failure, never proof that a started operation had no effect.
+      const history = []; histories.set(invocation.invocationId, history);
+      const current = record(operation, invocation.invocationId, invocation.phase);
+      const allowed = authorizeOperation(run, operation, browserCapabilities).allowed;
+      const window = checkExecutionWindow(run, {phase: invocation.phase, cleanupStartedAt: state.cleanupStartedAt});
+      current.failureClass = !allowed ? 'POLICY' : !window.allowed ? 'TIMEOUT' : reason;
+      current.outcome = ['POLICY', 'UNAVAILABLE'].includes(current.failureClass) ? 'BLOCKED' : 'INFRASTRUCTURE_FAILURE';
+      current.effect.certainty = 'not-executed';
+      await observe(current, 'observation', {invoked: false, reason: current.failureClass}); finish(current);
+      history.push(scenario.attempts.at(-1));
+    }
+  }
   async function execute({operation, invocationId, phase = 'EXERCISE', inputs = [], retry = false}, action) {
     if (busy || finished || state.busy || state.finished) throw new Error('Browser attempts must be sequential and inside the active scenario.');
     id(invocationId); oneOf(phase, ['SETUP','EXERCISE','VERIFY','CLEANUP','RESTORE']);
-    const nextPhase = {SETUP: 0, EXERCISE: 1, VERIFY: 2, CLEANUP: 3, RESTORE: 3}[phase];
+    const nextPhase = phaseOrder[phase];
     if (nextPhase < state.phaseNumber || histories.has(invocationId) || typeof action !== 'function' || typeof retry !== 'boolean') throw new Error('Invalid sequential invocation.');
     if (operation.family !== 'browser' || operation.target !== target) throw new Error('Browser operation must use this session target.');
     inputs = inputBindings(state, inputs);
     if (scope.expectations.some(item => item.invocationId === invocationId && item.operationId === operation.id && item.phase !== undefined && item.phase !== phase)) throw new Error('Browser invocation differs from its frozen phase.');
-    const authorization = authorizeOperation(run, operation, browserCapabilities); phaseNumber = state.phaseNumber = nextPhase;
-    if (nextPhase === 3) state.cleanupStartedAt ??= Date.now(); cleanupStartedAt = state.cleanupStartedAt;
+    const authorization = authorizeOperation(run, operation, browserCapabilities);
     if (operation.source.kind === 'exploration' && !observations.operations.some(item => item.id === operation.id)) observations.operations.push(operation);
     busy = state.busy = true; const history = []; histories.set(invocationId, history);
     try {
+      await missing('UNAVAILABLE', nextPhase); state.phaseNumber = nextPhase;
+      if (nextPhase === 3) state.cleanupStartedAt ??= Date.now(); cleanupStartedAt = state.cleanupStartedAt;
       for (let number = 1; number <= run.inputs.limits.maxAttempts; number++) {
         const current = record(operation, invocationId, phase, number, inputs); let failure, dispatched = false, explicitEffect = false, active = true;
         const asserted = new Set(), pending = new Set(), nativePending = new Set(), eventStart = native.events.length;
@@ -191,11 +229,7 @@ export async function runBrowserScenario(run, roots, {target, storageState, sign
     else if (!openingFailure) await boundedWork(() => body({attempt: launchAttempt, ownership: native.ownership}),
       () => window({identity: {phase: state.phaseNumber === 3 ? 'CLEANUP' : 'EXERCISE'}}, state.phaseNumber === 3), signal);
     else if (execution) await onUnavailable?.();
-    else for (const expectation of scope.expectations) if (!histories.has(expectation.invocationId)) {
-      const operation = run.inputs.operations.find(item => item.id === expectation.operationId);
-      if (!operation) throw new Error('Unopened browser has an unresolved exploratory operation.');
-      const blocked = record(operation, expectation.invocationId, 'EXERCISE'); blocked.outcome = 'BLOCKED'; blocked.failureClass = 'UNAVAILABLE'; blocked.effect.certainty = 'not-executed'; finish(blocked); histories.set(expectation.invocationId, [blocked]);
-    }
+    else await missing('UNAVAILABLE');
   } catch (error) {
     scenarioFailure = error instanceof NativeFailure ? error.classification : 'EXECUTOR';
     bodyInterrupted = ['TIMEOUT','CANCELLED'].includes(scenarioFailure);
@@ -205,25 +239,11 @@ export async function runBrowserScenario(run, roots, {target, storageState, sign
   finally {
     finished = true;
     if (activeAttempts.size) {if (!bodyInterrupted) indeterminate(); await boundedWork(() => Promise.allSettled([...activeAttempts]), cleanupWindow).catch(() => indeterminate());}
-    // A timed-out body may never reach a known frozen invocation. Preserve its
-    // unevaluated expectations explicitly; never fabricate exploratory provenance.
-    if (scenarioFailure && !execution) for (const expectation of scope.expectations) if (!histories.has(expectation.invocationId)) {
-      const operation = run.inputs.operations.find(item => item.id === expectation.operationId);
-      if (!operation) {indeterminate(); continue;}
-      const phase = phaseNumber === 3 ? 'CLEANUP' : phaseNumber === 2 ? 'VERIFY' : 'EXERCISE';
-      const missing = record(operation, expectation.invocationId, phase);
-      const window = checkExecutionWindow(run, {phase, cleanupStartedAt});
-      const allowed = authorizeOperation(run, operation, browserCapabilities).allowed;
-      missing.outcome = allowed ? 'INFRASTRUCTURE_FAILURE' : 'BLOCKED';
-      missing.failureClass = !allowed ? 'POLICY' : !window.allowed ? 'TIMEOUT' : scenarioFailure;
-      missing.effect.certainty = 'not-executed';
-      await observe(missing, 'observation', {invoked: false, reason: missing.failureClass}); finish(missing);
-      histories.set(expectation.invocationId, [missing]);
-    }
+    await missing(scenarioFailure ?? 'UNAVAILABLE');
     state.cleanupStartedAt ??= Date.now(); cleanupStartedAt = state.cleanupStartedAt; state.phaseNumber = 3;
     const cleanup = record(lifecycle[1], 'browser-session-cleanup', 'CLEANUP'); cleanup.inputs = [sessionValue];
     const cleanupExpired = cleanup.startedAt >= cleanupStartedAt + run.inputs.limits.cleanupTimeoutMs;
-    const result = await native.close({deadlineAt: cleanupStartedAt + run.inputs.limits.cleanupTimeoutMs});
+    const result = await closeOwnedSession();
     cleanup.effect = {certainty: result.complete ? 'confirmed' : 'uncertain', resourceIds: [sessionResourceId]};
     if (!result.complete || Date.now() >= cleanupStartedAt + run.inputs.limits.cleanupTimeoutMs) {cleanup.outcome = 'INFRASTRUCTURE_FAILURE'; cleanup.failureClass = 'EXECUTOR';}
     if (cleanupExpired) {cleanup.outcome = 'INFRASTRUCTURE_FAILURE'; cleanup.failureClass = 'TIMEOUT'; cleanup.effect = {certainty: 'not-executed', resourceIds: []};}
@@ -232,4 +252,9 @@ export async function runBrowserScenario(run, roots, {target, storageState, sign
   }
   if (execution) return;
   return finishScenario(state);
+  }
+  try {return await runOwnedScenario();} finally {
+    // Result construction, evidence writes and validators cannot bypass owned physical cleanup.
+    await closeOwnedSession();
+  }
 }

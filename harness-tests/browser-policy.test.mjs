@@ -10,9 +10,18 @@ import {validateNativeArguments, classifyNative, prepareNativeSession} from '../
 import {processCall} from '../scripts/lib/browser/processes.mjs';
 import {within} from '../scripts/lib/skill-roots.mjs';
 import {runInput, environment} from './fixtures/execution-core.mjs';
+import {requiredBrowserChecks, completeBrowserChecks} from '../scripts/probes/browser-checks.mjs';
 
 const env = mode => ({...environment(mode), browserTargets: ['app'], targets: {...environment().targets, browser: {app: {origins: ['https://app.example.test']}}}});
 const browserOp = (capability = 'browserReads', source = 'inline') => defineOperation({id: 'observe', family: 'browser', capability, target: 'app', source: {kind: source, reference: 'fixture', version: '1.0.0'}, definition: {intent: 'Observe the application'}});
+test('installed browser acceptance refuses missing, duplicate, unknown and failed native checks', () => {
+  const checks = requiredBrowserChecks.map(name => ({name, status: 'PASS'}));
+  assert.equal(completeBrowserChecks(checks), true);
+  assert.equal(completeBrowserChecks(checks.slice(1)), false);
+  assert.equal(completeBrowserChecks([...checks.slice(1), checks[1]]), false);
+  assert.equal(completeBrowserChecks(checks.map((item, index) => index ? item : {...item, name: 'unknown'})), false);
+  assert.equal(completeBrowserChecks(checks.map((item, index) => index ? item : {...item, status: 'INCOMPLETE'})), false);
+});
 async function removeFixture(root) {
   const actual = await fs.realpath(root), temporary = await fs.realpath(tmpdir());
   assert.ok(actual !== temporary && within(temporary, actual) && !(await fs.lstat(root)).isSymbolicLink());

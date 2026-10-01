@@ -15,7 +15,7 @@ export class ApisObservations {
   ///// Actions
 
   async observe(definition: any, description: string) {
-    await step('Read the configured observation', async () => {
+    await step(`Read API observation: ${description}`, async () => {
       this.result = await this.runtimeActions.observe(definition, description);
     });
   }
@@ -23,7 +23,7 @@ export class ApisObservations {
   ///// Validations
 
   async verifyObservation(key: string, expected: string) {
-    await step('Verify the response status and observation value', async () => {
+    await step(`Verify API observation ${key} has assessed status ${expected}`, async () => {
       await sourceExpectation(test, key, async () => {
         await expectToEqual('the assessed response', this.result.status, expected);
       });

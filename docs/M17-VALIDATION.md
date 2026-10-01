@@ -243,3 +243,102 @@ the credential was not reproduced or tested. Earlier milestone reports record th
 status known at their respective times. Current release-content review and explicit
 authorization are still required for publication.
 No npm publication, release tag, GitHub release or live ADO write occurred.
+
+## Final-review corrections — 2026-10-02
+
+The approved correction scope addresses F1–F3 from the final independent review.
+F1–F3 are resolved. All required correction validations pass, and the independent
+canonical `framework-review` verdict is **APPROVE** with no remaining findings.
+This closes the M6, M12 and M13/M14 gaps identified in the final review.
+The earlier milestone reports above retain their original scope and results.
+The executable candidate freezes 13 files against baseline
+`4f5f5412924051b4817c868a73791c46bd617188`; documentation is recorded separately.
+Public interfaces, result schemas, dependencies and normal tester autonomy remain
+unchanged. Work continues on the existing `main` branch.
+
+### Changes
+
+- F1: physical owned-browser cleanup now runs in an unconditional `finally` after
+  session acquisition, sharing the original cleanup deadline. One internal helper
+  records missing invocations in frozen phase order, groups their unevaluated
+  assertions and flushes missed earlier phases before advancement. Started
+  operations with incomplete recording never become fabricated `not-executed`
+  attempts. Reliable assertion failures remain `FAIL`; unusable evidence surfaces
+  an integrity error after physical cleanup. Business-resource retention policy
+  is unchanged.
+- F2: a shared narrow classifier accepts absent, blank, empty-array and genuinely
+  empty `parameters`/`NewDataSet` metadata through case retrieval, shared steps,
+  neutral conversion and legacy rendering. Definitions, populated data, malformed
+  XML and unrecognized nonempty content still require refinement. Raw metadata
+  remains available. No XML parser or dependency was added.
+- F3: the API/database reference-fixture observation titles now include their
+  supplied description; validation titles include the expected assessed status.
+  Assertions, signatures, technical steps and attachment behavior remain intact.
+
+### Correction validation
+
+The following commands ran against the frozen executable candidate. Workspace
+arguments refer to fresh, protected, external consumer directories.
+
+| Command / substantive scope | Windows | Linux |
+| --- | --- | --- |
+| `node scripts/ci/checks.mjs <workspace>` | PASS: 14 checks, 755 tests across 28 test files | Not separately repeated; the installed checklist below runs the same checks |
+| `node scripts/ci/installed.mjs <workspace>` | PASS: 14 checks, 755 tests; installed tree unchanged | PASS: 14 checks, 755 tests; installed tree unchanged |
+| `node scripts/ci/native.mjs <installed-workspace> browser` | PASS: 38 exact native checks; installed tree unchanged | PASS: 38 exact native checks; installed tree unchanged |
+| `node --test <package>/harness-tests/mixed-browser.integration.mjs` | PASS: 8 native controls | PASS: 8 native controls |
+| `node --test harness-tests/ado-integrations.test.mjs` | PASS: 93 focused contract tests | Included in the 755-test installed checklist |
+| `node --test harness-tests/browser-policy.test.mjs` | PASS: 12 policy/scope tests | Included in the 755-test installed checklist |
+| `node scripts/probes/generation.mjs --reports` | READY: independent generated-code approval and two distinct 10-case scoped green runs; both Allure reports generated | Not repeated for this bounded correction |
+
+Every passing suite in the table has zero failures, skips, cancellations and todo.
+The 38-check browser gate includes 12 added real-session regressions and rejects
+missing, duplicate or unknown check names. Regressions cover all five frozen phases,
+multiple assertions per invocation, legacy unphased expectations, native-open
+failure, earlier-phase advancement, interrupted bodies, placeholder-write failure,
+started-attempt validation failure and preserved reliable failure. Process shutdown
+and protected storage removal are checked independently of the result/error.
+Existing ownership, mixed cleanup and exhausted shared-deadline controls remain.
+
+The package checklist covers 153 JavaScript files, 23 JSON files / 22 parsed
+records, 108 Markdown files / 426 local links and 25 convention files / 103 rule
+applications. Source privacy, secret and provenance checks cover 326 publication
+candidates and 370 dependency records. The validated archive contains 324 files,
+87 dependency identities and 135 installed dependency nodes. JSON parsing is not
+schema validation; remote links and heading anchors were not checked.
+
+Fresh installations use Node 24.15.0 on Windows and 24.21.0 on Linux. Archive
+SHA-256 values are
+`c67b29e9a53b63530cc7cd0704578cd6ec7a19d0509422c85515e5d02a4361f8`
+and `6d036ee000589f745f588f07b64b9a11608dc33de935a28dddc5fa73f1e5cc2f`,
+respectively. Each archive retains its own installation and immutability receipts;
+byte equality across separately packed archives is not claimed.
+
+The ADO tests use synthetic transport and metadata controls; they do not claim
+live ADO integration. Native browser and generation proofs use real browser
+processes. Generation also executes real loopback API, SQL Server and PostgreSQL
+fixtures, then removes its owned fixtures. Independent inspection of actual
+Allure data verifies 18 corrected action titles, 18 validation titles, technical
+and assertion nesting, 36 case-associated JSON/HTML attachments, 18 distinct
+runtime identities and both generated report hashes across the two green runs.
+
+### Review, retained attempts and delivery boundary
+
+The independent canonical `framework-review` approves the correction: 10 applicable
+checklist boxes pass, zero fail and nine are not applicable to this bounded scope.
+It verified the executable
+freeze, nonzero convention/type scope, the original regressions and actual report
+data. An additional malformed-XML whitespace finding was fixed by recognizing
+XML whitespace narrowly; all 14 negative metadata controls pass on re-review.
+
+The initial Windows source browser proof retained a 37/38 result because its new
+failure-injection fixture incorrectly required an observation file after evidence
+recording aborted. The fixture now verifies the surfaced integrity error, absence
+of a successful result and independent physical cleanup. The subsequent installed
+Windows and Linux proofs pass all 38 checks; the earlier attempt remains retained.
+
+Authenticated Claude/Codex and complete workflow parity proofs were not repeated
+for this bounded correction. Their prior M17 evidence remains historical; no host
+adapter changed. The credential-free Linux correction client mounts no account
+authentication or Docker socket and was removed after validation. Public release
+remains outside this scope, with no npm publication, release tag, GitHub release
+or live ADO write.

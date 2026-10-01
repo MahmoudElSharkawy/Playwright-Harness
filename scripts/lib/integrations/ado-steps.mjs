@@ -1,4 +1,5 @@
 // Targeted ADO Steps XML and legacy Markdown compatibility, adapted from the supplied harness.
+import {emptyAdoMetadata} from './ado-metadata.mjs';
 export function slugify(s, max = 50) {
   return String(s).toLowerCase()
     .replace(/[^a-z0-9؀-ۿ]+/g, '-') // keep Arabic letters readable
@@ -105,8 +106,8 @@ export function renderSpec({ tc, planId, suiteId, suiteName, target, org, projec
   lines.push('');
   lines.push('## Notes');
   lines.push(`- This spec mirrors Azure DevOps test case ${tc.id}; report defects against it.`);
-  if (tc.parameters) lines.push(`- Parameterized test case — iterate the data table below once per row.`);
-  if (tc.dataTable) {
+  if (!emptyAdoMetadata(tc.parameters, 'parameters')) lines.push(`- Parameterized test case — iterate the data table below once per row.`);
+  if (!emptyAdoMetadata(tc.dataTable, 'NewDataSet')) {
     lines.push('');
     lines.push('```json');
     lines.push(JSON.stringify(tc.dataTable, null, 2));

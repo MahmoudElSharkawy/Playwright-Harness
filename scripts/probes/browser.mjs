@@ -13,6 +13,8 @@ import {within} from '../lib/skill-roots.mjs';
 import {inventory} from '../lib/package-validation.mjs';
 import {browserFixture} from '../../harness-tests/fixtures/browser-app.mjs';
 import {proofSignal} from './cancellation.mjs';
+import {unreachedCases, proveUnreachedCase} from '../../harness-tests/fixtures/browser-unreached.mjs';
+import {completeBrowserChecks} from './browser-checks.mjs';
 
 if (process.argv.length !== 3) throw new Error('Provide one new external consumer directory for the live browser proof.');
 const projectRoot = resolve(process.argv[2]);
@@ -280,6 +282,7 @@ try {
     assert.equal(JSON.parse(await readFile(join(roots(name).runRoot, 'result.json'), 'utf8')).status, 'NEEDS_REVIEW');
     return {verdict: result.status, automaticCleanupCompleted: false, separateFixtureRecovery: true};
   });
+  for (const regression of unreachedCases) await check(regression.name, () => proveUnreachedCase(regression, {packageRoot, projectRoot, origin: fixture.origin}));
   await check('unrelated-session-retained', async () => {
     assert.equal(JSON.parse((await sentinel.command(['eval', 'document.title'])).result), 'Synthetic browser fixture');
     return {sentinelSurvived: true};
@@ -288,7 +291,7 @@ try {
   await check('seed-cleanup', async () => {const result = await sentinel?.close(); assert.equal(result?.complete, true); return result;}, true);
   await fixture.close();
   await check('package-immutable', async () => {const after = await digest(); assert.deepEqual(after, before); return after;}, true);
-  const summary = {platform: process.platform, node: process.version, checks, status: checks.length === 26 && checks.every(check => check.status === 'PASS') ? 'PASS' : 'INCOMPLETE'};
+  const summary = {platform: process.platform, node: process.version, checks, status: completeBrowserChecks(checks) ? 'PASS' : 'INCOMPLETE'};
   await writeFile(join(projectRoot, 'browser-proof.json'), JSON.stringify(summary, null, 2), {mode: 0o600, flag: 'wx'});
   console.log(JSON.stringify({status: summary.status, passed: checks.filter(check => check.status === 'PASS').length, checks: checks.length}));
   if (summary.status !== 'PASS') process.exitCode = 1;

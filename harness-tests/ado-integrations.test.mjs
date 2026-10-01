@@ -12,6 +12,7 @@ import {createAdoSourceControl} from '../scripts/lib/integrations/ado-delivery.m
 import {runCompatibility, compatibilityDiagnostic} from '../scripts/lib/integrations/compatibility.mjs';
 import {packageRoot} from '../scripts/lib/consumer-paths.mjs';
 import {createAdoClient, AdoError} from '../scripts/lib/integrations/ado-client.mjs';
+import {renderSpec} from '../scripts/lib/integrations/ado-steps.mjs';
 
 const put = (root, path, value) => { const file = join(root, path); mkdirSync(dirname(file), {recursive: true}); writeFileSync(file, typeof value === 'string' ? value : JSON.stringify(value)); };
 const legacy = () => ({manifest: {cases: [{id: 101}, {id: 102}]}, state: {cases: {'101': {status: 'passed', greens: 2}, '102': {status: 'failed', classification: 'app-defect'}}}});
@@ -76,7 +77,54 @@ for (const mode of ['missing-item', 'missing-shared', 'cycle', 'malformed', 'pag
 }
 test('neutral conversion refuses missing assertions, action or unresolved parameter semantics', async t => {
   const f = await adoFixture(t), suite = await createAdoTestSource(f.client).fetchSuite(1, 2);
-  for (const change of [s => s.cases[0].parameters = '<parameters/>', s => s.cases[0].steps[0].expected = '', s => s.cases[0].steps[0].action = '']) { const copy = structuredClone(suite); change(copy); assert.throws(() => adoSuiteToSource(copy)); }
+  for (const change of [s => s.cases[0].parameters = '<parameters><param name="input"/></parameters>', s => s.cases[0].steps[0].expected = '', s => s.cases[0].steps[0].action = '']) { const copy = structuredClone(suite); change(copy); assert.throws(() => adoSuiteToSource(copy)); }
+});
+for (const [label, parameters, data] of [
+  ['absent', undefined, undefined], ['null', null, null], ['blank', '  \n', ' \t'], ['parsed-empty', [], []],
+  ['self-closing', '<parameters/>', '<NewDataSet/>'], ['spaced-self-closing', ' <parameters /> ', ' <NewDataSet /> '],
+  ['paired', '<parameters></parameters>', '<NewDataSet></NewDataSet>'],
+  ['whitespace-paired', '<parameters> \n </parameters>', '<NewDataSet> \n </NewDataSet>']
+]) test(`empty ADO ${label} metadata preserves ordinary and shared source semantics`, async t => {
+  const f = await adoFixture(t), metadata = {'Microsoft.VSTS.TCM.Parameters': parameters, 'Microsoft.VSTS.TCM.LocalDataSource': data};
+  Object.assign(f.state.items.get(101).fields, metadata);
+  f.state.items.set(300, {id: 300, fields: {'System.TeamProject': 'demo', ...metadata, 'Microsoft.VSTS.TCM.Steps': xml('Shared empty-metadata action', 'Shared empty-metadata expected')}});
+  f.state.items.get(102).fields['Microsoft.VSTS.TCM.Steps'] = '<steps><compref ref="300"/></steps>';
+  const suite = await createAdoTestSource(f.client).fetchSuite(1, 2), neutral = adoSuiteToSource(suite);
+  assert.equal(neutral.scenarios.length, 2); assert.deepEqual(neutral.scenarios[1].steps[0].expected, ['Shared empty-metadata expected']);
+  assert.deepEqual(suite.cases[0].parameters, parameters ?? null);
+  if (data !== undefined && data !== null) assert.deepEqual(suite.cases[0].dataTableXml, data);
+  const parsed = structuredClone(suite); parsed.cases[0].dataTable = []; assert.equal(adoSuiteToSource(parsed).scenarios.length, 2);
+  const markdown = renderSpec({tc: parsed.cases[0], planId: 1, suiteId: 2, suiteName: suite.suiteName, target: 'https://app.example.test', org: 'synthetic', project: 'demo'});
+  assert.equal(markdown.includes('Parameterized test case'), false); assert.equal(markdown.includes('```json'), false);
+  assert.equal(writes(f).length, 0);
+});
+for (const [label, field, value] of [
+  ['real-parameter', 'parameters', '<parameters><param name="input"/></parameters>'],
+  ['parsed-parameter', 'parameters', [{name: 'input'}]], ['malformed-parameters', 'parameters', '<parameters>'],
+  ['wrong-parameter-root', 'parameters', '<other/>'], ['parameter-text', 'parameters', '<parameters>input</parameters>'],
+  ['invalid-xml-token-whitespace', 'parameters', '<parameters\u000b/>'], ['non-xml-token-whitespace', 'parameters', '<parameters\u00a0/>'],
+  ['invalid-xml-surrounding-whitespace', 'parameters', '\u000b<parameters/>'],
+  ['populated-data', 'dataTableXml', '<NewDataSet><Table1><input>value</input></Table1></NewDataSet>'],
+  ['parsed-data', 'dataTable', [{input: 'value'}]], ['malformed-data', 'dataTableXml', '<NewDataSet>'],
+  ['unknown-data-child', 'dataTableXml', '<NewDataSet><Unknown/></NewDataSet>'], ['unknown-data-root', 'dataTableXml', '<other/>'],
+  ['invalid-xml-content-whitespace', 'dataTableXml', '<NewDataSet>\u000c</NewDataSet>']
+]) test(`nonempty or unsupported ADO ${label} is not silently discarded`, async t => {
+  const f = await adoFixture(t), suite = await createAdoTestSource(f.client).fetchSuite(1, 2);
+  suite.cases[0][field] = value; if (field === 'dataTableXml') suite.cases[0].dataTable = [];
+  assert.throws(() => adoSuiteToSource(suite), /refinement/);
+  if (field !== 'dataTable') {
+    const key = field === 'parameters' ? 'Microsoft.VSTS.TCM.Parameters' : 'Microsoft.VSTS.TCM.LocalDataSource';
+    f.state.items.set(300, {id: 300, fields: {'System.TeamProject': 'demo', [key]: value, 'Microsoft.VSTS.TCM.Steps': xml('Shared action', 'Shared expected')}});
+    f.state.items.get(101).fields['Microsoft.VSTS.TCM.Steps'] = '<steps><compref ref="300"/></steps>';
+    await assert.rejects(createAdoTestSource(f.client).fetchSuite(1, 2), /refinement/);
+  }
+  assert.equal(writes(f).length, 0);
+});
+test('legacy rendering still preserves genuine parameter guidance and rows', async t => {
+  const f = await adoFixture(t), suite = await createAdoTestSource(f.client).fetchSuite(1, 2), tc = suite.cases[0];
+  tc.parameters = '<parameters><param name="input"/></parameters>'; tc.dataTable = [{input: 'synthetic'}];
+  const markdown = renderSpec({tc, planId: 1, suiteId: 2, suiteName: suite.suiteName, target: 'https://app.example.test', org: 'synthetic', project: 'demo'});
+  assert.ok(markdown.includes('Parameterized test case')); assert.ok(markdown.includes('"input": "synthetic"'));
 });
 test('preview reads complete points and never mutates or creates a receipt', async t => {
   const f = await adoFixture(t), result = await publish(f); assert.equal(result.cases.length, 2); assert.equal(writes(f).length, 0); assert.equal(f.receipts().length, 0);

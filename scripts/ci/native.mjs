@@ -9,6 +9,7 @@ import {snapshotInstalledPackage} from '../lib/host-proof-files.mjs';
 import {completeChecks} from './results.mjs';
 import {nativeProcess} from './native-process.mjs';
 import {recoverNativeProof} from './recovery.mjs';
+import {completeBrowserChecks} from '../probes/browser-checks.mjs';
 
 const [directory, kind] = process.argv.slice(2);
 assert(process.argv.length === 4 && ['browser', 'parallel'].includes(kind), 'Use <installed-workspace> browser|parallel.');
@@ -30,7 +31,7 @@ if (browser.status === 'PASS') {
   }
 }
 const packageUnchanged = JSON.stringify(snapshotInstalledPackage(installation)) === JSON.stringify(before);
-const complete = recovery?.complete && assessment?.status === 'PASS' && (kind === 'browser' ? assessment.checks.length === 26 && assessment.checks.every(check => check.status === 'PASS')
+const complete = recovery?.complete && assessment?.status === 'PASS' && (kind === 'browser' ? completeBrowserChecks(assessment.checks)
   : assessment.comparison?.status === 'PASS' && assessment.counts.length === 2 && assessment.counts.every(count => count.scenarios === 13 && count.assertions > 0 && count.evidence > 0) && cleanup?.ownedDatabasesRemoved && cleanup?.fixtureServersClosed);
 const summary = {version: 1, kind, status: complete && packageUnchanged ? 'PASS' : 'INCOMPLETE', platform: process.platform, node: process.version,
   archive: installed.archive, packageUnchanged, browserInstallation: browser.status, ...(recovery ? {recovery} : {}),
