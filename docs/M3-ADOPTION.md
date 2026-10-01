@@ -172,6 +172,10 @@ to consumer `reports/tracker`. Initialize a real registry from the canonical
 
 ## Optional compatibility hooks and ADO commands
 
+M12 now supplies [optional ADO adapters](M12-ADO.md), explicit consumer configuration
+and write receipts. The following describes the original M3 adoption boundary;
+use the M12 guide for current command behavior and `--execute` requirements.
+
 Existing host settings are never overwritten. To enable legacy Claude hooks, merge
 only the desired hook entries from the package template and point each command at
 the installed `scripts/hooks/guard.mjs`, quoting the path where needed. Do not copy

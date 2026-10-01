@@ -116,7 +116,7 @@ test('hook records stay consumer-specific and a linked ledger leaf cannot overwr
 
 test('legacy ADO entrypoints refuse the package as consumer before contacting a service',t=>{
  const root=project(t);put(root,'config/project.json','{"azure":{}}');
- for(const name of ['fetch-ado-suite','publish-ado-results','ado-pr']) {
+ for(const name of ['fetch-ado-suite','publish-ado-results','ado-pr','tag-ado-workitem','relink-ado-story']) {
    const script=join(packageRoot,`scripts/${name}.mjs`);
    const wrong=spawnSync(process.execPath,[script,'--project-root',packageRoot],{encoding:'utf8',cwd:root});
    assert.notEqual(wrong.status,0);assert.match(wrong.stderr,/separate consumer/);

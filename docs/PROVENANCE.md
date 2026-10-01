@@ -61,6 +61,12 @@ informed those adapters; no upstream source was copied and no dependency was add
 Native host executables, browser binaries and database containers remain separately
 installed development tools with their own upstream terms and notices.
 
+M12 adds project-authored optional ADO adapters and local synthetic contract fixtures.
+The compatibility Steps parser/renderer is adapted from the owner-cleared supplied
+harness. Official Microsoft REST documentation informed request shapes; no upstream
+implementation was copied and no dependency or third-party notice changed. See
+[the adapter guide](M12-ADO.md) for the specific documentation references.
+
 AgenTeX (MIT) and Microsoft Playwright CLI (Apache-2.0) were inspected as references.
 No upstream implementation was copied into M1. Exact research revisions are recorded
 in [the provenance inventory](../scripts/provenance.json). Architectural ideas and links

@@ -415,15 +415,14 @@ For each failure, classify before touching anything:
 
 **Track rounds on disk.** Keep `test/ado-suite-<suiteId>/_verify-state.json` — per
 TC id: fix rounds used, consecutive greens, classification, last run result
-(`{ "cases": { "<tcId>": { "status":
+(`{ "sourceFingerprint": "<from the verified _suite.json>", "cases": { "<tcId>": { "status":
 "passed|failed|blocked|fixme|pending-confirmation", "rounds": n, "greens": n,
 "classification": "app-defect|script-defect|environment|unclassified",
 "note": "…" } } }` — the exact contract `scripts/publish-ado-results.mjs`
 consumes; use those classification values verbatim, the marking logic matches on
 them). `greens` counts consecutive runs in which the CASE executed and passed since
 the last behavior-file edit affecting its spec; a case that passed its latest run but
-holds `greens: 1` is recorded `"status": "pending-confirmation"` (unmapped in the
-publish script — skipped, never published as Passed or Failed); record
+holds `greens: 1` is recorded `"status": "pending-confirmation"` (incomplete: publication is refused until the selected scope is verified); record
 `"status": "passed"` ONLY when `greens ≥ 2` (the rerun-reusability gate). A failure
 of the case, or an edit to its behavior files — its spec, its paired data JSON, or
 any `pages/`/`apis/`/`dbs/`/`utils/` file (conservatively: any such edit resets the
@@ -498,42 +497,38 @@ silently skipped:
    suite PR. Message: suite, cases automated, verify matrix. Never on master (the
    harness guard warns about master pushes; remote branch policy must enforce them).
 4. **Push**: `git push -u origin <branch>`.
-5. **Pull request**:
+5. **Pull request** (authorized external delivery; preview without `--execute` first):
    ```
-   node scripts/ado-pr.mjs --title "Automate ADO suite <suiteId> — <suiteName>" --description-file <path> --json
+   node scripts/ado-pr.mjs --title "Automate ADO suite <suiteId> — <suiteName>" --description-file <path> --json --execute
    ```
    Record the result in the manifest: `"pr": { "id": <n>, "url": "..." }` in
    `_suite.json`. The description carries: the TC ↔ test ↔ verify-status matrix, a
    pointer to the (local-only) `_traceability.md` (the full TC ↔ step ↔ method ↔ layer
-   matrix does NOT live in the diff — `test/` is gitignored — so
-   **Azure DevOps caps PR descriptions at 4000 characters
-   and silently truncates beyond it**, so keep the description under the cap and
-   never inline the full table). Then post the full table as a **PR comment thread**
-   so it renders on the Overview tab (comments take ~150K chars):
-   `POST {orgUrl}/{project}/_apis/git/repositories/{repo}/pullrequests/<id>/threads?api-version=7.1`
-   with `{ "comments": [{ "parentCommentId": 0, "commentType": "text", "content": <table md> }], "status": "closed" }`
-   — status `closed` so the thread never blocks a comment-resolution merge policy.
+   matrix stays local because `test/` is gitignored).
+   keep the description within the adapter’s 4000-character limit; longer text is
+   refused without truncation. Additional PR comments require separate authorized
+   delivery and are not posted by this command.
    The description also carries: defects found during EXPLORE (with evidence paths),
    what was NOT automated and why, the suite's current NEEDS-HUMAN QUEUE entries
    (from `node scripts/harness-metrics.mjs` — terminal cases must not hide in run
    reports), the methods newly created per case (the
    reuse-gate output), any
    assertion-free GUI-cleanup last-resorts (reusability-ladder step 3 flags), and
-   the framework-review verdict. Exit 3 means the branch isn't pushed; exit
-   2 means the PAT lacks Code Read & Write — tell the user, hand them the branch
-   name, stop.
+   the framework-review verdict. A nonzero exit means delivery is incomplete;
+   inspect the redacted diagnostic and receipt before retrying.
 6. **Publish outcomes to ADO** (opt-in, confirm with the user first — it writes to
    the shared plan; once per pipeline, never per loop iteration):
    ```
-   node scripts/publish-ado-results.mjs --suite <suiteId> [--dry-run first]
+   node scripts/publish-ado-results.mjs --suite <suiteId> --dry-run
+   node scripts/publish-ado-results.mjs --suite <suiteId> --execute
    ```
 7. **After the PR is merged** (merged is not "PR opened" — check the PR's status via
    its recorded URL or the REST API before this step):
    ```
-   node scripts/publish-ado-results.mjs --suite <suiteId> --mark-automated
+   node scripts/publish-ado-results.mjs --suite <suiteId> --mark-automated --execute
    ```
-   This sets the project's custom `Custom.Automation` picklist to "Automated" (plus
-   the standard `Microsoft.VSTS.TCM.*` automation fields) on every case whose
+   This sets the standard `Microsoft.VSTS.TCM.*` automation fields and any
+   explicitly configured custom automation field on every eligible case whose
    **script works** — VERIFY-passed, or failing on a classified `app-defect` (a
    valid assertion correctly detecting a real bug counts as automated; team ruling
    2026-08-22). Script-defect and environment failures are never marked. The team's
@@ -618,3 +613,9 @@ carries the pipeline keys — `explore`, `resolvedSpecFiles`, `pr`, `markedAutom
 — forward automatically; diff the new `_suite.json` against the old one, report what
 changed in ADO, and redo REFINE only for changed cases). `refine` forces phase 2
 over the existing fetch.
+
+M12 compatibility: configure the optional ADO adapter in the consumer; see
+[ADO configuration and receipts](../../../../docs/M12-ADO.md). All external writes
+require authorized `--execute`, and incomplete receipts require reconciliation.
+Unknown/pending verification states, missing points and stale source fingerprints
+refuse publication. Do not use `--all` to bypass verification.

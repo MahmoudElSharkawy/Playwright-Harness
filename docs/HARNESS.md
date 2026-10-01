@@ -83,8 +83,10 @@ and intentionally persistent outcomes may remain.
 - Optional Claude hooks use payload `cwd` (or the consumer working directory) and store
   session records under consumer `.harness/state/hooks`. Adoption does not enable hooks
   or copy broad host permissions. These helpers remain advisory and fail open.
-- Legacy ADO scripts select a consumer root, keep their existing configuration/workflow,
-  and require explicit authorization for external writes. They are not neutral adapters.
+- Optional [ADO adapters](M12-ADO.md) separate retrieval, outcome publication/linking
+  and source-control delivery. The five compatibility commands select a consumer
+  root, preview remote mutations by default and require explicit execution with
+  durable receipts. Local sources never require ADO configuration.
 - API/DB utilities in `examples` remain examples. Typechecking and test listing do not
   prove browser/database execution against a configured system.
 

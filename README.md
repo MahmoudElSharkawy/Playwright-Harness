@@ -51,6 +51,11 @@ of validated results, thin native hook payload adapters and fixed Claude/Codex
 execution probes. See [M11 validation](docs/M11-VALIDATION.md) for the actual gate
 status. Full generation/review/verification parity and concurrency remain later work.
 
+M12 adds [optional ADO adapters](docs/M12-ADO.md) for retrieval, outcome publication,
+work-item linking and source-control delivery. Compatibility commands use explicit
+consumer configuration, preview remote mutations by default and retain write
+receipts. Local sources remain independent of ADO. See [M12 validation](docs/M12-VALIDATION.md).
+
 ## Install into a project
 
 Keep this package in its own directory; do not overlay it on application code.
@@ -144,18 +149,19 @@ hosts or external integration tests passed.
 | `scripts/spikes/playwright-cli` | Development-only pinned native CLI viability probes |
 | `scripts/lib/execution-core` | Shared execution records, policy decisions and result/evidence validation |
 | `scripts/lib/api` | Shared sequential API execution, credential binding, evidence and recovery |
-| `scripts/lib/database` | Scoped SQL Server execution with actual driver binding and optional restoration |
+| `scripts/lib/database` | Scoped SQL Server/PostgreSQL execution with actual driver binding and optional restoration |
 | `scripts/lib/sequential` | Fixed mixed lifecycle using one shared scenario record and the existing runtimes |
+| `scripts/lib/integrations` | Optional ADO sources, outcome/work-item management, source-control delivery and receipts |
 | `scripts/check-conventions.mjs` | Mechanical POM convention checks |
 | `scripts/hooks/guard.mjs` | Optional advisory Claude hooks |
 | `scripts/generate-tracker.mjs`, `scripts/harness-metrics.mjs` | Consumer reporting tools |
 | `examples` | Synthetic POM examples and dependency manifest |
 | `resources` | Derive-only team-library contracts |
 
-The legacy ADO suite workflow and its fetch, PR and result-publication commands remain
-compatibility facilities. They require explicit ADO configuration and the legacy
-AgenTeX integration for exploration. They are separate from local-source onboarding;
-neutral execution and optional ADO adapter restructuring are later milestones.
+The legacy ADO suite workflow retains its fetch, PR and result-publication entrypoints
+over the M12 adapters. Those commands require explicit ADO configuration and do not
+depend on AgenTeX. The older exploration workflow still documents its legacy plugin;
+generation/review/verification integration with the shared runtimes remains M13 work.
 Existing service/helper patterns remain valid. Catalogs are optional reuse assets.
 
 The old `.claude/settings.json` is a permissive compatibility template, not an

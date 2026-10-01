@@ -3,6 +3,17 @@
 Package versions belong to this package, not to adopting applications. Historical
 private incidents and delivery identifiers are intentionally not retained here.
 
+## 3.0.12 — Unreleased
+
+- M12: separate optional ADO test retrieval, outcome/work-item management and
+  source-control delivery behind concrete adapters with shared bounded transport.
+- Keep all five compatibility entrypoints consumer-rooted, make external mutations
+  explicitly executable, and retain flushed receipts without credentials/payloads.
+- Preserve local-only operation, validate publication scope and source identity,
+  guard work-item revisions, and verify writes without automatic replay.
+- Remove private field/branch defaults and silent missing-case/result handling;
+  document compatibility changes and the limits of synthetic contract validation.
+
 ## 3.0.11 — Unreleased
 
 - M11: compare validated execution semantics across native Claude and Codex runs,

@@ -4,6 +4,12 @@
   "publicationAuthorized": false,
   "sources": [
     {
+      "scope": "M12 changes",
+      "status": "Created for this project; compatibility parsing adapted from owner-cleared supplied code; official Microsoft REST documentation informed adapters; no new dependency",
+      "targetLicense": "MIT",
+      "thirdPartyCodeCopied": false
+    },
+    {
       "scope": "M11 changes",
       "status": "Created for this project; official native host documentation informed payload adapters; no new dependency",
       "targetLicense": "MIT",
