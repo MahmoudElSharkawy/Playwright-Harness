@@ -2,11 +2,17 @@
 
 Date: 2026-09-29. Package version: 3.0.1 (unreleased).
 
-**Source implementation is complete; full M1 acceptance remains BLOCKED by unresolved
-historical credential revocation/rotation.** The owner explicitly did not confirm
-rotation. Removal does not revoke a credential. Any credential that could still be
-valid requires immediate owner revocation/rotation. Its validity was not tested.
-M2 and executor implementation have not begun.
+**Current credential update (2026-10-01):** The owner has now confirmed revocation or
+rotation of the historical credential. This is an owner attestation, not an
+independent validity test. The blocked status below records the earlier M1 close;
+that owner-dependent remediation item is now resolved. Publication still requires
+separate authorization and review of current release contents.
+
+**At M1 close, source implementation was complete and full acceptance was BLOCKED by
+unconfirmed historical credential revocation/rotation.** The owner had not confirmed
+rotation at that time. Removal did not revoke a credential; a credential that could
+still be valid required owner revocation or rotation. Its validity was not tested.
+M2 and executor implementation had not begun at that time.
 
 ## Changes and original-state accounting
 

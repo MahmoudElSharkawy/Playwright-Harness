@@ -113,5 +113,5 @@ See [M5 validation](M5-VALIDATION.md) for the minimal core's actual checks and
 invocation/reply interpretation behind a narrow version-specific boundary; the
 harness layer owns identity, policy, evidence, ownership and cleanup. No second
 browser command language or generic workflow engine is introduced.
-Public delivery remains separately authorized and subject to unresolved historical
-credential revocation/rotation remediation.
+The owner confirmed historical credential revocation or rotation on 2026-10-01.
+Public delivery remains separately authorized and subject to current-content review.

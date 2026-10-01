@@ -246,7 +246,8 @@ dry run, not a publication action.
 
 See [M1 validation](docs/M1-VALIDATION.md), [provenance](docs/PROVENANCE.md) and
 [security guidance](SECURITY.md). Original rights are owner-cleared and required
-notices retained. Historical credential revocation/rotation remains unresolved.
+notices retained. The owner confirmed historical credential revocation/rotation on
+2026-10-01; the credential was not tested or reproduced.
 The package is private; a clean validation run is not public-release authorization.
 
 See [M3 validation](docs/M3-VALIDATION.md) for actual adoption, local-source and

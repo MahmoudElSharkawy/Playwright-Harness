@@ -2,7 +2,9 @@
 
 M17 implementation and technical validation pass: installed Windows/Linux checks,
 native host proofs, full lifecycle parity, hosted CI and independent implementation
-review. Public-release readiness remains gated on unresolved credential remediation.
+review. On 2026-10-01, the owner confirmed the historical credential was revoked or
+rotated. Public release remains a separate decision requiring current-content review
+and explicit authorization.
 The [M17 guide](M17-CI.md) defines the gates and reproducible command interfaces.
 
 ## Frozen implementation
@@ -235,7 +237,9 @@ from 323 publication candidates. Remote links and heading anchors were not teste
 The Windows junction interruption remains an unresolved environment incident with
 exact restoration evidence; it did not alter source or replay a scenario.
 
-Historical credential revocation/rotation remains owner-dependent and unresolved.
-Removing its value is not confirmation of revocation. It has not been reproduced
-or tested. This remains a public-release gate even if all technical checks pass.
+The owner confirmed historical credential revocation or rotation on 2026-10-01.
+This owner attestation resolves the previously open credential-remediation gate;
+the credential was not reproduced or tested. Earlier milestone reports record the
+status known at their respective times. Current release-content review and explicit
+authorization are still required for publication.
 No npm publication, release tag, GitHub release or live ADO write occurred.

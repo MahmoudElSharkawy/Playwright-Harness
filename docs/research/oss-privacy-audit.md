@@ -23,7 +23,8 @@ At the owner's request, credential-bearing review/prerequisite history was then
 replaced with clean templates in both the recovery material and the supplied archive.
 The archive hash changed intentionally; historical accounting hashes describe the
 original input, not a retained byte-for-byte backup. Credential revocation/rotation
-remains unresolved and requires owner action; the value was not tested.
+was later confirmed by the owner on 2026-10-01; the value was not tested or
+reproduced. The original unresolved status remains documented in the M1 record.
 
 ## Verification
 

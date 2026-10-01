@@ -161,8 +161,8 @@ contents. Record exact scope, counts and failed attempts in the validation repor
 Unavailable checks are not passes. Preserve each attempt rather than replacing
 failure evidence with a later green result.
 
-The historical credential's revocation/rotation remains a separate owner status;
-deleting its value is not remediation confirmation. Public readiness requires
-that status to be resolved. A green workflow is not permission to tag, publish an
-npm package, redistribute third-party installations or create a release. Those
+The owner confirmed historical credential revocation or rotation on 2026-10-01;
+deleting its value alone would not have established that status. A green workflow
+is not permission to tag, publish an npm package, redistribute third-party
+installations or create a release. Those
 actions still require explicit authorization.
