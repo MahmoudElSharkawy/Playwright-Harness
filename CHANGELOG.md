@@ -9,6 +9,8 @@ private incidents and delivery identifiers are intentionally not retained here.
   preserving business values, producer bindings, recovery and lifecycle decisions.
 - Add thin native hook payload translation and fixed browser/API/database host
   proofs with native command receipts, immutable package checks and owned cleanup.
+- Verify 19 native Windows execution cases through Claude and Codex, including
+  mixed lifecycle behavior and structured Codex denial across the Windows shell.
 - Keep host permissions separate from harness capabilities. Full workflow parity
   and parallel execution remain deferred.
 
