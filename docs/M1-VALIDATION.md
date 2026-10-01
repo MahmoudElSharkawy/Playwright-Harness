@@ -131,3 +131,20 @@ This does not resolve credential rotation or authorize publication.
 
 Stop at M1. Later milestones require further authorization. Syntax checks, fixture
 tests, typechecking and test discovery do not establish runtime integration readiness.
+
+## Later retained-content cleanup (2026-10-01)
+
+After reviewing the original-material inventory, the owner requested removal of
+additional legacy project names and numbered change references. The tracked package
+and existing Git history had no matches. The local machine-protected recovery ZIP,
+its embedded input ZIP, and the supplied encrypted ZIP were sanitized in memory.
+The comparison verified 242 archive entries: 33 text entries changed and 208 text
+entries retained identical content; the remaining entry is the embedded ZIP whose
+contents changed. Re-reading both retained archives found zero requested matches.
+The recovery remains machine-protected with restricted access, and the supplied ZIP
+remains encrypted with restricted access. A private checksum receipt is retained
+outside Git at `.m1-private/content-redaction-receipt.json`.
+
+The original-state accounting hashes still describe the pre-sanitization input.
+This cleanup does not establish credential revocation or change the owner-dependent
+public-release gate.
