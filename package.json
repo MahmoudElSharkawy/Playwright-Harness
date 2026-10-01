@@ -1,6 +1,6 @@
 {
   "name": "playwright-pom-harness",
-  "version": "3.0.15",
+  "version": "3.0.16",
   "private": true,
   "license": "MIT",
   "type": "module",
@@ -50,7 +50,9 @@
     "test:allure": "node --test harness-tests/allure-generation.test.mjs",
     "test:workflow": "node --test --test-concurrency=1 harness-tests/workflow-parity.test.mjs harness-tests/workflow-host-evidence.test.mjs",
     "check:workflow-conventions": "node scripts/check-conventions.mjs --root harness-tests/fixtures/workflow-consumer --fail-on-warn",
-    "probe:workflow": "node scripts/probes/workflow.mjs"
+    "probe:workflow": "node scripts/probes/workflow.mjs",
+    "test:parallel": "node --test harness-tests/parallel-runtime.test.mjs",
+    "probe:parallel": "node scripts/probes/parallel.mjs"
   },
   "files": [
     "README.md",

@@ -29,7 +29,7 @@ privileges. M9 adds [a fixed sequential mixed lifecycle](M9-SEQUENTIAL.md). The 
 runtimes share scenario records, typed producer bindings, effect/lifecycle ownership,
 confidential-value knowledge and one cleanup budget. Native browser mechanics, HTTP
 transport and SQL classification remain inside their existing integrations. There is
-no generic workflow engine or parallel scheduler.
+no generic workflow engine.
 
 M10 adds [PostgreSQL and database neutrality](M10-POSTGRESQL.md). The database runtime
 selects one of two concrete native drivers; SQL syntax, parameter types and optional
@@ -67,7 +67,11 @@ verification. [M15](M15-WORKFLOW-PARITY.md) proves that full route through both 
 hosts, including [M14 reports](M14-REPORTING.md) and Allure 3; see its actual
 [validation status](M15-VALIDATION.md). Preserve source assertions,
 three cumulative repair rounds and two independent scoped green runs. Sequential
-execution remains the default; harness parallel dispatch stays deferred.
+execution remains the default. [M16](M16-PARALLEL.md) adds explicit bounded batches
+of independent scenarios after that sequential proof; [M16 validation](M16-VALIDATION.md)
+records its actual coverage. Concurrency wraps the complete lifecycle, including
+required cleanup and owned browser shutdown. It does not introduce a dependency graph
+or change generated Playwright worker settings.
 
 Knowledge observations enter candidates and require review/sanitization before
 promotion. Active-run inputs do not silently change. Catalogs, deterministic helpers

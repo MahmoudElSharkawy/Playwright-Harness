@@ -3,33 +3,18 @@ import {createApiRuntime, apiCapabilities} from '../api/index.mjs';
 import {createDatabaseRuntime, databaseCapabilities} from '../database/index.mjs';
 import {runBrowserScenario, browserCapabilities} from '../browser/index.mjs';
 import {authorizeOperation, checkExecutionWindow, attemptRecord, registerEvidence} from '../execution-core/index.mjs';
-import {operationInput} from '../execution-core/inputs.mjs';
-import {data, frozen, keys, requireThat} from '../execution-core/data.mjs';
+import {data, frozen, requireThat} from '../execution-core/data.mjs';
 import {createScenarioState, initializeStorage, writeScenario, finishScenario, phaseOrder} from './state.mjs';
+import {prepareSequential, stages} from './preflight.mjs';
 
 const capabilities = {api: apiCapabilities, database: databaseCapabilities, browser: browserCapabilities};
-const stages = [['setup', 'SETUP'], ['exercise', 'EXERCISE'], ['verify', 'VERIFY'], ['cleanup', 'CLEANUP']];
 
 /** Fixed sequential lifecycle; callbacks use existing runtimes, never a step DSL or scheduler. */
 export async function runSequentialScenario(run, roots, options = {}, callbacks = {}) {
-  keys(options, ['signal', 'api', 'database', 'browser', 'explorations'], 'sequential options');
-  keys(callbacks, stages.map(([name]) => name), 'phase callbacks');
-  for (const callback of Object.values(callbacks)) requireThat(typeof callback === 'function', 'Phase callbacks must be functions.');
+  ({options, callbacks} = prepareSequential(run, options, callbacks));
   const state = createScenarioState(run, roots), controller = new AbortController();
-  requireThat(options.signal === undefined || options.signal instanceof AbortSignal, 'Cancellation needs an AbortSignal.');
-  for (const family of ['api', 'database']) if (options[family]) keys(options[family], ['resolveCredential', 'resolveSensitive', 'storeSensitive'], `${family} options`);
-  if (options.browser) keys(options.browser, ['target', 'storageState', 'nativeTimeoutMs', 'commandTimeoutMs'], 'browser options');
-  for (const input of options.explorations ?? []) {
-    const operation = operationInput(input);
-    requireThat(operation.source.kind === 'exploration' && ![...run.inputs.operations, ...state.observations.operations].some(item => item.id === operation.id), 'Exploration definitions need distinct run-local identities.');
-    state.observations.operations.push(operation);
-  }
+  state.observations.operations.push(...options.explorations);
   const operationFor = id => [...run.inputs.operations, ...state.observations.operations].find(item => item.id === id);
-  for (const expectation of state.scope.expectations) {
-    requireThat(Object.hasOwn(phaseOrder, expectation.phase) && operationFor(expectation.operationId), 'Mixed expectations need frozen phases and known stable or run-local definitions.');
-    requireThat(!['browser-session-setup', 'browser-session-cleanup'].includes(expectation.invocationId), 'Browser ownership invocation names are reserved.');
-    requireThat(state.scope.expectations.filter(item => item.invocationId === expectation.invocationId).every(item => item.operationId === expectation.operationId && item.phase === expectation.phase), 'An invocation has one operation and phase.');
-  }
   const abort = () => controller.abort(); options.signal?.addEventListener('abort', abort, {once: true});
   if (options.signal?.aborted) abort();
   const issue = () => {if (!state.scenario.issues.includes('indeterminate-outcome')) state.scenario.issues.push('indeterminate-outcome');};

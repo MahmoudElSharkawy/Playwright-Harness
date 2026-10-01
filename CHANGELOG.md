@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.0.16 — M16 bounded parallel execution
+
+- Add opt-in batches of independent complete sequential lifecycles, with concurrency 1 by default and an explicit maximum of 8.
+- Reject shared-data conflicts before execution; isolate run storage and assessed results, retain queued cancellation/deadline outcomes and drain required cleanup.
+- Keep one active batch per consumer, immutable queued inputs and guarded runtime exploration. Preserve uncertain effects and incomplete execution without inventing verdicts.
+- Prove real session isolation, API lifecycle behavior and both database drivers against sequential semantic outcomes. No new dependency, browser language, general scheduler or generated-test worker change.
+
 ## 3.0.15 — M15 sequential workflow parity
 
 - Connect native Claude/Codex source refinement, observed execution, unreviewed knowledge candidates, actual POM authorship, independent review, two scoped green processes and Allure 3 reporting in a fixed acceptance proof.

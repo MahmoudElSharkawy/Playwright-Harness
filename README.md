@@ -70,8 +70,12 @@ to test/action code. See [Allure 3 validation](docs/ALLURE3-VALIDATION.md).
 M15 adds the [complete sequential Claude/Codex lifecycle proof](docs/M15-WORKFLOW-PARITY.md),
 from local source and actual native POM authoring through independent review, two
 scoped green runs, Allure 3 reporting and delivery readiness. See
-[M15 validation](docs/M15-VALIDATION.md) for actual gate status. Concurrency remains
-deferred; sequential execution is the default.
+[M15 validation](docs/M15-VALIDATION.md) for actual gate status.
+
+M16 adds [bounded parallel execution](docs/M16-PARALLEL.md) around whole sequential
+scenario lifecycles. Sequential remains the default; explicit parallel batches require
+independent resources and preserve isolated evidence, cleanup and verdicts. See
+[M16 validation](docs/M16-VALIDATION.md).
 
 ## Install into a project
 
@@ -168,6 +172,7 @@ hosts or external integration tests passed.
 | `scripts/lib/api` | Shared sequential API execution, credential binding, evidence and recovery |
 | `scripts/lib/database` | Scoped SQL Server/PostgreSQL execution with actual driver binding and optional restoration |
 | `scripts/lib/sequential` | Fixed mixed lifecycle using one shared scenario record and the existing runtimes |
+| `scripts/lib/parallel` | Opt-in bounded batches of independent sequential scenarios |
 | `scripts/lib/integrations` | Optional ADO sources, outcome/work-item management, source-control delivery and receipts |
 | `scripts/check-conventions.mjs` | Mechanical POM convention checks |
 | `scripts/hooks/guard.mjs` | Optional advisory Claude hooks |

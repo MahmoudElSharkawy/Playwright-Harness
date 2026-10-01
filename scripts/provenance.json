@@ -4,6 +4,12 @@
   "publicationAuthorized": false,
   "sources": [
     {
+      "scope": "M16 changes",
+      "status": "Created for this project; bounded dispatch reuses the existing sequential runtimes, native CLI and pinned fixture databases; no third-party implementation copied and no new dependency",
+      "targetLicense": "MIT",
+      "thirdPartyCodeCopied": false
+    },
+    {
       "scope": "M15 changes",
       "status": "Created for this project; fixed native workflow proof and semantic assessment reuse existing project fixtures and installed dependencies; no third-party implementation copied",
       "targetLicense": "MIT",
