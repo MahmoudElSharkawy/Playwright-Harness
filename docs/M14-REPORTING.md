@@ -83,14 +83,28 @@ process for the required second green. Optional reporting failure does not grant
 revoke a green. The M13 gate still requires independent approval, exact source
 assertions and two fresh successful processes for the same frozen candidate.
 
-The concrete adapter uses separately installed `allure-playwright` **3.13.0**,
-`allure-commandline` **2.46.1** and a working `java` on PATH. Keep consumer dependency
+The concrete adapter uses separately installed `allure-playwright` **3.13.0** and
+the Node-based `allure` **3.19.1** generator. `allure-js-commons` remains **3.13.0**.
+Java is not required. Keep consumer dependency
 declarations/lockfiles accurate. Other versions fail explicitly as unavailable until
 validated. Configuration follows the official [Playwright configuration reference](https://allurereport.org/docs/playwright-configuration/):
 `resultsDir`, `detail` and `suiteTitle`. Native reporter interfaces were also checked
 against the installed version. No reporter registry or copied Allure implementation
-is included. The retained example configuration and its legacy report paths remain
-unchanged; do not copy the unsupported `outputFolder` key into new configurations.
+is included. The example configuration retains its report paths, but replaces the
+old global teardown with `src/utils/AllureReport.ts` as a reporter. Its `onExit`
+generates after every reporter's `onEnd`, including environment metadata. Keep it
+before the HTML reporter, whose viewer can block `onExit` in local terminal runs.
+Preserve consumer customizations when adopting this wiring. Test bodies, POM actions,
+validations, `allure.step` and attachment calls require no migration. Do not copy
+the unsupported `outputFolder` key into Allure reporter configurations.
+
+The explicit package `allurerc.json` selects the Awesome UI, embeds report assets
+in one HTML file and groups existing epic/feature/story labels. It disables Allure's
+agent output and remote publishing. Ambient consumer configuration is not loaded
+by the harness generator. Known-issue reclassification, quality gates, reruns and
+history aggregation are not enabled. Allure remains a reporter, not an execution
+or verdict owner. The example's timestamped HTML archive remains an archive;
+it is not Allure 3's separate JSONL trend-history mechanism.
 
 For ordinary native tests outside generation verification, configure the concrete
 `scripts/lib/reporting/allure-reporter.mjs` reporter by its resolved installed path.
@@ -117,11 +131,18 @@ Playwright reports passed while the source-coverage verifier records FAIL. The
 landing page preserves FAIL; it never promotes native status to readiness. Each
 embedded harness execution report similarly retains its own core verdict.
 
-Java generation is a separate bounded job after reporter flush. It passes arguments
+Node generation is a separate bounded job after reporter flush. It passes arguments
 without a shell and never opens a browser. Fresh output is required; failure returns
 `FAILED` with its stage, leaves test history unchanged and writes no success receipt.
 Raw diagnostics are withheld. `capture.json` and `generation.json` are completeness
 and integrity records, not tamper-proof attestations against the filesystem owner.
+The generation receipt records the generator version and configuration hash.
+Allure 3.19.1 embeds analytics in its Awesome template without a configuration
+opt-out. A content security policy is added to the generated HTML before hashing,
+blocking outbound scripts/connections while allowing embedded assets and attachments.
+The upstream implementation is not vendored or modified. Direct user-followed links
+are not a publishing workflow. Upstream references: [migration](https://allurereport.org/docs/v3/migrate/)
+and [configuration](https://allurereport.org/docs/v3/configure/).
 
 These report directories are consumer runtime artifacts and stay ignored. Native
 Playwright/Allure also records consumer test titles, logs, errors and attachments;
@@ -137,7 +158,7 @@ consumer proof with reports and two Allure generations, waiting for an actual
 independent review before generated tests execute. It is interactive development
 validation, not an unattended CI command. The small native failure control can also
 run with `HARNESS_ALLURE_HTML_PROOF=1` and the `Allure capture preserves` test-name
-filter; this requires Java and validates actual FAIL landing-page generation.
+filter; this uses Node-based Allure 3 and validates actual FAIL landing-page generation.
 
 See [actual M14 validation](M14-VALIDATION.md) for passed, failed and unperformed
 checks. Full sequential host workflow parity is M15, bounded parallel execution

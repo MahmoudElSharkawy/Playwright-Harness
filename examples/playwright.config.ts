@@ -2,7 +2,7 @@
 import { defineConfig, devices } from '@playwright/test';
 import * as path from 'path';
 import * as dotenv from 'dotenv';
-import { allureEnvironmentInfo } from './src/config/reporting';
+import { allureConfig, allureEnvironmentInfo } from './src/config/reporting';
 import { TEST_DEFAULT_MS, EXPECT_DEFAULT_MS, ACTION_DEFAULT_MS, NAVIGATION_DEFAULT_MS } from './src/config/timeouts';
 /**
  * Read environment variables (secrets like DB credentials) from the gitignored
@@ -36,11 +36,12 @@ export default defineConfig({
   /* Reporter to use. See https://playwright.dev/docs/test-reporters */
   reporter: [
     ['list'],
+    // Finish Allure before the HTML viewer's onExit can keep an interactive run open.
+    ['./src/utils/AllureReport.ts'],
     ['html', { open: 'always', outputFolder: 'reports/playwright-report' }],
-    // allure-playwright v3 writes to ./allure-results (the outputFolder key is dead —
-    // report output contract in design-conventions; paths and environmentInfo are
-    // single-sourced in src/config/reporting.ts, shared with global-setup/teardown)
+    // Paths and environmentInfo are shared with setup and the post-flush report job.
     ['allure-playwright', {
+      resultsDir: allureConfig.resultsDir,
       environmentInfo: allureEnvironmentInfo,
       links: {
         tms: {
@@ -75,7 +76,6 @@ export default defineConfig({
   },
 
   globalSetup: require.resolve('./global-setup.ts'),
-  globalTeardown: require.resolve('./global-teardown.ts'),
 
   /* Configure projects for major browsers */
   projects: [

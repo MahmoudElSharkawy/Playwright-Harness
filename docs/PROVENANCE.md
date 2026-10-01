@@ -78,11 +78,16 @@ No upstream implementation was copied into M1. Exact research revisions are reco
 in [the provenance inventory](../scripts/provenance.json). Architectural ideas and links
 do not change the licenses of dependencies or any future copied source.
 
-Dependency versions are resolved in the example lockfile and all 150 dependency
+Dependency versions are resolved in the example lockfile and all 280 dependency
 records are listed in [the dependency inventory](../scripts/dependency-licenses.json).
-The 122 packages installed on Windows were inspected; 28 optional platform packages
-were not installed. The inventory records their lockfile license declarations without
-claiming those platforms were executed. No dependency implementation is bundled in
+The original M1 audit inspected 122 Windows packages and recorded declarations for
+28 uninstalled optional platform packages. The Allure 3 follow-up installed and
+inspected 131 added packages, removed the old Java CLI package, and retained every
+surviving dependency version. It reviewed Python-2.0 and the Apache-2.0 alternative
+of DOMPurify's dual license, and recorded missing bundled notices and README license
+texts in [third-party notices](../THIRD_PARTY_NOTICES.md). New funding URLs are exact
+reviewed upstream metadata, not broad privacy-scanner exemptions.
+No dependency implementation is bundled in
 the source package. Preserve upstream LICENSE and NOTICE files when redistributing
 dependencies; that would require a distribution-specific audit.
 

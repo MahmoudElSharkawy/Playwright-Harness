@@ -1,6 +1,7 @@
 import {createRequire} from 'node:module';
 import {readFileSync, readdirSync, lstatSync, writeFileSync, existsSync} from 'node:fs';
-import {join, dirname, delimiter} from 'node:path';
+import {join, dirname} from 'node:path';
+import {fileURLToPath} from 'node:url';
 import {execFileSync} from 'node:child_process';
 import {consumerRoots, consumerPath} from '../consumer-paths.mjs';
 import {digest, requireThat, data} from '../execution-core/data.mjs';
@@ -8,7 +9,7 @@ import {verificationRecord} from '../generation/index.mjs';
 import {escapeHtml} from './render.mjs';
 
 export function installedAllure(roots, name) {
-  requireThat(['allure-playwright', 'allure-commandline'].includes(name), 'Unsupported Allure component.');
+  requireThat(['allure-playwright', 'allure'].includes(name), 'Unsupported Allure component.');
   const require = createRequire(join(roots.projectRoot, 'package.json')), entry = require.resolve(name);
   let directory = dirname(entry);
   for (let depth = 0; depth < 5; depth++, directory = dirname(directory)) {
@@ -55,17 +56,27 @@ export async function generateAllure(inputRoots, directory) {
       requireThat(verification.reporting?.directory === directory && verification.revision === reference.revision && verification.status === reference.status, 'Allure capture belongs to another verification.');
     }
     phase = 'DEPENDENCY';
-    const installation = installedAllure(roots, 'allure-commandline'); requireThat(installation.version === '2.46.1', 'Use the validated Allure commandline 2.46.1.');
+    const installation = installedAllure(roots, 'allure'); requireThat(installation.version === '3.19.1', 'Use the validated Allure Report 3.19.1.');
     const output = join(path, 'allure-report'); requireThat(!existsSync(output), 'Do not overwrite a generated Allure report.');
-    // Same entrypoint as the installed official launcher, with argv binding and no shell.
-    const classpath = [join(installation.directory, 'dist/lib/*'), join(installation.directory, 'dist/lib/config')].join(delimiter);
+    // Pinned official CLI, bound argv and an explicit package config: consumer
+    // discovery cannot enable publishing, result filters, known issues or quality gates.
+    const configuration = fileURLToPath(new URL('./allurerc.json', import.meta.url));
     phase = 'GENERATION';
-    execFileSync('java', ['-Xms128m', '-Xmx512m', '-cp', classpath, 'io.qameta.allure.CommandLine', 'generate', join(path, 'allure-results'), '--single-file', '-o', output],
-      {cwd: roots.projectRoot, windowsHide: true, stdio: 'pipe', timeout: 60000, maxBuffer: 1024 * 1024});
+    // The CLI treats inputs as globs. A fixed relative input avoids interpreting
+    // brackets or other glob syntax in the consumer's absolute directory name.
+    execFileSync(process.execPath, [join(installation.directory, 'cli.js'), 'generate', 'allure-results', '--config', configuration, '--output', output],
+      {cwd: path, windowsHide: true, stdio: 'pipe', timeout: 60000, maxBuffer: 1024 * 1024});
     phase = 'OUTPUT';
-    const bytes = readFileSync(join(output, 'index.html')); requireThat(bytes.length > 0, 'Allure generated no report.');
+    const reportFile = join(output, 'index.html');
+    const html = readFileSync(reportFile, 'utf8'); requireThat(html.includes('<head>'), 'Allure generated no HTML report.');
+    // Allure 3.19.1's Awesome template embeds analytics without an opt-out.
+    // Keep this local single-file artifact offline, including when opened directly.
+    const csp = "default-src 'none'; script-src 'unsafe-inline' data: blob:; style-src 'unsafe-inline' data:; img-src data: blob:; font-src data:; connect-src data: blob:; media-src data: blob:; frame-src data: blob:; base-uri 'self'; form-action 'none'";
+    const bytes = Buffer.from(html.replace('<head>', `<head><meta http-equiv="Content-Security-Policy" content="${csp}">`));
+    writeFileSync(reportFile, bytes, {mode: 0o600});
     requireThat(JSON.stringify(allureInventory(join(path, 'allure-results'))) === JSON.stringify(current), 'Allure evidence changed during generation.');
     const receipt = {status: 'GENERATED', source: 'playwright-native', tests: manifest.tests, reporter: manifest.reporter, commandline: installation.version,
+      generator: 'allure', configuration: digest(readFileSync(configuration)),
       artifact: {path: `${directory}/allure-report/index.html`, bytes: bytes.length, sha256: digest(bytes)}};
     if (verification) {
       // The native runner can pass while source coverage fails (for example, a
@@ -76,5 +87,5 @@ export async function generateAllure(inputRoots, directory) {
       receipt.artifact = {path: `${directory}/index.html`, bytes: Buffer.byteLength(landing), sha256: digest(landing)};
     }
     writeFileSync(join(path, 'generation.json'), JSON.stringify(receipt, null, 2), {flag: 'wx', mode: 0o600}); return receipt;
-  } catch {return {status: 'FAILED', phase, reason: 'Allure capture, dependency, Java or generation is unavailable; execution verdicts are unchanged.'};}
+  } catch {return {status: 'FAILED', phase, reason: 'Allure capture, dependency or generation is unavailable; execution verdicts are unchanged.'};}
 }

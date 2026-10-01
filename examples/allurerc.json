@@ -1,0 +1,16 @@
+{
+  "name": "Native Playwright test results",
+  "open": false,
+  "appendHistory": false,
+  "plugins": {
+    "awesome": {
+      "options": {
+        "singleFile": true,
+        "reportLanguage": "en",
+        "groupBy": ["epic", "feature", "story"],
+        "publish": false
+      }
+    },
+    "agent": {"enabled": false}
+  }
+}

@@ -60,7 +60,7 @@ try {
   }
   cpSync(join(packageRoot, 'harness-tests/fixtures/generation-consumer'), projectRoot, {recursive: true});
   const dependencies = {}, versions = {};
-  for (const name of ['@playwright/test', 'playwright', 'playwright-core', 'allure-js-commons', '@types/node', 'typescript', ...(reporting ? ['allure-playwright', 'allure-commandline'] : [])]) {
+  for (const name of ['@playwright/test', 'playwright', 'playwright-core', 'allure-js-commons', '@types/node', 'typescript', ...(reporting ? ['allure-playwright', 'allure'] : [])]) {
     const target = join(projectRoot, 'node_modules', name); mkdirSync(dirname(target), {recursive: true});
     const source = join(packageRoot, 'examples/node_modules', name);
     if (!existsSync(target)) symlinkSync(source, target, process.platform === 'win32' ? 'junction' : 'dir');

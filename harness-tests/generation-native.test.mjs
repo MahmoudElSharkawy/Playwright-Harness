@@ -64,7 +64,7 @@ test('Allure capture preserves the verifier FAIL when a native helper swallows a
   assert.equal(JSON.parse(readFileSync(join(path, 'capture.json'), 'utf8')).nativeStatus, 'passed');
   assert.equal(JSON.parse(readFileSync(join(path, 'verification.json'), 'utf8')).status, 'FAIL');
   assert.equal((await generationStatus(f.roots, f.source.id)).greens, 0);
-  // Optional real Java/Allure generation proof, separate from the ordinary unit/runner suite.
+  // Optional real Allure 3 generation proof, separate from the ordinary unit/runner suite.
   if (process.env.HARNESS_ALLURE_HTML_PROOF === '1') {
     const generated = await generateAllure(f.roots, result.reporting.directory);
     assert.equal(generated.status, 'GENERATED', JSON.stringify(generated)); assert.equal(generated.verification.status, 'FAIL');

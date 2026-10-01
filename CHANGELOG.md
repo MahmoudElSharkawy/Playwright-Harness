@@ -2,6 +2,8 @@
 
 ## 3.0.14 — M14 reporting and Allure integration
 
+- Reporting follow-up: replace the Java generator with pinned Allure Report 3.19.1; retain test/action APIs, report locations, native status and harness verdict authority.
+- Use explicit local single-file configuration and post-flush example generation; preserve nested attachments and block outbound report analytics.
 - Render validated execution results as JSON, Markdown and self-contained static HTML, preserving verdicts, attempts, effects and lifecycle intent.
 - Attach sanitized execution views inside native technical steps; isolate native Allure captures per verification invocation.
 - Generate Allure after reporter flush with integrity checks and a visible recorded verification outcome above native detail.

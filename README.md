@@ -64,6 +64,8 @@ M14 adds [validated JSON, Markdown and static HTML reports, plus Allure integrat
 Reports preserve execution verdicts, recovery and intent-driven lifecycle outcomes.
 Generated verification can capture native Allure detail in isolated consumer folders;
 report generation runs after native flush. See [M14 validation](docs/M14-VALIDATION.md).
+The reporting follow-up uses Allure Report 3.19.1 on Node, without Java or changes
+to test/action code. See [Allure 3 validation](docs/ALLURE3-VALIDATION.md).
 
 ## Install into a project
 

@@ -2,16 +2,17 @@ import * as os from 'node:os';
 
 /**
  * Single source for the Allure report plumbing — consumed by `playwright.config.ts`
- * (reporter wiring) and the root lifecycle scripts `global-setup.ts` /
- * `global-teardown.ts`, so no script carries a second hardcoded copy of a path.
+ * (reporter wiring), `global-setup.ts` and `utils/AllureReport.ts` (after flush).
  *
  * Report output contract (design-conventions): the human-readable copies of these
  * paths — the runbook's report table and the CI artifact steps — cannot read this
  * file; update them in lockstep with any change here.
  */
 export const allureConfig = {
-  /** Raw results dir — allure-playwright v3's fixed default (its `outputFolder` key is dead). */
+  /** Raw results dir, explicitly passed through allure-playwright's resultsDir option. */
   resultsDir: 'allure-results',
+  /** Explicit Allure 3 config; no Java, remote publishing or verdict overrides. */
+  generatorConfig: 'allurerc.json',
   /** Where the latest single-file report is generated each run. */
   reportDir: 'allure-report',
   /** Per-run archive root: each run's report is copied to `<historyDir>/<timestamp>/index.html`. */
@@ -27,13 +28,8 @@ export const allureConfig = {
 /**
  * Environment table shown in the Allure report's Environment widget.
  *
- * Two consumers on purpose: `playwright.config.ts` hands it to allure-playwright,
- * which writes `allure-results/environment.properties` in its reporter `onEnd` hook —
- * but Playwright runs globalTeardown BEFORE reporters' `onEnd`, so that write lands
- * only after `global-teardown.ts` has already generated the report. The teardown
- * therefore writes the same pairs itself right before `allure generate`; the
- * reporter's later identical write keeps `allure-results/` self-consistent for
- * manual re-generation.
+ * allure-playwright writes these pairs during onEnd. AllureReport generates the
+ * HTML during onExit, after that flush, without duplicating environment files.
  */
 export const allureEnvironmentInfo: Record<string, string> = {
   os_platform: os.platform(),

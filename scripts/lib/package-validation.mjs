@@ -51,7 +51,7 @@ export function secretFindings(file, text) {
 
 const PUBLIC_HOSTS = new Set(['github.com', 'raw.githubusercontent.com', 'playwright.dev', 'nodejs.org', 'www.npmjs.com', 'registry.npmjs.org', 'learn.microsoft.com', 'code.claude.com', 'learn.chatgpt.com', 'developers.openai.com', 'json.schemastore.org', 'www.w3.org', 'www.typescriptlang.org', 'allurereport.org', 'mit-license.org', 'opensource.org', 'aka.ms', 'go.microsoft.com', 'node-postgres.com', 'www.postgresql.org']);
 // Reviewed upstream funding links present in the dependency lockfile; no host-wide exception.
-const PUBLIC_METADATA_URLS=new Set(['https://www.patreon.com/feross','https://feross.org/support','https://dotenvx.com/','https://opencollective.com/fastify','https://opencollective.com/express']);
+const PUBLIC_METADATA_URLS=new Set(['https://www.patreon.com/feross','https://feross.org/support','https://dotenvx.com/','https://opencollective.com/fastify','https://opencollective.com/express','https://opencollective.com/preact','https://paulmillr.com/funding/']);
 export function privacyFindings(file, text) {
   const findings = [];
   const push = (line, rule) => findings.push({ file, line, rule });

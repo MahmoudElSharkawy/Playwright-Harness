@@ -295,17 +295,21 @@ after the last.
 
 Scope is strictly run hygiene. ✅ Clear stale `allure-results` before the run
 (`global-setup.ts`); generate the report, archive a timestamped copy
-(`reports/allure-history/<timestamp>/index.html`), and open it after
-(`global-teardown.ts`). Raw `allure-results` are disposable once the HTML exists —
-only the generated report is archived.
+(`reports/allure-history/<timestamp>/index.html`), and optionally open it after
+all reporters flush (`src/utils/AllureReport.ts`, reporter `onExit`). The archive
+contains the generated HTML; it is distinct from optional Allure trend history.
 ❌ Business logic, and data seeding/cleanup of any kind — iron law 8 makes seeding
 per-test (`beforeEach`, via API); these files run once per run and cannot honor it.
 
-Ordering gotcha the teardown must own: Playwright runs globalTeardown BEFORE
-reporters' `onEnd`, and allure-playwright writes `allure-results/environment.properties`
-only in its `onEnd` hook — so a teardown that generates the report must first write
-that file itself, from the same single-source object the reporter config uses
-(practice 17), or the report's Environment widget ships empty.
+Ordering matters: Playwright runs globalTeardown BEFORE reporters' `onEnd`.
+Generate from reporter `onExit` or a separate process after Playwright returns;
+writing environment.properties early is not a substitute for the complete flush.
+Register the generator before the HTML reporter: the viewer can keep its `onExit`
+hook open during local terminal runs and prevent later exit hooks from running.
+The example uses Node-based Allure 3 with an explicit single-file configuration.
+No test, action method or Allure metadata call needs to change. See
+[M14 reporting](../../../../docs/M14-REPORTING.md) for the pinned generator and
+the independent authority of harness verdicts.
 
 ## 15. Lifecycle scripts never fail the run over report plumbing
 
@@ -462,6 +466,6 @@ sourcing of env config, secrets, and JSON test data →
 - [ ] Class and methods carry JSDoc; rewrites preserve the facade surface (step-title format, attachment names/order, verb signatures) — verified by diffing old vs new Allure reports
 - [ ] Lifecycle scripts: run hygiene only (no business logic, no seeding); no `test.step()`/`test.info()`/attachments; JSDoc'd like utils
 - [ ] Teardown never exits non-zero or throws over report generate/open; setup rethrows only for report-integrity failures
-- [ ] Teardown writes `environment.properties` before `allure generate` (Playwright runs globalTeardown before reporters' `onEnd`); archives the run's report copy before opening the latest
+- [ ] Report generation waits for all reporters to flush (`onExit` or a subsequent process); environment information comes from the reporter; archives the report before opening the latest
 - [ ] `AUTO_ALLURE_OPEN` / `ALLURE_HISTORY` opt-outs honored, desktop behavior auto-disabled when `CI` is set; facade toggles stay opt-in `=== 'true'`
 - [ ] Lifecycle scripts share a constant with (or read) the reporter config — no second hardcoded path copy in code; README report table and CI artifact steps updated in lockstep with any path change

@@ -31,7 +31,7 @@ function run() {
     if (!existsSync(join(root,'LICENSE'))) findings.push({file:'LICENSE',rule:'public-license-not-applied'});
     if (!existsSync(join(root,'THIRD_PARTY_NOTICES.md'))) findings.push({file:'THIRD_PARTY_NOTICES.md',rule:'notices-missing'});
     if (!Array.isArray(status.sources) || !status.sources.length) findings.push({file:'scripts/provenance.json',rule:'source-inventory-empty'});
-    const reviewed=new Set(['MIT','Apache-2.0','BSD-2-Clause','BSD-3-Clause','ISC','BlueOak-1.0.0','0BSD']);
+    const reviewed=new Set(['MIT','Apache-2.0','BSD-2-Clause','BSD-3-Clause','ISC','BlueOak-1.0.0','0BSD','Python-2.0','(MPL-2.0 OR Apache-2.0)']);
     dependencyRecords=0;
     for (const [recordFile,lockFile] of [['scripts/dependency-licenses.json','examples/package-lock.json'],['scripts/cli-dependency-licenses.json','scripts/spikes/playwright-cli/package-lock.json'],['scripts/runtime-dependency-licenses.json','package-lock.json']]) {
       const dependencies=JSON.parse(readFileSync(join(root,recordFile),'utf8'));

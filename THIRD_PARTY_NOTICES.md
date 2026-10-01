@@ -10,8 +10,9 @@ inventory is [scripts/dependency-licenses.json](scripts/dependency-licenses.json
 checked against the example lockfile by `npm run check:provenance`.
 
 The resolved license declarations are MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause,
-ISC, BlueOak-1.0.0 and 0BSD. This source distribution does not copy their implementations
-or replace their copyright notices. Of 122 installed Windows packages, three did not
+ISC, BlueOak-1.0.0, 0BSD, Python-2.0 and `(MPL-2.0 OR Apache-2.0)`.
+This source distribution does not copy their implementations
+or replace their copyright notices. In the original M1 audit of 122 installed Windows packages, three did not
 include a top-level license/notice file (`@napi-rs/canvas-win32-x64-msvc`,
 `allure-js-commons`, `allure-playwright`). Before redistributing those packages, obtain
 the applicable notices from their upstream distributions; the source-only package
@@ -20,6 +21,23 @@ does not bundle them. The 28 optional packages for other platforms were not inst
 Principal dependencies include Playwright, TypeScript, Allure and pdf-parse
 (Apache-2.0), node-mssql and the CTRF reporter (MIT), and dotenv (BSD-2-Clause).
 Consult the resolved versions' own license/notice files before redistributing them.
+
+The Allure 3 follow-up replaces `allure-commandline` 2.46.1 with `allure` 3.19.1
+(Apache-2.0), adding 131 resolved packages and removing one. All pre-existing
+surviving dependency versions remain unchanged; the example inventory now contains
+280 records. New dependency licenses were inspected from installed manifests and
+license/notice files. `argparse` 2.0.1 carries the Python-2.0 license and historical
+PSF/CNRI/CWI notices in its LICENSE. `dompurify` 3.4.16 offers MPL-2.0 or Apache-2.0;
+the Apache-2.0 alternative is used, with its LICENSE retained by installation.
+The complete MIT texts for `clipanion`, `typanion`, and Axios's nested `agent-base`
+and `https-proxy-agent` are in their README files rather than top-level LICENSE files.
+
+The 29 new Allure-family packages and `@nodable/entities` declare Apache-2.0 and
+MIT respectively but omit full top-level license files. They remain separately
+installed dependencies, not vendored source. Before redistributing installed
+packages or generated report bundles, preserve their upstream notices and the
+embedded asset notices; this source-only audit does not authorize such distribution.
+No dependency source or copyright is relicensed as harness MIT material.
 
 M4 installs `@playwright/cli` 0.1.22 and its exact Playwright/Playwright Core
 1.64.0-alpha-1790635538000 dependencies for development only. These three Apache-2.0
