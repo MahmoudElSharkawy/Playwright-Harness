@@ -4,6 +4,12 @@
   "publicationAuthorized": false,
   "sources": [
     {
+      "scope": "M17 changes",
+      "status": "Project-authored installed-package validation, CI and acceptance fixtures. Existing root dependency graph retained in npm-shrinkwrap.json. Official npm and GitHub Actions documentation informed packaging and CI; no third-party implementation copied or new runtime dependency added.",
+      "targetLicense": "MIT",
+      "thirdPartyCodeCopied": false
+    },
+    {
       "scope": "M16 changes",
       "status": "Created for this project; bounded dispatch reuses the existing sequential runtimes, native CLI and pinned fixture databases; no third-party implementation copied and no new dependency",
       "targetLicense": "MIT",

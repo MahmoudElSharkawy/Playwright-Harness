@@ -81,7 +81,7 @@ try {
   put('package.json', {name: 'synthetic-m13-consumer', private: true, type: 'module', devDependencies: dependencies});
   put('dependency-versions.json', {version: 1, proof: 'linked-source', node: process.version, packages: versions,
     localPackage: {name: 'playwright-pom-harness', path: '.harness/packages/playwright-pom-harness', preparation: 'Link this relative location to the matching reviewed harness checkout before installing dependencies.'}});
-  put('tsconfig.json', {compilerOptions: {target: 'ES2021', module: 'NodeNext', moduleResolution: 'NodeNext', allowJs: true, checkJs: false, esModuleInterop: true, resolveJsonModule: true, skipLibCheck: true, noEmit: true, types: ['node']}, exclude: ['node_modules', '.harness']});
+  put('tsconfig.json', {compilerOptions: {target: 'ES2021', module: 'NodeNext', moduleResolution: 'NodeNext', allowJs: true, checkJs: false, maxNodeModuleJsDepth: 1, strict: true, esModuleInterop: true, resolveJsonModule: true, skipLibCheck: true, noEmit: true, types: ['node']}, exclude: ['node_modules', '.harness']});
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve)); const origin = `http://127.0.0.1:${server.address().port}`;
   databases = await hostDatabases(); Object.assign(process.env, databases.environment, {HARNESS_PROOF_ORIGIN: origin});
   put('.harness/project.json', {version: 1, defaultEnvironment: 'qa', environments: {qa: {environmentMode: 'test', apiTargets: ['api'], databaseTargets: ['sqlserver', 'postgresql'], browserTargets: ['app']}}});

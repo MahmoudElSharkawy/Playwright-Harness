@@ -17,7 +17,7 @@ const identity = ctx => ctx.resource('row').outputs.find(value => value.name ===
 const resource = intent => ({id: 'row', output: 'recordId', ownership: intent === 'restore' ? 'existing' : 'harness', intent});
 const recordSymbol = invocationId => ({name: 'record', slots: [{scenarioId: 'case', name: 'recordId'}, {scenarioId: 'case', invocationId, number: 1, name: 'recordId'}]});
 
-export async function executeParallelCases(projectRoot, databases, concurrency) {
+export async function executeParallelCases(projectRoot, databases, concurrency, signal) {
   const items = new Map(), jobs = [], metadata = new Map(), base = randomInt(100000, 1000000000);
   let browserArrivals = 0, browserOverlap = false, survivorAfterClose = false;
   const f = await parallelFixture(undefined, {projectRoot, targets: databases.targets, handler: async ({request, reply, res}) => {
@@ -115,7 +115,7 @@ export async function executeParallelCases(projectRoot, databases, concurrency) 
     const requestsBefore = f.requests.length;
     await assert.rejects(runScenarioBatch(f.roots, jobs.slice(2, 4).map(job => ({...job, resources: [{key: 'same-business-row', access: 'write'}]})), {concurrency: 2}), /conflicting/);
     assert.equal(f.requests.length, requestsBefore);
-    const batch = await runScenarioBatch(f.roots, jobs, {concurrency});
+    const batch = await runScenarioBatch(f.roots, jobs, {concurrency, ...(signal ? {signal} : {})});
     assert.equal(batch.completion, 'COMPLETE'); assert.equal(batch.entries.length, 13);
     const cases = [], sessions = [];
     for (const entry of batch.entries) {

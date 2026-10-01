@@ -192,11 +192,17 @@ permissions, reliable test verdicts or remote branch policies.
 
 ## Package validation and release
 
+[M17](docs/M17-CI.md) defines the installed-package/platform gates and the
+[actual validation status](docs/M17-VALIDATION.md). Root dependencies are frozen in
+the distributed `npm-shrinkwrap.json`; the two development fixtures retain their
+own lockfiles. A passing source checkout alone does not prove an installed package.
+
 ```sh
 npm ci --ignore-scripts
 npm ci --prefix scripts/spikes/playwright-cli --ignore-scripts
 npm run check:syntax
 npm run check:json
+npm run check:contracts
 npm run check:links
 npm run check:conventions
 npm run test:api
@@ -212,6 +218,12 @@ npm run check:publication
 npm ci --prefix examples --ignore-scripts
 npm run typecheck:examples
 ```
+
+`npm run check:ci` runs the fixed local checklist with private check logs.
+`npm run test:installed -- <new-external-directory>` builds the actual archive,
+installs it and its locked development fixtures, checks its dependency graph,
+runs that checklist and verifies installation immutability. See M17 for the
+separate native proofs and authenticated host prerequisites.
 
 The package tests inspect the separately installed, pinned CLI configuration resolver.
 They do not require a browser download; live M4 probes have separate prerequisites.

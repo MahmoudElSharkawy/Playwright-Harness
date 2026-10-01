@@ -57,11 +57,12 @@ for (const host of ['claude', 'codex']) test(`${host}: session, deny, failure le
   const stored = readFileSync(join(directory, files[0]), 'utf8'); assert(!stored.includes(command)); assert(!stored.includes('synthetic.spec'));
 });
 
-test('Codex structured denial survives the real Windows PowerShell command boundary', {skip: process.platform !== 'win32'}, t => {
+test('Codex structured denial survives the real native shell command boundary', t => {
   const cwd = mkdtempSync(join(tmpdir(), 'harness-m11-shell-')); t.after(() => rmSync(cwd, {recursive: true, force: true}));
   const quote = value => `'${value.replaceAll("'", "''")}'`;
   const command = '& ' + [process.execPath, resolve('scripts/hooks/host.mjs'), 'codex'].map(quote).join(' ');
-  const response = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', command], {
+  const windows = process.platform === 'win32';
+  const response = spawnSync(windows ? 'powershell.exe' : '/bin/sh', windows ? ['-NoProfile', '-NonInteractive', '-Command', command] : ['-c', '"$@"', 'hook-proof', process.execPath, resolve('scripts/hooks/host.mjs'), 'codex'], {
     encoding: 'utf8', windowsHide: true, timeout: 20000, input: JSON.stringify({cwd, session_id: 'synthetic', hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: {command: 'git push origin main'}})});
   assertDenied('codex', response);
 });

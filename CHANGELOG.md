@@ -1,5 +1,15 @@
 # Changelog
 
+## 3.0.17 — M17 CI and installed-package validation
+
+- Validate actual npm archives in fresh Windows/Linux installations, with pinned dependency provenance and package immutability checks.
+- Publish the existing dependency lock as `npm-shrinkwrap.json`; exclude nested installed dependencies when repacking and use the distributed lock for generation fingerprints.
+- Add a fixed CI checklist that rejects missing, skipped and zero-scope checks, plus real native browser and Linux API/database/parallel proofs.
+- Allow the existing host and full-workflow acceptance probes to use a separate consumer with the actual installed package.
+- Drain cancellation and recover exact owned native resources after a proof timeout, with protected atomic ownership receipts and real fault evaluations.
+- Resolve Windows consumer paths for native allowlists, retain private compiler diagnostics, and support the explicit local Docker Desktop fixture route.
+- Keep authenticated host evidence separate from public CI artifacts and retain explicit readiness gates. No runtime dependency upgrade, execution-policy change or release authorization.
+
 ## 3.0.16 — M16 bounded parallel execution
 
 - Add opt-in batches of independent complete sequential lifecycles, with concurrency 1 by default and an explicit maximum of 8.

@@ -17,7 +17,7 @@ function run() {
   if (command === 'publication') {
     const npm=process.env.npm_execpath || join(dirname(process.execPath),'node_modules/npm/bin/npm-cli.js');
     if (!existsSync(npm)) throw new Error('run using npm run check:publication');
-    const result=spawnSync(process.execPath,[npm,'pack','--dry-run','--json','--ignore-scripts','--cache',join(root,'.validation/npm-cache')],{cwd:root,encoding:'utf8',timeout:60000,maxBuffer:8*1024*1024});
+    const result=spawnSync(process.execPath,[npm,'pack','--dry-run','--json','--ignore-scripts','--cache',process.env.npm_config_cache ?? join(root,'.validation/npm-cache')],{cwd:root,encoding:'utf8',timeout:60000,maxBuffer:8*1024*1024});
     if (result.error || result.status!==0) throw new Error('npm package inspection failed');
     const packed=JSON.parse(result.stdout);
     if (!Array.isArray(packed) || packed.length!==1 || !Array.isArray(packed[0].files)) throw new Error('invalid npm output');
@@ -33,7 +33,7 @@ function run() {
     if (!Array.isArray(status.sources) || !status.sources.length) findings.push({file:'scripts/provenance.json',rule:'source-inventory-empty'});
     const reviewed=new Set(['MIT','Apache-2.0','BSD-2-Clause','BSD-3-Clause','ISC','BlueOak-1.0.0','0BSD','Python-2.0','(MPL-2.0 OR Apache-2.0)']);
     dependencyRecords=0;
-    for (const [recordFile,lockFile] of [['scripts/dependency-licenses.json','examples/package-lock.json'],['scripts/cli-dependency-licenses.json','scripts/spikes/playwright-cli/package-lock.json'],['scripts/runtime-dependency-licenses.json','package-lock.json']]) {
+    for (const [recordFile,lockFile] of [['scripts/dependency-licenses.json','examples/package-lock.json'],['scripts/cli-dependency-licenses.json','scripts/spikes/playwright-cli/package-lock.json'],['scripts/runtime-dependency-licenses.json','npm-shrinkwrap.json']]) {
       const dependencies=JSON.parse(readFileSync(join(root,recordFile),'utf8'));
       const lock=JSON.parse(readFileSync(join(root,lockFile),'utf8'));
       const locked=Object.entries(lock.packages).filter(([p])=>p);

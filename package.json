@@ -1,6 +1,6 @@
 {
   "name": "playwright-pom-harness",
-  "version": "3.0.16",
+  "version": "3.0.17",
   "private": true,
   "license": "MIT",
   "type": "module",
@@ -52,7 +52,11 @@
     "check:workflow-conventions": "node scripts/check-conventions.mjs --root harness-tests/fixtures/workflow-consumer --fail-on-warn",
     "probe:workflow": "node scripts/probes/workflow.mjs",
     "test:parallel": "node --test harness-tests/parallel-runtime.test.mjs",
-    "probe:parallel": "node scripts/probes/parallel.mjs"
+    "probe:parallel": "node scripts/probes/parallel.mjs",
+    "check:contracts": "node scripts/ci/contracts.mjs",
+    "check:ci": "node scripts/ci/checks.mjs",
+    "test:installed": "node scripts/ci/installed.mjs",
+    "test:autonomy": "node --test harness-tests/api-runtime.test.mjs harness-tests/database-runtime.test.mjs harness-tests/postgresql-runtime.test.mjs harness-tests/sequential-runtime.test.mjs harness-tests/parallel-runtime.test.mjs"
   },
   "files": [
     "README.md",
@@ -63,6 +67,8 @@
     "SECURITY.md",
     "LICENSE",
     "THIRD_PARTY_NOTICES.md",
+    "npm-shrinkwrap.json",
+    ".github/workflows/validation.yml",
     ".env.example",
     ".gitignore",
     ".claude/settings.json",
@@ -76,7 +82,8 @@
     "resources/Queries/README.md",
     "resources/apisCollections/README.md",
     ".agents/skills",
-    ".claude-plugin/plugin.json"
+    ".claude-plugin/plugin.json",
+    "!**/node_modules/**"
   ],
   "dependencies": {
     "mssql": "12.7.2",

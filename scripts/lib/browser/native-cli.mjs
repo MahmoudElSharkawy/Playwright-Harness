@@ -1,5 +1,5 @@
 // The only version-specific browser integration. Public actions remain native CLI arguments.
-import {readFile, writeFile, mkdir, lstat, realpath, chmod, copyFile, rm} from 'node:fs/promises';
+import {readFile, writeFile, mkdir, lstat, realpath, chmod, copyFile, rm, rename} from 'node:fs/promises';
 import {join, resolve, dirname} from 'node:path';
 import {homedir} from 'node:os';
 import {randomUUID, createHash} from 'node:crypto';
@@ -88,6 +88,8 @@ export async function prepareNativeSession(roots, {origins, storageState, native
     config = join(workRoot, 'native.json');
     const settings = {browser: {browserName: 'chromium', isolated: true, launchOptions: {headless: true, channel: 'chrome-for-testing', ...(process.platform === 'linux' && process.getuid() === 0 ? {chromiumSandbox: false} : {})}, contextOptions: {serviceWorkers: 'block'}}, network: {allowedOrigins: origins}, timeouts: {action: nativeTimeoutMs, navigation: nativeTimeoutMs}, outputDir: workRoot};
     await writeFile(config, JSON.stringify(settings), {mode: 0o600, flag: 'wx'});
+    // Protected identity-only crash recovery. Register the exact session before dispatch.
+    await writeFile(join(workRoot, 'native-ownership.json'), JSON.stringify({version: 1, session, stage: 'prepared', trees: []}), {mode: 0o600, flag: 'wx'});
     if (source !== undefined) {
       statePath = join(workRoot, 'restored-state.json'); await copyFile(source, statePath); await chmod(statePath, 0o600);
     }
@@ -130,10 +132,18 @@ export async function prepareNativeSession(roots, {origins, storageState, native
   async function open(options) {
     if (opened || closed) throw new Error('Session is already open or closed.');
     await preflight(); openingUncertain = true;
+    await ownership('opening');
     const reply = await invoke(['open', 'about:blank', `--config=${config}`], options);
-    trees.push(await rememberTree(reply.pid)); opened = true; openingUncertain = false;
+    trees.push(await rememberTree(reply.pid));
+    await ownership('opened');
+    opened = true; openingUncertain = false;
     if (statePath) await invoke(['state-load', statePath], options);
     return {session};
+  }
+  async function ownership(stage) {
+    const next = join(workRoot, 'native-ownership.next.json');
+    await writeFile(next, JSON.stringify({version: 1, session, stage, trees}), {mode: 0o600, flag: 'wx'});
+    await rename(next, join(workRoot, 'native-ownership.json'));
   }
   async function close({deadlineAt = Date.now() + 30000} = {}) {
     if (closed) return lastCleanup;

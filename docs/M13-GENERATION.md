@@ -91,8 +91,13 @@ The live proof declares all linked libraries and tools at their installed versio
 including a relative `file:` dependency for the harness and frozen version evidence.
 Its local package alias is recreated against the reviewed checkout on another machine.
 This is linked-source proof; packed installation remains an M17 gate.
-For TypeScript consumers of the JavaScript runtime libraries, enable `allowJs` with
-`checkJs: false` (or supply reviewed declarations at the consumer boundary). The proof
+For TypeScript consumers of the installed JavaScript runtime libraries, enable
+`allowJs: true`, `checkJs: false` and `maxNodeModuleJsDepth: 1`, while retaining
+`strict: true` (or supply reviewed declarations at the consumer boundary). The
+[TypeScript inference setting](https://www.typescriptlang.org/tsconfig/maxNodeModuleJsDepth.html)
+allows loading JavaScript interfaces inside `node_modules`; source-only links can
+hide its default exclusion. The installed check compiles both runtime helpers and
+rejects a deliberately wrong argument type. The proof
 type-checks its TypeScript POM code; it does not claim full static typing of the existing
 JavaScript execution libraries. Their runtime validation and contract tests still apply.
 

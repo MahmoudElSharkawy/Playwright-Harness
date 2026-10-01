@@ -73,6 +73,6 @@ try {
 } catch (error) {
   mkdirSync(directory, {recursive: true});
   // Native diagnostics are retained only in this private, synthetic consumer.
-  writeFileSync(join(directory, `failure-${stage}-${Date.now()}.txt`), String(error.stack), {flag: 'wx', mode: 0o600});
+  writeFileSync(join(directory, `failure-${stage}-${Date.now()}.txt`), [String(error.stack), error.stdout, error.stderr].filter(value => value !== undefined).join('\n'), {flag: 'wx', mode: 0o600});
   console.error(JSON.stringify({proof: 'M15', stage, status: 'INCOMPLETE'})); process.exitCode = 1;
 }

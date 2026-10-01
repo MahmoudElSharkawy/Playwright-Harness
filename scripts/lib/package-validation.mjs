@@ -2,9 +2,9 @@ import { readdirSync, readFileSync, lstatSync, existsSync, realpathSync } from '
 import { join, relative, resolve, isAbsolute } from 'node:path';
 
 const OMIT_DIRS = new Set(['.git', 'node_modules', '.m1-private', '.validation', 'test-results', 'playwright-report', 'blob-report', 'allure-results', 'allure-report', 'reports', 'ctrf', 'executions', '.playwright-cli']);
-const ROOT_FILES = new Set(['README.md', 'AGENTS.md', 'CLAUDE.md', 'CHANGELOG.md', 'VERSION', '.env.example', '.gitignore', 'package.json', 'package-lock.json', 'SECURITY.md', 'LICENSE', 'THIRD_PARTY_NOTICES.md']);
+const ROOT_FILES = new Set(['README.md', 'AGENTS.md', 'CLAUDE.md', 'CHANGELOG.md', 'VERSION', '.env.example', '.gitignore', '.npmignore', 'package.json', 'package-lock.json', 'npm-shrinkwrap.json', 'SECURITY.md', 'LICENSE', 'THIRD_PARTY_NOTICES.md']);
 const PUBLIC_PREFIXES = ['scripts/', 'harness-tests/', 'docs/', 'examples/', '.claude/skills/', '.agents/skills/'];
-const EXTRA_FILES = new Set(['.claude/settings.json', '.claude-plugin/plugin.json', '.agentex/page-map/README.md', '.agentex/page-map/_template.md', 'resources/Queries/README.md', 'resources/apisCollections/README.md']);
+const EXTRA_FILES = new Set(['.claude/settings.json', '.claude-plugin/plugin.json', '.github/workflows/validation.yml', '.agentex/page-map/README.md', '.agentex/page-map/_template.md', 'resources/Queries/README.md', 'resources/apisCollections/README.md']);
 
 export function inventory(root) {
   root = realpathSync(root);
@@ -119,7 +119,7 @@ export function publicationFindings(scope, paths) {
   for(const file of packed) if (!allowed.has(file)) findings.push({file,rule:'unexpected-packed-file'});
   for(const file of allowed) {
     // npm never ships the root lockfile or nested packaging-control files.
-    if (file==='package-lock.json' || file.endsWith('/.npmignore')) continue;
+    if (file==='package-lock.json' || file==='.npmignore' || file.endsWith('/.npmignore')) continue;
     if (!packed.has(file)) findings.push({file,rule:'missing-packed-file'});
   }
   return findings;

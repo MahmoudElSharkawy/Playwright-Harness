@@ -3,13 +3,14 @@
 import assert from 'node:assert/strict';
 import {execFileSync, spawn} from 'node:child_process';
 import {mkdirSync, readFileSync, writeFileSync, cpSync, existsSync, symlinkSync, realpathSync, appendFileSync} from 'node:fs';
-import {join, dirname, resolve} from 'node:path';
+import {join, dirname, resolve, basename} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {createServer} from 'node:http';
 import {setTimeout as pause} from 'node:timers/promises';
 import {inventory} from '../lib/package-validation.mjs';
 import {adoptProject} from '../lib/adoption.mjs';
 import {consumerRoots} from '../lib/consumer-paths.mjs';
+import {realFuture, within} from '../lib/skill-roots.mjs';
 import {digest, fingerprint} from '../lib/execution-core/data.mjs';
 import {snapshotInstalledPackage} from '../lib/host-proof-files.mjs';
 import {observeHostProcess} from '../lib/host-proof-processes.mjs';
@@ -20,7 +21,7 @@ import {transaction} from '../lib/generation/storage.mjs';
 import {workflowCases, workflowExecutionIds, generatedExecutionIds} from '../../harness-tests/fixtures/workflow.mjs';
 import {hostDatabases} from '../../harness-tests/fixtures/host-databases.mjs';
 
-const source = resolve(import.meta.dirname, '../..'), [mode, stateFile, host, executable, model] = process.argv.slice(2), fixture = workflowCases();
+const source = realpathSync.native(resolve(import.meta.dirname, '../..')), [mode, stateFile, host, executable, model] = process.argv.slice(2), fixture = workflowCases();
 const expected = {source: fixture.source, executionIds: workflowExecutionIds, generatedIds: generatedExecutionIds};
 const save = (path, value) => {mkdirSync(dirname(path), {recursive: true}); writeFileSync(path, JSON.stringify(value, null, 2) + '\n', {flag: 'wx', mode: 0o600});};
 const read = path => JSON.parse(readFileSync(path, 'utf8'));
@@ -31,11 +32,16 @@ function protect(path) {
   }
 }
 function prepare() {
-  const id = randomUUID(), workspace = join(source, '.validation/m15', id), packageRoot = join(source, '.validation/m15', `package-${id}`);
-  mkdirSync(workspace, {recursive: true, mode: 0o700}); protect(workspace); mkdirSync(packageRoot, {recursive: true});
-  const scope = inventory(source); assert.equal(scope.unexpected.length, 0);
-  for (const file of scope.files) {mkdirSync(dirname(join(packageRoot, file)), {recursive: true}); cpSync(join(source, file), join(packageRoot, file));}
-  for (const path of ['node_modules', 'scripts/spikes/playwright-cli/node_modules', 'examples/node_modules']) cpSync(join(source, path), join(packageRoot, path), {recursive: true, verbatimSymlinks: true});
+  const installed = mode === 'prepare-installed';
+  const id = randomUUID(), workspace = installed ? join(realpathSync.native(dirname(resolve(stateFile))), basename(stateFile)) : join(source, '.validation/m15', id), packageRoot = installed ? source : join(source, '.validation/m15', `package-${id}`);
+  assert(!installed || !within(source, realFuture(workspace)), 'Use an external consumer workspace.');
+  mkdirSync(workspace, {recursive: !installed, mode: 0o700}); protect(workspace);
+  if (!installed) {
+    mkdirSync(packageRoot, {recursive: true});
+    const scope = inventory(source); assert.equal(scope.unexpected.length, 0);
+    for (const file of scope.files) {mkdirSync(dirname(join(packageRoot, file)), {recursive: true}); cpSync(join(source, file), join(packageRoot, file));}
+    for (const path of ['node_modules', 'scripts/spikes/playwright-cli/node_modules', 'examples/node_modules']) cpSync(join(source, path), join(packageRoot, path), {recursive: true, verbatimSymlinks: true});
+  }
   const projects = {}, scaffolds = {};
   for (const nativeHost of ['claude', 'codex']) {
     const projectRoot = join(workspace, nativeHost); mkdirSync(projectRoot);
@@ -60,8 +66,8 @@ function prepare() {
     symlinkSync(alias, join(projectRoot, 'node_modules/playwright-pom-harness'), process.platform === 'win32' ? 'junction' : 'dir');
     dependencies['playwright-pom-harness'] = 'file:./.harness/packages/playwright-pom-harness'; versions['playwright-pom-harness'] = read(join(packageRoot, 'package.json')).version;
     save(join(projectRoot, 'package.json'), {name: 'synthetic-m15-consumer', private: true, type: 'module', devDependencies: dependencies});
-    save(join(projectRoot, 'dependency-versions.json'), {version: 1, proof: 'linked-source', node: process.version, packages: versions});
-    save(join(projectRoot, 'tsconfig.json'), {compilerOptions: {target: 'ES2021', module: 'NodeNext', moduleResolution: 'NodeNext', allowJs: true, checkJs: false, esModuleInterop: true, resolveJsonModule: true, skipLibCheck: true, noEmit: true, types: ['node']}, exclude: ['node_modules', '.harness']});
+    save(join(projectRoot, 'dependency-versions.json'), {version: 1, proof: installed ? 'npm-archive' : 'linked-source', node: process.version, packages: versions});
+    save(join(projectRoot, 'tsconfig.json'), {compilerOptions: {target: 'ES2021', module: 'NodeNext', moduleResolution: 'NodeNext', allowJs: true, checkJs: false, maxNodeModuleJsDepth: 1, strict: true, esModuleInterop: true, resolveJsonModule: true, skipLibCheck: true, noEmit: true, types: ['node']}, exclude: ['node_modules', '.harness']});
     projects[nativeHost] = projectRoot;
     scaffolds[nativeHost] = ['source.json', 'resources/testData/ObservationTestJsonFile.json', 'playwright.config.ts', 'src/config/applications.ts', 'src/utils/Expects.ts', 'src/utils/RuntimeActions.ts', 'src/utils/LifecycleActions.ts', 'package.json', 'dependency-versions.json', 'tsconfig.json', '.harness/knowledge/fixture-contract.json', '.harness/workflow/source-context.json'].map(path => ({path, sha256: digest(readFileSync(join(projectRoot, path)))}));
   }
@@ -97,7 +103,8 @@ async function nativeStage(state, name, prompt, environment, version) {
   const nativeExecutable = /[\\/]/.test(executable) ? resolve(executable) : executable;
   const child = spawn(nativeExecutable, args, {cwd: projectRoot, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'], env: {...process.env, ...environment}});
   writeFileSync(eventPath, ''); const errorPath = join(directory, 'stderr.txt'); writeFileSync(errorPath, '');
-  child.stdout.on('data', chunk => appendFileSync(eventPath, chunk)); child.stderr.on('data', chunk => appendFileSync(errorPath, chunk)); child.stdin.end(prompt);
+  const namespaceHint = host === 'codex' && process.platform === 'linux' ? 'If a native tool cannot start a supplied proof command or requested file read because bwrap namespace setup is unavailable, request sandbox_permissions=require_escalated for that exact operation through normal automatic approval review. Stop if review rejects it. Do not replay a command that actually started or bypass a denied operation.\n' : '';
+  child.stdout.on('data', chunk => appendFileSync(eventPath, chunk)); child.stderr.on('data', chunk => appendFileSync(errorPath, chunk)); child.stdin.end(namespaceHint + prompt);
   const processResult = {...await observeHostProcess(child, {timeoutMs: 1200000}), version, packageUnchanged: fingerprint(snapshotInstalledPackage(state.packageRoot)) === fingerprint(state.before)};
   save(join(directory, 'process.json'), processResult); intact(state, host);
   assert(processResult.exitCode === 0 && !processResult.timedOut && processResult.ownedProcessesStopped && processResult.packageUnchanged, 'Native workflow stage incomplete.');
@@ -173,11 +180,11 @@ async function assess(state) {
 }
 try {
   const count = process.argv.length - 2;
-  assert((mode === 'prepare' && count === 1) || (mode === 'assess' && count === 2) || (mode === 'run' && (count === 4 || count === 5)), 'Use prepare, assess <state>, or run <state> <host> <executable> [Claude model].');
-  if (mode === 'prepare') prepare();
+  assert((mode === 'prepare' && count === 1) || (mode === 'prepare-installed' && count === 2) || (mode === 'assess' && count === 2) || (mode === 'run' && (count === 4 || count === 5)), 'Use prepare, prepare-installed <new-external-workspace>, assess <state>, or run <state> <host> <executable> [Claude model].');
+  if (['prepare', 'prepare-installed'].includes(mode)) prepare();
   else {const state = read(stateFile); if (mode === 'run') await run(state); else if (mode === 'assess') await assess(state); else throw new Error('Use prepare, run or assess.');}
 } catch (error) {
-  if (stateFile && existsSync(stateFile)) {
+  if (mode !== 'prepare-installed' && stateFile && existsSync(stateFile)) {
     const state = read(stateFile); save(join(state.workspace, `failure-${host ?? 'assessment'}-${Date.now()}.json`), {diagnostic: String(error.stack)});
   }
   console.error(JSON.stringify({probe: 'workflow', status: 'INCOMPLETE', reason: error.code ?? 'PROOF_FAILED'})); process.exitCode = 1;

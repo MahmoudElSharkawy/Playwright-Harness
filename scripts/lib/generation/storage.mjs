@@ -43,7 +43,7 @@ export function snapshot(roots) {
     const path = join(directory, entry.name); if (entry.isDirectory()) library(path); else implementation.push([relative(roots.packageRoot, path).replaceAll('\\', '/'), digest(readFileSync(path))]);
   }};
   library(join(roots.packageRoot, 'scripts/lib'));
-  for (const name of ['VERSION', 'package-lock.json']) implementation.push([name, digest(readFileSync(join(roots.packageRoot, name)))]);
+  for (const name of ['VERSION', 'npm-shrinkwrap.json']) implementation.push([name, digest(readFileSync(join(roots.packageRoot, name)))]);
   const runtimeFingerprint = fingerprint(implementation);
   return {files, runtimeFingerprint, fingerprint: fingerprint({files, runtimeFingerprint, node: process.version})};
 }

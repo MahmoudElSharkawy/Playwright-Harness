@@ -1,5 +1,19 @@
 # Third-party notices and references
 
+M17 preserves the root dependency graph in the publishable `npm-shrinkwrap.json`;
+its 87 package identities and notices remain unchanged. npm may duplicate or
+relocate dependency nodes during installation; the installed validation checks
+their exact identities, registry origins, integrity and on-disk package metadata.
+
+CI references the official `actions/checkout`, `actions/setup-node` and
+`actions/upload-artifact` repositories at immutable commits. Their implementations
+are downloaded by GitHub Actions, not copied or relicensed here. The local Linux
+acceptance client separately installs Claude Code 2.1.285 and Codex CLI 0.159.2.
+They are external host tools, not dependencies included in the harness archive;
+their respective upstream terms still apply. The local client also uses the
+official Docker CLI image. Neither the client image, its installed software nor
+authenticated runtime material is published by this source distribution.
+
 M1 does not vendor AgenTeX or Playwright source. It retains links to the inspected
 projects in the provenance inventory. If source is copied later, preserve its required
 license/copyright notice and record the source revision and modifications.

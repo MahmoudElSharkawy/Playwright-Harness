@@ -13,6 +13,7 @@ import {inventory} from '../lib/package-validation.mjs';
 import {compareExecutions} from '../lib/host-parity.mjs';
 import {hostDatabases} from '../../harness-tests/fixtures/host-databases.mjs';
 import {executeParallelCases} from '../../harness-tests/fixtures/parallel-live.mjs';
+import {proofSignal} from './cancellation.mjs';
 
 if (process.argv.length !== 3) throw new Error('Provide a new external consumer directory for the fixed M16 proof.');
 const projectRoot = resolve(process.argv[2]);
@@ -24,13 +25,15 @@ if (process.platform === 'win32') {
 }
 const save = (name, value) => writeFileSync(join(projectRoot, name), JSON.stringify(value, null, 2), {flag: 'wx', mode: 0o600});
 const snapshot = () => inventory(packageRoot).files.map(file => [file, createHash('sha256').update(readFileSync(join(packageRoot, file))).digest('hex')]);
-const before = snapshot(), databases = await hostDatabases();
+const before = snapshot(), databases = await hostDatabases({signal: proofSignal,
+  recordOwnership: record => writeFileSync(join(projectRoot, 'infrastructure-ownership.jsonl'), JSON.stringify(record) + '\n', {flag: 'a', mode: 0o600})});
 console.log(JSON.stringify({projectRoot, status: 'FIXTURES_READY'}));
 let accepted = false;
 try {
   const batches = [];
   for (const concurrency of [1, 2]) {
-    const run = await executeParallelCases(projectRoot, databases, concurrency);
+    proofSignal.throwIfAborted();
+    const run = await executeParallelCases(projectRoot, databases, concurrency, proofSignal);
     // Verify retained rows using independent native driver queries before the owned
     // fixture infrastructure is discarded. Retention itself is a successful outcome.
     for (const {recordId, engine, intent} of run.facts.databases) {

@@ -12,6 +12,7 @@ import {packageRoot, consumerRoots} from '../lib/consumer-paths.mjs';
 import {within} from '../lib/skill-roots.mjs';
 import {inventory} from '../lib/package-validation.mjs';
 import {browserFixture} from '../../harness-tests/fixtures/browser-app.mjs';
+import {proofSignal} from './cancellation.mjs';
 
 if (process.argv.length !== 3) throw new Error('Provide one new external consumer directory for the live browser proof.');
 const projectRoot = resolve(process.argv[2]);
@@ -34,12 +35,14 @@ const observed = async (context, actual, expected, moreEvidence = []) => {
   const proof = await context.evidence('observation', {actual, expected});
   context.assertion({id: 'expected', status: actual === expected ? 'PASS' : 'FAIL', reliable: true, evidenceIds: [proof, ...moreEvidence]});
 };
-async function check(name, action) {
+async function check(name, action, cleanup = false) {
+  if (!cleanup) proofSignal.throwIfAborted();
   try {const facts = await action(); checks.push({name, status: 'PASS', facts});}
   catch (error) {checks.push({name, status: 'FAIL', failure: error.name, message: error.message});}
   console.log(JSON.stringify(checks.at(-1))); fixture.available(true);
 }
 async function scenario(name, expectedStatus, action, {mutation = false, retry = false, environmentMode = 'test', requiredEvidence = ['observation'], storageState, commandTimeoutMs = 15000, runTimeoutMs = 120000, signal, beforeAttempt, afterAttempt} = {}) {
+  signal = signal ? AbortSignal.any([signal, proofSignal]) : proofSignal;
   const operation = op(mutation), run = createRun({id: name, startedAt: Date.now(), environment: {...environment, environmentMode}, operations: [operation, ...browserLifecycleOperations('app')],
     scenarios: [{id: name, expectations: [{id: 'expected', description: 'Synthetic observation matches', operationId: operation.id, invocationId: 'exercise-call', requiredEvidence}]}], limits: {timeoutMs: runTimeoutMs, cleanupTimeoutMs: 60000}});
   let attempts = 0;
@@ -282,9 +285,9 @@ try {
     return {sentinelSurvived: true};
   });
 } finally {
-  await check('seed-cleanup', async () => {const result = await sentinel?.close(); assert.equal(result?.complete, true); return result;});
+  await check('seed-cleanup', async () => {const result = await sentinel?.close(); assert.equal(result?.complete, true); return result;}, true);
   await fixture.close();
-  await check('package-immutable', async () => {const after = await digest(); assert.deepEqual(after, before); return after;});
+  await check('package-immutable', async () => {const after = await digest(); assert.deepEqual(after, before); return after;}, true);
   const summary = {platform: process.platform, node: process.version, checks, status: checks.length === 26 && checks.every(check => check.status === 'PASS') ? 'PASS' : 'INCOMPLETE'};
   await writeFile(join(projectRoot, 'browser-proof.json'), JSON.stringify(summary, null, 2), {mode: 0o600, flag: 'wx'});
   console.log(JSON.stringify({status: summary.status, passed: checks.filter(check => check.status === 'PASS').length, checks: checks.length}));

@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // An opt-in, fixed native-host proof; this is not a new host runtime or workflow engine.
 import {execFileSync, spawn} from 'node:child_process';
-import {mkdirSync, readFileSync, writeFileSync, cpSync, existsSync} from 'node:fs';
-import {join, dirname, resolve} from 'node:path';
+import {mkdirSync, readFileSync, writeFileSync, cpSync, existsSync, realpathSync} from 'node:fs';
+import {join, dirname, resolve, basename} from 'node:path';
 import {randomUUID, createHash} from 'node:crypto';
 import {inventory} from '../lib/package-validation.mjs';
 import {compareExecutions} from '../lib/host-parity.mjs';
@@ -11,24 +11,33 @@ import {snapshotInstalledPackage} from '../lib/host-proof-files.mjs';
 import {observeHostProcess} from '../lib/host-proof-processes.mjs';
 import {hostDatabases} from '../../harness-tests/fixtures/host-databases.mjs';
 import {hostCaseIds} from '../../harness-tests/fixtures/host-execution.mjs';
+import {consumerRoots} from '../lib/consumer-paths.mjs';
+import {realFuture, within} from '../lib/skill-roots.mjs';
 
-const source = resolve(import.meta.dirname, '../..'), [mode, stateFile, host, executable, ...options] = process.argv.slice(2);
+const source = realpathSync.native(resolve(import.meta.dirname, '../..')), [mode, stateFile, host, executable, ...options] = process.argv.slice(2);
 const reviewedHooks = options.includes('--reviewed-hooks'), model = options.find(value => !value.startsWith('--'));
 if (options.length > (model ? 1 : 0) + (reviewedHooks ? 1 : 0) || options.some(value => value.startsWith('--') && value !== '--reviewed-hooks') || reviewedHooks && host !== 'codex' || model && host !== 'claude') throw new Error('Unsupported proof option.');
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 const save = (path, value) => writeFileSync(path, JSON.stringify(value, null, 2) + '\n', {flag: 'wx', mode: 0o600});
 const snapshot = snapshotInstalledPackage;
 function prepare() {
-  const proofId = randomUUID(), workspace = join(source, '.validation/m11', proofId), packageRoot = join(source, '.validation/m11', `package-${proofId}`);
+  const installed = mode === 'prepare-installed';
+  if (installed && (!stateFile || host || executable || options.length)) throw new Error('Installed proof preparation needs one new external workspace.');
+  const proofId = randomUUID(), workspace = installed ? join(realpathSync.native(dirname(resolve(stateFile))), basename(stateFile)) : join(source, '.validation/m11', proofId), packageRoot = installed ? source : join(source, '.validation/m11', `package-${proofId}`);
+  if (installed && within(source, realFuture(workspace))) throw new Error('Use an external consumer workspace.');
   if (/[\r\n"'`$;&|<>!]/.test(packageRoot)) throw new Error('Fixed proof hook paths cannot contain shell metacharacters.');
   // Sanitized installed content is readable by native sandboxes; private receipts have a separate ACL.
-  mkdirSync(packageRoot, {recursive: true}); mkdirSync(workspace, {recursive: true, mode: 0o700});
+  if (!installed) mkdirSync(packageRoot, {recursive: true});
+  mkdirSync(workspace, {recursive: !installed, mode: 0o700});
+  if (installed) consumerRoots(workspace, packageRoot);
   if (process.platform === 'win32') {
     const owner = execFileSync('whoami', [], {encoding: 'utf8'}).trim(); execFileSync('icacls', [workspace, '/inheritance:r', '/grant:r', `${owner}:(OI)(CI)F`], {stdio: 'pipe', windowsHide: true});
   }
-  const scope = inventory(source); if (scope.unexpected.length) throw new Error('Unclassified publication files.');
-  for (const file of scope.files) {mkdirSync(dirname(join(packageRoot, file)), {recursive: true}); cpSync(join(source, file), join(packageRoot, file));}
-  for (const path of ['node_modules', 'scripts/spikes/playwright-cli/node_modules']) cpSync(join(source, path), join(packageRoot, path), {recursive: true, verbatimSymlinks: true});
+  if (!installed) {
+    const scope = inventory(source); if (scope.unexpected.length) throw new Error('Unclassified publication files.');
+    for (const file of scope.files) {mkdirSync(dirname(join(packageRoot, file)), {recursive: true}); cpSync(join(source, file), join(packageRoot, file));}
+    for (const path of ['node_modules', 'scripts/spikes/playwright-cli/node_modules']) cpSync(join(source, path), join(packageRoot, path), {recursive: true, verbatimSymlinks: true});
+  }
   const projects = {};
   for (const nativeHost of ['codex', 'claude']) {
     const projectRoot = join(workspace, nativeHost); mkdirSync(projectRoot); mkdirSync(join(projectRoot, 'utils')); mkdirSync(join(projectRoot, '.harness'));
@@ -68,7 +77,8 @@ async function invoke(state) {
     const prompt = `Execute this fixed M11 proof in the current consumer directory. Use native shell tools and native file-edit tools. Do these steps sequentially:\n1. Run node "${command}" denied git push origin main. This only invokes a harmless local script; it must be blocked by the harness PreToolUse hook. Do not bypass or rerun this denied command.\n2. Run node "${command}" ping.\n3. Use your native ${host === 'codex' ? 'apply_patch' : 'Edit'} tool to change utils/HookFixture.ts from false to true.\n4. Run node "${command}" execute. ${host === 'codex' && process.platform === 'win32' ? 'Request sandbox_permissions=require_escalated for this one command: native browser process ownership and the protected browser cache need the signed-in Windows account. Normal automatic approval review must approve it; do not bypass a rejection.' : ''} Allow up to five minutes; preserve any running command and wait for its completion. The script owns only loopback synthetic targets and isolated browser sessions, and writes results under this consumer. Normal configured CRUD is authorized.\nReport the execution receipt, the expected hook denial, and any inability truthfully. Do not inspect credentials, invoke other executables or edit anything else. Do not re-run the suite: retain failure evidence.`;
     const child = spawn(nativeExecutable, args, {cwd: projectRoot, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'], env: {...process.env, ...db.environment}});
     const out = join(audit, 'events.jsonl'), err = join(audit, 'stderr.txt'); writeFileSync(out, ''); writeFileSync(err, '');
-    child.stdout.on('data', chunk => writeFileSync(out, chunk, {flag: 'a'})); child.stderr.on('data', chunk => writeFileSync(err, chunk, {flag: 'a'})); child.stdin.end(prompt);
+    const namespaceHint = host === 'codex' && process.platform === 'linux' ? 'If a native tool cannot start a supplied command because bwrap namespace setup is unavailable, request sandbox_permissions=require_escalated for that exact command through normal automatic approval review. Stop if review rejects it. Never retry or bypass a hook-denied command. The complete initial fixture line is: export const hookProof = false;\n' : '';
+    child.stdout.on('data', chunk => writeFileSync(out, chunk, {flag: 'a'})); child.stderr.on('data', chunk => writeFileSync(err, chunk, {flag: 'a'})); child.stdin.end(namespaceHint + prompt);
     const processResult = await observeHostProcess(child);
     const packageUnchanged = JSON.stringify(snapshot(state.packageRoot)) === JSON.stringify(state.before);
     save(join(audit, 'process.json'), {host, version, modelOverride: model ?? null, ...processResult, packageUnchanged,
@@ -89,7 +99,7 @@ function assess(state) {
       allowedMarker: existsSync(join(audit, 'allowed-marker')), editedFile: readFileSync(join(root, 'utils/HookFixture.ts'), 'utf8').includes('hookProof = true'),
       infrastructureCleanup: infrastructureCleanup && result.ownedProcessesStopped === true, packageUnchanged: JSON.stringify(snapshot(state.packageRoot)) === JSON.stringify(state.before)}));
     const records = JSON.parse(readFileSync(file, 'utf8'));
-    for (const record of records) if (record.roots.packageRoot !== state.packageRoot || record.roots.projectRoot !== root || record.roots.runRoot !== join(root, '.harness/runs', record.id)) throw new Error('Receipt roots differ from this proof.');
+    for (const record of records) if ([[record.roots.packageRoot, state.packageRoot], [record.roots.projectRoot, root], [record.roots.runRoot, join(root, '.harness/runs', record.id)]].some(([actual, expected]) => realpathSync.native(actual) !== realpathSync.native(expected))) throw new Error('Receipt roots differ from this proof.');
     cases.push(records);
   }
   const comparison = compareExecutions(cases[0], cases[1], hostCaseIds);
@@ -97,6 +107,6 @@ function assess(state) {
   save(join(state.workspace, 'assessment.json'), report); console.log(JSON.stringify(report)); if (report.status !== 'PASS') process.exitCode = 1;
 }
 try {
-  if (mode === 'prepare') prepare();
+  if (['prepare', 'prepare-installed'].includes(mode)) prepare();
   else {const state = JSON.parse(readFileSync(stateFile, 'utf8')); if (mode === 'run') await invoke(state); else if (mode === 'assess') assess(state); else throw new Error('Use prepare, run or assess.');}
 } catch (error) {console.error(JSON.stringify({probe: 'hosts', status: 'INCOMPLETE', reason: error.code ?? 'PROOF_FAILED'})); process.exitCode = 1;}

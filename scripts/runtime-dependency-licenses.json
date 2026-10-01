@@ -1,5 +1,5 @@
 {
-  "source": "package-lock.json",
+  "source": "npm-shrinkwrap.json",
   "distribution": "Runtime dependencies are installed separately; upstream implementations and notices are not bundled or relicensed.",
   "packages": [
     {

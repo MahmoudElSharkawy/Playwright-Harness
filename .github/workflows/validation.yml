@@ -1,0 +1,57 @@
+name: Harness validation
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validation-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  installed:
+    name: Installed package (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2025]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    env:
+      CI: '1'
+      NO_UPDATE_NOTIFIER: '1'
+      AUTO_ALLURE_OPEN: 'false'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Validate the distributed archive and its installed dependencies
+        run: node scripts/ci/installed.mjs "${{ runner.temp }}/harness-installed"
+      - name: Prove native browser behavior from the installed archive
+        run: node scripts/ci/native.mjs "${{ runner.temp }}/harness-installed" browser
+      - name: Prove API, SQL Server, PostgreSQL and bounded execution on Linux
+        if: runner.os == 'Linux'
+        run: node scripts/ci/native.mjs "${{ runner.temp }}/harness-installed" parallel
+      - name: Prove cleanup after cooperative and forced timeouts
+        run: node "${{ runner.temp }}/harness-installed/installation/node_modules/playwright-pom-harness/scripts/ci/timeout-proof.mjs" "${{ runner.temp }}/harness-timeout" ${{ runner.os == 'Linux' && 'mixed' || 'browser' }}
+      - name: Retain sanitized check summary
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: installed-summary-${{ matrix.os }}
+          path: |
+            ${{ runner.temp }}/harness-installed/installed.json
+            ${{ runner.temp }}/harness-installed/native-browser.json
+            ${{ runner.temp }}/harness-installed/native-parallel.json
+            ${{ runner.temp }}/harness-timeout/timeout-proof.json
+          if-no-files-found: error
+          retention-days: 7
