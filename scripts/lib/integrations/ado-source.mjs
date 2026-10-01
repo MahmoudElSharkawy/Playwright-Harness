@@ -84,7 +84,7 @@ export function createAdoTestSource(client) {
       const identity = await client.projectIdentity(), linked = new Set();
       for (const relation of item.relations ?? []) if (relations.includes(relation?.rel)) {
         const id = workItemLinkId(relation.url, client.configuration.organizationUrl, identity);
-        requireValue(id !== undefined, 'ADO story link is outside the configured collection.'); linked.add(id);
+        requireValue(id !== undefined, 'ADO story link is outside the configured collection or project.'); linked.add(id);
       }
       const candidates = [...linked].sort((a, b) => a - b);
       requireValue(candidates.length <= 1000, 'ADO story links exceed the bounded scope.');

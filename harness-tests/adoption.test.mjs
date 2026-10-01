@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtempSync,realpathSync,rmSync,mkdirSync,writeFileSync,readFileSync,existsSync,readdirSync,symlinkSync,cpSync} from 'node:fs';
+import {mkdtempSync,realpathSync,rmSync,mkdirSync,writeFileSync,readFileSync,existsSync,readdirSync,symlinkSync,cpSync,utimesSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 import {tmpdir} from 'node:os';
 import {join,dirname,relative,isAbsolute} from 'node:path';
@@ -15,6 +15,7 @@ function project(t) {
 }
 function put(root,path,text){const file=join(root,path);mkdirSync(dirname(file),{recursive:true});writeFileSync(file,text);}
 const adopt=root=>adoptProject({projectRoot:root,environment:'qa',mode:'test'});
+const registry=ids=>JSON.stringify({planId:7,names:[],branches:[{name:'Synthetic',inScope:true}],suites:[{branch:0,id:10,name:'Synthetic',cases:ids.map(id=>({id,title:`Synthetic case ${id}`,desc:'fixture',verdict:'k',note:''}))}],manual:{},bugs:{}});
 test('fresh onboarding requires deliberate profile; preview writes nothing',t=>{
  const root=project(t);assert.throws(()=>adoptProject({projectRoot:root,environment:'qa'}));assert.deepEqual(readdirSync(root),[]);
  const preview=adoptProject({projectRoot:root,environment:'qa',mode:'test',dryRun:true});assert.equal(preview.skills,13);assert.deepEqual(readdirSync(root),[]);
@@ -65,12 +66,33 @@ test('tracker uses installed template and writes only consumer output; package o
  const blocked=spawnSync(process.execPath,[script,'--project-root',root,'--out',join(packageRoot,'forbidden.html')],{encoding:'utf8'});assert.notEqual(blocked.status,0);assert(!existsSync(join(packageRoot,'forbidden.html')));
 });
 test('metrics and tracker sync read story-scoped verification folders but not look-alikes',t=>{
- const root=project(t);adopt(root);put(root,'.harness/state/tracker/plan-7.json',JSON.stringify({planId:7,names:[],branches:[{name:'Synthetic',inScope:true}],suites:[{branch:0,id:10,name:'Synthetic',cases:[{id:7,title:'Synthetic case',desc:'fixture',verdict:'k',note:''}]}],manual:{},bugs:{}}));
+ const root=project(t);adopt(root);put(root,'.harness/state/tracker/plan-7.json',registry([7,8]));
  put(root,'test/ado-story-300/_suite.json',JSON.stringify({storyId:300,cases:[{id:7}]}));put(root,'test/ado-story-300/_verify-state.json',JSON.stringify({cases:{7:{status:'passed',greens:2}}}));
  put(root,'test/ado-other-300/_verify-state.json',JSON.stringify({cases:{8:{status:'passed',greens:2}}}));
  const metrics=spawnSync(process.execPath,[join(packageRoot,'scripts/harness-metrics.mjs'),'--project-root',root,'--json'],{encoding:'utf8'});assert.equal(metrics.status,0,metrics.stderr);
  assert.deepEqual(JSON.parse(metrics.stdout).suites.map(s=>[s.suite,s.passed]),[['ado-story-300',1]]);
  const sync=spawnSync(process.execPath,[join(packageRoot,'scripts/generate-tracker.mjs'),'--project-root',root,'--sync','--dry-run'],{encoding:'utf8'});assert.equal(sync.status,0,sync.stderr);assert.match(sync.stdout,/"set":\{"done":\[7\]\}/);
+});
+test('a case shared by suite and story folders counts once and syncs only when the folders agree',t=>{
+ const root=project(t);adopt(root);put(root,'.harness/state/tracker/plan-7.json',registry([7,9,11]));
+ put(root,'test/ado-story-300/_verify-state.json',JSON.stringify({cases:{7:{status:'passed',greens:2},9:{status:'passed',greens:2},11:{status:'passed',greens:2}}}));
+ // The story's suite is fetched for delivery (lists 11) but has verified only 7 and 9 so far.
+ put(root,'test/ado-suite-10/_suite.json',JSON.stringify({cases:[{id:7},{id:9},{id:11}]}));put(root,'test/ado-suite-10/_verify-state.json',JSON.stringify({cases:{7:{status:'failed',rounds:1},9:{status:'passed',greens:2}}}));
+ const metrics=spawnSync(process.execPath,[join(packageRoot,'scripts/harness-metrics.mjs'),'--project-root',root,'--json'],{encoding:'utf8'});assert.equal(metrics.status,0,metrics.stderr);
+ const {totals}=JSON.parse(metrics.stdout);assert.deepEqual([totals.total,totals.passed,totals.failed,totals.noState],[3,2,0,1]);
+ assert.match(metrics.stderr,/7 \(ado-story-300, ado-suite-10\)/);assert.doesNotMatch(metrics.stderr,/\b(?:9|11) \(/);
+ const sync=spawnSync(process.execPath,[join(packageRoot,'scripts/generate-tracker.mjs'),'--project-root',root,'--sync','--dry-run'],{encoding:'utf8'});assert.equal(sync.status,0,sync.stderr);
+ assert.match(sync.stdout,/"set":\{"done":\[9,11\]\}/);assert.match(sync.stderr,/not synced[^\n]*7 \(ado-story-300, ado-suite-10\)/);
+});
+test('a shared case uses its newest verification for metrics totals and tracker staleness',t=>{
+ const root=project(t);adopt(root);put(root,'.harness/state/tracker/plan-7.json',registry([9,13]));put(root,'.harness/state/tracker/history.jsonl','{"at":"2026-02-01","set":{"blocked":[9]}}\n');
+ const story='test/ado-story-300/_verify-state.json',suite='test/ado-suite-10/_verify-state.json',at=day=>new Date(`2026-${day}T12:00:00Z`);
+ put(root,story,JSON.stringify({cases:{9:{status:'passed',greens:2},13:{status:'failed',rounds:1}}}));put(root,suite,JSON.stringify({cases:{9:{status:'passed',greens:2},13:{status:'failed',rounds:3}}}));
+ utimesSync(join(root,story),at('01-01'),at('01-01'));utimesSync(join(root,suite),at('03-01'),at('03-01'));
+ const metrics=spawnSync(process.execPath,[join(packageRoot,'scripts/harness-metrics.mjs'),'--project-root',root,'--json'],{encoding:'utf8'});assert.equal(metrics.status,0,metrics.stderr);
+ const {totals}=JSON.parse(metrics.stdout);assert.deepEqual([totals.total,totals.failed,totals.roundsMax],[2,1,3]);
+ const sync=spawnSync(process.execPath,[join(packageRoot,'scripts/generate-tracker.mjs'),'--project-root',root,'--sync','--dry-run'],{encoding:'utf8'});assert.equal(sync.status,0,sync.stderr);
+ assert.match(sync.stdout,/"set":\{"done":\[9\]\}/);assert.match(sync.stderr,/not synced[^\n]*13 \(ado-story-300, ado-suite-10\)/);
 });
 
 test('recognized legacy instructions become redirects; originals need an exact normalized digest',t=>{

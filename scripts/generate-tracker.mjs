@@ -181,7 +181,9 @@ const localDate = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart
 function collectVerifyState() {
   const found = new Map(); // caseId(number) -> { status, rounds, suite, fileDate }
   if (!existsSync(SUITES_DIR)) return found;
-  for (const entry of readdirSync(SUITES_DIR, { withFileTypes: true })) {
+  const records = new Map(); // caseId -> one record per folder holding it (a suite and a story folder may share a case)
+  // Sorted so the outcome never depends on filesystem enumeration order.
+  for (const entry of readdirSync(SUITES_DIR, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
     if (!entry.isDirectory() || !/^ado-(?:suite|story)-/.test(entry.name)) continue;
     const path = join(SUITES_DIR, entry.name, '_verify-state.json');
     if (!existsSync(path)) continue;
@@ -190,9 +192,18 @@ function collectVerifyState() {
     catch (e) { warn(`skipped malformed ${path}: ${e.message}`); continue; }
     const fileDate = localDate(statSync(path).mtime);
     for (const [tc, c] of Object.entries(verify.cases ?? {})) {
-      found.set(Number(tc), { status: c.status, rounds: Number(c.rounds) || 0, suite: entry.name, fileDate });
+      const id = Number(tc);
+      if (!records.has(id)) records.set(id, []);
+      records.get(id).push({ status: c.status, rounds: Number(c.rounds) || 0, suite: entry.name, fileDate });
     }
   }
+  // Folders that disagree on the tracker status must not drive the append-only history.
+  const conflicts = [];
+  for (const [id, list] of records) {
+    if (new Set(list.map(mapVerify)).size > 1) { conflicts.push(`${id} (${list.map((v) => v.suite).join(', ')})`); continue; }
+    found.set(id, list.reduce((newest, v) => (v.fileDate > newest.fileDate ? v : newest)));
+  }
+  if (conflicts.length) warn(`verify-state case(s) disagree across folders and were not synced — reconcile them first: ${conflicts.join(', ')}`);
   return found;
 }
 
