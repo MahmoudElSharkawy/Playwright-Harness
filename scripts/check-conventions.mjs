@@ -123,11 +123,11 @@ const RULES = [
       return /Tests\.spec\.ts$/.test(file) ? [] : [{ line: 1, excerpt: basename(file) }];
     } },
   { id: 'tms-per-test', dirs: ['tests'], severity: 'warn',
-    why: 'every test carries allure.tms(<ADO id>) (test-methods §3)',
+    why: 'every test carries its external allure.tms id or local allure.testCaseId (test-methods §3)',
     check: (file, text) => {
       const tests = (text.match(/^\s*test\s*\(/gm) || []).length;
-      const tms = (text.match(/allure\.tms\s*\(/g) || []).length;
-      return tms < tests ? [{ line: 1, excerpt: `${tests} test(s) but only ${tms} allure.tms call(s)` }] : [];
+      const tms = (text.match(/allure\.(?:tms|testCaseId)\s*\(/g) || []).length;
+      return tms < tests ? [{ line: 1, excerpt: `${tests} test(s) but only ${tms} source identity call(s)` }] : [];
     } },
   { id: 'feature-per-test', dirs: ['tests'], severity: 'warn',
     why: 'every test opens with allure.feature matching the describe title (test-methods §3)',

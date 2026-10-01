@@ -1,5 +1,9 @@
 # Test Methods — Playbook
 
+## Local source identity (M13)
+
+For neutral local sources, use `allure.testCaseId(localScenarioId)` instead of inventing a TMS link. For an actual external test case, preserve `allure.tms`. The M13 source binding maps each generated test and validation to its original expectation. The metadata identity must match that binding.
+
 Rules for the content of one `test(...)` block. The spec-file skeleton around it
 (imports, `let` state, hooks) belongs to [test-classes](../../test-classes/SKILL.md).
 All section references (§) point to

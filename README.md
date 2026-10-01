@@ -56,6 +56,10 @@ work-item linking and source-control delivery. Compatibility commands use explic
 consumer configuration, preview remote mutations by default and retain write
 receipts. Local sources remain independent of ADO. See [M12 validation](docs/M12-VALIDATION.md).
 
+M13 connects assessed execution to durable POM automation through
+[generation, independent review and two scoped green runs](docs/M13-GENERATION.md). See
+[M13 validation](docs/M13-VALIDATION.md) for actual evidence and limits.
+
 ## Install into a project
 
 Keep this package in its own directory; do not overlay it on application code.
@@ -160,8 +164,8 @@ hosts or external integration tests passed.
 
 The legacy ADO suite workflow retains its fetch, PR and result-publication entrypoints
 over the M12 adapters. Those commands require explicit ADO configuration and do not
-depend on AgenTeX. The older exploration workflow still documents its legacy plugin;
-generation/review/verification integration with the shared runtimes remains M13 work.
+depend on AgenTeX. Current generation, review and verification use the M13 procedure
+and shared runtimes. Historical plugin commands remain compatibility reference only.
 Existing service/helper patterns remain valid. Catalogs are optional reuse assets.
 
 The old `.claude/settings.json` is a permissive compatibility template, not an

@@ -50,46 +50,8 @@ router) and follow its routing table.
 | "Update / regenerate the plan tracker", "record these cases as done/blocked", "sync the tracker", "where are we on the plan" — any change to the tracked plan's progress or scope | `plan-tracker` — registry + append-only history in `.agents/skills/plan-tracker/data/`, rendered by `scripts/generate-tracker.mjs` |
 | Folder layout, naming, where new code belongs, or a full MR/code review | `pom-architecture` |
 
-## The common flow: automating a test case end-to-end
+## Automation workflow
 
-**Packaged version:** when the request names an Azure DevOps plan/suite id, the whole
-flow below (plus fetching the cases and verifying the result) is the `automate-suite`
-skill — `/automate-suite <planId>/<suiteId>`. It branches first
-(`automation/ado-suite-<id>-*`), fetches the suite's cases into
-`test/ado-suite-<suiteId>/` (via `scripts/fetch-ado-suite.mjs`), refines them for
-executability (scope-preserving, every change logged), executes them with AgenTeX
-(`/execute-test` — a mandatory phase; only an explicit user "generate directly"
-skips it), generates the POM automation through the skills below (exit gate:
-independent `framework-review`, with a reuse-before-create method inventory), loops
-`npx playwright test "tests/<Suite Folder>/<Feature>Tests.spec.ts"` (quoting matters
-when the folder name has spaces) until honestly green twice in a row (the
-rerun-reusability gate; a bare, unscoped `npx playwright test` is the single-project
-POM regression, never a green-earning run for one spec),
-and delivers: PR (`scripts/ado-pr.mjs`), outcomes to ADO test points, and — after
-merge — the automation-status field on the cases
-(`scripts/publish-ado-results.mjs`). Use the manual sequence only for a single
-pasted test case or when deliberately doing one layer by hand.
+Use the canonical automate-suite skill and [M13 generation procedure](docs/M13-GENERATION.md): load a neutral local source or explicitly configured ADO source, preserve its assertions, explore through shared runtimes, generate/reuse POM code, obtain an independent review, and earn two independent scoped green runs. Three cumulative repair rounds are available. Catalogs, helpers and fixed inline definitions are peers. Cleanup follows intent and ownership. AgenTeX is not a runtime prerequisite. External delivery uses optional M12 adapters only when authorized.
 
-A request like "create scripts for test case 12345" means: turn a manual test case into
-framework-conformant automation. Follow this sequence, skipping skills for layers that
-already exist and are not changing:
-
-1. Obtain the test case's steps and expected results (from Azure DevOps tooling if
-   available in the session, otherwise ask the user to paste them).
-2. `pom-architecture` — decide which layers the scenario touches and where code belongs.
-3. `test-data` — one JSON per spec; inputs, expected values, secrets placement.
-4. `page-classes` + `element-locators` + `action-methods` + `validation-methods` — build
-   or extend the page objects the journey needs.
-5. `service-classes` — API/DB prerequisites and seed/cleanup (iron law: seed through
-   API/DB wherever a path exists, never through the GUI).
-6. `test-classes` + `test-methods` — the spec skeleton, hooks, and the test itself; the
-   Azure DevOps test-case id goes into `allure.tms()`.
-
-For reviews, `pom-architecture`'s design-conventions §6 is the merged checklist; dip into
-a specialist playbook only where a box fails.
-
-- `executions/` holds generated test-run artifacts (reports, screenshots, logs).
-  Never read or search it when gathering context — only when explicitly asked
-  about a specific run. Sanctioned exception: the `automate-suite` pipeline reads
-  the `codegen-notes/` (selector/network harvest written for exactly that purpose)
-  of the run its suite manifest records — nothing else in the folder.
+Read only the specific current run's registered evidence when preparing its generation handoff. Do not mine unrelated run artifacts for context.

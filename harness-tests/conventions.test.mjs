@@ -15,6 +15,13 @@ function fixture(t) {
 }
 function findings(result) { assert.notEqual(result.status,2,result.stderr);const data=JSON.parse(result.stdout);assert(data.files>0);assert(data.ruleApplications>0);return [...data.fresh,...data.freshWarn]; }
 const spec='tests/ExampleTests.spec.ts', page='src/pages/ExamplePage.ts';
+test('local source identities satisfy traceability without requiring an external TMS', t => {
+ const f=fixture(t);f.put('resources/testData/ExampleTestJsonFile.json','{}');
+ f.put(spec,'test("case",()=>{allure.testCaseId("local-case");});');
+ assert.equal(findings(f.run()).some(hit=>hit.rule==='tms-per-test'),false);
+ f.put(spec,'test("case",()=>{allure.feature("Feature");});');
+ assert.equal(findings(f.run()).some(hit=>hit.rule==='tms-per-test'),true);
+});
 const cases=[
  ['no-test-only',spec,'test.only("case", () => {});','test("case", () => {});'],
  ['no-wait-timeout',page,'page.waitForTimeout(500);','page.waitForLoadState();'],

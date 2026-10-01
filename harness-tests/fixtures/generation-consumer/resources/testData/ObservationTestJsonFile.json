@@ -1,0 +1,501 @@
+{
+  "ui": {
+    "id": "ui",
+    "title": "The page displays the expected observation",
+    "description": "The heading says Observed fixture",
+    "expected": "Observed fixture",
+    "key": "expect-227422ea6b3243cb438b12a9"
+  },
+  "apiCatalog": {
+    "id": "apiCatalog",
+    "title": "A catalog request returns the expected observation",
+    "description": "The response status is 200 and its JSON observation value is 42",
+    "expected": "PASS",
+    "definition": {
+      "family": "api",
+      "operation": {
+        "id": "observe",
+        "target": "api",
+        "source": {
+          "kind": "catalog",
+          "reference": "synthetic-observation",
+          "version": "1.0.0"
+        },
+        "request": {
+          "method": "GET",
+          "path": "/observation"
+        },
+        "checks": [
+          {
+            "id": "status",
+            "select": {
+              "from": "status",
+              "path": []
+            },
+            "equals": 200
+          },
+          {
+            "id": "expected",
+            "select": {
+              "from": "json",
+              "path": [
+                "value"
+              ]
+            },
+            "equals": 42
+          }
+        ],
+        "effects": {
+          "readOnlyContract": "synthetic-read"
+        }
+      },
+      "values": []
+    },
+    "key": "expect-7017339bdc62c82c4e4453a9"
+  },
+  "apiHelper": {
+    "id": "apiHelper",
+    "title": "A helper request returns the expected observation",
+    "description": "The response status is 200 and its JSON observation value is 42",
+    "expected": "PASS",
+    "definition": {
+      "family": "api",
+      "operation": {
+        "id": "observe",
+        "target": "api",
+        "source": {
+          "kind": "helper",
+          "reference": "synthetic-observation",
+          "version": "1.0.0"
+        },
+        "request": {
+          "method": "GET",
+          "path": "/observation"
+        },
+        "checks": [
+          {
+            "id": "status",
+            "select": {
+              "from": "status",
+              "path": []
+            },
+            "equals": 200
+          },
+          {
+            "id": "expected",
+            "select": {
+              "from": "json",
+              "path": [
+                "value"
+              ]
+            },
+            "equals": 42
+          }
+        ],
+        "effects": {
+          "readOnlyContract": "synthetic-read"
+        }
+      },
+      "values": []
+    },
+    "key": "expect-3bc43cf015e68e70b12f451b"
+  },
+  "apiInline": {
+    "id": "apiInline",
+    "title": "An inline request returns the expected observation",
+    "description": "The response status is 200 and its JSON observation value is 42",
+    "expected": "PASS",
+    "definition": {
+      "family": "api",
+      "operation": {
+        "id": "observe",
+        "target": "api",
+        "source": {
+          "kind": "inline",
+          "reference": "synthetic-observation",
+          "version": "1.0.0"
+        },
+        "request": {
+          "method": "GET",
+          "path": "/observation"
+        },
+        "checks": [
+          {
+            "id": "status",
+            "select": {
+              "from": "status",
+              "path": []
+            },
+            "equals": 200
+          },
+          {
+            "id": "expected",
+            "select": {
+              "from": "json",
+              "path": [
+                "value"
+              ]
+            },
+            "equals": 42
+          }
+        ],
+        "effects": {
+          "readOnlyContract": "synthetic-read"
+        }
+      },
+      "values": []
+    },
+    "key": "expect-0866b8f723ddf25130a5646b"
+  },
+  "sqlserverCatalog": {
+    "id": "sqlserverCatalog",
+    "title": "A catalog SQL Server query returns the bound observation",
+    "description": "One row returns the bound observation value 42",
+    "expected": "PASS",
+    "definition": {
+      "family": "database",
+      "operation": {
+        "id": "observe",
+        "target": "sqlserver",
+        "source": {
+          "kind": "catalog",
+          "reference": "synthetic-observation",
+          "version": "1.0.0"
+        },
+        "sql": "SELECT @value AS Observed",
+        "parameters": [
+          {
+            "name": "value",
+            "input": "value",
+            "type": "int"
+          }
+        ],
+        "checks": [
+          {
+            "id": "count",
+            "select": {
+              "from": "rowCount",
+              "path": []
+            },
+            "equals": 1
+          },
+          {
+            "id": "expected",
+            "select": {
+              "from": "rows",
+              "path": [
+                0,
+                "Observed"
+              ]
+            },
+            "equals": {
+              "$input": "value"
+            }
+          }
+        ]
+      },
+      "values": [
+        {
+          "name": "value",
+          "type": "number",
+          "sensitivity": "public",
+          "value": 42
+        }
+      ]
+    },
+    "key": "expect-f562a9b0dbff5b69db220264"
+  },
+  "sqlserverHelper": {
+    "id": "sqlserverHelper",
+    "title": "A helper SQL Server query returns the bound observation",
+    "description": "One row returns the bound observation value 42",
+    "expected": "PASS",
+    "definition": {
+      "family": "database",
+      "operation": {
+        "id": "observe",
+        "target": "sqlserver",
+        "source": {
+          "kind": "helper",
+          "reference": "synthetic-observation",
+          "version": "1.0.0"
+        },
+        "sql": "SELECT @value AS Observed",
+        "parameters": [
+          {
+            "name": "value",
+            "input": "value",
+            "type": "int"
+          }
+        ],
+        "checks": [
+          {
+            "id": "count",
+            "select": {
+              "from": "rowCount",
+              "path": []
+            },
+            "equals": 1
+          },
+          {
+            "id": "expected",
+            "select": {
+              "from": "rows",
+              "path": [
+                0,
+                "Observed"
+              ]
+            },
+            "equals": {
+              "$input": "value"
+            }
+          }
+        ]
+      },
+      "values": [
+        {
+          "name": "value",
+          "type": "number",
+          "sensitivity": "public",
+          "value": 42
+        }
+      ]
+    },
+    "key": "expect-0b007fd87f5c439054f82ed9"
+  },
+  "sqlserverInline": {
+    "id": "sqlserverInline",
+    "title": "An inline SQL Server query returns the bound observation",
+    "description": "One row returns the bound observation value 42",
+    "expected": "PASS",
+    "definition": {
+      "family": "database",
+      "operation": {
+        "id": "observe",
+        "target": "sqlserver",
+        "source": {
+          "kind": "inline",
+          "reference": "synthetic-observation",
+          "version": "1.0.0"
+        },
+        "sql": "SELECT @value AS Observed",
+        "parameters": [
+          {
+            "name": "value",
+            "input": "value",
+            "type": "int"
+          }
+        ],
+        "checks": [
+          {
+            "id": "count",
+            "select": {
+              "from": "rowCount",
+              "path": []
+            },
+            "equals": 1
+          },
+          {
+            "id": "expected",
+            "select": {
+              "from": "rows",
+              "path": [
+                0,
+                "Observed"
+              ]
+            },
+            "equals": {
+              "$input": "value"
+            }
+          }
+        ]
+      },
+      "values": [
+        {
+          "name": "value",
+          "type": "number",
+          "sensitivity": "public",
+          "value": 42
+        }
+      ]
+    },
+    "key": "expect-33ae0f6a6c0d97a6e5a7a74c"
+  },
+  "postgresqlCatalog": {
+    "id": "postgresqlCatalog",
+    "title": "A catalog PostgreSQL query returns the bound observation",
+    "description": "One row returns the bound observation value 42",
+    "expected": "PASS",
+    "definition": {
+      "family": "database",
+      "operation": {
+        "id": "observe",
+        "target": "postgresql",
+        "source": {
+          "kind": "catalog",
+          "reference": "synthetic-observation",
+          "version": "1.0.0"
+        },
+        "engine": "postgresql",
+        "sql": "SELECT $1::integer AS \"Observed\"",
+        "parameters": [
+          {
+            "name": "value",
+            "input": "value",
+            "type": "integer"
+          }
+        ],
+        "checks": [
+          {
+            "id": "count",
+            "select": {
+              "from": "rowCount",
+              "path": []
+            },
+            "equals": 1
+          },
+          {
+            "id": "expected",
+            "select": {
+              "from": "rows",
+              "path": [
+                0,
+                "Observed"
+              ]
+            },
+            "equals": {
+              "$input": "value"
+            }
+          }
+        ]
+      },
+      "values": [
+        {
+          "name": "value",
+          "type": "number",
+          "sensitivity": "public",
+          "value": 42
+        }
+      ]
+    },
+    "key": "expect-572101fb6365c3014265e601"
+  },
+  "postgresqlHelper": {
+    "id": "postgresqlHelper",
+    "title": "A helper PostgreSQL query returns the bound observation",
+    "description": "One row returns the bound observation value 42",
+    "expected": "PASS",
+    "definition": {
+      "family": "database",
+      "operation": {
+        "id": "observe",
+        "target": "postgresql",
+        "source": {
+          "kind": "helper",
+          "reference": "synthetic-observation",
+          "version": "1.0.0"
+        },
+        "engine": "postgresql",
+        "sql": "SELECT $1::integer AS \"Observed\"",
+        "parameters": [
+          {
+            "name": "value",
+            "input": "value",
+            "type": "integer"
+          }
+        ],
+        "checks": [
+          {
+            "id": "count",
+            "select": {
+              "from": "rowCount",
+              "path": []
+            },
+            "equals": 1
+          },
+          {
+            "id": "expected",
+            "select": {
+              "from": "rows",
+              "path": [
+                0,
+                "Observed"
+              ]
+            },
+            "equals": {
+              "$input": "value"
+            }
+          }
+        ]
+      },
+      "values": [
+        {
+          "name": "value",
+          "type": "number",
+          "sensitivity": "public",
+          "value": 42
+        }
+      ]
+    },
+    "key": "expect-035ace11329bfe91e8cea4ec"
+  },
+  "postgresqlInline": {
+    "id": "postgresqlInline",
+    "title": "An inline PostgreSQL query returns the bound observation",
+    "description": "One row returns the bound observation value 42",
+    "expected": "PASS",
+    "definition": {
+      "family": "database",
+      "operation": {
+        "id": "observe",
+        "target": "postgresql",
+        "source": {
+          "kind": "inline",
+          "reference": "synthetic-observation",
+          "version": "1.0.0"
+        },
+        "engine": "postgresql",
+        "sql": "SELECT $1::integer AS \"Observed\"",
+        "parameters": [
+          {
+            "name": "value",
+            "input": "value",
+            "type": "integer"
+          }
+        ],
+        "checks": [
+          {
+            "id": "count",
+            "select": {
+              "from": "rowCount",
+              "path": []
+            },
+            "equals": 1
+          },
+          {
+            "id": "expected",
+            "select": {
+              "from": "rows",
+              "path": [
+                0,
+                "Observed"
+              ]
+            },
+            "equals": {
+              "$input": "value"
+            }
+          }
+        ]
+      },
+      "values": [
+        {
+          "name": "value",
+          "type": "number",
+          "sensitivity": "public",
+          "value": 42
+        }
+      ]
+    },
+    "key": "expect-40e5ee07a106959532a64809"
+  }
+}

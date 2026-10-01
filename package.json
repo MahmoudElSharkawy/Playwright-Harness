@@ -1,6 +1,6 @@
 {
   "name": "playwright-pom-harness",
-  "version": "3.0.12",
+  "version": "3.0.13",
   "private": true,
   "license": "MIT",
   "type": "module",
@@ -41,7 +41,10 @@
     "probe:database-neutrality": "node scripts/probes/database-neutrality.mjs",
     "test:hosts": "node --test harness-tests/host-parity.test.mjs harness-tests/host-hooks.test.mjs harness-tests/host-proof-assessment.test.mjs",
     "probe:hosts": "node scripts/probes/hosts.mjs",
-    "test:integrations": "node --test harness-tests/ado-integrations.test.mjs"
+    "test:integrations": "node --test harness-tests/ado-integrations.test.mjs",
+    "test:generation": "node --test --test-concurrency=1 harness-tests/generation.test.mjs harness-tests/generation-native.test.mjs",
+    "probe:generation": "node scripts/probes/generation.mjs",
+    "check:generation-conventions": "node scripts/check-conventions.mjs --root harness-tests/fixtures/generation-consumer --fail-on-warn"
   },
   "files": [
     "README.md",

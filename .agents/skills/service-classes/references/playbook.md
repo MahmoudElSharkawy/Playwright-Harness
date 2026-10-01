@@ -1,5 +1,9 @@
 # Service Classes Playbook
 
+## Shared runtime integration (M13)
+
+A generated service may delegate a reviewed catalog operation, deterministic helper, or fixed inline parameterized definition through a technical facade into the shared API/DB runtime. These are equal execution sources; no catalog conversion is required. Versioned operation records can own their endpoint/SQL fields rather than duplicating them on the service. Review records, bindings and expected values together with their callers. Native driver binding and configured capabilities still apply.
+
 Rules for `Apis<Domain>` classes in `apis/` and `Dbs<Domain>` classes in `dbs/`.
 Living style references: `src/apis/ApisUserManagement.ts`, `src/dbs/DbsUserManagement.ts`,
 `src/config/databases.ts`, `tests/User Management/DbUserManagementTests.spec.ts`.

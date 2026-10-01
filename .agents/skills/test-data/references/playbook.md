@@ -1,5 +1,9 @@
 # Test Data — Playbook
 
+## Intent-driven lifecycle (M13)
+
+Cleanup follows scenario intent and ownership: temporary owned fixtures normally clean up, existing state is restored when required, and intentionally persistent outcomes may remain. Capture before-state only for a defined restoration obligation. Local source identities replace external TC IDs when there is no external case; mutable records still need distinct per-case and per-run identity.
+
 Numbered practices for test data in this framework. Shared law lives in
 [design-conventions](../../pom-architecture/references/design-conventions.md); this file
 adds the test-data depth. All examples are quoted from real project files, except the

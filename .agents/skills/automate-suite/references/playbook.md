@@ -17,6 +17,10 @@ execution is separately implemented and validated.
 
 # Automate-Suite Playbook
 
+## Compatibility scope
+
+This document preserves historical ADO artifacts and conventions. For current execution, generation, repair budgets and verification use [M13](../../../../docs/M13-GENERATION.md). AgenTeX, catalog migration, automatic restoration and parallel execution are not prerequisites. Current environment capabilities authorize ordinary permitted operations.
+
 The phases in execution order. Each phase states its **inputs**, **exact
 commands**, **outputs**, and **failure handling**. State lives on disk (§8), so any
 phase can be re-entered idempotently.

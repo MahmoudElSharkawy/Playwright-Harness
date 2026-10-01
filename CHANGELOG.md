@@ -1,5 +1,14 @@
 # Changelog
 
+## 3.0.13 — M13 generation, review and verification
+
+- Bind neutral source intent to reassessed execution, durable POM files and independent review.
+- Enforce three cumulative repair rounds and two independent exact-scope native green runs, with executed source assertions and intact receipts.
+- Reuse shared deterministic API/DB libraries across catalog, helper and inline definitions; keep sequential execution and intent-driven lifecycle policy.
+- Add a separate consumer proof and native runner failure fixtures. Local case metadata no longer requires an invented ADO link.
+- Refresh the canonical automation route without adding AgenTeX, a browser DSL or a workflow engine.
+
+
 Package versions belong to this package, not to adopting applications. Historical
 private incidents and delivery identifiers are intentionally not retained here.
 
