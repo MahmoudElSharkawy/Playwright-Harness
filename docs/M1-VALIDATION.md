@@ -155,3 +155,9 @@ machine-protected recovery, its embedded ZIP, and the encrypted supplied ZIP; th
 changelog entries changed. The archived term has zero remaining matches, unrelated
 entries retained their content, and both protection mechanisms remain in place. The
 private follow-up receipt is `.m1-private/content-redaction-followup.json`.
+
+A subsequent local Git-object audit found one unreachable historical script blob with
+an owner-prohibited legacy reference. Only that blob and its two unreachable parent
+trees were removed. Git integrity validation passed; 242 other unreachable objects
+were preserved, and the remaining unreachable blobs had zero requested-term matches.
+The previous branch history and working files were unaffected by the object cleanup.
