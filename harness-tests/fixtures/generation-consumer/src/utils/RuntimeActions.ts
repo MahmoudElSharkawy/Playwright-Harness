@@ -6,6 +6,7 @@ import { createApiRuntime, defineApiOperation } from 'playwright-pom-harness/scr
 import { createDatabaseRuntime, defineDatabaseOperation } from 'playwright-pom-harness/scripts/lib/database/index.mjs';
 import { consumerRoots } from 'playwright-pom-harness/scripts/lib/consumer-paths.mjs';
 import { loadEnvironment } from 'playwright-pom-harness/scripts/lib/project-config.mjs';
+import { attachResult } from 'playwright-pom-harness/scripts/lib/reporting/index.mjs';
 
 /** Thin consumer wiring only. Binding, transport, SQL drivers, effects and evidence stay in the shared runtimes. */
 export class RuntimeActions {
@@ -27,7 +28,10 @@ export class RuntimeActions {
       const runtimeRoots = {...roots, runRoot: join(roots.projectRoot, '.harness/runs', runId)};
       const runtime = definition.family === 'api' ? createApiRuntime(run, runtimeRoots) : createDatabaseRuntime(run, runtimeRoots);
       await runtime.execute({operation, invocationId: 'observe-call', inputs: run.inputs.values});
-      return runtime.finish();
+      const result = runtime.finish();
+      const delivery = await attachResult(test, result);
+      if (delivery.status === 'FAILED') console.warn('Harness result attachments unavailable; execution outcome is unchanged.');
+      return result;
     });
   }
 }

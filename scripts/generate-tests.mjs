@@ -12,8 +12,10 @@ import {relativeFile} from './lib/generation/storage.mjs';
 try {
   const {roots, args} = projectArgument(), [command, ...rest] = args;
   const options = {};
-  for (let i = 0; i < rest.length; i += 2) {
+  for (let i = 0; i < rest.length;) {
+    if (rest[i] === '--allure') {requireThat(command === 'verify' && !options['--allure'], 'Allure capture is available once on verify.'); options['--allure'] = true; i++; continue;}
     requireThat(['--input', '--id'].includes(rest[i]) && rest[i + 1] && !options[rest[i]], 'Use --input and/or --id once.'); options[rest[i]] = rest[i + 1];
+    i += 2;
   }
   let result;
   if (command === 'prepare') {
@@ -39,7 +41,7 @@ try {
       result = {status: command === 'candidate' ? 'NEEDS_REVIEW' : result.verdict, revision: result.revision};
     } else {
       requireThat(!options['--input'], 'This command does not accept --input.');
-      if (command === 'verify') result = await verifyGeneration(roots, options['--id']);
+      if (command === 'verify') result = await verifyGeneration(roots, options['--id'], {allure: options['--allure'] ?? false});
       else {requireThat(command === 'status', 'Unknown generation command.'); result = await generationStatus(roots, options['--id']);}
     }
   }

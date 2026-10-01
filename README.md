@@ -60,6 +60,11 @@ M13 connects assessed execution to durable POM automation through
 [generation, independent review and two scoped green runs](docs/M13-GENERATION.md). See
 [M13 validation](docs/M13-VALIDATION.md) for actual evidence and limits.
 
+M14 adds [validated JSON, Markdown and static HTML reports, plus Allure integration](docs/M14-REPORTING.md).
+Reports preserve execution verdicts, recovery and intent-driven lifecycle outcomes.
+Generated verification can capture native Allure detail in isolated consumer folders;
+report generation runs after native flush. See [M14 validation](docs/M14-VALIDATION.md).
+
 ## Install into a project
 
 Keep this package in its own directory; do not overlay it on application code.

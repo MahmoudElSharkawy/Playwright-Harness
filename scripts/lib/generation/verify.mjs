@@ -10,6 +10,7 @@ import {approvedCandidate} from './index.mjs';
 import {readJson} from '../project-config.mjs';
 
 const reporter = fileURLToPath(new URL('./reporter.cjs', import.meta.url));
+const reportingReporter = fileURLToPath(new URL('../reporting/verification-reporter.mjs', import.meta.url));
 const identity = test => fingerprint([test.spec, test.project, test.titlePath]);
 
 export function selectTests(candidate, report) {
@@ -72,8 +73,9 @@ async function command(roots, cli, args, environment, timeoutMs) {
   });
 }
 
-export async function verifyGeneration(roots, sourceId, {timeoutMs = 120000} = {}) {
+export async function verifyGeneration(roots, sourceId, {timeoutMs = 120000, allure = false} = {}) {
   requireThat(integer(timeoutMs, 5000, 600000), 'Verification timeout must be bounded.');
+  requireThat(typeof allure === 'boolean', 'Allure capture is an explicit boolean option.');
   // Persist invocation intent before dispatch. A crash never turns into an absent attempt.
   return transaction(roots, sourceId, async (state, save, directory) => {
     const candidate = approvedCandidate(roots, state), prior = state.runs.filter(r => r.revision === candidate.revision);
@@ -99,7 +101,10 @@ export async function verifyGeneration(roots, sourceId, {timeoutMs = 120000} = {
       writeFileSync(testList, selected.map(t => `[${t.project}] › ${t.nativeFile} › ${t.titlePath.join(' › ')}`).join('\n'), {flag: 'wx', mode: 0o600});
       requireThat(snapshot(roots).fingerprint === candidate.snapshot.fingerprint, 'Collection changed frozen consumer files.');
       phase = 'EXECUTION'; failureStatus = 'NEEDS_REVIEW';
-      const execution = await command(roots, native.cli, [...shared, '--test-list', testList], {...env, HARNESS_GENERATION_RECEIPT: runReceipt}, timeoutMs);
+      const executionArgs = [...shared, '--test-list', testList];
+      if (allure) executionArgs[executionArgs.indexOf('--reporter') + 1] = reportingReporter;
+      const execution = await command(roots, native.cli, executionArgs, {...env, HARNESS_GENERATION_RECEIPT: runReceipt,
+        HARNESS_ALLURE_DIRECTORY: `reports/generation/${invocation.id}`}, timeoutMs);
       const report = data(readJson(runReceipt));
       requireThat(!execution.timedOut && snapshot(roots).fingerprint === candidate.snapshot.fingerprint, 'Execution changed files or exceeded its deadline.');
       approvedCandidate(roots, state);
@@ -108,6 +113,14 @@ export async function verifyGeneration(roots, sourceId, {timeoutMs = 120000} = {
       Object.assign(record, assessVerification(state.handoff, selected, report, invocation.id, execution.exitCode), {runner: native.version,
         receipt: {path: `.harness/state/generation/${sourceId}/${invocation.id}/execution.json`, fingerprint: fingerprint(report)}});
     } catch {record.status = failureStatus; record.failureClass = phase; record.reason = 'Inspect protected native receipts and the named gate; raw errors are withheld.';}
+    if (allure) {
+      try {
+        const path = `reports/generation/${invocation.id}`, capture = data(readJson(relativeFile(roots, `${path}/capture.json`)));
+        record.reporting = {status: capture.status === 'CAPTURED' ? 'CAPTURED' : 'FAILED', directory: path, source: 'playwright-native'};
+        writeFileSync(relativeFile(roots, `${path}/verification.json`), JSON.stringify({sourceId, invocation: invocation.id, revision: record.revision, status: record.status,
+          ...(record.failureClass ? {failureClass: record.failureClass} : {})}), {flag: 'wx', mode: 0o600});
+      } catch {record.reporting = {status: 'FAILED', reason: 'Optional Allure capture unavailable; verification verdict unchanged.'};}
+    }
     record.endedAt = Date.now(); save(state); return frozen(record);
   });
 }

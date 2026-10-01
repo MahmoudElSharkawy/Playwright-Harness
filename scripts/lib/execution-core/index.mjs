@@ -3,4 +3,4 @@ export {createRun, defineOperation, authorizeOperation, checkExecutionWindow} fr
 export {typedValue, PHASES, EVIDENCE_KINDS} from './data.mjs';
 export {attemptRecord, decideRecovery} from './attempts.mjs';
 export {registerEvidence, verifyEvidence} from './evidence.mjs';
-export {assessRun} from './results.mjs';
+export {assessRun, requireAssessedResult} from './results.mjs';

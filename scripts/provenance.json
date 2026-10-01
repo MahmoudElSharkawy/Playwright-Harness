@@ -4,6 +4,12 @@
   "publicationAuthorized": false,
   "sources": [
     {
+      "scope": "M14 changes",
+      "status": "Created for this project; official Allure configuration and installed native interfaces informed the adapters; existing separately installed Allure tools are reused; no new root dependency",
+      "targetLicense": "MIT",
+      "thirdPartyCodeCopied": false
+    },
+    {
       "scope": "M13 changes",
       "status": "Created for this project; existing separately installed Playwright Test and database libraries are reused; native interface inspection informed the verification adapter; no new dependency",
       "targetLicense": "MIT",

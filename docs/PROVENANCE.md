@@ -67,6 +67,12 @@ harness. Official Microsoft REST documentation informed request shapes; no upstr
 implementation was copied and no dependency or third-party notice changed. See
 [the adapter guide](M12-ADO.md) for the specific documentation references.
 
+M13 generation and M14 reporting changes are project-authored. Official Allure
+documentation and the installed reporter/launcher interfaces informed M14 adapters;
+no upstream implementation was copied. Existing separately installed Allure tools
+remain Apache-2.0 dependencies with their original notices. No new root dependency
+or redistribution of Allure, Java, browsers or database images is introduced.
+
 AgenTeX (MIT) and Microsoft Playwright CLI (Apache-2.0) were inspected as references.
 No upstream implementation was copied into M1. Exact research revisions are recorded
 in [the provenance inventory](../scripts/provenance.json). Architectural ideas and links

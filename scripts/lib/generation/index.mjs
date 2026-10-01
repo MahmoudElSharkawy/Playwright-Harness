@@ -84,3 +84,15 @@ export async function generationStatus(roots, sourceId) {
       revision: candidate.revision, sourceFingerprint: state.handoff.fingerprint, runs: runs.map(r => ({id: r.id, status: r.status}))});
   });
 }
+
+/** Historical presentation reads a recorded verdict; it never derives a new one. */
+export async function verificationRecord(roots, sourceId, invocationId) {
+  id(invocationId);
+  return transaction(roots, sourceId, state => {
+    const run = state?.runs.find(item => item.id === invocationId); requireThat(run && run.status !== 'STARTED', 'Verification did not finish.');
+    const review = state.reviews.filter(item => item.revision === run.revision).at(-1);
+    requireThat(review?.verdict === 'APPROVE' && fingerprint(reviewArtifact(roots, review.artifact.path)) === fingerprint(review.artifact), 'Verification review is unavailable or changed.');
+    if (run.receipt) requireThat(fingerprint(JSON.parse(readFileSync(relativeFile(roots, run.receipt.path), 'utf8'))) === run.receipt.fingerprint, 'Native verification receipt changed.');
+    return frozen(data(run));
+  });
+}

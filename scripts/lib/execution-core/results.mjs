@@ -3,6 +3,12 @@ import {requireRun, operationInput, authorizeOperation, checkExecutionWindow} fr
 import {attemptRecord, decideRecovery, rowMismatch} from './attempts.mjs';
 import {verifyEvidence} from './evidence.mjs';
 
+const ASSESSED_RESULTS = new WeakSet();
+/** Presentation code accepts only this core's immutable, evidence-checked results. */
+export function requireAssessedResult(result) {
+  requireThat(ASSESSED_RESULTS.has(result), 'Use an execution-core assessment, not a claimed result JSON.'); return result;
+}
+
 function sameProducer(value, attempt, name) {
   return value.producer.runId === attempt.identity.runId && value.producer.scenarioId === attempt.identity.scenarioId
     && value.producer.attemptId === attempt.identity.attemptId && value.producer.name === name;
@@ -181,7 +187,8 @@ export function assessRun(run, roots, input) {
   const status = ['FAIL', 'NEEDS_REVIEW', 'BLOCKED'].find(candidate => results.some(result => result.status === candidate))
     ?? (results.every(result => result.status === 'SKIPPED') ? 'SKIPPED' : 'PASS');
   const counts = Object.fromEntries(['PASS', 'FAIL', 'BLOCKED', 'SKIPPED', 'NEEDS_REVIEW'].map(value => [value, results.filter(result => result.status === value).length]));
-  return frozen({version: 1, runId: run.id, inputFingerprint: run.inputFingerprint, status,
+  const result = frozen({version: 1, runId: run.id, inputFingerprint: run.inputFingerprint, status,
     stability: results.some(result => result.stability === 'unstable') ? 'unstable' : results.some(result => result.stability === 'recovered') ? 'recovered' : 'stable', counts,
     scenarios: results, operations, evidence: [...evidence.values()]});
+  ASSESSED_RESULTS.add(result); return result;
 }

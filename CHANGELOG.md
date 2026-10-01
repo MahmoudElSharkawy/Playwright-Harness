@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.0.14 — M14 reporting and Allure integration
+
+- Render validated execution results as JSON, Markdown and self-contained static HTML, preserving verdicts, attempts, effects and lifecycle intent.
+- Attach sanitized execution views inside native technical steps; isolate native Allure captures per verification invocation.
+- Generate Allure after reporter flush with integrity checks and a visible recorded verification outcome above native detail.
+- Keep reporting failures separate from test verdicts and two-green readiness; preserve sequential execution.
+- Add report contract checks and extend the reviewed live consumer proof. No new root dependency or release authorization.
+
 ## 3.0.13 — M13 generation, review and verification
 
 - Bind neutral source intent to reassessed execution, durable POM files and independent review.

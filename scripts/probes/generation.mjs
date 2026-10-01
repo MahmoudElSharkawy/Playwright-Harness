@@ -18,14 +18,18 @@ import {beginGeneration, createGenerationHandoff, registerCandidate, recordGener
 import {verifyGeneration} from '../lib/generation/verify.mjs';
 import {transaction} from '../lib/generation/storage.mjs';
 import {fingerprint} from '../lib/execution-core/data.mjs';
+import {writeReports} from '../lib/reporting/index.mjs';
+import {generateAllure} from '../lib/reporting/allure.mjs';
 import {hostDatabases} from '../../harness-tests/fixtures/host-databases.mjs';
 import {generationCases} from '../../harness-tests/fixtures/generation.mjs';
 
-const repairRoot = process.argv.length === 4 && process.argv[2] === '--repair-consumer' ? resolve(process.argv[3]) : undefined;
-if (process.argv.length !== 2 && !repairRoot) throw new Error('Use no arguments for a fresh proof, or --repair-consumer for its reviewed repair.');
-const projectRoot = repairRoot ?? mkdtempSync(join(tmpdir(), 'harness-m13-consumer-')), roots = consumerRoots(projectRoot), proofId = `proof-${randomUUID()}`;
+const args = process.argv.slice(2), reporting = args.includes('--reports');
+if (reporting) args.splice(args.indexOf('--reports'), 1);
+const repairRoot = args.length === 2 && args[0] === '--repair-consumer' ? resolve(args[1]) : undefined;
+if (args.length && !repairRoot) throw new Error('Use --reports optionally, with no other arguments or --repair-consumer for its reviewed repair.');
+const projectRoot = repairRoot ?? mkdtempSync(join(tmpdir(), `harness-${reporting ? 'm14' : 'm13'}-consumer-`)), roots = consumerRoots(projectRoot), proofId = `proof-${randomUUID()}`;
 const fixture = generationCases();
-const audit = join(packageRoot, '.validation/m13', proofId); mkdirSync(audit, {recursive: true});
+const audit = join(packageRoot, reporting ? '.validation/m14' : '.validation/m13', proofId); mkdirSync(audit, {recursive: true});
 const put = (path, value) => {mkdirSync(dirname(join(projectRoot, path)), {recursive: true}); writeFileSync(join(projectRoot, path), typeof value === 'string' ? value : JSON.stringify(value, null, 2));};
 const check = (name, args) => {
   const output = execFileSync(process.execPath, args, {cwd: projectRoot, encoding: 'utf8', windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], timeout: 60000});
@@ -56,7 +60,7 @@ try {
   }
   cpSync(join(packageRoot, 'harness-tests/fixtures/generation-consumer'), projectRoot, {recursive: true});
   const dependencies = {}, versions = {};
-  for (const name of ['@playwright/test', 'playwright', 'playwright-core', 'allure-js-commons', '@types/node', 'typescript']) {
+  for (const name of ['@playwright/test', 'playwright', 'playwright-core', 'allure-js-commons', '@types/node', 'typescript', ...(reporting ? ['allure-playwright', 'allure-commandline'] : [])]) {
     const target = join(projectRoot, 'node_modules', name); mkdirSync(dirname(target), {recursive: true});
     const source = join(packageRoot, 'examples/node_modules', name);
     if (!existsSync(target)) symlinkSync(source, target, process.platform === 'win32' ? 'junction' : 'dir');
@@ -107,6 +111,7 @@ try {
       await runtime.execute({operation, invocationId: 'observe-call', inputs: run.inputs.values}); result = runtime.finish();
     }
     assert.equal(result.status, 'PASS', `Exploration failed for ${item.id}`);
+    if (reporting) assert.equal(writeReports(roots, result, {directory: `reports/exploration/${runId}`}).status, 'WRITTEN');
     writeFileSync(join(runRoots.runRoot, 'inputs.json'), JSON.stringify(run));
     executions.push({run, roots: runRoots, observations: JSON.parse(readFileSync(join(runRoots.runRoot, 'observations.json'), 'utf8'))});
     bindings.push({key: item.key, runId: run.id, scenarioId: item.id, expectationId: 'expected'});
@@ -121,11 +126,20 @@ try {
   const deadline = Date.now() + 3600000;
   while (!existsSync(descriptor.reviewInput)) {if (Date.now() >= deadline) throw new Error('Independent review was not supplied within the proof deadline.'); await pause(1000);}
   await recordGenerationReview(roots, fixture.source.id, JSON.parse(readFileSync(descriptor.reviewInput, 'utf8')));
-  const first = await verifyGeneration(roots, fixture.source.id), second = first.status === 'PASS' ? await verifyGeneration(roots, fixture.source.id) : undefined;
+  const first = await verifyGeneration(roots, fixture.source.id, {allure: reporting}), second = first.status === 'PASS' ? await verifyGeneration(roots, fixture.source.id, {allure: reporting}) : undefined;
   const status = await generationStatus(roots, fixture.source.id); success = status.status === 'READY';
   writeFileSync(join(audit, 'verification.json'), JSON.stringify({first, second, status, databases: databases.versions}, null, 2));
+  if (reporting) {
+    const reports = [];
+    for (const verification of [first, second].filter(Boolean)) {
+      assert.equal(verification.reporting?.status, 'CAPTURED');
+      const generated = await generateAllure(roots, verification.reporting.directory); reports.push(generated); assert.equal(generated.status, 'GENERATED');
+    }
+    writeFileSync(join(audit, 'reporting.json'), JSON.stringify(reports, null, 2));
+  }
   console.log(JSON.stringify({probe: 'generation', ...status, liveBrowser: true, liveApi: true, liveSqlServer: true, livePostgresql: true, nativeRunner: '1.63.0', cases: fixture.cases.length}));
 } catch (error) {
+  success = false;
   // Inputs are synthetic; still keep native diagnostics private and emit only classification.
   writeFileSync(join(audit, 'failure.txt'), String(error.stack), {mode: 0o600}); console.error(JSON.stringify({probe: 'generation', status: 'FAIL', audit}));
 } finally {

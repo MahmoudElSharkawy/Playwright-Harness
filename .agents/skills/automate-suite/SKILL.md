@@ -43,6 +43,8 @@ Source → refinement → observed execution → durable POM generation
 - Preserve existing application code and consumer customizations. Use the user's ongoing
   branch/delivery instructions; do not infer authorization for external writes from READY.
 
+Use [M14 reporting](../../../docs/M14-REPORTING.md) for validated execution reports and optional Allure capture during verification. Keep the recorded verifier outcome visible above native test detail; report generation never grants delivery readiness.
+
 Use [M12 adapters](../../../docs/M12-ADO.md) for explicitly authorized external delivery.
 Local sources support the complete generation/review/verification path without ADO.
 Legacy ADO artifact layouts remain documented in [the compatibility playbook](references/playbook.md).

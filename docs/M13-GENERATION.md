@@ -102,7 +102,8 @@ verification stops before execution. It forces one worker, zero retries, one rep
 project dependencies, and bounds time and output. Put required prerequisites in
 reviewed per-test fixtures/hooks; dependency projects are not implicitly executed.
 The verification receipt replaces the configured reporter for these scoped checks.
-Product reports and Allure report generation belong to M14.
+With `verify --allure`, [M14 reporting](M14-REPORTING.md) composes that required
+receipt with optional Allure capture. It does not change scope, assertions or readiness.
 
 Every selected test must run once with normal expected status, pass, and execute every
 mapped expectation marker with at least one native assertion. Missing/extra tests,
