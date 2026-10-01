@@ -31,8 +31,12 @@ use official CLI arguments. See [M6 validation](docs/M6-VALIDATION.md) for curre
 M7 adds the [shared API runtime](docs/M7-API.md) for configured CRUD, typed inputs and
 outputs, sanitized evidence and effect-aware recovery. Catalogs, helpers, inline
 definitions and dynamic exploration share the same controls. See
-[M7 validation](docs/M7-VALIDATION.md) for its acceptance status. Database execution
-remains a later milestone.
+[M7 validation](docs/M7-VALIDATION.md) for its acceptance status.
+
+M8 adds the [SQL Server runtime](docs/M8-SQLSERVER.md) with real driver binding,
+configured scope, affected-row expectations, protected evidence and optional guarded
+restoration. See [M8 validation](docs/M8-VALIDATION.md) for acceptance and real-instance
+coverage. Mixed execution and PostgreSQL remain later milestones.
 
 ## Install into a project
 
@@ -146,12 +150,14 @@ permissions, reliable test verdicts or remote branch policies.
 ## Package validation and release
 
 ```sh
+npm ci --ignore-scripts
 npm ci --prefix scripts/spikes/playwright-cli --ignore-scripts
 npm run check:syntax
 npm run check:json
 npm run check:links
 npm run check:conventions
 npm run test:api
+npm run test:database
 npm test
 npm run test:fetch
 npm run check:privacy
@@ -164,6 +170,10 @@ npm run typecheck:examples
 
 The package tests inspect the separately installed, pinned CLI configuration resolver.
 They do not require a browser download; live M4 probes have separate prerequisites.
+The SQL Server runtime uses the root lockfile's pinned driver. `npm run probe:database`
+separately provisions, tests and removes a disposable development SQL Server through
+Docker; it fails if the required real instance cannot run. See the M8 guide for its
+requirements and the Linux-client option.
 
 The convention gate checks `examples` with warnings treated as errors. Zero scope or
 an unresolved Git base fails. JSON parsing is not schema validation; link checks cover

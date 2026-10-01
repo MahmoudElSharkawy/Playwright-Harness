@@ -71,7 +71,7 @@ export function createApiRuntime(run, inputRoots, {signal, resolveCredential = e
     const inspect = item => {
       if (typeof item === 'string') requireThat(![...secretValues].some(secret => item.includes(secret) || item.includes(encodeURIComponent(secret))), 'Sensitive content cannot be a public API output.');
       else if (typeof item === 'number' || typeof item === 'boolean') requireThat(!sensitiveScalars.has(item), 'Sensitive content cannot be a public API output.');
-      else if (item && typeof item === 'object') for (const [name, child] of Object.entries(item)) {requireThat(!sensitiveKey(name), 'Sensitive fields require protected extraction.'); inspect(child);}
+      else if (item && typeof item === 'object') for (const [name, child] of Object.entries(item)) {requireThat(!sensitiveKey(name), 'Sensitive fields require protected extraction.'); if (!Array.isArray(item)) inspect(name); inspect(child);}
     };
     inspect(checked); return checked;
   }

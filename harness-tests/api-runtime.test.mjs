@@ -8,6 +8,12 @@ import {defineApiOperation, createApiRuntime} from '../scripts/lib/api/index.mjs
 import {defineOperation} from '../scripts/lib/execution-core/index.mjs';
 import {fixture, operation, statusCheck, readEffects, writeEffects} from './fixtures/api.mjs';
 
+test('known confidential values cannot become public JSON member names', async t => {
+  const value = `synthetic-"${randomUUID()}\\key`, op = operation('key', {extract: [{name: 'payload', type: 'object', sensitivity: 'public', select: {from: 'json', path: []}}]});
+  const f = await fixture(t, ({reply}) => reply(200, {[value]: 'public'}), [op], {auth: true, runtime: {resolveCredential: () => ({'x-api-key': value})}});
+  const attempt = await f.call(); assert.equal(attempt.outputs.length, 0); assert.equal(f.runtime.finish().status, 'NEEDS_REVIEW');
+});
+
 for (const kind of ['catalog', 'helper', 'inline', 'exploration']) test(`${kind} performs the same real request, checks and typed extraction`, async t => {
   const op = operation('request', {kind, extract: [{name: 'recordId', type: 'number', sensitivity: 'public', select: {from: 'json', path: ['id']}}]});
   const f = await fixture(t, ({reply}) => reply(200, {id: 7}), [op]);

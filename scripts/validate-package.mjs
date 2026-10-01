@@ -33,7 +33,7 @@ function run() {
     if (!Array.isArray(status.sources) || !status.sources.length) findings.push({file:'scripts/provenance.json',rule:'source-inventory-empty'});
     const reviewed=new Set(['MIT','Apache-2.0','BSD-2-Clause','BSD-3-Clause','ISC','BlueOak-1.0.0','0BSD']);
     dependencyRecords=0;
-    for (const [recordFile,lockFile] of [['scripts/dependency-licenses.json','examples/package-lock.json'],['scripts/cli-dependency-licenses.json','scripts/spikes/playwright-cli/package-lock.json']]) {
+    for (const [recordFile,lockFile] of [['scripts/dependency-licenses.json','examples/package-lock.json'],['scripts/cli-dependency-licenses.json','scripts/spikes/playwright-cli/package-lock.json'],['scripts/runtime-dependency-licenses.json','package-lock.json']]) {
       const dependencies=JSON.parse(readFileSync(join(root,recordFile),'utf8'));
       const lock=JSON.parse(readFileSync(join(root,lockFile),'utf8'));
       const locked=Object.entries(lock.packages).filter(([p])=>p);

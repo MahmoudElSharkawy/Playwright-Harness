@@ -36,3 +36,18 @@ packages and browser binaries are separate upstream distributions, not bundled i
 this source package. This audit does not clear redistribution of the image or
 browser binaries; preserve their upstream notices and audit that distribution before
 sharing it. No container image has been published.
+
+M8 consumes [node-mssql](https://github.com/tediousjs/node-mssql) 12.7.2 under MIT
+as a separately installed runtime dependency. Its 73 resolved dependency packages
+are recorded in [the runtime inventory](scripts/runtime-dependency-licenses.json)
+and checked against the root lockfile. Their declarations are MIT, Apache-2.0,
+BSD-3-Clause, ISC and 0BSD. Every installed package includes a top-level license or
+notice file; preserve those files when redistributing installed dependencies. No
+upstream implementation is copied into the harness or relicensed.
+
+The real database probe uses Microsoft's SQL Server 2022 Developer container for
+development/testing under Microsoft's terms, with explicit EULA acceptance. It is
+not MIT software and is not bundled, published or cleared for redistribution here.
+The pinned Node Linux client image is also an independent upstream distribution.
+See [Microsoft's container guide](https://learn.microsoft.com/en-us/sql/linux/install-upgrade/quickstart-install-docker?view=sql-server-ver17)
+and [the M8 guide](docs/M8-SQLSERVER.md) for the intended local validation use.

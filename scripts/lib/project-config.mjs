@@ -31,9 +31,12 @@ export function validateConfiguration(project,targets) {
   }
   for(const [name,target] of Object.entries(targets.databases)) {
     if(!identifier(name))throw new Error('Invalid target identifier.');
-    keys(target,['engine','connectionRef','schema'],'database target');
+    keys(target,['engine','connectionRef','schema','server','port','database','encrypt','trustServerCertificate'],'database target');
     if(!['sqlserver','postgresql'].includes(target.engine) || !secretReference(target.connectionRef))throw new Error('Database targets need a supported engine name and environment-variable connection reference.');
     if(target.schema!==undefined && (typeof target.schema!=='string' || !target.schema.trim()))throw new Error('Invalid database schema scope.');
+    for(const field of ['server','database']) if(target[field]!==undefined && (typeof target[field]!=='string' || !target[field].trim() || /[\x00-\x1f]/.test(target[field])))throw new Error('Invalid database destination.');
+    if(target.port!==undefined && (!Number.isInteger(target.port) || target.port<1 || target.port>65535))throw new Error('Invalid database port.');
+    for(const field of ['encrypt','trustServerCertificate']) if(target[field]!==undefined && typeof target[field]!=='boolean')throw new Error('Invalid database TLS option.');
   }
   for(const [name,environment] of Object.entries(project.environments)) {
     if(!identifier(name))throw new Error('Invalid environment identifier.');

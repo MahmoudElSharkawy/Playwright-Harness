@@ -3,6 +3,17 @@
 Package versions belong to this package, not to adopting applications. Historical
 private incidents and delivery identifiers are intentionally not retained here.
 
+## 3.0.8 — Unreleased
+
+- M8: add sequential SQL Server execution with actual typed driver bindings,
+  lightweight statement classification and dedicated database/schema principals.
+- Support dynamic SELECT/INSERT/UPDATE/DELETE, peer catalog/helper/inline sources,
+  bounded results, effect accounting, sanitized evidence and safe read recovery.
+- Keep lifecycle obligations optional; require conditional identity/version checks
+  for restoration, and preserve intentionally persistent outcomes.
+- Pin node-mssql and its dependencies, record third-party provenance, and add
+  disposable real SQL Server validation for Windows and Linux clients.
+
 ## 3.0.7 — Unreleased
 
 - M7: add one deterministic API runtime for catalog, helper, inline and dynamic
