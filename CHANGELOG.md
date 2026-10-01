@@ -8,6 +8,7 @@
 - Allow the existing host and full-workflow acceptance probes to use a separate consumer with the actual installed package.
 - Drain cancellation and recover exact owned native resources after a proof timeout, with protected atomic ownership receipts and real fault evaluations.
 - Resolve Windows consumer paths for native allowlists, retain private compiler diagnostics, and support the explicit local Docker Desktop fixture route.
+- Supply the generated-test fixture's Chrome prerequisite in the Linux client and recognize exact literal native consumer-directory prefixes without accepting shell additions.
 - Keep authenticated host evidence separate from public CI artifacts and retain explicit readiness gates. No runtime dependency upgrade, execution-policy change or release authorization.
 
 ## 3.0.16 — M16 bounded parallel execution

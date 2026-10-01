@@ -135,11 +135,17 @@ cleanup. Runtime targets remain local and ephemeral; semantic comparison still
 preserves arbitrary remote destinations and ports. Native Linux CI uses the
 default. The image verifies
 both pinned native CLI versions and explicitly completes Claude's local binary
-placement after dependency installation.
+placement after dependency installation. It installs both the pinned Playwright
+Chromium build and the Google Chrome channel required by the generated-test fixture.
+The Playwright installer is pinned; Chrome's downloaded stable release is recorded
+as an observed version in the validation evidence, not described as pinned.
 
 Windows consumers resolve their physical long paths before native tool allowlists
 are constructed. Workflow compiler diagnostics remain in private failure receipts
 so the author can repair actual source errors; public status stays sanitized.
+Native command evidence accepts a literal unquoted POSIX current-directory prefix
+only when it names the exact consumer. Expansion, foreign directories, extra shell
+operations and unpaired or failed receipts remain invalid.
 When a Linux native sandbox cannot create its namespace before an operation starts,
 the proof may request normal host approval escalation for that exact operation.
 A rejection remains a blocker; hook denials and commands that actually started are
