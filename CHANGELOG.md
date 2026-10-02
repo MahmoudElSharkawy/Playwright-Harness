@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased — installed validation repair
+
+- Constrain the fresh CI consumer to the existing cleared dependency versions when npm relocates the shrinkwrap; retain exact provenance checks without changing dependencies or notices.
+- Parse npm JSON from stdout while preserving combined, hashed diagnostics; add three CI regression tests.
+- Correct the bundled example's `fetch:story` shortcut to resolve the parent package script; document its explicit external consumer and adoption path requirements.
+- Correct the remaining five bundled harness shortcuts; exercise all six through actual npm invocations from the package root and example directory in the adoption tests.
+
+## Unreleased — ADO story retrieval
+
+- Add read-only `fetch-ado-story.mjs --story <id>`: retrieve the test cases linked to a user story without plan or suite IDs. Tested By links by default; `--links tested-by,child,related` selects others per run.
+- Bind link targets to the configured collection, take test-case types from the project's test-case category, and report non-test or other-project items by ID without reading their content.
+- Reuse the suite case reader and bounds; write the suite contract under `test/ado-story-<id>/` and an `ado-story-<id>` neutral source. Suite fetch output is pinned unchanged; exclusions are recorded but not fingerprinted.
+- Include `ado-story-<id>` folders in convention, metrics and tracker scans. A case held by several folders counts once in metrics totals, from its newest verification; recorded results that disagree count it as no-state, and tracker sync skips it with a warning, in deterministic folder order. Library changes refresh consumers' M13 runtime fingerprints; re-verify after upgrading.
+- No story-scoped publication or automation marking, automate-suite skill route, version bump or live-tenant validation.
+
 ## Unreleased — final-review corrections
 
 - Guarantee owned-browser cleanup after interrupted bodies or failed result recording, preserving frozen phases, assertion failures and the shared cleanup deadline.

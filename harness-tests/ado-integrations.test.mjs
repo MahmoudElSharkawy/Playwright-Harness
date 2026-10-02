@@ -5,8 +5,8 @@ import {dirname, join} from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {adoFixture, xml} from './fixtures/ado.mjs';
 import {fixture, retry} from './fixtures/execution-core.mjs';
-import {loadAdoConfiguration, validateAdoConfiguration} from '../scripts/lib/integrations/config.mjs';
-import {createAdoTestSource, adoSuiteToSource, loadTestSource} from '../scripts/lib/integrations/ado-source.mjs';
+import {loadAdoConfiguration, validateAdoConfiguration, workItemLinkId} from '../scripts/lib/integrations/config.mjs';
+import {createAdoTestSource, adoSuiteToSource, adoStoryToSource, loadTestSource} from '../scripts/lib/integrations/ado-source.mjs';
 import {createAdoTestManagement, prepareLegacyPublication, prepareRunPublication} from '../scripts/lib/integrations/ado-management.mjs';
 import {createAdoSourceControl} from '../scripts/lib/integrations/ado-delivery.mjs';
 import {runCompatibility, compatibilityDiagnostic} from '../scripts/lib/integrations/compatibility.mjs';
@@ -21,6 +21,22 @@ const writes = f => f.state.requests.filter(req => req.method !== 'GET' && req.p
 const publish = (f, extra = {}) => createAdoTestManagement(f.client).publish({publication: publication(), planId: 1, suiteId: 2, ...extra});
 function cli(f, command, args = []) { return runCompatibility(command, ['--project-root', f.roots.projectRoot, ...args], {fetchImpl: f.fetchImpl, environment: {[f.config.credentialRef]: f.credential}}); }
 function configure(f) { put(f.roots.projectRoot, '.harness/integrations.json', {version: 1, ado: f.config}); }
+const testedBy = 'Microsoft.VSTS.Common.TestedBy-Forward', link = (f, rel, id, scope = '') => ({rel, url: `${f.config.organizationUrl}${scope}/_apis/wit/workItems/${id}`});
+/** Story 400 tests 101/102 (three URL forms), has a Task child 403 and a related other-project case 404. */
+async function storyFixture(t) {
+  const f = await adoFixture(t), item = (id, fields) => ({id, rev: 1, fields: {'System.TeamProject': 'demo', 'Microsoft.VSTS.TCM.Steps': xml(), ...fields}, relations: []});
+  for (const id of [101, 102]) f.state.items.get(id).fields['System.WorkItemType'] = 'Test Case';
+  f.state.items.set(400, item(400, {'System.Title': 'Synthetic story', 'System.WorkItemType': 'User Story'}));
+  f.state.items.get(400).relations = [link(f, testedBy, 102), link(f, testedBy, 101, '/demo'), {rel: testedBy, url: `${link(f, testedBy, 101, `/${f.state.project.id}`).url}/`},
+    link(f, 'System.LinkTypes.Hierarchy-Forward', 403), link(f, 'System.LinkTypes.Related', 404), {rel: 'AttachedFile', url: 'https://files.example.test/keep'}];
+  f.state.items.set(403, item(403, {'System.Title': 'Synthetic task', 'System.WorkItemType': 'Task'}));
+  f.state.items.set(404, item(404, {'System.Title': 'Foreign case', 'System.WorkItemType': 'Test Case', 'System.TeamProject': 'other'}));
+  f.state.category = {name: 'Test Case Category', referenceName: 'Microsoft.TestCaseCategory', workItemTypes: [{name: 'Test Case'}]};
+  f.state.fault = ({path, send}) => { if (path === 'wit/workitemtypecategories/microsoft.testcasecategory') {send(f.state.category); return true;} };
+  return f;
+}
+const batches = f => f.state.requests.filter(req => req.path === 'wit/workitemsbatch'), contentReads = f => batches(f).filter(req => req.body.fields.includes('Microsoft.VSTS.TCM.Steps'));
+const discoveryFields = ['System.Id', 'System.WorkItemType', 'System.TeamProject'];
 
 test('local source works with no ADO credentials, ignores even malformed ADO config and never invokes an adapter', async t => {
   const f = fixture(t); put(f.roots.projectRoot, '.harness/integrations.json', 'broken');
@@ -126,6 +142,88 @@ test('legacy rendering still preserves genuine parameter guidance and rows', asy
   const markdown = renderSpec({tc, planId: 1, suiteId: 2, suiteName: suite.suiteName, target: 'https://app.example.test', org: 'synthetic', project: 'demo'});
   assert.ok(markdown.includes('Parameterized test case')); assert.ok(markdown.includes('"input": "synthetic"'));
 });
+test('story retrieval follows only Tested By links by default, deduplicates URL forms and reads nothing else', async t => {
+  const f = await storyFixture(t), story = await createAdoTestSource(f.client).fetchStory(400);
+  assert.deepEqual(Object.keys(story), ['storyId', 'storyTitle', 'links', 'organizationUrl', 'project', 'cases', 'excluded']);
+  assert.deepEqual({...story, cases: story.cases.map(tc => tc.id)}, {storyId: 400, storyTitle: 'Synthetic story', links: ['tested-by'], organizationUrl: f.config.organizationUrl, project: 'demo', cases: [101, 102], excluded: []});
+  assert.deepEqual(f.state.requests.map(req => `${req.method} ${req.path}${req.query}`), ['GET wit/workitems/400?$expand=relations&api-version=7.1', 'GET projects/demo?api-version=7.1',
+    'GET wit/workitemtypecategories/microsoft.testcasecategory?api-version=7.1', 'POST wit/workitemsbatch?api-version=7.1', 'POST wit/workitemsbatch?api-version=7.1']);
+  assert.deepEqual(batches(f).map(req => [req.body.ids, req.body.fields]), [[[101, 102], discoveryFields], [[101, 102], ['System.Id', 'System.Title', 'System.TeamProject', 'System.State', 'System.Tags', 'Microsoft.VSTS.Common.Priority',
+    'Microsoft.VSTS.TCM.Steps', 'Microsoft.VSTS.TCM.Parameters', 'Microsoft.VSTS.TCM.LocalDataSource']]]); assert.equal(writes(f).length, 0); assert.equal(f.receipts().length, 0);
+});
+test('selected child and related links report non-test and other-project items by ID without reading their content', async t => {
+  const f = await storyFixture(t); f.state.items.get(400).relations.push(link(f, 'System.LinkTypes.Related', 101));
+  const story = await createAdoTestSource(f.client).fetchStory(400, ['related', 'tested-by', 'child']);
+  assert.deepEqual([story.links, story.cases.map(tc => tc.id), story.excluded], [['tested-by', 'child', 'related'], [101, 102], [{id: 403, reason: 'not-test-case'}, {id: 404, reason: 'other-project'}]]);
+  assert.deepEqual(batches(f).map(req => req.body.ids), [[101, 102, 403, 404], [101, 102]]); assert.deepEqual(contentReads(f).map(req => req.body.ids), [[101, 102]]);
+});
+test('story retrieval accepts exactly 1000 distinct links and 500 included cases', async t => {
+  const f = await storyFixture(t); f.state.items.get(400).relations = [];
+  for (let id = 1000; id < 2000; id++) { f.state.items.set(id, {...structuredClone(f.state.items.get(id < 1500 ? 101 : 403)), id}); f.state.items.get(400).relations.push(link(f, testedBy, id)); }
+  const story = await createAdoTestSource(f.client).fetchStory(400);
+  assert.deepEqual([story.cases.length, story.excluded.length, batches(f).length - contentReads(f).length, contentReads(f).length], [500, 500, 5, 3]);
+});
+test('story retrieval takes test-case types from the process category, not an assumed name', async t => {
+  const f = await storyFixture(t); f.state.category.workItemTypes = [{name: 'Testfall'}]; f.state.items.get(101).fields['System.WorkItemType'] = 'testfall';
+  const story = await createAdoTestSource(f.client).fetchStory(400);
+  assert.deepEqual([story.cases.map(tc => tc.id), story.excluded], [[101], [{id: 102, reason: 'not-test-case'}]]);
+});
+for (const [mode, change, pattern] of [
+  ['test-case-id', f => f.state.items.get(400).fields['System.WorkItemType'] = 'Test Case', /names a test case/],
+  ['no-selected-link', f => f.state.items.get(400).relations = [link(f, 'System.LinkTypes.Related', 101)], /no linked test cases/],
+  ['only-excluded-links', f => f.state.items.get(400).relations = [link(f, testedBy, 403)], /no linked test cases/],
+  ['foreign-host', f => f.state.items.get(400).relations.push({rel: testedBy, url: 'https://other.invalid/collection/_apis/wit/workItems/101'}), /outside the configured collection/],
+  ['alias-host', f => f.state.items.get(400).relations.push({rel: testedBy, url: 'https://alias.example.test/collection/_apis/wit/workItems/101'}), /outside the configured collection/],
+  ['other-project-path', f => f.state.items.get(400).relations.push(link(f, testedBy, 101, '/other')), /outside the configured collection/],
+  ['story-other-project', f => f.state.items.get(400).fields['System.TeamProject'] = 'other', /ownership/],
+  ['missing-linked-item', f => f.state.items.delete(102), /omitted/],
+  ['incomplete-category', f => f.state.category = {referenceName: 'Microsoft.TestCaseCategory', workItemTypes: []}, /category/],
+  ['wrong-category', f => f.state.category.referenceName = 'Microsoft.RequirementCategory', /category/],
+  ['unclassified-item', f => delete f.state.items.get(102).fields['System.WorkItemType'], /classification/],
+  ['ownership-flip', f => { let calls = 0; const base = f.state.fault; f.state.fault = context => { if (context.path === 'wit/workitemsbatch' && ++calls === 2) f.state.items.get(102).fields['System.TeamProject'] = 'other'; return base(context); }; }, /ownership/],
+  ['too-many-cases', f => { f.state.items.get(400).relations = []; for (let id = 1000; id <= 1500; id++) { f.state.items.set(id, {...structuredClone(f.state.items.get(101)), id}); f.state.items.get(400).relations.push(link(f, testedBy, id)); } }, /1–500/],
+  ['too-many-links', f => f.state.items.get(400).relations = Array.from({length: 1001}, (_, index) => link(f, testedBy, 2000 + index)), /bounded scope/]
+]) test(`story retrieval refuses ${mode} without reading excluded or partial content`, async t => {
+  const f = await storyFixture(t); change(f);
+  await assert.rejects(createAdoTestSource(f.client).fetchStory(400), pattern);
+  assert.equal(contentReads(f).length, mode === 'ownership-flip' ? 1 : 0); assert(batches(f).every(req => contentReads(f).includes(req) || String(req.body.fields) === String(discoveryFields)));
+  assert.equal(writes(f).length, 0);
+});
+test('story retrieval validates its ID and link selection before any request', async t => {
+  const f = await storyFixture(t), source = createAdoTestSource(f.client);
+  for (const [story, links] of [[0], ['x'], [400, []], [400, ['parent']], [400, ['tested-by', 'tested-by']], [400, 'tested-by']]) await assert.rejects(source.fetchStory(story, links));
+  assert.equal(f.state.requests.length, 0);
+});
+test('story and suite retrieval share one case reader, including nested shared steps', async t => {
+  const f = await storyFixture(t); f.state.items.set(300, {id: 300, fields: {'System.TeamProject': 'demo', 'Microsoft.VSTS.TCM.Steps': xml('Shared action', 'Shared expected')}}); f.state.items.get(101).fields['Microsoft.VSTS.TCM.Steps'] = '<steps><compref ref="300"/></steps>';
+  const source = createAdoTestSource(f.client), suite = await source.fetchSuite(1, 2), story = await source.fetchStory(400);
+  assert.deepEqual(story.cases, suite.cases); assert.equal(story.cases[0].steps[0].fromShared, 300);
+});
+test('story conversion yields an ado-story neutral source and loads only through an unambiguous selection', async t => {
+  const f = await storyFixture(t), source = createAdoTestSource(f.client), neutral = adoStoryToSource(await source.fetchStory(400));
+  assert.deepEqual([neutral.id, neutral.title, neutral.scenarios.map(scenario => scenario.id)], ['ado-story-400', 'Synthetic story', ['tc-101', 'tc-102']]);
+  assert.deepEqual(await loadTestSource(f.roots, {kind: 'ado', storyId: 400}, source), neutral);
+  assert.deepEqual(await loadTestSource(f.roots, {kind: 'ado', planId: 1, suiteId: 2}, source), adoSuiteToSource(await source.fetchSuite(1, 2)));
+  await assert.rejects(loadTestSource(f.roots, {kind: 'ado', storyId: 400, planId: 1, suiteId: 2}, source), /suite or story/);
+});
+test('relation targets resolve only in configured collection forms, exactly as relink matches them', async t => {
+  const f = await adoFixture(t), org = f.config.organizationUrl, project = await f.client.projectIdentity(), management = createAdoTestManagement(f.client);
+  const accepted = [`${org}/_apis/wit/workItems/200`, `${org}/demo/_apis/wit/workitems/200/`, `${org.toUpperCase()}/${project.id.toUpperCase()}/_apis/wit/workItems/200`];
+  const refused = ['https://other.invalid/collection/_apis/wit/workItems/200', `${org}/other/_apis/wit/workItems/200`, `${org}/_apis/wit/workItems/0200`, `${org}/_apis/wit/workItems/200/updates`, `${org}/_apis/wit/workItems/2147483648`, `${org}/_apis/wit/workItems/201`];
+  for (const url of accepted) assert.equal(workItemLinkId(url, org, project), 200, url);
+  for (const url of refused) assert.notEqual(workItemLinkId(url, org, project), 200, url);
+  assert.equal(workItemLinkId(undefined, org, project), undefined); assert.equal(workItemLinkId(`${org}/_apis/wit/workItems/201`, org, project), 201);
+  for (const url of [...accepted, ...refused]) {
+    f.state.items.get(201).relations = [{rel: 'System.LinkTypes.Hierarchy-Reverse', url}];
+    assert.equal(await management.relink({ids: [201], storyId: 200}).then(() => true, () => false), workItemLinkId(url, org, project) === 200, url);
+  }
+});
+test('story specs differ from suite specs only in their source and generator lines', () => {
+  const common = {tc: {id: 101, title: 'Synthetic case', tags: [], steps: [{kind: 'step', type: 'ActionStep', action: 'Open', expected: 'Shown'}], parameters: null, dataTable: null}, target: '', org: 'https://ado.example.test/collection', project: 'demo'};
+  const suite = renderSpec({...common, planId: 1, suiteId: 2, suiteName: 'Synthetic suite'}).split('\n'), story = renderSpec({...common, storyId: 400, storyTitle: 'Synthetic story'}).split('\n');
+  assert.equal(story.length, suite.length); assert.deepEqual(suite.flatMap((line, index) => line === story[index] ? [] : [index]), [4, 5]);
+  assert.equal(story[4], 'Source: Azure DevOps TC 101 — story 400 (Synthetic story) — org https://ado.example.test/collection, project demo'); assert.match(story[5], /GENERATED by scripts\/fetch-ado-story\.mjs/);
+});
 test('preview reads complete points and never mutates or creates a receipt', async t => {
   const f = await adoFixture(t), result = await publish(f); assert.equal(result.cases.length, 2); assert.equal(writes(f).length, 0); assert.equal(f.receipts().length, 0);
 });
@@ -193,8 +291,8 @@ test('PR delivery refuses unknown repository and missing refs before mutation', 
   f.state.fault = ({path, send}) => {if (path.endsWith('/refs')) {send({value: []}); return true;}};
   await assert.rejects(adapter.createPullRequest({...input, repository: 'harness', execute: true}), /branches/); assert.equal(writes(f).length, 0);
 });
-test('all five entrypoints reject package-as-consumer without network', () => {
-  for (const name of ['fetch-ado-suite', 'publish-ado-results', 'ado-pr', 'tag-ado-workitem', 'relink-ado-story']) {
+test('all six entrypoints reject package-as-consumer without network', () => {
+  for (const name of ['fetch-ado-suite', 'fetch-ado-story', 'publish-ado-results', 'ado-pr', 'tag-ado-workitem', 'relink-ado-story']) {
     const result = spawnSync(process.execPath, [join(packageRoot, `scripts/${name}.mjs`), '--project-root', packageRoot], {encoding: 'utf8'}); assert.notEqual(result.status, 0); assert.match(result.stderr, /separate consumer/);
   }
 });
@@ -208,6 +306,56 @@ test('compatibility fetch preserves refined files, exports neutral source and in
   await assert.rejects(cli(f, 'publish-ado-results', ['--suite', '2', '--execute']), /fingerprint/); assert.equal(writes(f).length, 0);
   put(f.roots.projectRoot, 'test/ado-suite-2/_verify-state.json', {...legacy().state, sourceFingerprint: manifest.sourceFingerprint});
   assert.equal((await cli(f, 'publish-ado-results', ['--suite', '2'])).mode, 'dry-run'); assert.equal(writes(f).length, 0);
+});
+test('suite fetch keeps its exact requests, fingerprint, manifest layout, spec text and neutral source', async t => {
+  const f = await adoFixture(t); configure(f);
+  const result = await cli(f, 'fetch-ado-suite', ['--plan', '1', '--suite', '2', '--source-out', 'scenarios/source.json']), read = path => readFileSync(join(f.roots.projectRoot, path), 'utf8');
+  assert.deepEqual(f.state.requests.map(req => `${req.method} ${req.path}${req.query}`), ['GET testplan/plans/1/suites/2?api-version=7.1', 'GET testplan/plans/1/suites/2/testcase?api-version=7.1&excludeFlags=0',
+    'GET testplan/plans/1/suites/2/testcase?api-version=7.1&excludeFlags=0&continuationToken=second', 'POST wit/workitemsbatch?api-version=7.1', 'GET projects/demo?api-version=7.1']);
+  assert.deepEqual(f.state.requests[3].body, {ids: [101, 102], fields: ['System.Id', 'System.Title', 'System.TeamProject', 'System.State', 'System.Tags', 'Microsoft.VSTS.Common.Priority', 'Microsoft.VSTS.TCM.Steps', 'Microsoft.VSTS.TCM.Parameters', 'Microsoft.VSTS.TCM.LocalDataSource'], errorPolicy: 'fail'});
+  assert.deepEqual(Object.entries(result), Object.entries({mode: 'fetched', cases: 2, files: ['test/ado-suite-2/tc-101-synthetic-case-101.md', 'test/ado-suite-2/tc-102-synthetic-case-102.md', 'scenarios/source.json', 'test/ado-suite-2/_suite.json'],
+    sourceFingerprint: 'cec6cecf20ab55bea9d9a166c2a7d691be35db5f52217c28c298271bfd9b5dba'}));
+  const manifest = JSON.parse(read('test/ado-suite-2/_suite.json'));
+  assert.deepEqual(Object.keys(manifest), ['planId', 'suiteId', 'suiteName', 'organizationUrl', 'project', 'cases', 'org', 'orgUrl', 'sourceFingerprint', 'environment', 'target', 'fetchedAt', 'suggestedFeature', 'suggestedSpecFile', 'suggestedDataFile']);
+  assert.deepEqual(Object.keys(manifest.cases[0]), ['id', 'title', 'state', 'priority', 'tags', 'steps', 'parameters', 'dataTable', 'specFile', 'stepCount', 'preservedRefinement']);
+  assert.equal(read('test/ado-suite-2/tc-101-synthetic-case-101.md'), ['# Spec: Synthetic case 101  (TC 101)', '', 'Target: https://example.com  <!-- set portalUrl in environments/<env>.json -->', 'Type: existing — stateful chain',
+    'Source: Azure DevOps TC 101 — plan 1, suite 2 (Synthetic suite) — org https://ado.example.test/collection, project demo', '<!-- GENERATED by scripts/fetch-ado-suite.mjs (raw fetch). The automate-suite REFINE phase',
+    '     may restructure steps for executability (scope preserved, changes logged below).', '     Refetch keeps files with a "## Refinement log" — overwrite only with --force. -->', '', '## Acceptance criteria', '- Synthetic record is visible', '',
+    '## Scenario steps  (stateful — run in order, in one session)', '1. Open synthetic record — Expected: Synthetic record is visible', '', '## Notes', '- This spec mirrors Azure DevOps test case 101; report defects against it.', ''].join('\n'));
+  assert.equal(read('scenarios/source.json'), JSON.stringify({version: 1, id: 'ado-1-2', title: 'Synthetic suite', scenarios: [101, 102].map(id => ({id: `tc-${id}`, title: `Synthetic case ${id}`, externalReferences: [{system: 'ado', id: String(id)}],
+    steps: [{action: 'Open synthetic record', expected: ['Synthetic record is visible']}]}))}, null, 2) + '\n');
+});
+test('story fetch writes its folder and source, preserves refinement and fingerprints only included content', async t => {
+  const f = await storyFixture(t); configure(f);
+  const read = path => readFileSync(join(f.roots.projectRoot, path), 'utf8'), manifest = () => JSON.parse(read('test/ado-story-400/_suite.json')), spec = 'test/ado-story-400/tc-101-synthetic-case-101.md';
+  const first = await cli(f, 'fetch-ado-story', ['--story', '400', '--links', 'child,tested-by', '--source-out', 'scenarios/story.json']);
+  assert.deepEqual(first.files, [spec, 'test/ado-story-400/tc-102-synthetic-case-102.md', 'scenarios/story.json', 'test/ado-story-400/_suite.json']); assert.deepEqual(first.excluded, [{id: 403, reason: 'not-test-case'}]);
+  assert.deepEqual(Object.keys(manifest()), ['storyId', 'storyTitle', 'links', 'organizationUrl', 'project', 'cases', 'excluded', 'org', 'orgUrl', 'sourceFingerprint', 'environment', 'target', 'fetchedAt', 'suggestedFeature', 'suggestedSpecFile', 'suggestedDataFile']);
+  assert.deepEqual([manifest().links, manifest().suggestedSpecFile, manifest().sourceFingerprint, JSON.parse(read('scenarios/story.json')).id], [['tested-by', 'child'], 'tests/SyntheticStoryTests.spec.ts', first.sourceFingerprint, 'ado-story-400']);
+  assert.match(read(spec), /^Source: Azure DevOps TC 101 — story 400 \(Synthetic story\) — org https:\/\/ado\.example\.test\/collection, project demo$/m);
+  put(f.roots.projectRoot, spec, '## Refinement log\nPreserved user work');
+  f.state.items.set(405, {...structuredClone(f.state.items.get(403)), id: 405}); f.state.items.get(400).relations.push(link(f, 'System.LinkTypes.Hierarchy-Forward', 405));
+  const second = await cli(f, 'fetch-ado-story', ['--story', '400', '--links', 'tested-by,child']);
+  assert.equal(second.sourceFingerprint, first.sourceFingerprint); assert.deepEqual(manifest().excluded.map(item => item.id), [403, 405]);
+  assert.match(read(spec), /Preserved/); assert.equal(manifest().cases[0].preservedRefinement, true);
+  f.state.items.get(400).fields['System.Title'] = 'Renamed story';
+  const renamed = await cli(f, 'fetch-ado-story', ['--story', '400', '--links', 'tested-by,child', '--force']);
+  assert.notEqual(renamed.sourceFingerprint, first.sourceFingerprint); assert.doesNotMatch(read(spec), /Preserved/); assert.equal(manifest().storyTitle, 'Renamed story');
+});
+test('story fetch refuses a manifest for another destination, suite or story before writing', async t => {
+  const f = await storyFixture(t); configure(f);
+  for (const previous of [{orgUrl: f.config.organizationUrl, project: 'demo', storyId: 400, planId: 1, suiteId: 2}, {orgUrl: 'https://other.invalid/collection', project: 'demo', storyId: 400}, {orgUrl: f.config.organizationUrl, project: 'other', storyId: 400}, {orgUrl: f.config.organizationUrl, project: 'demo', storyId: 401}]) {
+    put(f.roots.projectRoot, 'test/ado-story-400/_suite.json', previous); await assert.rejects(cli(f, 'fetch-ado-story', ['--story', '400']), /Story manifest/);
+  }
+  assert.equal(existsSync(join(f.roots.projectRoot, 'test/ado-story-400/tc-101-synthetic-case-101.md')), false);
+});
+test('story fetch previews, refuses unconvertible sources and rejects unsupported options without writing', async t => {
+  const f = await storyFixture(t), folder = join(f.roots.projectRoot, 'test/ado-story-400'); configure(f);
+  assert.equal((await cli(f, 'fetch-ado-story', ['--story', '400', '--dry-run'])).mode, 'dry-run'); assert.equal(existsSync(folder), false);
+  f.state.items.get(101).fields['Microsoft.VSTS.TCM.Parameters'] = '<parameters><param name="input"/></parameters>';
+  await assert.rejects(cli(f, 'fetch-ado-story', ['--story', '400', '--source-out', 'scenarios/story.json']), /refinement/);
+  for (const [args, pattern] of [[['--story', '400', '--plan', '1'], /Unknown/], [[], /--story/], [['--story', '400', '--links', 'parent'], /Story links/], [['--story', '400', '--links', 'tested-by,'], /Story links/]]) await assert.rejects(cli(f, 'fetch-ado-story', args), pattern);
+  assert.equal(existsSync(folder), false); assert.equal(existsSync(join(f.roots.projectRoot, 'scenarios')), false); assert.equal(writes(f).length, 0);
 });
 test('compatibility commands use consumer config and every write is opt-in', async t => {
   const f = await adoFixture(t); configure(f);

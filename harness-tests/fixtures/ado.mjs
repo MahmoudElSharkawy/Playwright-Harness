@@ -26,7 +26,8 @@ export async function adoFixture(t, overrides = {}) {
     if (path === 'testplan/plans/1/suites') return send({value: [{id: 2, name: 'Synthetic suite'}]});
     if (path === 'testplan/plans/1/suites/2') return send({id: 2, name: 'Synthetic suite'});
     if (path === 'testplan/plans/1/suites/2/testcase') return url.searchParams.has('continuationToken') ? send({value: [{workItem: {id: 102}}]}) : send({value: [{workItem: {id: 101}}]}, 200, {'x-ms-continuationtoken': 'second'});
-    if (path === 'wit/workitemsbatch') return send({value: body.ids.flatMap(id => items.has(id) ? [items.get(id)] : [])});
+    // Like ADO, return only the requested fields, so tests can prove what a read never received.
+    if (path === 'wit/workitemsbatch') return send({value: body.ids.flatMap(id => items.has(id) ? [{...items.get(id), fields: Object.fromEntries(Object.entries(items.get(id).fields).filter(([name]) => body.fields.includes(name)))}] : [])});
     const wi = path.match(/^wit\/workitems\/(\d+)$/);
     if (wi) {
       const item = items.get(Number(wi[1])); if (!item) return send({}, 404);

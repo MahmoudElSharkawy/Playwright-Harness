@@ -90,7 +90,8 @@ and intentionally persistent outcomes may remain.
   session records under consumer `.harness/state/hooks`. Adoption does not enable hooks
   or copy broad host permissions. These helpers remain advisory and fail open.
 - Optional [ADO adapters](M12-ADO.md) separate retrieval, outcome publication/linking
-  and source-control delivery. The five compatibility commands select a consumer
+  and source-control delivery. Retrieval selects a plan/suite or, read-only, the test
+  cases linked to a user story. The six compatibility commands select a consumer
   root, preview remote mutations by default and require explicit execution with
   durable receipts. Local sources never require ADO configuration.
 - API/DB utilities in `examples` remain examples. Typechecking and test listing do not

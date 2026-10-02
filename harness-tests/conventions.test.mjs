@@ -102,6 +102,11 @@ test('invalid verification artifacts do not disappear',t=>{
   f.put('test/ado-suite-100/_verify-state.json',invalid);assert(findings(f.run()).some(h=>h.rule==='verify-state-contract-drift'));
  }
 });
+test('story-scoped verification folders get the suite artifact contract; look-alike folders stay out of scope',t=>{
+ const f=fixture(t);f.put(spec,'allure.tms("1001");');
+ for(const folder of ['ado-story-x','ado-stories-100','ado-story-100']) f.put(`test/${folder}/_verify-state.json`,'{');
+ assert.deepEqual([...new Set(findings(f.run()).filter(h=>h.rule==='verify-state-contract-drift').map(h=>h.file))],['test/ado-story-100/_verify-state.json']);
+});
 test('malformed baselines never echo input fragments',t=>{
  const f=fixture(t), marker='do-not-echo-this-fixture';f.put('scripts/conventions-baseline.json','{"bad":'+marker+'}');
  const r=f.run();assert.equal(r.status,2);assert(!r.stdout.includes(marker));assert(!r.stderr.includes(marker));
@@ -114,6 +119,13 @@ test('Git selection includes committed, staged, unstaged and untracked files wit
  f.put('src/config/clean.ts','export const changed=true;');f.put('src/utils/staged file.ts','export {};');git('add','src/utils/staged file.ts');f.put('src/utils/untracked file.ts','export {};');
  const r=f.run('--changed');assert.equal(r.status,0,r.stderr);assert.equal(JSON.parse(r.stdout).files,4);
  assert.equal(f.run('--changed','--base-ref','missing-reference').status,2);
+});
+test('changed scope includes touched story verification folders and skips untouched suite folders',t=>{
+ const f=fixture(t);
+ const git=(...args)=>{const r=spawnSync('git',['-c','core.hooksPath='+join(f.root,'empty-hooks'),'-c','user.name=Fixture','-c','user.email=fixture@example.test',...args],{cwd:f.root,encoding:'utf8'});assert.equal(r.status,0,r.stderr);return r;};
+ f.put('test/ado-suite-100/_verify-state.json','{');git('init','--initial-branch=main');git('add','.');git('commit','-m','fixture baseline');git('checkout','-b','feature');
+ f.put('src/config/clean.ts','export const changed=true;');f.put('test/ado-story-200/_verify-state.json','{');
+ assert.deepEqual([...new Set(findings(f.run('--changed')).filter(h=>h.rule==='verify-state-contract-drift').map(h=>h.file))],['test/ado-story-200/_verify-state.json']);
 });
 test('Git failure never becomes successful empty scope',t=>{
  const f=fixture(t);assert.equal(f.run('--changed').status,2);assert.equal(f.run('--changed','--base-ref','main').status,2);

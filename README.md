@@ -55,6 +55,9 @@ M12 adds [optional ADO adapters](docs/M12-ADO.md) for retrieval, outcome publica
 work-item linking and source-control delivery. Compatibility commands use explicit
 consumer configuration, preview remote mutations by default and retain write
 receipts. Local sources remain independent of ADO. See [M12 validation](docs/M12-VALIDATION.md).
+Test cases can also be fetched read-only from the user story they test, without plan
+or suite IDs: see [story retrieval](docs/M12-ADO.md#story-scoped-retrieval) and its
+[validation](docs/ADO-STORY-VALIDATION.md).
 
 M13 connects assessed execution to durable POM automation through
 [generation, independent review and two scoped green runs](docs/M13-GENERATION.md). See

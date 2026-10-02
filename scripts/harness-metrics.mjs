@@ -2,7 +2,7 @@
 /**
  * harness-metrics.mjs — aggregate the harness pipeline's on-disk state into one report.
  *
- * Reads:   test/ado-suite-<id>/_suite.json + _verify-state.json    (pipeline/verify state)
+ * Reads:   test/ado-{suite,story}-<id>/_suite.json + _verify-state.json (pipeline/verify state)
  *          .harness/knowledge/ui/*.md                                  (per-page "Drift ledger" tables)
  *          .harness/state/review/class-ledger.md         (review finding-class rows)
  * Prints:  automation coverage per suite and in total (passed + fixme over total cases),
@@ -18,7 +18,7 @@
  * exit code is always 0.
  */
 
-import { readFileSync, readdirSync, existsSync } from 'node:fs';
+import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {projectArgument,consumerPath} from './lib/consumer-paths.mjs';
@@ -40,13 +40,13 @@ function readJsonSafe(path) {
   catch (e) { warn(`skipped malformed ${path}: ${e.message}`); return null; }
 }
 
-// ---------- suites (test/ado-suite-*/) ----------
+// ---------- suites (test/ado-suite-*/ and story-scoped test/ado-story-*/) ----------
 
 function collectSuites() {
   if (!existsSync(SUITES_DIR)) return [];
   const suites = [];
   for (const entry of readdirSync(SUITES_DIR, { withFileTypes: true })) {
-    if (!entry.isDirectory() || !entry.name.startsWith('ado-suite-')) continue;
+    if (!entry.isDirectory() || !/^ado-(?:suite|story)-/.test(entry.name)) continue;
     const dir = join(SUITES_DIR, entry.name);
     const manifest = readJsonSafe(join(dir, '_suite.json'));
     const verify = readJsonSafe(join(dir, '_verify-state.json'));
@@ -71,7 +71,7 @@ function collectSuites() {
         note: (v && v.note) || '',
       };
     }
-    suites.push({ suite: entry.name, cases });
+    suites.push({ suite: entry.name, cases, verifiedMs: verify ? statSync(join(dir, '_verify-state.json')).mtimeMs : 0 });
   }
   return suites.sort((a, b) => a.suite.localeCompare(b.suite));
 }
@@ -186,10 +186,29 @@ function suiteRow(name, s) {
     s.roundsMean === null ? '-' : `${s.roundsMean} / ${s.roundsMax}`];
 }
 
+// A case can sit in both a suite and a story folder. TOTAL counts it once, from the newest
+// verification (as tracker sync does). A folder without verification for it yet does not
+// disagree; folders whose recorded statuses differ count it as no-state, never as covered.
+function uniqueCases(suites) {
+  const byId = new Map();
+  for (const s of suites) for (const [id, c] of Object.entries(s.cases)) {
+    if (!byId.has(id)) byId.set(id, []);
+    byId.get(id).push({ suite: s.suite, verifiedMs: s.verifiedMs, ...c });
+  }
+  const recorded = (list) => (list.some((c) => c.status !== 'no-state') ? list.filter((c) => c.status !== 'no-state') : list);
+  const conflicts = [...byId].filter(([, list]) => new Set(recorded(list).map((c) => c.status)).size > 1);
+  if (conflicts.length) warn(`case(s) disagree across folders and count as no-state in TOTAL: ${conflicts.map(([id, list]) => `${id} (${recorded(list).map((c) => c.suite).join(', ')})`).join(', ')}`);
+  const conflicting = new Set(conflicts.map(([id]) => id));
+  return [...byId].map(([id, list]) => {
+    const newest = recorded(list).reduce((a, b) => (b.verifiedMs > a.verifiedMs ? b : a));
+    return conflicting.has(id) ? { ...newest, status: 'conflict', classification: '' } : newest;
+  });
+}
+
 function main() {
   const suites = collectSuites();
   const suiteStats = suites.map((s) => ({ suite: s.suite, ...statsFor(Object.values(s.cases)), cases: s.cases }));
-  const totals = statsFor(suites.flatMap((s) => Object.values(s.cases)));
+  const totals = statsFor(uniqueCases(suites));
   const queue = needsHumanQueue(suites);
   const drift = collectDrift();
   const findings = collectReviewFindings();
@@ -210,7 +229,7 @@ function main() {
 
   out.push('== SUITES ==');
   if (!suiteStats.length) {
-    out.push('no pipeline state found (no test/ado-suite-*/ folder holds _suite.json or _verify-state.json)');
+    out.push('no pipeline state found (no test/ado-suite-*/ or test/ado-story-*/ folder holds _suite.json or _verify-state.json)');
   } else {
     const rows = suiteStats.map((s) => suiteRow(s.suite, s));
     if (suiteStats.length > 1) rows.push(suiteRow('TOTAL', totals));

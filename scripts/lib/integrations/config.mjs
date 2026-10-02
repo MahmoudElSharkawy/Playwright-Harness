@@ -8,6 +8,14 @@ export function adoId(value) {
   requireValue(/^[1-9]\d{0,9}$/.test(String(value)) && Number(value) <= 2147483647, 'ADO IDs must be positive int32 values.');
   return Number(value);
 }
+/** Relation target ID only in the configured collection's URL forms (as relink matches them); otherwise undefined. */
+export function workItemLinkId(url, organizationUrl, project) {
+  const value = typeof url === 'string' ? url.replace(/\/$/, '').toLowerCase() : '';
+  for (const scope of ['', ...[project.id, project.name].map(part => `/${encodeURIComponent(part)}`)]) {
+    const prefix = `${organizationUrl}${scope}/_apis/wit/workitems/`.toLowerCase(), rest = value.slice(prefix.length);
+    if (value.startsWith(prefix) && /^[1-9]\d{0,9}$/.test(rest) && Number(rest) <= 2147483647) return Number(rest);
+  }
+}
 export function readConsumerJson(roots, path, optional = false) {
   const file = consumerPath(roots, path);
   if (optional && !existsSync(file)) return undefined;

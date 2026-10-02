@@ -9,7 +9,7 @@ integration or M14 reporting. Node 24 remains the supported runtime.
 
 | Responsibility | Module | Behavior |
 |---|---|---|
-| Source loading | `scripts/lib/integrations/ado-source.mjs` | Two concrete local/ADO source choices; neutral scenario conversion and optional external identities |
+| Source loading | `scripts/lib/integrations/ado-source.mjs` | Two concrete local/ADO source choices (ADO by plan/suite or by user story); neutral scenario conversion and optional external identities |
 | Outcomes and work items | `scripts/lib/integrations/ado-management.mjs` | Publish validated outcomes, mark automation, tag items and convert a selected parent relation to Related |
 | Source-control delivery | `scripts/lib/integrations/ado-delivery.mjs` | Preview/create and verify an ADO PR; never push, merge or change branch policy |
 | Transport and receipts | `scripts/lib/integrations/ado-client.mjs` | Destination-bound credentials, HTTPS, bounded IO, redirect refusal, explicit writes and flushed receipts |
@@ -44,6 +44,7 @@ automation fields work without a custom field. `timeoutMs` defaults to 30000 and
 is capped at 60000; `maxResponseBytes` defaults to 2 MiB and is capped at 8 MiB.
 Requests are also size bounded. Lists have 100-page/10000-record limits and suite
 execution sources are limited to 500 cases with 1000 expanded steps per case.
+Story retrieval also classifies at most 1000 distinct linked work items.
 
 Resolve the named credential from the shell environment or the consumer's ignored
 `.env`. Existing shell values take precedence. The loader does not mutate the
@@ -68,13 +69,15 @@ release, process template or tenant permission policy.
 
 ## Compatibility commands
 
-Paths below are examples relative to a separate consumer. All five entrypoints
+Paths below are examples relative to a separate consumer. All six entrypoints
 accept `--project-root`; package-as-consumer and paths escaping the consumer are
 refused, including resolved junction escapes.
 
 ```sh
 node ../playwright-pom-harness/scripts/fetch-ado-suite.mjs --project-root . --plan 1 --suite 2
 node ../playwright-pom-harness/scripts/fetch-ado-suite.mjs --project-root . --plan 1 --suite 2 --source-out scenarios/synthetic.json
+node ../playwright-pom-harness/scripts/fetch-ado-story.mjs --project-root . --story 200
+node ../playwright-pom-harness/scripts/fetch-ado-story.mjs --project-root . --story 200 --links tested-by,related --source-out scenarios/story.json
 node ../playwright-pom-harness/scripts/publish-ado-results.mjs --project-root . --suite 2
 node ../playwright-pom-harness/scripts/tag-ado-workitem.mjs --project-root . --ids 101,102 --tag synthetic
 node ../playwright-pom-harness/scripts/relink-ado-story.mjs --project-root . --id 201 --story 200
@@ -107,6 +110,48 @@ source content changes; stale verification is refused. Preserved refinement and
 historical delivery metadata still require review after a source change. Old
 manifests without this fingerprint retain the legacy verification contract and
 cannot claim the stronger evidence integrity of an M5 run.
+
+### Story-scoped retrieval
+
+`fetch-ado-story.mjs --story <id>` retrieves the test cases linked to a user story
+(or another non-test-case work item) without plan or suite IDs. Like the suite
+fetch it writes consumer files unless `--dry-run` is supplied and never mutates ADO.
+
+- **Links.** Only Tested By (`Microsoft.VSTS.Common.TestedBy-Forward`) is followed by
+  default. `--links` selects any of `tested-by`, `child`
+  (`System.LinkTypes.Hierarchy-Forward`) and `related` (`System.LinkTypes.Related`);
+  a run without `--links` returns to the default. Cases converted by
+  `relink-ado-story` are Related, so fetch them with `--links tested-by,related`.
+- **Collection binding.** Link targets must use the configured collection's URL
+  form (collection, project name or project ID). A selected link in any other form
+  fails instead of silently returning fewer cases: another collection, another
+  project's URL form, or an alias such as `<org>.visualstudio.com` for a
+  `dev.azure.com/<org>` configuration. Configure the form ADO returns.
+- **Classification before content.** Test-case types come from the project's
+  `Microsoft.TestCaseCategory`, so custom and localized type names work; a story ID
+  that is itself a test case is refused. Linked items that are not test cases or
+  belong to another project are listed in `excluded` by ID and reason; their titles
+  and steps are never read. A deleted or unreadable linked item fails the whole
+  fetch, as do zero remaining cases, more than 500 cases or more than 1000 distinct
+  linked items.
+- **Same contract.** Included cases use the suite fetch's case reader: steps, shared
+  steps, parameters, data and limits are identical. Output reuses the suite layout
+  under `test/ado-story-<storyId>/`: `_suite.json` carries `storyId`, `storyTitle`
+  and `links` instead of plan/suite identity, plus one spec per case. A previous
+  manifest for another destination, suite or story is refused before writes.
+  `--source-out` exports a neutral source with ID `ado-story-<storyId>`.
+- **Fingerprint.** `sourceFingerprint` covers the story title, selected links and
+  included cases. `excluded` is recorded but not fingerprinted, so an unrelated
+  Task link does not invalidate verification.
+
+Story retrieval is fetch-only. Outcome publication needs test points, which exist
+only inside a plan/suite, so `publish-ado-results` (including `--mark-automated`)
+stays suite-scoped; fetch the story's suite for delivery. Convention, metrics and
+tracker scans include `ado-story-<id>` folders alongside `ado-suite-<id>`. A case
+held by both a suite and a story folder counts once in metrics totals, from its
+newest verification; a folder that has not verified it yet does not disagree. When
+recorded results disagree it counts as no-state there, and tracker sync skips it
+with a warning until they are reconciled. See [story retrieval validation](ADO-STORY-VALIDATION.md).
 
 ## Publication and linking
 
@@ -189,5 +234,7 @@ Revision-guarded JSON patches follow [work-item updates](https://learn.microsoft
 and source-control requests follow [PR creation](https://learn.microsoft.com/en-us/rest/api/azure/devops/git/pull-requests/create?view=azure-devops-rest-7.1).
 Project ownership checks use [configured project resolution](https://learn.microsoft.com/en-us/rest/api/azure/devops/core/projects/get?view=azure-devops-rest-7.1)
 and the `System.TeamProject` field from [work-item reads](https://learn.microsoft.com/en-us/rest/api/azure/devops/wit/work-items/get-work-item?view=azure-devops-rest-7.1).
+Story retrieval follows the documented [link types](https://learn.microsoft.com/en-us/azure/devops/boards/queries/link-type-reference?view=azure-devops)
+and resolves test-case types through [work-item type categories](https://learn.microsoft.com/en-us/rest/api/azure/devops/wit/work-item-type-categories/get?view=azure-devops-rest-7.1).
 These documents informed project-authored code; no third-party implementation
 was copied and no dependency was added.
