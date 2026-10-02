@@ -30,8 +30,8 @@ skills, and resolve the collision explicitly before retrying. Do not silently re
 customized skills.
 
 Known legacy Markdown is replaced only when its newline-normalized digest matches
-the recorded original. Review ledgers, prerequisite facts, tracker registries/history
-and page maps migrate to consumer locations. Original state files remain available;
+the recorded original. Review ledgers, prerequisite facts and tracker registries/history
+migrate to consumer locations. Original state files remain available;
 `.harness/installation.json` records source fingerprints and destinations. On rerun,
 an unchanged legacy source does not overwrite a newer destination. Changed sources or
 conflicting destinations require review. When tracked data would move into the

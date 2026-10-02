@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased — page map leaves `.agentex/`
+
+- Ship the page-map template and contract with the `automate-suite` skill, as `assets/page-map-template.md` and `references/page-map.md`; the contract now requires review before facts are promoted. The package no longer ships `.agentex/`, and setup no longer migrates `.agentex/page-map/` or adds the unused `.agentex/cache/` ignore line.
+
 ## Unreleased — pin `@azure/msal-browser`
 
 - Pin `@azure/msal-browser` 5.23.0 as an exact runtime dependency, as `@js-joda/core` and `tedious` are. `@azure/identity` accepts `^5.5.0`, so plain installs re-resolved it to 5.24.0 once that was published, and setup stopped on the drifted dependency closure.
