@@ -1,4 +1,18 @@
 // CI evidence checks only. These never compute a scenario verdict.
+import {completeBrowserChecks, requiredBrowserChecks} from '../probes/browser-checks.mjs';
+
+export function browserDiagnostics(assessment) {
+  return Array.isArray(assessment?.checks) ? assessment.checks
+    .filter(check => requiredBrowserChecks.includes(check?.name) && ['PASS', 'FAIL'].includes(check.status))
+    .map(({name, status}) => ({name, status})) : [];
+}
+export function completeNativeProof(kind, proof, recovery, assessment, cleanup) {
+  return proof?.status === 'PASS' && recovery?.complete === true && assessment?.status === 'PASS' &&
+    (kind === 'browser' ? completeBrowserChecks(assessment.checks) : kind === 'parallel' &&
+      assessment.comparison?.status === 'PASS' && Array.isArray(assessment.counts) && assessment.counts.length === 2 &&
+      assessment.counts.every(count => count.scenarios === 13 && count.assertions > 0 && count.evidence > 0) &&
+      cleanup?.ownedDatabasesRemoved === true && cleanup?.fixtureServersClosed === true);
+}
 export const requiredChecks = Object.freeze(['syntax', 'json', 'links', 'privacy', 'secrets', 'provenance', 'publication', 'contracts', 'conventions', 'generation-conventions', 'workflow-conventions', 'types', 'fetch', 'tests']);
 export function testCounts(output) {
   return Object.fromEntries(['tests', 'pass', 'fail', 'cancelled', 'skipped', 'todo'].map(name => [name, Number(output.match(new RegExp(`^# ${name} (\\d+)$`, 'm'))?.[1] ?? NaN)]));

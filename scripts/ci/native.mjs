@@ -6,10 +6,9 @@ import {join, resolve} from 'node:path';
 import {command, hash} from './process.mjs';
 import {within} from '../lib/skill-roots.mjs';
 import {snapshotInstalledPackage} from '../lib/host-proof-files.mjs';
-import {completeChecks} from './results.mjs';
+import {completeChecks, completeNativeProof, browserDiagnostics} from './results.mjs';
 import {nativeProcess} from './native-process.mjs';
 import {recoverNativeProof} from './recovery.mjs';
-import {completeBrowserChecks} from '../probes/browser-checks.mjs';
 
 const [directory, kind] = process.argv.slice(2);
 assert(process.argv.length === 4 && ['browser', 'parallel'].includes(kind), 'Use <installed-workspace> browser|parallel.');
@@ -25,18 +24,20 @@ let proof, assessment, cleanup, recovery;
 if (browser.status === 'PASS') {
   proof = await nativeProcess(join(root, `scripts/probes/${kind}.mjs`), consumer, {cwd: workspace, log: join(workspace, `${kind}-native.log`)});
   recovery = await recoverNativeProof(root, consumer);
-  if (proof.status === 'PASS') {
+  try {
     assessment = JSON.parse(readFileSync(join(consumer, kind === 'browser' ? 'browser-proof.json' : 'assessment.json'), 'utf8'));
     if (kind === 'parallel') cleanup = JSON.parse(readFileSync(join(consumer, 'cleanup.json'), 'utf8'));
+  } catch {
+    // Missing/invalid assessment remains incomplete; private logs are never published.
   }
 }
 const packageUnchanged = JSON.stringify(snapshotInstalledPackage(installation)) === JSON.stringify(before);
-const complete = recovery?.complete && assessment?.status === 'PASS' && (kind === 'browser' ? completeBrowserChecks(assessment.checks)
-  : assessment.comparison?.status === 'PASS' && assessment.counts.length === 2 && assessment.counts.every(count => count.scenarios === 13 && count.assertions > 0 && count.evidence > 0) && cleanup?.ownedDatabasesRemoved && cleanup?.fixtureServersClosed);
+const complete = completeNativeProof(kind, proof, recovery, assessment, cleanup);
 const summary = {version: 1, kind, status: complete && packageUnchanged ? 'PASS' : 'INCOMPLETE', platform: process.platform, node: process.version,
   archive: installed.archive, packageUnchanged, browserInstallation: browser.status, ...(recovery ? {recovery} : {}),
   process: proof ? {status: proof.status, exitCode: proof.exitCode, diagnostic: proof.diagnostic, log: `${kind}-native.log`, sha256: proof.sha256} : {status: 'UNPERFORMED'},
-  ...(complete ? {checks: kind === 'browser' ? assessment.checks.map(({name, status}) => ({name, status})) : assessment.counts,
+  ...(kind === 'browser' ? {checks: browserDiagnostics(assessment)} : {}),
+  ...(complete ? {...(kind === 'parallel' ? {checks: assessment.counts} : {}),
     assessmentSha256: hash(readFileSync(join(consumer, kind === 'browser' ? 'browser-proof.json' : 'assessment.json'))), ...(cleanup ? {cleanup, databases: assessment.databases} : {})} : {})};
 writeFileSync(join(workspace, `native-${kind}.json`), JSON.stringify(summary, null, 2), {flag: 'wx', mode: 0o600});
 console.log(JSON.stringify({kind, status: summary.status, packageUnchanged})); if (summary.status !== 'PASS') process.exitCode = 1;
