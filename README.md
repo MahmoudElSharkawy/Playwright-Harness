@@ -80,6 +80,24 @@ scenario lifecycles. Sequential remains the default; explicit parallel batches r
 independent resources and preserve isolated evidence, cleanup and verdicts. See
 [M16 validation](docs/M16-VALIDATION.md).
 
+## How automation works
+
+The harness turns a scenario suite into reviewed Playwright POM automation:
+
+```text
+SOURCE → REFINE → EXPLORE → PREPARE → AUTHOR → CANDIDATE → REVIEW → VERIFY ×2 → READY → DELIVER
+```
+
+A local JSON source, or an explicitly configured ADO suite or story, is refined without
+changing its expectations and run against the configured application to collect
+evidence. Agents then write or reuse POM code. A fresh independent reviewer must approve
+it, and two separate scoped Playwright runs of the same candidate must pass. Repairs are
+limited to three rounds per source batch. READY does not authorize delivery; PRs and ADO
+publishing are optional and need explicit authorization.
+
+See [the automation pipeline](docs/PIPELINE.md) for each phase's inputs, outputs,
+commands and contract documents. Agents run it through the `automate-suite` skill.
+
 ## Install into a project
 
 Keep this package in its own directory; do not overlay it on application code.

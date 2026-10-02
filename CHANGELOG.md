@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased — automation pipeline guide
+
+- Add `docs/PIPELINE.md`, one guide to the automation pipeline in execution order: ten named phases with their inputs, outputs, commands and gates, the repair loop, consumer state paths and a mapping from the legacy ADO phase names. It summarizes and links the M3–M16 contracts, which remain authoritative. The README gains a short "How automation works" section pointing to it. No script, test or example change.
+
 ## Unreleased — Windows owned-process trees
 
 - Record a process as an owned descendant only when it was created no earlier than its parent. Windows keeps an exited parent's PID on its children and reuses PIDs, so browser cleanup could adopt older, unrelated processes and terminate them; this explains the intermittent Windows native browser gate failures, including a supervisor exit 1 with no summary. Creation identities compare exactly as integers, and a process without a readable identity is never adopted. A regression test covers the reused-PID case.
