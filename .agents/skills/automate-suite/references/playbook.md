@@ -284,9 +284,10 @@ manifest steps alone and expects more VERIFY iterations.
 **Propose reviewed knowledge.** After notes are written, place durable observations
 in `.harness/knowledge-candidates/ui/`. Review and sanitize selectors, landmarks,
 strings, endpoints and gotchas before promoting to `.harness/knowledge/ui/<page-slug>.md`.
-Use the immutable page-map template from the package for a new page. Run verdicts and
-screenshots stay in run artifacts. Promotion affects subsequent work; it does not
-silently change active-run inputs.
+Start a new page from the immutable [page-map template](../assets/page-map-template.md)
+and follow [its contract](page-map.md). Run verdicts and screenshots stay in run
+artifacts. Promotion affects subsequent work; it does not silently change active-run
+inputs.
 
 ---
 

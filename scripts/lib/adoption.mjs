@@ -175,8 +175,9 @@ export function adoptProject({projectRoot,installedRoot=packageRoot,environment,
     const file=consumerPath(roots,`.claude/skills/plan-tracker/data/${name}`),content=readFileSync(file);
     migrateState(`.claude/skills/plan-tracker/data/${name}`,`.harness/state/tracker/${name}`,content);
   }
+  // Only pages migrate: a legacy README and template are package files, now shipped with automate-suite.
   const legacyPages=consumerPath(roots,'.agentex/page-map');
-  if(existsSync(legacyPages))for(const name of readdirSync(legacyPages).filter(n=>n.endsWith('.md'))) {
+  if(existsSync(legacyPages))for(const name of readdirSync(legacyPages).filter(n=>n.endsWith('.md') && !/^(_template|README)\.md$/i.test(n))) {
     const file=consumerPath(roots,`.agentex/page-map/${name}`),content=readFileSync(file);
     migrateState(`.agentex/page-map/${name}`,`.harness/knowledge/ui/${name}`,content);
   }
@@ -198,7 +199,7 @@ export function adoptProject({projectRoot,installedRoot=packageRoot,environment,
   const ignoreLines=['/.harness/runs/','/.harness/state/','/.harness/knowledge-candidates/','/.harness/installation.json',
     '.env','.env.*','!.env.example','.claude/settings.local.json','*.pfx','*.key',
     'node_modules/','test-results/','playwright-report/','blob-report/','playwright/.cache/','playwright/.auth/',
-    'allure-report/','allure-results/','reports/','ctrf/','.playwright-cli/','/executions/','/test/','.agentex/cache/',
+    'allure-report/','allure-results/','reports/','ctrf/','.playwright-cli/','/executions/','/test/',
     // Links and pointers are machine-specific; no trailing slash, so a Linux symlink matches too.
     ...[...managedLinks,...managedFiles].map(rel=>`/${rel}`)];
   const absent=ignoreLines.filter(line=>!ignore.split(/\r?\n/).includes(line));

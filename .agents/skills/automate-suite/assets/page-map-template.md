@@ -1,4 +1,4 @@
-# Page: <slug>   <!-- copy this file to <slug>.md; delete guidance comments -->
+# Page: <slug>   <!-- copy this file to the project's .harness/knowledge/ui/<slug>.md; delete guidance comments -->
 
 ## Identity
 - URL pattern(s): `/<path>` <!-- one per line; parameterized segments as <id> -->

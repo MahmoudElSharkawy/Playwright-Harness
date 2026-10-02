@@ -46,9 +46,10 @@ Also check, from the harness's own rules (not in §6):
   A missing, stale, method-inventing, or reason-less table is a finding
   (class: `traceability-table-stale`).
 - No secrets in code, step titles, or test data (values, not handle names).
-- Page-map edits honor its contract (orchestrator-written, drift ledger append-only),
-  and any element with **three or more drift-ledger entries** becomes a finding —
-  its selector strategy is wrong, not unlucky.
+- Page-map edits honor [its contract](../../automate-suite/references/page-map.md)
+  (orchestrator-written, drift ledger append-only), and any element with **three or
+  more drift-ledger entries** becomes a finding — its selector strategy is wrong, not
+  unlucky.
 - The change is on a feature branch, not master (`git branch --show-current`).
 - **Every NEW public action/validation method** in the diff: search `pages/`, `apis/`,
   `dbs/` for an existing equivalent intent (case/suffix-tolerant, legacy `assert*`

@@ -73,8 +73,6 @@
     ".github/workflows/validation.yml",
     ".env.example",
     ".gitignore",
-    ".agentex/page-map/README.md",
-    ".agentex/page-map/_template.md",
     "scripts",
     "docs",
     "harness-tests",

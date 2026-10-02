@@ -8,7 +8,7 @@ const ROOT_FILES = new Set(['README.md', 'AGENTS.md', 'CHANGELOG.md', 'VERSION',
 const SOURCE_ONLY_FILES = new Set(['CLAUDE.md', '.claude/settings.json']);
 const SOURCE_ONLY_PREFIXES = ['.claude/skills/'];
 const PUBLIC_PREFIXES = ['scripts/', 'harness-tests/', 'docs/', 'examples/', '.agents/skills/'];
-const EXTRA_FILES = new Set(['.claude-plugin/plugin.json', '.github/workflows/validation.yml', '.agentex/page-map/README.md', '.agentex/page-map/_template.md', 'resources/Queries/README.md', 'resources/apisCollections/README.md']);
+const EXTRA_FILES = new Set(['.claude-plugin/plugin.json', '.github/workflows/validation.yml', 'resources/Queries/README.md', 'resources/apisCollections/README.md']);
 
 export function inventory(root) {
   root = realpathSync(root);

@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased — page map leaves `.agentex/`
+
+The page-map template and contract now ship with the `automate-suite` skill, as
+`assets/page-map-template.md` and `references/page-map.md`, and the package no longer
+ships `.agentex/`. Setup migrates only page files from a legacy `.agentex/page-map/`, and
+no longer adds the unused `.agentex/cache/` ignore line.
+
+### Upgrade actions
+
+- Delete `README.md` and `_template.md` from `.harness/knowledge/ui/` if an earlier setup copied them there from `.agentex/page-map/`; they are package files, now in the `automate-suite` skill.
+- Once the pages migrated into `.harness/knowledge/ui/` are reviewed, delete `.agentex/page-map/`: only setup's migration reads it, and a stale copy stops a later setup with a conflict on a machine without `.harness/installation.json`.
+- Re-verify in-flight generated candidates: `scripts/lib` changed, which refreshes the M13 runtime fingerprint.
+
 ## 3.1.0 — M18 archive adoption
 
 A project now adopts the harness from its versioned release archive in one command,

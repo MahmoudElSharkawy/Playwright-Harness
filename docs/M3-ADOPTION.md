@@ -31,14 +31,15 @@ customized skills.
 
 Known legacy Markdown is replaced only when its newline-normalized digest matches
 the recorded original. Review ledgers, prerequisite facts, tracker registries/history
-and page maps migrate to consumer locations. Original state files remain available;
-`.harness/installation.json` records source fingerprints and destinations. On rerun,
-an unchanged legacy source does not overwrite a newer destination. Changed sources or
-conflicting destinations require review. When tracked data would move into the
-git-ignored `.harness/state/`, the legacy folder is kept and reported, so the team
-decides before shared data becomes per-machine. Migration does not itself promote
-unreviewed facts: preserve their prior review status and sanitize before any later
-promotion.
+and page-map pages migrate to consumer locations; a legacy page map's README and
+template stay behind, because the package ships them with `automate-suite`. Original
+state files remain available; `.harness/installation.json` records source fingerprints
+and destinations. On rerun, an unchanged legacy source does not overwrite a newer
+destination. Changed sources or conflicting destinations require review. When tracked
+data would move into the git-ignored `.harness/state/`, the legacy folder is kept and
+reported, so the team decides before shared data becomes per-machine. Migration does
+not itself promote unreviewed facts: preserve their prior review status and sanitize
+before any later promotion.
 
 Setup plans every change and reports all conflicts before it writes. It journals each
 change under `.harness/state/setup/`, so an interrupted run can be rerun, which is

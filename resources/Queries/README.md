@@ -3,9 +3,10 @@
 The markdown files in this folder are the QA team's curated SQL knowledge for the
 application under test's databases, exported from the team's Notion workspace: the
 tables that matter, the join paths between them, status-code semantics, and proven
-verify/seed recipes. They are the DB counterpart of `.agentex/page-map/` — durable
-application knowledge the harness consults instead of rediscovering. Governed by the
-2026-08-24 "Team DB-query library" ruling (design-conventions, Decision records).
+verify/seed recipes. They are the DB counterpart of the page map
+(`.harness/knowledge/ui/`) — durable application knowledge the harness consults
+instead of rediscovering. Governed by the 2026-08-24 "Team DB-query library" ruling
+(design-conventions, Decision records).
 
 ## Ownership & lifecycle
 

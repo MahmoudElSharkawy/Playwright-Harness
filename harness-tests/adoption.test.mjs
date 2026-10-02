@@ -53,9 +53,11 @@ test('custom canonical or legacy skills stop before any instruction/configuratio
 test('legacy state migrates byte-for-byte; later consumer changes are not overwritten on rerun',t=>{
  const root=project(t),legacy='.claude/skills/plan-tracker/data/history.jsonl';
  put(root,legacy,'{"at":"2026-09-30","set":{"todo":[7]}}\n');put(root,'.claude/skills/plan-tracker/data/plan-7.json','{"planId":7}');
- put(root,'.claude/skills/framework-review/class-ledger.md','Reviewed synthetic finding\n');put(root,'.agentex/page-map/login.md','Reviewed synthetic page\n');adopt(root);
+ put(root,'.claude/skills/framework-review/class-ledger.md','Reviewed synthetic finding\n');put(root,'.agentex/page-map/login.md','Reviewed synthetic page\n');
+ put(root,'.agentex/page-map/README.md','Legacy page-map contract\n');put(root,'.agentex/page-map/_template.md','Legacy page template\n');adopt(root);
  assert.equal(readFileSync(join(root,'.harness/state/tracker/history.jsonl'),'utf8'),readFileSync(join(root,legacy),'utf8'));
  assert.equal(readFileSync(join(root,'.harness/knowledge/ui/login.md'),'utf8'),'Reviewed synthetic page\n');
+ for(const name of ['README.md','_template.md'])assert(!existsSync(join(root,'.harness/knowledge/ui',name)),`${name} is a package file, not a page`);
  put(root,'.harness/state/tracker/history.jsonl','Newer consumer events\n');assert.equal(adopt(root).changes.length,0);assert.equal(readFileSync(join(root,'.harness/state/tracker/history.jsonl'),'utf8'),'Newer consumer events\n');
 });
 test('conflicting existing state is preserved and migration stops before writes',t=>{
