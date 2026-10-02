@@ -126,3 +126,24 @@ script that does not exist. Use the documented package-root command; remove or
 correct that shortcut separately. No story implementation was changed by the CI
 repair. Hosted Windows/Linux browser, database, parallel and timeout gates remain
 required on the updated PR.
+
+## Example shortcut correction
+
+The nonblocking shortcut finding above is corrected: the bundled example's
+`fetch:story` resolves `../scripts/fetch-ado-story.mjs` in the parent harness package.
+From the package's `examples` directory, invoke:
+
+```sh
+npm run fetch:story -- --project-root <separate-consumer-path> --story 200
+```
+
+Resolve the consumer path from the example directory. The consumer must remain
+outside the installed package; the bundled example is immutable package content.
+When copying the example manifest into a consumer, adjust this shortcut to the
+actual installed package location, as with the documented package-root command.
+Adoption does not copy harness scripts into the consumer.
+
+The actual npm shortcut was checked from the example directory using an external
+consumer path containing spaces. Entrypoint resolution and argument forwarding
+passed; deliberately absent ADO configuration failed before any remote request.
+This startup check does not claim live ADO retrieval.
