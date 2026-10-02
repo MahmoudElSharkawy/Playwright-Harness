@@ -76,6 +76,13 @@ test('the vendored archive must exist, match the lockfile and stay tracked',t=>{
  put(root,'.gitignore','*.tgz\n!/.harness/vendor/*.tgz\n');
  const untracked=check(root);assert.deepEqual(untracked.errors,[]);assert.match(untracked.notes.join(' '),/is not committed yet/);
 });
+test('an installation without npm-shrinkwrap.json reports the gap instead of failing',t=>{
+ // npm 12 packs without the shrinkwrap; the drift comparison then has nothing to compare against.
+ const root=project(t),installed=join(root,'packed-without-lock');put(installed,'package.json',JSON.stringify({name:'playwright-pom-harness',version:'0.0.1'}));
+ put(root,'package-lock.json',JSON.stringify({packages:{'':{},'node_modules/synthetic':{version:'1.0.0'}}}));
+ const result=runCheck({projectRoot:root,packageRoot:installed});
+ assert.deepEqual(result.errors,[]);assert.match(result.notes.join(' '),/no npm-shrinkwrap\.json, so its dependency versions were not compared/);
+});
 test('a pipeline that runs Playwright tests needs a browser install step',t=>{
  const root=project(t),pipeline='jobs:\n  test:\n    steps:\n      - run: npm ci\n      - run: npx playwright test\n';
  put(root,'.github/workflows/tests.yml',pipeline);

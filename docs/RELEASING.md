@@ -18,6 +18,8 @@ authorization. A green workflow is not that authorization ([M17](M17-CI.md#accep
 - If the managed instruction block changed, add its digest to `scripts/managed-digests.json`,
   so later versions can replace it.
 - `npm run check:contracts` enforces the version, the upgrade actions and the block digest.
+- Pack with npm 11, the npm bundled with Node 24. npm 12 leaves `npm-shrinkwrap.json` out of
+  the archive, and the release needs it. CI packs the release archive with npm 11.
 
 ## 2. Validate locally
 

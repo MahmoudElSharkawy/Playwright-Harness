@@ -108,7 +108,9 @@ export function runCheck({projectRoot, packageRoot, addEnvKeys = false}) {
   // Dependency versions: the harness's cleared runtime graph against what npm installed here.
   // A project may hold its own version of the same package beside the harness's (for example
   // Playwright); only a cleared version missing from every installed copy counts as drift.
-  if (lock) {
+  // npm 12 leaves npm-shrinkwrap.json out of the archives it packs; releases are packed with npm 11.
+  if (lock && !existsSync(join(packageRoot, 'npm-shrinkwrap.json'))) notes.push('This installation has no npm-shrinkwrap.json, so its dependency versions were not compared with the cleared graph; release archives include it.');
+  else if (lock) {
     const cleared = readJson(join(packageRoot, 'npm-shrinkwrap.json')).packages, installed = new Map();
     for (const [path, item] of Object.entries(lock.packages ?? {})) if (path) {const name = path.split('node_modules/').at(-1); installed.set(name, (installed.get(name) ?? new Set()).add(item.version));}
     const drift = Object.entries(cleared).filter(([path]) => path).map(([path, item]) => [path.split('node_modules/').at(-1), item.version])

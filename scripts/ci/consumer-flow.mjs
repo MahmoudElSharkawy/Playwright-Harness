@@ -28,11 +28,14 @@ const run = (argv, cwd) => command(argv, {cwd, env, timeout: 900000, log: join(w
 const npmVersion = run([npm, '--version'], workspace).stdout.trim();
 if (option('--npm-major')) assert.equal(npmVersion.split('.')[0], option('--npm-major'), `Expected npm ${option('--npm-major')}, found ${npmVersion}.`);
 
+// Archives are packed like releases, with the npm bundled with Node: npm 12 leaves npm-shrinkwrap.json out.
 // npm names an unscoped package's archive <name>-<version>.tgz; the shape of `npm pack --json` differs between npm 11 and 12.
 function pack(source, destination) {
   const {version} = JSON.parse(readFileSync(join(source, 'package.json'), 'utf8')), file = join(destination, `playwright-pom-harness-${version}.tgz`);
-  assert.equal(run([npm, 'pack', '--ignore-scripts', '--pack-destination', destination], source).status, 'PASS', 'npm pack failed; inspect its log.');
-  assert(existsSync(file), `npm pack did not write ${basename(file)}.`); return file;
+  assert.equal(run([npmPath(), 'pack', '--ignore-scripts', '--pack-destination', destination], source).status, 'PASS', 'npm pack failed; inspect its log.');
+  assert(existsSync(file), `npm pack did not write ${basename(file)}.`);
+  assert([...entries(file)].some(entry => entry.path === 'package/npm-shrinkwrap.json'), 'The packed archive has no npm-shrinkwrap.json; pack releases with npm 11.');
+  return file;
 }
 // The archive under test: given (a file, or the folder installed validation packed into), or packed here.
 let archive = option('--archive') && resolve(option('--archive'));
@@ -71,8 +74,8 @@ const installedSkill = (root, skill) => realpathSync.native(join(root, 'node_mod
 const linkedVersion = (root, skill) => JSON.parse(readFileSync(join(linked(root, `.claude/skills/${skill}`), '../../../package.json'), 'utf8')).version;
 const stops = result => JSON.stringify(result.stops ?? result.errors ?? result.status);
 
-/** Unpacks an npm archive (ustar, with optional pax path records). */
-function extract(file, folder) {
+/** The entries of an npm archive (ustar, with optional pax path records). */
+function* entries(file) {
   const data = gunzipSync(readFileSync(file)), text = (block, start, length) => block.subarray(start, start + length).toString('utf8').replace(/\0[\s\S]*$/, '');
   let offset = 0, pax;
   while (offset + 512 <= data.length) {
@@ -82,6 +85,11 @@ function extract(file, folder) {
     if (type === 'x') {pax = Object.fromEntries(body.toString('utf8').split('\n').filter(Boolean).map(line => {const record = line.slice(line.indexOf(' ') + 1), at = record.indexOf('='); return [record.slice(0, at), record.slice(at + 1)];})); continue;}
     if (type === 'g') continue;
     const prefix = text(header, 345, 155), path = pax?.path ?? (prefix ? `${prefix}/${text(header, 0, 100)}` : text(header, 0, 100)); pax = undefined;
+    yield {path, type, body};
+  }
+}
+function extract(file, folder) {
+  for (const {path, type, body} of entries(file)) {
     const target = resolve(folder, path); assert(within(folder, target), 'An archive entry escapes its folder.');
     if (type === '5') mkdirSync(target, {recursive: true});
     else if (type === '0') {mkdirSync(dirname(target), {recursive: true}); writeFileSync(target, body);}

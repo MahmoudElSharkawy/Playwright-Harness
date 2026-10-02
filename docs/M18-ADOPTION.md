@@ -34,6 +34,18 @@ project installs with one command. Users and AIs follow
 - **Starter configuration.** `src/config/targets.ts` reads `.harness/targets.json`, so
   destinations are entered once for both the harness and the tests.
 
+## npm 12 results
+
+Recorded 2026-10-02 in CI with npm 12.2.0 on Linux and Windows, consuming an archive packed
+with npm 11. Install, rerun, CRLF clone, rollback, conflict, failure recovery and parent-folder
+flows pass. npm 12 changes two things:
+
+- `npm pack --json` returns an object keyed by package name, not an array. The consumer flows
+  find the archive by its `<name>-<version>.tgz` name instead.
+- npm 12 leaves `npm-shrinkwrap.json` out of the archives it packs. Releases are therefore packed
+  with npm 11. On an installation without the file, `check` reports that dependency versions
+  were not compared, instead of failing.
+
 ## Phase 0 spike results
 
 Recorded 2026-10-02 on Windows 11 with Node 24.15.0. These results decide the M18
