@@ -14,7 +14,9 @@ node scripts/ci/installed.mjs <new-external-workspace>
 
 The workspace must be new and outside the package, including resolved links.
 The command creates an actual npm archive, installs it with scripts disabled,
-and installs the separately locked example and native CLI fixtures. The root
+and installs the separately locked example and native CLI spike fixtures. The pinned
+native CLI used for browser execution is part of the root dependency graph; the
+spike's own copy serves only its tests. The root
 `npm-shrinkwrap.json` is the canonical, distributable dependency lock. It replaces
 the root `package-lock.json` without changing dependency versions. The runtime
 provenance inventory and generation fingerprint use this same published lock.
@@ -165,4 +167,5 @@ The owner confirmed historical credential revocation or rotation on 2026-10-01;
 deleting its value alone would not have established that status. A green workflow
 is not permission to tag, publish an npm package, redistribute third-party
 installations or create a release. Those
-actions still require explicit authorization.
+actions still require explicit authorization. [The release guide](RELEASING.md) attaches
+only the archive and checksum that a passing `main` run uploaded as `release-archive`.

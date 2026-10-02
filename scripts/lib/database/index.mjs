@@ -8,17 +8,19 @@ import {databaseCapabilities, validateDatabaseOperation, bindDatabase, select, e
 import {DatabaseFailure, bounded, credentials} from './shared.mjs';
 import * as sqlserver from './sqlserver-driver.mjs';
 import * as postgresql from './postgresql-driver.mjs';
+import {consumerEnvironment} from '../consumer-env.mjs';
 
 export {defineDatabaseOperation, databaseCapabilities} from './definition.mjs';
 const phases = {SETUP: 0, EXERCISE: 1, VERIFY: 2, CLEANUP: 3, RESTORE: 3};
 const sensitiveKey = name => /(?:password|passwd|pwd|secret|token|authorization|cookie|api.?key|connectionstring)/i.test(name);
 const overlaps = (a, b) => a.from === b.from && a.path.slice(0, Math.min(a.path.length, b.path.length)).every((part, i) => String(part) === String(b.path[i]));
-function environmentCredential({reference}) {
-  try {return JSON.parse(process.env[reference.slice(4)]);} catch {throw new DatabaseFailure('UNAVAILABLE');}
+// The shell environment wins; a name it lacks falls back to the consumer's ignored .env.
+function environmentCredential({reference}, environment) {
+  try {return JSON.parse(environment[reference.slice(4)]);} catch {throw new DatabaseFailure('UNAVAILABLE');}
 }
 
 /** One sequential database scenario; native SQL and types stay in the selected driver. */
-export function createDatabaseRuntime(run, inputRoots, {signal, resolveCredential = environmentCredential, resolveSensitive, storeSensitive, execution} = {}) {
+export function createDatabaseRuntime(run, inputRoots, {signal, resolveCredential, resolveSensitive, storeSensitive, execution} = {}) {
   requireRun(run); requireThat(run.inputs.scenarios.length === 1, 'Database execution accepts one sequential scenario per run.');
   requireThat(signal === undefined || signal instanceof AbortSignal, 'Cancellation needs an AbortSignal.');
   for (const callback of [resolveCredential, resolveSensitive, storeSensitive]) requireThat(callback === undefined || typeof callback === 'function', 'Database resolvers must be functions.');
@@ -26,6 +28,7 @@ export function createDatabaseRuntime(run, inputRoots, {signal, resolveCredentia
   if (!execution) initializeStorage(state);
   requireThat(state.storageReady, 'Shared storage must be initialized.');
   const {roots, scope, scenario, observations, histories} = state, authCache = new Map();
+  resolveCredential ??= context => environmentCredential(context, consumerEnvironment(roots));
   state.releases.push(() => authCache.clear());
   let busy = false, finished = false, phaseNumber = 0, cleanupStartedAt;
   function write(path, value) {

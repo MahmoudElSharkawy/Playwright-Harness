@@ -1,7 +1,8 @@
-import {existsSync,lstatSync,realpathSync,mkdirSync,symlinkSync,readdirSync} from 'node:fs';
+import {existsSync,lstatSync,realpathSync,mkdirSync,symlinkSync,readdirSync,readlinkSync,readFileSync,statSync,rmdirSync,unlinkSync} from 'node:fs';
 import {resolve,relative,isAbsolute,dirname,basename,join} from 'node:path';
 
 export const within=(root,path)=>{const rel=relative(root,path);return rel==='' || (!isAbsolute(rel) && rel!=='..' && !rel.startsWith('../') && !rel.startsWith('..\\'));};
+const sameName=(left,right)=>process.platform==='win32'?left.toLowerCase()===right.toLowerCase():left===right;
 export function realFuture(path) {
   path=resolve(path);const tail=[];
   while(!existsSync(path)) {
@@ -43,4 +44,38 @@ export function linkSkill(roots,name,{dryRun=false}={}) {
   mkdirSync(parent,{recursive:true});
   symlinkSync(source,target,process.platform==='win32'?'junction':'dir');
   return target;
+}
+
+/** Classify one discovery entry without following it. A dangling link is still a link, never empty space. */
+export function discoveryEntry(path) {
+  let found;
+  try {found=readdirSync(dirname(path),{withFileTypes:true}).find(entry=>sameName(entry.name,basename(path)));}
+  catch(error) {if(['ENOENT','ENOTDIR'].includes(error.code))return {kind:'missing'};throw error;}
+  if(!found)return {kind:'missing'};
+  let target;
+  try {target=readlinkSync(path);} catch(error) {if(!['EINVAL','UNKNOWN'].includes(error.code))throw error;}
+  if(target!==undefined) {
+    let live=false;
+    try {live=statSync(path).isDirectory();} catch(error) {if(error.code!=='ENOENT')throw error;}
+    return {kind:'link',target:resolve(dirname(path),target.replace(/^\\\\\?\\/,'')),live};
+  }
+  return {kind:found.isDirectory()?'directory':'file'};
+}
+/** A live link to a skill inside some playwright-pom-harness copy: a previous version, a moved project or a sibling clone. */
+export function harnessSkillTarget(entry,name) {
+  if(entry.kind!=='link' || !entry.live)return false;
+  const skill=realpathSync(entry.target);
+  if(!sameName(basename(skill),name) || !existsSync(join(skill,'SKILL.md')))return false;
+  try {return JSON.parse(readFileSync(join(skill,'..','..','..','package.json'),'utf8')).name==='playwright-pom-harness';} catch {return false;}
+}
+/** A junction on Windows (absolute by nature); elsewhere a relative symlink, so a moved project keeps working. */
+export function createSkillLink(source,path) {
+  mkdirSync(dirname(path),{recursive:true});
+  if(process.platform==='win32')symlinkSync(source,path,'junction');
+  else symlinkSync(relative(dirname(path),source),path,'dir');
+}
+/** Remove the discovery link itself; its target's content is never touched. */
+export function removeSkillLink(path) {
+  if(discoveryEntry(path).kind!=='link')throw new Error('Only a discovery link may be removed.');
+  if(process.platform==='win32')rmdirSync(path);else unlinkSync(path);
 }

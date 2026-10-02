@@ -24,7 +24,7 @@ For saved runs, reconstruct frozen inputs and reassess original observations and
 artifact bytes through the CLI. A stored `result.json` is never trusted as proof:
 
 ```text
-node <packageRoot>/scripts/render-results.mjs --project-root <consumer> --snapshot .harness/runs/<run-id>/inputs.json --run-root .harness/runs/<run-id> --output reports/harness/<new-name>
+npx --no pom-harness render-results --snapshot .harness/runs/<run-id>/inputs.json --run-root .harness/runs/<run-id> --output reports/harness/<new-name>
 ```
 
 The output defaults to a fresh `reports/harness/<run-id>-<unique-id>/` directory.
@@ -74,8 +74,8 @@ The generated RuntimeActions fixture demonstrates this shared API/DB integration
 For reviewed generation verification:
 
 ```text
-node <packageRoot>/scripts/generate-tests.mjs verify --project-root <consumer> --id <source-id> --allure
-node <packageRoot>/scripts/generate-allure.mjs --project-root <consumer> --input reports/generation/<verification-id>
+npx --no pom-harness generate verify --id <source-id> --allure
+npx --no pom-harness generate-allure --input reports/generation/<verification-id>
 ```
 
 Run the second command after verification returns. Repeat verification in a new

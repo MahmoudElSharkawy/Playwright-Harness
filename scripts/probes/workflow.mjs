@@ -40,7 +40,8 @@ function prepare() {
     mkdirSync(packageRoot, {recursive: true});
     const scope = inventory(source); assert.equal(scope.unexpected.length, 0);
     for (const file of scope.files) {mkdirSync(dirname(join(packageRoot, file)), {recursive: true}); cpSync(join(source, file), join(packageRoot, file));}
-    for (const path of ['node_modules', 'scripts/spikes/playwright-cli/node_modules', 'examples/node_modules']) cpSync(join(source, path), join(packageRoot, path), {recursive: true, verbatimSymlinks: true});
+    // The root node_modules carries the pinned native CLI; the spike's own install is development-only.
+    for (const path of ['node_modules', 'examples/node_modules']) cpSync(join(source, path), join(packageRoot, path), {recursive: true, verbatimSymlinks: true});
   }
   const projects = {}, scaffolds = {};
   for (const nativeHost of ['claude', 'codex']) {

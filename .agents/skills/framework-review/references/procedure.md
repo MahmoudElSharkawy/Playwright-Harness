@@ -12,7 +12,7 @@ list the caller names). Output: the verdict block in §4.
 ## 1. Mechanical pass (always first — cheap facts before judgment)
 
 ```
-node scripts/check-conventions.mjs --changed
+npx --no pom-harness check-conventions --changed
 ```
 
 Every new FAIL/WARN it prints becomes a pre-confirmed finding (evidence is the

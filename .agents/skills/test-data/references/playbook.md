@@ -202,6 +202,13 @@ gitignored `.env`, documented by `.env.example`, loaded by dotenv in
 `playwright.config.ts`) — never commit a literal credential. Secrets must also
 never surface in step titles or attachments (iron law 7; `utils/` redacts them).
 
+✅ The shipped starter enters destinations once: `src/config/targets.ts` reads the
+coordinates from `.harness/targets.json` (written when the harness is configured and
+read by its runtime too), with a per-machine override named after the target
+(`APP_DB_SERVER` for `appDb`), and takes database credentials from the variable the
+target's `connectionRef` names — still only `process.env`. `databases.ts` then reads
+`appDb: databaseTarget('appDb')`. A project with its own config modules keeps them.
+
 ✅ `baseURL: process.env.APP_BASE_URL` lives in `playwright.config.ts`, so
 specs and pages navigate relatively. Per-environment selection is wired for dotenv —
 the `dotenv.config(...)` lines sit commented at the top of `playwright.config.ts` —

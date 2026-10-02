@@ -346,3 +346,22 @@ test('public raw-text extraction cannot bypass credential field screening even w
   const datum = randomUUID(), op = operation('request', {extract: [{name: 'text', type: 'string', sensitivity: 'public', select: {from: 'text', path: []}}]});
   const f = await fixture(t, ({reply}) => reply(200, {password: datum}), [op]); await f.call(); assert.equal(f.runtime.finish().status, 'NEEDS_REVIEW'); assert(!f.allText().includes(datum));
 });
+
+// The default resolver reads the shell first and the consumer's ignored .env second.
+function shellCredential(t, value) {
+  const previous = process.env.FIXTURE_ACCESS;
+  if (value === undefined) delete process.env.FIXTURE_ACCESS; else process.env.FIXTURE_ACCESS = value;
+  t.after(() => {if (previous === undefined) delete process.env.FIXTURE_ACCESS; else process.env.FIXTURE_ACCESS = previous;});
+}
+test('default credentials fall back to the consumer .env without changing process.env', async t => {
+  shellCredential(t, undefined);
+  const f = await fixture(t, ({reply}) => reply(200, {}), [operation()], {auth: true});
+  writeFileSync(join(f.roots.projectRoot, '.env'), 'FIXTURE_ACCESS="synthetic-dotenv"\n');
+  await f.call(); assert.equal(f.requests[0].headers.authorization, 'Bearer synthetic-dotenv'); assert.equal(process.env.FIXTURE_ACCESS, undefined);
+});
+test('a shell credential wins over the consumer .env', async t => {
+  shellCredential(t, 'synthetic-shell');
+  const f = await fixture(t, ({reply}) => reply(200, {}), [operation()], {auth: true});
+  writeFileSync(join(f.roots.projectRoot, '.env'), 'FIXTURE_ACCESS=synthetic-dotenv\n');
+  await f.call(); assert.equal(f.requests[0].headers.authorization, 'Bearer synthetic-shell');
+});

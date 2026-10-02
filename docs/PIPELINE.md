@@ -50,9 +50,9 @@ SOURCE → REFINE → EXPLORE → PREPARE → AUTHOR → CANDIDATE → REVIEW �
   `.harness/integrations.json` ([M12](M12-ADO.md#consumer-configuration)).
 - Work on a feature branch, following the consumer's branch and delivery rules.
 
-Harness commands select the consumer with `--project-root <consumer>`; the convention
-checker uses `--root <consumer>`. Run the installed package's scripts as
-`node <packageRoot>/scripts/<name>.mjs`. Store generation command inputs and review
+Run harness commands from the consumer folder as `npx --no pom-harness <command>`;
+`npx --no pom-harness help` lists them. The underlying scripts also accept
+`--project-root <consumer>`, and the convention checker `--root <consumer>`. Store generation command inputs and review
 artifacts under `.harness/state/`, so recording them does not change the candidate's
 file snapshot.
 
@@ -76,9 +76,9 @@ file, or an ADO plan/suite or user story exported to that format.
   must be refined into the neutral format explicitly.
 
 ```text
-node <packageRoot>/scripts/load-local-source.mjs --project-root <consumer> --source .harness/sources/<name>.json --environment <env> --out .harness/runs/source.json
-node <packageRoot>/scripts/fetch-ado-suite.mjs --project-root <consumer> --plan <planId> --suite <suiteId> --source-out .harness/sources/<name>.json
-node <packageRoot>/scripts/fetch-ado-story.mjs --project-root <consumer> --story <storyId> --source-out .harness/sources/<name>.json
+npx --no pom-harness load-source --source .harness/sources/<name>.json --environment <env> --out .harness/runs/source.json
+npx --no pom-harness fetch-suite --plan <planId> --suite <suiteId> --source-out .harness/sources/<name>.json
+npx --no pom-harness fetch-story --story <storyId> --source-out .harness/sources/<name>.json
 ```
 
 Details: [M3 local sources](M3-ADOPTION.md#local-scenario-sources),
@@ -145,7 +145,7 @@ To render a saved run as JSON, Markdown and HTML reports (optional; output defau
 a fresh `reports/harness/` directory):
 
 ```text
-node <packageRoot>/scripts/render-results.mjs --project-root <consumer> --snapshot .harness/runs/<run-id>/inputs.json --run-root .harness/runs/<run-id>
+npx --no pom-harness render-results --snapshot .harness/runs/<run-id>/inputs.json --run-root .harness/runs/<run-id>
 ```
 
 Details: [M14 execution reports](M14-REPORTING.md#validated-execution-reports).
@@ -167,7 +167,7 @@ Bind every source expectation to an observed result and open the generation hist
   data.
 
 ```text
-node <packageRoot>/scripts/generate-tests.mjs prepare --project-root <consumer> --input .harness/state/<preparation>.json
+npx --no pom-harness generate prepare --input .harness/state/<preparation>.json
 ```
 
 Details: [M13 steps 3–4](M13-GENERATION.md#from-source-to-a-reviewed-candidate),
@@ -203,7 +203,7 @@ rule counts must be nonzero. Their results go to the reviewer. A file change aft
 registration invalidates the candidate, so fix check failures before registering.
 
 ```text
-node <packageRoot>/scripts/check-conventions.mjs --root <consumer>
+npx --no pom-harness check-conventions
 ```
 
 Details: [M13 steps 4 and 6](M13-GENERATION.md#from-source-to-a-reviewed-candidate),
@@ -223,7 +223,7 @@ Playwright test.
   prints `NEEDS_REVIEW` with the revision.
 
 ```text
-node <packageRoot>/scripts/generate-tests.mjs candidate --project-root <consumer> --id <source-id> --input .harness/state/<candidate>.json
+npx --no pom-harness generate candidate --id <source-id> --input .harness/state/<candidate>.json
 ```
 
 Details: [M13 step 5](M13-GENERATION.md#from-source-to-a-reviewed-candidate).
@@ -250,7 +250,7 @@ their own work, and a self-review cannot release verification.
   accept on the user's behalf. `CHANGES-REQUIRED` leads to a [repair](#repairs).
 
 ```text
-node <packageRoot>/scripts/generate-tests.mjs review --project-root <consumer> --id <source-id> --input .harness/state/<review>.json
+npx --no pom-harness generate review --id <source-id> --input .harness/state/<review>.json
 ```
 
 Details: [M13 steps 6–7](M13-GENERATION.md#from-source-to-a-reviewed-candidate).
@@ -274,8 +274,8 @@ pass the same reviewed candidate.
   expected failures, soft failures, flaky retries and nonzero exits never count.
 
 ```text
-node <packageRoot>/scripts/generate-tests.mjs verify --project-root <consumer> --id <source-id>
-node <packageRoot>/scripts/generate-tests.mjs verify --project-root <consumer> --id <source-id>
+npx --no pom-harness generate verify --id <source-id>
+npx --no pom-harness generate verify --id <source-id>
 ```
 
 For optional Allure 3 capture, add `--allure` to `verify` and render after it returns.
@@ -283,8 +283,8 @@ This needs `allure-playwright` 3.13.0 and the Node-based `allure` 3.19.1 in the
 consumer; Java is not required. Reporting never grants or revokes a green.
 
 ```text
-node <packageRoot>/scripts/generate-tests.mjs verify --project-root <consumer> --id <source-id> --allure
-node <packageRoot>/scripts/generate-allure.mjs --project-root <consumer> --input reports/generation/<verification-id>
+npx --no pom-harness generate verify --id <source-id> --allure
+npx --no pom-harness generate-allure --input reports/generation/<verification-id>
 ```
 
 Details: [M13 verification](M13-GENERATION.md#two-independent-scoped-green-runs),
@@ -314,7 +314,7 @@ Details: [M13 verification](M13-GENERATION.md#two-independent-scoped-green-runs)
 Check whether the candidate is ready:
 
 ```text
-node <packageRoot>/scripts/generate-tests.mjs status --project-root <consumer> --id <source-id>
+npx --no pom-harness generate status --id <source-id>
 ```
 
 `READY` means the current approved candidate has two scoped greens from distinct
@@ -340,8 +340,8 @@ contact ADO, create PRs, publish, push or merge.
   never pushes, merges or changes branch policy.
 
 ```text
-node <packageRoot>/scripts/ado-pr.mjs --project-root <consumer> --source <branch> --title "<title>" --description-file <description>.md
-node <packageRoot>/scripts/publish-ado-results.mjs --project-root <consumer> --suite <suiteId>
+npx --no pom-harness pr --source <branch> --title "<title>" --description-file <description>.md
+npx --no pom-harness publish-results --suite <suiteId>
 ```
 
 Details: [M12 commands](M12-ADO.md#compatibility-commands),

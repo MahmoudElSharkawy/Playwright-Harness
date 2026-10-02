@@ -2,9 +2,13 @@ import { readdirSync, readFileSync, lstatSync, existsSync, realpathSync } from '
 import { join, relative, resolve, isAbsolute } from 'node:path';
 
 const OMIT_DIRS = new Set(['.git', 'node_modules', '.m1-private', '.validation', 'test-results', 'playwright-report', 'blob-report', 'allure-results', 'allure-report', 'reports', 'ctrf', 'executions', '.playwright-cli']);
-const ROOT_FILES = new Set(['README.md', 'AGENTS.md', 'CLAUDE.md', 'CHANGELOG.md', 'VERSION', '.env.example', '.gitignore', '.npmignore', 'package.json', 'package-lock.json', 'npm-shrinkwrap.json', 'SECURITY.md', 'LICENSE', 'THIRD_PARTY_NOTICES.md']);
-const PUBLIC_PREFIXES = ['scripts/', 'harness-tests/', 'docs/', 'examples/', '.claude/skills/', '.agents/skills/'];
-const EXTRA_FILES = new Set(['.claude/settings.json', '.claude-plugin/plugin.json', '.github/workflows/validation.yml', '.agentex/page-map/README.md', '.agentex/page-map/_template.md', 'resources/Queries/README.md', 'resources/apisCollections/README.md']);
+const ROOT_FILES = new Set(['README.md', 'AGENTS.md', 'CHANGELOG.md', 'VERSION', '.env.example', '.gitignore', '.npmignore', 'package.json', 'package-lock.json', 'npm-shrinkwrap.json', 'SECURITY.md', 'LICENSE', 'THIRD_PARTY_NOTICES.md']);
+// Maintainer instructions and this repository's own Claude setup; never shipped into client projects'
+// node_modules, where a nested .claude/skills folder would load as duplicate skills.
+const SOURCE_ONLY_FILES = new Set(['CLAUDE.md', '.claude/settings.json']);
+const SOURCE_ONLY_PREFIXES = ['.claude/skills/'];
+const PUBLIC_PREFIXES = ['scripts/', 'harness-tests/', 'docs/', 'examples/', '.agents/skills/'];
+const EXTRA_FILES = new Set(['.claude-plugin/plugin.json', '.github/workflows/validation.yml', '.agentex/page-map/README.md', '.agentex/page-map/_template.md', 'resources/Queries/README.md', 'resources/apisCollections/README.md']);
 
 export function inventory(root) {
   root = realpathSync(root);
@@ -19,7 +23,7 @@ export function inventory(root) {
         walk(absolute); continue;
       }
       if (!item.isFile()) continue;
-      if ((/^\.env(?:\.|$)/.test(item.name) && item.name !== '.env.example') || /\.(dpapi|pfx|key|tgz|zip)$/.test(item.name) || file === '.claude/settings.local.json') { excluded.push(file); continue; }
+      if ((/^\.env(?:\.|$)/.test(item.name) && item.name !== '.env.example') || /\.(dpapi|pfx|key|tgz|zip)$/.test(item.name) || file === '.claude/settings.local.json' || SOURCE_ONLY_FILES.has(file) || SOURCE_ONLY_PREFIXES.some(prefix => file.startsWith(prefix))) { excluded.push(file); continue; }
       const allowed = ROOT_FILES.has(file) || EXTRA_FILES.has(file) || PUBLIC_PREFIXES.some(prefix => file.startsWith(prefix));
       if (!allowed) { unexpected.push({ file, rule: 'unclassified-file' }); continue; }
       files.push(file);
@@ -49,7 +53,7 @@ export function secretFindings(file, text) {
   return findings;
 }
 
-const PUBLIC_HOSTS = new Set(['github.com', 'raw.githubusercontent.com', 'playwright.dev', 'nodejs.org', 'www.npmjs.com', 'registry.npmjs.org', 'learn.microsoft.com', 'code.claude.com', 'learn.chatgpt.com', 'developers.openai.com', 'json.schemastore.org', 'www.w3.org', 'www.typescriptlang.org', 'allurereport.org', 'mit-license.org', 'opensource.org', 'aka.ms', 'go.microsoft.com', 'node-postgres.com', 'www.postgresql.org']);
+const PUBLIC_HOSTS = new Set(['github.com', 'api.github.com', 'raw.githubusercontent.com', 'playwright.dev', 'nodejs.org', 'www.npmjs.com', 'registry.npmjs.org', 'learn.microsoft.com', 'code.claude.com', 'learn.chatgpt.com', 'developers.openai.com', 'json.schemastore.org', 'www.w3.org', 'www.typescriptlang.org', 'allurereport.org', 'mit-license.org', 'opensource.org', 'aka.ms', 'go.microsoft.com', 'node-postgres.com', 'www.postgresql.org']);
 // Reviewed upstream funding links present in the dependency lockfile; no host-wide exception.
 const PUBLIC_METADATA_URLS=new Set(['https://www.patreon.com/feross','https://feross.org/support','https://dotenvx.com/','https://opencollective.com/fastify','https://opencollective.com/express','https://opencollective.com/preact','https://paulmillr.com/funding/']);
 export function privacyFindings(file, text) {

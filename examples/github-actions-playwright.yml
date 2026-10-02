@@ -15,9 +15,11 @@
 # environment-targeting specs fail on connectivity until you wire a self-hosted
 # runner — then change `runs-on:` to your runner label.
 #
-# SECRETS: specs read env vars (.env locally). For CI, add the keys from
-# .env.example as GitHub Actions secrets (Settings → Secrets and variables →
-# Actions), then uncomment the env mapping on the run step.
+# SECRETS: specs read env vars (.env locally). For CI, add the secret keys from
+# .env — the variables your .harness/targets.json names, DB_USER/DB_PASSWORD for
+# databases without a target, and the APP_LOGIN_* values — as GitHub Actions
+# secrets (Settings → Secrets and variables → Actions), then uncomment the env
+# mapping on the run step. Destinations come from the committed .harness/targets.json.
 #
 # Deliberately headless & non-interactive: AUTO_ALLURE_OPEN=false suppresses the
 # Allure auto-open, PW_TEST_HTML_REPORT_OPEN=never suppresses the HTML report
@@ -47,6 +49,9 @@ jobs:
 
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
+
+      - name: Check POM conventions
+        run: npx --no pom-harness check-conventions
 
       - name: Run Playwright specs
         id: run_specs

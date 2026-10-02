@@ -1,13 +1,15 @@
 // The only version-specific browser integration. Public actions remain native CLI arguments.
-import {readFile, writeFile, mkdir, lstat, realpath, chmod, copyFile, rm, rename} from 'node:fs/promises';
+import {readFileSync} from 'node:fs';
+import {writeFile, mkdir, lstat, realpath, chmod, copyFile, rm, rename} from 'node:fs/promises';
 import {join, resolve, dirname} from 'node:path';
 import {homedir} from 'node:os';
-import {randomUUID, createHash} from 'node:crypto';
+import {randomUUID} from 'node:crypto';
 import {createRequire} from 'node:module';
 import {resolveSkillRoots, within, realFuture} from '../skill-roots.mjs';
 import {processCall, rememberTree, refreshTree, stopTree, treeGone} from './processes.mjs';
 
-const PIN = Object.freeze({cli: '0.1.22', playwright: '1.64.0-alpha-1790635538000', lock: '1292f67fda12e1e1beb43fdea946639daefc581a6198d1500fbd7860dbc7f5f2'});
+const PIN = Object.freeze({cli: '0.1.22', playwright: '1.64.0-alpha-1790635538000'});
+export {PIN as NATIVE_CLI_PIN};
 const SYSTEM_KEYS = new Set(['PATH','PATHEXT','SYSTEMROOT','WINDIR','COMSPEC','TEMP','TMP','TMPDIR','HOME','USERPROFILE','HOMEDRIVE','HOMEPATH','LOCALAPPDATA','APPDATA','XDG_CACHE_HOME','XDG_RUNTIME_DIR','LANG','LANGUAGE','LC_ALL','TZ','PLAYWRIGHT_BROWSERS_PATH']);
 const RESERVED = new Set(['open','attach','close','detach','close-all','kill-all','delete-data','install','install-browser','list','show']);
 
@@ -54,19 +56,28 @@ async function protect(directory) {
   } else await chmod(directory, 0o700);
 }
 
+/** Locate the exact proven native CLI graph where npm installed this package's own dependency.
+ * Resolution starts at the package so CI can target an installed copy; the CLI's own location
+ * then selects its playwright packages even when npm nests them beside a project's Playwright.
+ */
+export function nativeCliInstallation(packageRoot) {
+  const cliManifest = createRequire(join(packageRoot, 'package.json')).resolve('@playwright/cli/package.json'), fromCli = createRequire(cliManifest);
+  const manifests = {'@playwright/cli': cliManifest, playwright: fromCli.resolve('playwright/package.json'), 'playwright-core': fromCli.resolve('playwright-core/package.json')};
+  for (const [name, path] of Object.entries(manifests)) {
+    if (JSON.parse(readFileSync(path, 'utf8')).version !== (name === '@playwright/cli' ? PIN.cli : PIN.playwright)) throw new Error('Install the exact proven native CLI graph.');
+  }
+  // Unexported files are reached by absolute path from each resolved package folder.
+  return Object.freeze({executable: join(dirname(cliManifest), 'playwright-cli.js'), coreBundle: fromCli.resolve('playwright-core/lib/coreBundle'), installer: join(dirname(manifests.playwright), 'cli.js')});
+}
+
 /** Create fresh consumer storage and an owned isolated session; no attachment or global cleanup. */
 export async function prepareNativeSession(roots, {origins, storageState, nativeTimeoutMs = 5000, commandTimeoutMs = 30000} = {}) {
   roots = resolveSkillRoots(roots);
-  const env = await neutralEnvironment(), installation = join(roots.packageRoot, 'scripts/spikes/playwright-cli');
-  for (const name of ['@playwright/cli','playwright','playwright-core']) {
-    const value = JSON.parse(await readFile(join(installation, 'node_modules', name, 'package.json'), 'utf8'));
-    if (value.version !== (name === '@playwright/cli' ? PIN.cli : PIN.playwright)) throw new Error('Install the exact proven native CLI graph.');
-  }
-  if (createHash('sha256').update(await readFile(join(installation, 'package-lock.json'))).digest('hex') !== PIN.lock) throw new Error('Native CLI lock differs from the proven graph.');
+  const env = await neutralEnvironment(), installation = nativeCliInstallation(roots.packageRoot);
   if (!Number.isSafeInteger(nativeTimeoutMs) || nativeTimeoutMs < 1 || nativeTimeoutMs > 60000 || !Number.isSafeInteger(commandTimeoutMs) || commandTimeoutMs < 1 || commandTimeoutMs > 120000) throw new Error('Native timeouts must be bounded.');
-  const require = createRequire(import.meta.url), {tools} = require(join(installation, 'node_modules/playwright-core/lib/coreBundle.js'));
+  const require = createRequire(import.meta.url), {tools} = require(installation.coreBundle);
   if (typeof tools?.resolveCLIConfigForCLI !== 'function') throw new Error('Native CLI integration prerequisite is unavailable.');
-  const executable = join(installation, 'node_modules/@playwright/cli/playwright-cli.js');
+  const executable = installation.executable;
   if (!(await lstat(executable)).isFile()) throw new Error('Native CLI executable is unavailable.');
   let source;
   if (storageState !== undefined) {

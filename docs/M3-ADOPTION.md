@@ -7,74 +7,58 @@ consumer storage from a skill installation directory.
 
 ## Adoption and upgrades
 
-From a separate consumer directory:
+Since 3.1.0 a project installs the harness from its versioned release archive; see
+[Get started](../README.md#get-started) and the `harness-setup` skill. Setup installs the
+archive as an exact development dependency, committed under `.harness/vendor/`. It links
+each skill into `.claude/skills/` and `.agents/skills/`: junctions on Windows, relative
+symbolic links elsewhere. The links are recorded in `.harness/links.json`, so `npm ci`
+restores them for teammates and CI. An update runs setup from the newer archive; nothing
+depends on a sibling checkout or a `--plugin-dir` launch flag. The adoption engine stays
+available from a package checkout as `scripts/adopt-project.mjs`.
 
-```sh
-node ../playwright-pom-harness/scripts/adopt-project.mjs --project-root . --environment qa --mode test --dry-run
-node ../playwright-pom-harness/scripts/adopt-project.mjs --project-root . --environment qa --mode test
-```
+Link ownership is checked first. Setup creates a link only where nothing exists, and
+repairs only links that hold no content of their own: a link into an earlier harness
+package, or a dangling link it recorded. A real folder or file, or a link to anything
+else, is preserved and reported. Native discovery failures remain incomplete gates.
 
-Adoption creates native Codex directory links (junctions on Windows), not copied
-rule libraries. Launch Claude from that consumer using `--plugin-dir` with the same
-package directory. Keep the package at that location while consumers use its links.
-An upgrade at a new location requires reviewing and relinking existing package links;
-custom directories are never removed automatically. Native discovery failures remain
-incomplete gates. The M3 Windows proof does not certify Linux link behavior.
-
-The command appends a small managed block to AGENTS/CLAUDE instructions and missing
+Setup appends a small managed block to the AGENTS and CLAUDE instructions, plus missing
 ignore entries. Existing settings, app code, team imports and configuration are
-preserved. A changed managed block or customized skill stops migration before writes.
-Review the difference against the canonical rules, preserve useful consumer additions
-in the consumer's instructions or distinct project skills, and resolve the collision
-explicitly before retrying. Do not silently replace customized skills.
+preserved. A released managed block is replaced; an edited block or a customized skill
+stops setup before any write. Review the difference against the canonical rules,
+preserve useful consumer additions in the consumer's instructions or distinct project
+skills, and resolve the collision explicitly before retrying. Do not silently replace
+customized skills.
 
 Known legacy Markdown is replaced only when its newline-normalized digest matches
 the recorded original. Review ledgers, prerequisite facts, tracker registries/history
 and page maps migrate to consumer locations. Original state files remain available;
 `.harness/installation.json` records source fingerprints and destinations. On rerun,
 an unchanged legacy source does not overwrite a newer destination. Changed sources or
-conflicting destinations require review. Migration does not itself promote unreviewed
-facts: preserve their prior review status and sanitize before any later promotion.
+conflicting destinations require review. When tracked data would move into the
+git-ignored `.harness/state/`, the legacy folder is kept and reported, so the team
+decides before shared data becomes per-machine. Migration does not itself promote
+unreviewed facts: preserve their prior review status and sanitize before any later
+promotion.
 
-Planning validates conflicts before writes. Application also detects changed planned
-files; it is not a filesystem transaction. After an interruption, inspect the summary
-and retry; do not discard existing consumer work.
+Setup plans every change and reports all conflicts before it writes. It journals each
+change under `.harness/state/setup/`, so an interrupted run can be rerun, which is
+idempotent, or undone with `npx --no pom-harness setup --restore`. Do not discard
+existing consumer work after an interruption.
 
-## Seeding a fresh consumer from examples
+## The starter for a new framework
 
-Adoption copies no harness scripts and seeds no framework files. When a fresh
-consumer starts from `examples`, copy only the files it needs and fill in its names.
-The copied `package.json` also needs its six harness shortcuts repointed. In the
-package they resolve `../scripts` and run against a separate consumer passed
-explicitly; copied unchanged, they point at the consumer's parent directory. Use the
-same relative package location as the adoption command. With the package at
-`../playwright-pom-harness`, merge these entries into the copied `scripts` and keep
-its local `test` command:
+In a project without Playwright, setup adds a minimal starter from `examples`:
+`playwright.config.ts`, `global-setup.ts`, `allurerc.json`, `tsconfig.json`, the
+`src/config` modules, the technical `src/utils` facades, `.env.example`, and
+`README.md` when there is none. It creates missing files only, with no demo pages
+or tests. The starter's exact development dependencies are installed with the
+harness. `src/config/targets.ts` reads destinations from `.harness/targets.json`, so
+they are entered once for both the harness and the tests.
 
-```json
-{
-  "scripts": {
-    "fetch:suite": "node ../playwright-pom-harness/scripts/fetch-ado-suite.mjs",
-    "fetch:story": "node ../playwright-pom-harness/scripts/fetch-ado-story.mjs",
-    "check:conventions": "node ../playwright-pom-harness/scripts/check-conventions.mjs --root .",
-    "harness:metrics": "node ../playwright-pom-harness/scripts/harness-metrics.mjs",
-    "publish:results": "node ../playwright-pom-harness/scripts/publish-ado-results.mjs",
-    "tracker": "node ../playwright-pom-harness/scripts/generate-tracker.mjs"
-  }
-}
-```
-
-Quote a package path that contains spaces:
-`"tracker": "node \"../Harness Package/scripts/generate-tracker.mjs\""`.
-
-npm runs these shortcuts from the consumer root. The fetch, publication, metrics and
-tracker commands default to that directory as their project root. The convention
-checker defaults to its own package, so its shortcut keeps `--root .`; without it, the
-checker targets the package and stops with a validation error. The ADO shortcuts
-still require explicit [M12 configuration](M12-ADO.md). Harness commands in the
-example CI templates need the same path, and the CI job must provide the package
-there. Verify from the consumer that `npm run check:conventions` reports nonzero file
-and rule counts.
+Harness commands run as `npx --no pom-harness <command>` from the project folder; no
+copied shortcuts need repointing. The convention checker checks the current folder by
+default. The ADO commands still require explicit [M12 configuration](M12-ADO.md). Verify
+that `npx --no pom-harness check-conventions` reports nonzero file and rule counts.
 
 ## Deliberate profiles and separate targets
 
@@ -114,7 +98,9 @@ and rule counts.
 }
 ```
 
-Fresh adoption starts with empty target lists and registries. Add target definitions
+`npx --no pom-harness setup --environment qa --mode test` adds a profile; a new
+profile starts with empty target lists, and no configuration exists until the first
+one is added. The `harness-setup` skill asks the mode question for each environment. Add target definitions
 and their references together. Supported engine labels are `sqlserver` and
 `postgresql`; these labels do not claim that database drivers exist in M3.
 Credentials remain environment-variable references; no secret value is resolved or
@@ -132,8 +118,8 @@ Profiles record the approved policy intent:
 DDL/admin remain disabled by default. Optional `capabilities` is a flat object of
 boolean overrides: `apiReads`, `apiMutations`, `apiExploration`, `dbSelect`, `dbDml`,
 `dbExploration`, `ddl`, `admin`. Unknown fields, environments and target references
-fail. Changing an existing profile is a reviewed configuration edit; rerunning the
-adopter with a different mode refuses to change it silently.
+fail. Changing an existing profile is a reviewed configuration edit; rerunning setup
+with a different mode refuses to change it silently.
 
 M3 validates and loads configuration only. It does not compute an execution policy,
 resolve credentials, dispatch requests or implement drivers. Later executors must
@@ -163,7 +149,7 @@ Store versioned inputs in the consumer, for example `.harness/sources/synthetic.
 ```
 
 ```sh
-node ../playwright-pom-harness/scripts/load-local-source.mjs --project-root . --source .harness/sources/synthetic.json --environment qa --out .harness/runs/source.json
+npx --no pom-harness load-source --source .harness/sources/synthetic.json --environment qa --out .harness/runs/source.json
 ```
 
 The loader preserves actions, expectations and optional references and records a
@@ -193,6 +179,9 @@ remains later work.
 | `.harness/state/hooks` | Session-specific advisory hook records, ignored |
 | `.harness/runs` | Outputs and evidence, ignored |
 | `.harness/installation.json` | Migration receipts, ignored |
+| `.harness/vendor` | The installed release archive, committed so `npm ci` can install it |
+| `.harness/links.json` | The managed skill links and pointer files, committed; no machine paths |
+| `.harness/state/setup` | Setup run journals for `setup --restore`, ignored |
 
 Templates under canonical skill assets never become live state. Review/sanitize
 knowledge before versioning it; promotion affects later work, not active run inputs.
@@ -212,10 +201,10 @@ M12 now supplies [optional ADO adapters](M12-ADO.md), explicit consumer configur
 and write receipts. The following describes the original M3 adoption boundary;
 use the M12 guide for current command behavior and `--execute` requirements.
 
-Existing host settings are never overwritten. To enable legacy Claude hooks, merge
-only the desired hook entries from the package template and point each command at
-the installed `scripts/hooks/guard.mjs`, quoting the path where needed. Do not copy
-the broad permissions block as an automatic installation step. Hook payload `cwd`
+Existing host settings are never overwritten. To enable the optional Claude hooks,
+merge only the desired entries from `scripts/hooks/claude-hooks.example.json` into the
+project's `.claude/settings.json`; its commands run the installed
+`node_modules/playwright-pom-harness/scripts/hooks/guard.mjs`. Setup never enables them. Hook payload `cwd`
 selects the consumer; session records stay in that consumer. Verify startup and state
 placement. Hooks remain advisory/fail-open and are not execution-policy enforcement.
 

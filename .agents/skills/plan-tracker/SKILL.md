@@ -27,11 +27,11 @@ The renderer reads the HTML template from the installed package and writes only 
 ## Commands
 
 ```
-npm run tracker                                    # fold history → render the report (once wired; or node <packageRoot>/scripts/generate-tracker.mjs)
-node <packageRoot>/scripts/generate-tracker.mjs --sync --dry-run # preview a pipeline sync (ALWAYS first)
-node <packageRoot>/scripts/generate-tracker.mjs --sync           # append live _verify-state.json diffs as one event, then render
-node <packageRoot>/scripts/generate-tracker.mjs --archive        # also keep a timestamped copy under reports/tracker/archive/
-node <packageRoot>/scripts/generate-tracker.mjs --json           # machine-readable summary (for loops/agents)
+npx --no pom-harness tracker                       # fold history → render the report
+npx --no pom-harness tracker --sync --dry-run      # preview a pipeline sync (ALWAYS first)
+npx --no pom-harness tracker --sync                # append live _verify-state.json diffs as one event, then render
+npx --no pom-harness tracker --archive             # also keep a timestamped copy under reports/tracker/archive/
+npx --no pom-harness tracker --json                # machine-readable summary (for loops/agents)
 ```
 
 `--sync` maps pipeline state (`_verify-state.json` in `test/ado-suite-*/` and

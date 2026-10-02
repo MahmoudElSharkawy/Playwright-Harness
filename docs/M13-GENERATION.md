@@ -143,17 +143,17 @@ owner. Generated tests and their reviewers remain trusted automation code.
 
 ## Local command interfaces
 
-Every command takes `--project-root <consumer>`; it cannot use installed package storage
-as the consumer. JSON inputs and review artifacts belong to the consumer. These commands
+Run every command from the consumer folder (or pass `--project-root <consumer>`); it
+cannot use installed package storage as the consumer. JSON inputs and review artifacts belong to the consumer. These commands
 do not contact ADO, create PRs, publish, push or merge.
 
 ```text
-node <packageRoot>/scripts/generate-tests.mjs prepare --project-root <consumer> --input <preparation.json>
-node <packageRoot>/scripts/generate-tests.mjs candidate --project-root <consumer> --id <source-id> --input <candidate.json>
-node <packageRoot>/scripts/generate-tests.mjs review --project-root <consumer> --id <source-id> --input <review.json>
-node <packageRoot>/scripts/generate-tests.mjs verify --project-root <consumer> --id <source-id>
-node <packageRoot>/scripts/generate-tests.mjs verify --project-root <consumer> --id <source-id>
-node <packageRoot>/scripts/generate-tests.mjs status --project-root <consumer> --id <source-id>
+npx --no pom-harness generate prepare --input <preparation.json>
+npx --no pom-harness generate candidate --id <source-id> --input <candidate.json>
+npx --no pom-harness generate review --id <source-id> --input <review.json>
+npx --no pom-harness generate verify --id <source-id>
+npx --no pom-harness generate verify --id <source-id>
+npx --no pom-harness generate status --id <source-id>
 ```
 
 Preparation JSON contains `source` (neutral source file), `author`, `executions` and

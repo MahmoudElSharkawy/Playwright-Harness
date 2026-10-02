@@ -47,7 +47,8 @@ router) and follow its routing table.
 | An `Apis<Domain>` / `Dbs<Domain>` class — endpoints (sourced from the team API-collection library `resources/apisCollections/`), SQL queries (sourced from the team library `resources/Queries/`), lifecycle | `service-classes` |
 | Anything in `utils/` — facades, logging, Allure attachments, global setup/teardown | `utility-classes` |
 | Review a diff/MR against the conventions, "run framework review", the GENERATE exit gate | `framework-review` — mechanical linter + §6 walk + verdict (independent reviewer, never the author) |
-| "Update / regenerate the plan tracker", "record these cases as done/blocked", "sync the tracker", "where are we on the plan" — any change to the tracked plan's progress or scope | `plan-tracker` — registry + append-only history in `.agents/skills/plan-tracker/data/`, rendered by `scripts/generate-tracker.mjs` |
+| "Update / regenerate the plan tracker", "record these cases as done/blocked", "sync the tracker", "where are we on the plan" — any change to the tracked plan's progress or scope | `plan-tracker` — registry + append-only history in the consumer's `.harness/state/tracker/`, rendered by `scripts/generate-tracker.mjs` |
+| "Install / update the harness", "configure the harness with my project information", add an environment, target, secret or CI pipeline, roll the harness back | `harness-setup` |
 | Folder layout, naming, where new code belongs, or a full MR/code review | `pom-architecture` |
 
 ## Automation workflow

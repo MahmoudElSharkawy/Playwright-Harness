@@ -50,7 +50,7 @@ try {
     writeFileSync(join(staging,'files.txt'), files.join('\n')+'\n');
     execFileSync('tar',['-cf',join(staging,'source.tar'),'-T',join(staging,'files.txt')],{stdio:'pipe'});
     docker(['create','--name',clientName,'--label',`playwright-harness.milestone=${milestone}`,'--init','--shm-size=1g','--network',networkName,...Object.keys(testEnvironment).flatMap(name=>['--env',name]),'--entrypoint','sh',nodeImage,'-c',
-      `mkdir -m 700 /package && tar -xf /source.tar -C /package && cd /package && npm ci --ignore-scripts --no-audit --no-fund && ${mixed?'mkdir -p scripts/spikes/playwright-cli/node_modules && cp -a /opt/m4/node_modules/. scripts/spikes/playwright-cli/node_modules/ && ':''}node --version && node --test --test-concurrency=1 ${mixed?'harness-tests/sequential-runtime.test.mjs':'harness-tests/database-runtime.test.mjs'} ${suite}`],testEnvironment); clientCreated=true;
+      `mkdir -m 700 /package && tar -xf /source.tar -C /package && cd /package && npm ci --ignore-scripts --no-audit --no-fund && node --version && node --test --test-concurrency=1 ${mixed?'harness-tests/sequential-runtime.test.mjs':'harness-tests/database-runtime.test.mjs'} ${suite}`],testEnvironment); clientCreated=true;
     docker(['cp',join(staging,'source.tar'),`${clientName}:/source.tar`]);
   }
   const child = linux ? spawn('docker',['start','-a',clientName],{stdio:'inherit'}) : spawn(process.execPath, ['--test','--test-concurrency=1',suite], {stdio: 'inherit', env: {...process.env,...testEnvironment}});

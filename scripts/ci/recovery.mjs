@@ -4,6 +4,7 @@ import {readFile, readdir, realpath, lstat, rm} from 'node:fs/promises';
 import {join} from 'node:path';
 import {within} from '../lib/skill-roots.mjs';
 import {processCall, stopTree, treeGone} from '../lib/browser/processes.mjs';
+import {nativeCliInstallation} from '../lib/browser/native-cli.mjs';
 
 const uuid = '[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}';
 const absent = reply => reply.exitCode !== 0 && !reply.kind && /No such (?:object|container)/i.test(reply.stderr);
@@ -53,7 +54,7 @@ export async function recoverNativeProof(packageRoot, consumer) {
         const record = JSON.parse(await readFile(file, 'utf8'));
         assert(record.version === 1 && /^harness_[a-f0-9]{32}$/.test(record.session) && ['prepared', 'opening', 'opened'].includes(record.stage) && Array.isArray(record.trees));
         for (const tree of record.trees) assert(Array.isArray(tree) && tree.length > 0 && tree.every(item => Number.isSafeInteger(item.pid) && item.pid > 0 && typeof item.identity === 'string' && /^\d+$/.test(item.identity)));
-        const cli = args => processCall(process.execPath, [join(packageRoot, 'scripts/spikes/playwright-cli/node_modules/@playwright/cli/playwright-cli.js'), '--json', `-s=${record.session}`, ...args],
+        const cli = args => processCall(process.execPath, [nativeCliInstallation(packageRoot).executable, '--json', `-s=${record.session}`, ...args],
           {cwd: workRoot, timeoutMs: 30000, env: {...process.env, CI: '1', NO_UPDATE_NOTIFIER: '1'}});
         const closed = await cli(['close']); assert.equal(closed.exitCode, 0); const close = JSON.parse(closed.stdout);
         assert(close.session === record.session && ['closed', 'not-open'].includes(close.status));

@@ -33,12 +33,12 @@ phase can be re-entered idempotently.
 
 | Check | Command | On failure |
 |---|---|---|
-| Fetch script healthy | `node scripts/fetch-ado-suite.mjs --self-test` | Fix the script before anything else |
-| Azure config | `azure.org` + `azure.project` in `config/project.json` | Ask the user / run `/init-test` wizard |
+| Fetch script healthy | `npx --no pom-harness fetch-suite --self-test` | Fix the script before anything else |
+| Azure config | `.harness/integrations.json` (or the legacy `azure` section of `config/project.json`) | Ask the user, then configure it through the harness-setup skill |
 | PAT | script exits 1 with a clear message if `AZURE_PAT` / `AZURE_DEVOPS_EXT_PAT` missing in `.env` | Ask the user to fill `.env` (never ask them to paste the PAT in chat) |
-| playwright-cli (EXPLORE only) | `npx playwright-cli --version` | `npm install -D @playwright/cli && npx playwright-cli install-browser chromium` — use the registry approved for the consumer project |
-| Playwright deps (VERIFY only) | `node_modules/@playwright/test` exists | `npm install` (same registry note) |
-| Conventions linter clean | `node scripts/check-conventions.mjs` | New FAILs on an untouched tree mean someone bypassed the hooks — surface to the user |
+| Browser exploration (EXPLORE only) | `npx --no pom-harness check` reports `browser exploration` ready | Rerun `npx --no pom-harness setup`, which downloads the browser for the CLI the harness ships with |
+| Playwright deps (VERIFY only) | `npx --no pom-harness check` reports `generation verification` ready | Install the versions it names — use the registry approved for the consumer project |
+| Conventions linter clean | `npx --no pom-harness check-conventions` | New FAILs on an untouched tree mean someone bypassed the hooks — surface to the user |
 
 The PAT needs **Work Items: Read & Write**, **Test Management: Read & Write** (both
 verified in this project), and **Code: Read & Write** for PR creation.
@@ -80,11 +80,11 @@ committed to or pushed to master directly** (repo rule, hook-enforced). In order
 ## 1. FETCH — pull the suite from Azure DevOps
 
 ```
-node scripts/fetch-ado-suite.mjs --plan <planId> --suite <suiteId>
-node scripts/fetch-ado-suite.mjs --suite <suiteId>            # azure.testPlanId set in config
-node scripts/fetch-ado-suite.mjs ... --env <env>              # when the user said "on <env>"
-node scripts/fetch-ado-suite.mjs --list-plans                 # discovery
-node scripts/fetch-ado-suite.mjs --list-suites <planId>       # discovery
+npx --no pom-harness fetch-suite --plan <planId> --suite <suiteId>
+npx --no pom-harness fetch-suite --suite <suiteId>            # azure.testPlanId set in config
+npx --no pom-harness fetch-suite ... --env <env>              # when the user said "on <env>"
+npx --no pom-harness fetch-suite --list-plans                 # discovery
+npx --no pom-harness fetch-suite --list-suites <planId>       # discovery
 ```
 
 The script (zero-dependency Node, REST + PAT — it does not need the az CLI) resolves
@@ -153,7 +153,7 @@ Allowed (log each change):
   catalog entry — adapted per `resources/Queries/README.md` (single statement,
   parameterized, sample literals stripped, connection coordinates mirroring
   `src/config/databases.ts` — the named catalog — credentials only via the
-  `DB_USER`/`DB_PASSWORD` env keys), added to `integration/*_db.json` and confirmed
+  environment variables it reads), added to `integration/*_db.json` and confirmed
   with the user before EXPLORE. Never SQL invented from scratch when the library
   already knows the tables. Symmetrically, consult `resources/apisCollections/`
   (the team's API-collection knowledge library) for api intents: a collection
@@ -441,7 +441,7 @@ whose case STILL FAILS is terminal — report it, never retry it (a case whose t
 fix worked keeps its free confirmation run: rounds stay 3, greens proceed 1 → 2).
 Terminal cases — 3 rounds exhausted and still failing, blocked-environment,
 app-defect awaiting triage, unclassified — form the **NEEDS-HUMAN QUEUE**, derived
-live from `_verify-state.json` by `node scripts/harness-metrics.mjs` (no separate
+live from `_verify-state.json` by `npx --no pom-harness metrics` (no separate
 ledger to maintain): a terminal case is never retried, it is queued for a human.
 Debugging aids: `--headed`, `-g "<test title>"`, `--trace on`.
 Hard rules: never weaken/delete a validation to pass, never add `waitForTimeout`,
@@ -469,7 +469,7 @@ Generated code is not delivered until it is merged and ADO reflects reality. The
 delivery chain, in order — each step's failure is reported to the user, never
 silently skipped:
 
-1. **Lint gate**: `node scripts/check-conventions.mjs --changed` must show 0 new FAILs
+1. **Lint gate**: `npx --no pom-harness check-conventions --changed` must show 0 new FAILs
    (--changed includes staged and untracked files).
 2. **Traceability table** (2026-08-27 ruling): write
    `test/ado-suite-<suiteId>/_traceability.md` — one section per test case, one row per
@@ -503,7 +503,7 @@ silently skipped:
 4. **Push**: `git push -u origin <branch>`.
 5. **Pull request** (authorized external delivery; preview without `--execute` first):
    ```
-   node scripts/ado-pr.mjs --title "Automate ADO suite <suiteId> — <suiteName>" --description-file <path> --json --execute
+   npx --no pom-harness pr --title "Automate ADO suite <suiteId> — <suiteName>" --description-file <path> --json --execute
    ```
    Record the result in the manifest: `"pr": { "id": <n>, "url": "..." }` in
    `_suite.json`. The description carries: the TC ↔ test ↔ verify-status matrix, a
@@ -514,7 +514,7 @@ silently skipped:
    delivery and are not posted by this command.
    The description also carries: defects found during EXPLORE (with evidence paths),
    what was NOT automated and why, the suite's current NEEDS-HUMAN QUEUE entries
-   (from `node scripts/harness-metrics.mjs` — terminal cases must not hide in run
+   (from `npx --no pom-harness metrics` — terminal cases must not hide in run
    reports), the methods newly created per case (the
    reuse-gate output), any
    assertion-free GUI-cleanup last-resorts (reusability-ladder step 3 flags), and
@@ -523,13 +523,13 @@ silently skipped:
 6. **Publish outcomes to ADO** (opt-in, confirm with the user first — it writes to
    the shared plan; once per pipeline, never per loop iteration):
    ```
-   node scripts/publish-ado-results.mjs --suite <suiteId> --dry-run
-   node scripts/publish-ado-results.mjs --suite <suiteId> --execute
+   npx --no pom-harness publish-results --suite <suiteId> --dry-run
+   npx --no pom-harness publish-results --suite <suiteId> --execute
    ```
 7. **After the PR is merged** (merged is not "PR opened" — check the PR's status via
    its recorded URL or the REST API before this step):
    ```
-   node scripts/publish-ado-results.mjs --suite <suiteId> --mark-automated --execute
+   npx --no pom-harness publish-results --suite <suiteId> --mark-automated --execute
    ```
    This sets the standard `Microsoft.VSTS.TCM.*` automation fields and any
    explicitly configured custom automation field on every eligible case whose
@@ -551,7 +551,7 @@ silently skipped:
 - What was NOT automated and why (blocked cases, missing backends, NEEDS-DATA), the
   methods newly created per case, and any GUI-cleanup last-resorts awaiting a
   backend path.
-- The suite's NEEDS-HUMAN QUEUE (`node scripts/harness-metrics.mjs`): every
+- The suite's NEEDS-HUMAN QUEUE (`npx --no pom-harness metrics`): every
   terminal case — rounds exhausted, blocked, app-defect awaiting triage,
   unclassified — listed by TC id so none hides in the run report.
 - Optionally generate the interactive dashboard: `/extent-report` over the recorded

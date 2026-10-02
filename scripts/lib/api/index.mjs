@@ -6,6 +6,7 @@ import {data, fingerprint, id, keys, oneOf, requireThat, typedValue, protectedRe
 import {createScenarioState, requireScenarioState, initializeStorage, writeScenario, finishScenario, rememberSensitive, publicValue as checkedPublicValue} from '../sequential/state.mjs';
 import {apiCapabilities, validateApiOperation, buildRequest, bind, select} from './definition.mjs';
 import {ApiFailure, send, bounded} from './transport.mjs';
+import {consumerEnvironment} from '../consumer-env.mjs';
 
 export {defineApiOperation, apiCapabilities} from './definition.mjs';
 const AUTH_HEADERS = new Set(['authorization', 'x-api-key', 'api-key', 'x-auth-token', 'cookie']);
@@ -21,9 +22,11 @@ function overlaps(left, right) {
   return a.slice(0, Math.min(a.length, b.length)).every((part, index) => part === b[index]);
 }
 
-/** Default bearer credentials stay in memory and are resolved only for their selected destination. */
-function environmentCredential({reference}) {
-  const value = process.env[reference.slice(4)];
+/** Default bearer credentials stay in memory and are resolved only for their selected destination.
+ * The shell environment wins; a name it lacks falls back to the consumer's ignored .env.
+ */
+function environmentCredential({reference}, environment) {
+  const value = environment[reference.slice(4)];
   if (!value) throw new ApiFailure('UNAVAILABLE');
   return {authorization: `Bearer ${value}`};
 }
@@ -34,7 +37,7 @@ function environmentCredential({reference}) {
  * Raw responses/authentication remain in memory. Only allowlisted extracted values and
  * sanitized comparison/transport facts are persisted. No host or reporting dependency.
  */
-export function createApiRuntime(run, inputRoots, {signal, resolveCredential = environmentCredential, resolveSensitive, storeSensitive, execution} = {}) {
+export function createApiRuntime(run, inputRoots, {signal, resolveCredential, resolveSensitive, storeSensitive, execution} = {}) {
   requireRun(run);
   requireThat(run.inputs.scenarios.length === 1, 'M7 accepts one sequential API scenario per run.');
   requireThat(signal === undefined || signal instanceof AbortSignal, 'Cancellation needs an AbortSignal.');
@@ -43,6 +46,7 @@ export function createApiRuntime(run, inputRoots, {signal, resolveCredential = e
   if (!execution) initializeStorage(state);
   requireThat(state.storageReady, 'Shared storage must be initialized.');
   const {roots, scope, scenario, observations, histories} = state, credentials = new Map();
+  resolveCredential ??= context => environmentCredential(context, consumerEnvironment(roots));
   state.releases.push(() => credentials.clear());
   let busy = false, finished = false, phaseNumber = 0, cleanupStartedAt;
 

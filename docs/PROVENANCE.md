@@ -78,6 +78,15 @@ no upstream implementation was copied. Existing separately installed Allure tool
 remain Apache-2.0 dependencies with their original notices. No new root dependency
 or redistribution of Allure, Java, browsers or database images is introduced.
 
+M18 makes the M4 native CLI graph exact runtime dependencies, so a client's install of
+the archive supplies the browser runtime: `@playwright/cli` 0.1.22 with Playwright and
+Playwright Core 1.64.0-alpha-1790635538000, all Apache-2.0. It also pins the already
+recorded `@js-joda/core` 6.1.0 (BSD-3-Clause), which npm otherwise re-resolved on a
+plain install. npm installs these packages from the registry; no implementation is
+copied or bundled. The [runtime inventory](../scripts/runtime-dependency-licenses.json)
+gains the three CLI records, with the same integrity values as the spike inventory, and
+now covers 90 records. The spike keeps its own lock and inventory for its development tests.
+
 AgenTeX (MIT) and Microsoft Playwright CLI (Apache-2.0) were inspected as references.
 No upstream implementation was copied into M1. Exact research revisions are recorded
 in [the provenance inventory](../scripts/provenance.json). Architectural ideas and links
@@ -98,5 +107,6 @@ dependencies; that would require a distribution-specific audit.
 
 Before publication: recheck any new third-party source, retain required notices,
 inspect the archive, resolve outstanding security remediation, and obtain explicit
-publication authorization. The root package remains private. MIT licensing is not
+publication authorization. The root package remains private; releases attach the validated
+archive to a GitHub release, following [the release guide](RELEASING.md). MIT licensing is not
 authorization to create a public repository, push, publish or release this package.

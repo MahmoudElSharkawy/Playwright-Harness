@@ -69,19 +69,19 @@ release, process template or tenant permission policy.
 
 ## Compatibility commands
 
-Paths below are examples relative to a separate consumer. All six entrypoints
+Run these from the consumer folder. All six entrypoints also
 accept `--project-root`; package-as-consumer and paths escaping the consumer are
 refused, including resolved junction escapes.
 
 ```sh
-node ../playwright-pom-harness/scripts/fetch-ado-suite.mjs --project-root . --plan 1 --suite 2
-node ../playwright-pom-harness/scripts/fetch-ado-suite.mjs --project-root . --plan 1 --suite 2 --source-out scenarios/synthetic.json
-node ../playwright-pom-harness/scripts/fetch-ado-story.mjs --project-root . --story 200
-node ../playwright-pom-harness/scripts/fetch-ado-story.mjs --project-root . --story 200 --links tested-by,related --source-out scenarios/story.json
-node ../playwright-pom-harness/scripts/publish-ado-results.mjs --project-root . --suite 2
-node ../playwright-pom-harness/scripts/tag-ado-workitem.mjs --project-root . --ids 101,102 --tag synthetic
-node ../playwright-pom-harness/scripts/relink-ado-story.mjs --project-root . --id 201 --story 200
-node ../playwright-pom-harness/scripts/ado-pr.mjs --project-root . --source feature/synthetic --title "Synthetic change" --description-file pr-description.md
+npx --no pom-harness fetch-suite --plan 1 --suite 2
+npx --no pom-harness fetch-suite --plan 1 --suite 2 --source-out scenarios/synthetic.json
+npx --no pom-harness fetch-story --story 200
+npx --no pom-harness fetch-story --story 200 --links tested-by,related --source-out scenarios/story.json
+npx --no pom-harness publish-results --suite 2
+npx --no pom-harness tag-workitem --ids 101,102 --tag synthetic
+npx --no pom-harness relink-story --id 201 --story 200
+npx --no pom-harness pr --source feature/synthetic --title "Synthetic change" --description-file pr-description.md
 ```
 
 All remote mutation commands now **preview by default**. After authorization,

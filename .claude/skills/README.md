@@ -1,4 +1,4 @@
 # Skill library compatibility index
 
-Use the [canonical library](../../.agents/skills/README.md). All thirteen skills are
+Use the [canonical library](../../.agents/skills/README.md). All skills are
 maintained there. These legacy Markdown paths are redirects for existing consumers.

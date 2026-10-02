@@ -7,6 +7,10 @@
     "resolveJsonModule": true,
     "skipLibCheck": true,
     "noEmit": true,
+    "strict": true,
+    "allowJs": true,
+    "checkJs": false,
+    "maxNodeModuleJsDepth": 1,
     "types": ["node"]
   },
   "exclude": ["node_modules", "allure-report", "reports", "test-results"]

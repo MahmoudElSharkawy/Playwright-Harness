@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtempSync,realpathSync,rmSync,mkdirSync,writeFileSync,readFileSync,existsSync,readdirSync,symlinkSync,cpSync,utimesSync} from 'node:fs';
+import {mkdtempSync,realpathSync,rmSync,mkdirSync,writeFileSync,readFileSync,existsSync,readdirSync,symlinkSync,cpSync,utimesSync,renameSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 import {tmpdir} from 'node:os';
 import {join,dirname,relative,isAbsolute} from 'node:path';
@@ -16,15 +16,20 @@ function project(t) {
 }
 function put(root,path,text){const file=join(root,path);mkdirSync(dirname(file),{recursive:true});writeFileSync(file,text);}
 const adopt=root=>adoptProject({projectRoot:root,environment:'qa',mode:'test'});
+const shipped=readdirSync(join(packageRoot,'.agents/skills')).filter(name=>existsSync(join(packageRoot,'.agents/skills',name,'SKILL.md'))).sort();
 const registry=ids=>JSON.stringify({planId:7,names:[],branches:[{name:'Synthetic',inScope:true}],suites:[{branch:0,id:10,name:'Synthetic',cases:ids.map(id=>({id,title:`Synthetic case ${id}`,desc:'fixture',verdict:'k',note:''}))}],manual:{},bugs:{}});
 test('fresh onboarding requires deliberate profile; preview writes nothing',t=>{
  const root=project(t);assert.throws(()=>adoptProject({projectRoot:root,environment:'qa'}));assert.deepEqual(readdirSync(root),[]);
- const preview=adoptProject({projectRoot:root,environment:'qa',mode:'test',dryRun:true});assert.equal(preview.skills,13);assert.deepEqual(readdirSync(root),[]);
+ const preview=adoptProject({projectRoot:root,environment:'qa',mode:'test',dryRun:true});assert.equal(preview.skills,shipped.length);assert.deepEqual(readdirSync(root),[]);
 });
-test('adoption links 13 canonical skills, initializes consumer state and is idempotent',t=>{
- const root=project(t),result=adopt(root);assert.equal(result.skills,13);
- for(const name of readdirSync(join(root,'.agents/skills')))assert.equal(realpathSync(join(root,'.agents/skills',name)),realpathSync(join(packageRoot,'.agents/skills',name)));
- assert(existsSync(join(root,'.harness/state/tracker/history.jsonl')));assert.equal(adopt(root).changes.length,0);
+test('adoption links every canonical skill for both hosts, initializes consumer state and is idempotent',t=>{
+ const root=project(t),result=adopt(root);assert.equal(result.skills,shipped.length);
+ for(const dir of ['.agents/skills','.claude/skills']) {
+  for(const name of shipped)assert.equal(realpathSync(join(root,dir,name)),realpathSync(join(packageRoot,'.agents/skills',name)));
+  assert.match(readFileSync(join(root,dir,'ROOTS.md'),'utf8'),/Read \[ROOTS\.md in the installed harness\]\(.+\.agents\/skills\/ROOTS\.md\)/);
+ }
+ assert.equal(JSON.parse(readFileSync(join(root,'.harness/links.json'),'utf8')).links.length,shipped.length*2);
+ assert(existsSync(join(root,'.harness/state/tracker/history.jsonl')));const rerun=adopt(root);assert.equal(rerun.changes.length,0);assert.equal(rerun.links.length,0);
  assert.equal(loadEnvironment(consumerRoots(root)).environmentMode,'test');
 });
 test('existing instructions, host settings, application code and imported libraries survive',t=>{
@@ -96,16 +101,22 @@ test('a shared case uses its newest verification for metrics totals and tracker 
  assert.match(sync.stdout,/"set":\{"done":\[9\]\}/);assert.match(sync.stderr,/not synced[^\n]*13 \(ado-story-300, ado-suite-10\)/);
 });
 
-test('recognized legacy instructions become redirects; originals need an exact normalized digest',t=>{
+test('a recognized legacy instruction folder becomes a link; originals need an exact normalized digest',t=>{
  const root=project(t),installed=project(t);
- for(const dir of ['.agents/skills','.claude/skills','resources'])cpSync(join(packageRoot,dir),join(installed,dir),{recursive:true});
+ for(const dir of ['.agents/skills','resources'])cpSync(join(packageRoot,dir),join(installed,dir),{recursive:true});
  put(installed,'VERSION','3.0.3\n');
+ for(const file of ['scripts/managed-digests.json'])cpSync(join(packageRoot,file),join(installed,file));
+ put(installed,'scripts/redirect-skill-hashes.json','{}');
  const file='.claude/skills/action-methods/SKILL.md',original='Synthetic original convention\n';
  put(root,file,original.replaceAll('\n','\r\n'));
  put(installed,'scripts/legacy-skill-hashes.json',JSON.stringify({[file]:createHash('sha256').update(original).digest('hex')}));
- adoptProject({projectRoot:root,installedRoot:installed,environment:'qa',mode:'test'});
- assert.equal(readFileSync(join(root,file),'utf8'),readFileSync(join(installed,file),'utf8'));
- assert.equal(realpathSync(join(root,'.agents/skills/action-methods')),realpathSync(join(installed,'.agents/skills/action-methods')));
+ const result=adoptProject({projectRoot:root,installedRoot:installed,environment:'qa',mode:'test'});
+ assert.deepEqual(result.removedFolders,['.claude/skills/action-methods']);
+ for(const dir of ['.agents/skills','.claude/skills'])assert.equal(realpathSync(join(root,dir,'action-methods')),realpathSync(join(installed,'.agents/skills/action-methods')));
+ // A fresh consumer: in the adopted one this path is now a link, and writing there would reach the package.
+ const other=project(t);put(other,'.claude/skills/test-classes/SKILL.md','Unrecognized legacy text\n');
+ assert.throws(()=>adoptProject({projectRoot:other,installedRoot:installed}),/Customized legacy skill needs a manual merge: \.claude\/skills\/test-classes\/SKILL\.md/);
+ assert.equal(readFileSync(join(other,'.claude/skills/test-classes/SKILL.md'),'utf8'),'Unrecognized legacy text\n');assert(!existsSync(join(other,'AGENTS.md')));
 });
 
 test('fresh consumer ignores secrets/auth/reports but permits the example environment file',t=>{
@@ -220,5 +231,105 @@ test('adding broad environment ignores preserves an existing example exception',
    assert.equal(git('check-ignore','--quiet','.env.example').status,1);
    assert.equal(git('check-ignore','--quiet','.env.local').status,0);
    assert(readFileSync(join(root,'.gitignore'),'utf8').startsWith(ignore));assert.equal(adopt(root).changes.length,0);
+ }
+});
+
+// A minimal installed package copy for link tests: skills, digest lists, templates and VERSION.
+function installedCopy(root) {
+ for(const dir of ['.agents/skills','resources'])cpSync(join(packageRoot,dir),join(root,dir),{recursive:true});
+ for(const file of ['VERSION','package.json','scripts/legacy-skill-hashes.json','scripts/redirect-skill-hashes.json','scripts/managed-digests.json']) {mkdirSync(dirname(join(root,file)),{recursive:true});cpSync(join(packageRoot,file),join(root,file));}
+ return root;
+}
+const git=(root,...args)=>spawnSync('git',args,{cwd:root,encoding:'utf8'});
+// The 3.0.x managed block exactly as released.
+const releasedBlock='<!-- playwright-pom-harness -->\nUse the canonical skills discovered under `.agents/skills`. Resolve linked skills to their real package path for references. Keep package content immutable and consumer state under `.harness`. Preserve this project\'s existing instructions and code. Imported team libraries are derive-only.\n<!-- /playwright-pom-harness -->';
+
+test('adoption without an environment links skills and creates no configuration',t=>{
+ const root=project(t),result=adoptProject({projectRoot:root});
+ assert.equal(result.environment,undefined);assert(!existsSync(join(root,'.harness/project.json')));assert(!existsSync(join(root,'.harness/targets.json')));
+ assert.equal(realpathSync(join(root,'.claude/skills/test-data')),realpathSync(join(packageRoot,'.agents/skills/test-data')));
+ assert.equal(adoptProject({projectRoot:root}).changes.length,0);
+ assert.throws(()=>adoptProject({projectRoot:root,mode:'test'}),/environment identifier/);
+ adoptProject({projectRoot:root,environment:'qa',mode:'protected'});assert.equal(loadEnvironment(consumerRoots(root)).environmentMode,'protected');
+});
+test('git sees no harness skill files behind the links, only the link record',t=>{
+ const root=project(t);assert.equal(git(root,'init','--initial-branch=fixture').status,0);adopt(root);
+ const staged=git(root,'add','-A','--dry-run').stdout;
+ assert.deepEqual(staged.split('\n').filter(line=>/\.(?:agents|claude)\/skills\//.test(line)),[]);assert.match(staged,/\.harness\/links\.json/);
+});
+test('a CRLF checkout of every committed adoption file reruns without changes',t=>{
+ const root=project(t);adopt(root);
+ // core.autocrlf=true checks out every committed text file with CRLF.
+ for(const file of ['AGENTS.md','CLAUDE.md','.gitignore','.harness/links.json','.harness/project.json','.harness/targets.json','resources/Queries/README.md','resources/apisCollections/README.md'])writeFileSync(join(root,file),readFileSync(join(root,file),'utf8').replaceAll('\n','\r\n'));
+ assert.deepEqual(adopt(root).changes,[]);
+});
+test('an earlier released block is replaced in place; an edited block stops adoption',t=>{
+ const root=project(t);put(root,'AGENTS.md',`Team rules\r\n\r\n${releasedBlock.replaceAll('\n','\r\n')}\r\n\r\nMore team rules\r\n`);adopt(root);
+ const agents=readFileSync(join(root,'AGENTS.md'),'utf8');
+ assert(agents.startsWith('Team rules\r\n\r\n<!-- playwright-pom-harness -->\r\n'));assert(agents.endsWith('\r\n\r\nMore team rules\r\n'));
+ assert.match(agents,/harness-setup/);assert.doesNotMatch(agents,/discovered under `\.agents\/skills`\. Resolve/);
+ const edited=project(t);put(edited,'CLAUDE.md',releasedBlock.replace('derive-only.','derive-only. Team addition.'));
+ assert.throws(()=>adopt(edited),/edited harness instruction block in CLAUDE\.md/);assert(!existsSync(join(edited,'AGENTS.md')));
+});
+test('links are repaired after a project move and from an old sibling clone; foreign links stop',t=>{
+ const base=project(t),first=join(base,'first'),moved=join(base,'moved');mkdirSync(first);
+ adoptProject({projectRoot:first,installedRoot:installedCopy(join(first,'node_modules/playwright-pom-harness'))});
+ renameSync(first,moved);
+ const installed=join(moved,'node_modules/playwright-pom-harness'),result=adoptProject({projectRoot:moved,installedRoot:installed});
+ for(const dir of ['.agents/skills','.claude/skills'])for(const name of shipped)assert.equal(realpathSync(join(moved,dir,name)),realpathSync(join(installed,'.agents/skills',name)));
+ // Windows junctions are absolute and dangle after a move; POSIX links are relative and survive it.
+ assert.equal(result.links.filter(link=>link.kind==='repair').length,process.platform==='win32'?shipped.length*2:0);
+ const sibling=installedCopy(join(base,'old-harness')),second=join(base,'second');mkdirSync(join(second,'.agents/skills'),{recursive:true});
+ symlinkSync(join(sibling,'.agents/skills/test-data'),join(second,'.agents/skills/test-data'),'junction');
+ assert.deepEqual(adoptProject({projectRoot:second}).links.filter(link=>link.kind==='repair').map(link=>link.path),['.agents/skills/test-data']);
+ assert.equal(realpathSync(join(second,'.agents/skills/test-data')),realpathSync(join(packageRoot,'.agents/skills/test-data')));
+ assert(existsSync(join(sibling,'.agents/skills/test-data/SKILL.md')),'Repair never touches the old target.');
+ const third=join(base,'third'),foreign=join(base,'team-skills/test-data');mkdirSync(foreign,{recursive:true});writeFileSync(join(foreign,'SKILL.md'),'team skill');
+ mkdirSync(join(third,'.agents/skills'),{recursive:true});symlinkSync(foreign,join(third,'.agents/skills/test-data'),'junction');
+ assert.throws(()=>adoptProject({projectRoot:third}),/\.agents\/skills\/test-data links to something other than this harness/);
+ assert.equal(readFileSync(join(foreign,'SKILL.md'),'utf8'),'team skill');
+});
+test('links of skills no longer shipped are removed; non-links at those paths are kept',t=>{
+ const root=project(t);adopt(root);
+ const record=JSON.parse(readFileSync(join(root,'.harness/links.json'),'utf8'));record.links.push('.agents/skills/retired-skill','.claude/skills/retired-skill');
+ writeFileSync(join(root,'.harness/links.json'),JSON.stringify(record));
+ const retired=join(root,'retired-target');mkdirSync(retired);symlinkSync(retired,join(root,'.agents/skills/retired-skill'),'junction');rmSync(retired,{recursive:true});
+ put(root,'.claude/skills/retired-skill/SKILL.md','team-owned');
+ const result=adopt(root);
+ assert.deepEqual(result.links.filter(link=>link.kind==='remove').map(link=>link.path),['.agents/skills/retired-skill']);
+ assert.equal(readFileSync(join(root,'.claude/skills/retired-skill/SKILL.md'),'utf8'),'team-owned');assert(result.reports.some(report=>report.includes('.claude/skills/retired-skill')));
+});
+test('a legacy folder holding tracked team data is kept and reported; untracked data folders become links',t=>{
+ const root=project(t);assert.equal(git(root,'init','--initial-branch=fixture').status,0);
+ put(root,'.claude/skills/plan-tracker/data/history.jsonl','{"at":"2026-09-30","set":{"todo":[7]}}\n');assert.equal(git(root,'add','.claude/skills/plan-tracker').status,0);
+ put(root,'.claude/skills/framework-review/class-ledger.md','Untracked synthetic finding\n');
+ const result=adopt(root);
+ assert.equal(readFileSync(join(root,'.claude/skills/plan-tracker/data/history.jsonl'),'utf8'),readFileSync(join(root,'.harness/state/tracker/history.jsonl'),'utf8'));
+ assert(result.reports.some(report=>report.startsWith('Kept .claude/skills/plan-tracker:')));assert(!result.removedFolders.includes('.claude/skills/plan-tracker'));
+ assert.deepEqual(result.removedFolders,['.claude/skills/framework-review']);assert.equal(readFileSync(join(root,'.harness/state/review/class-ledger.md'),'utf8'),'Untracked synthetic finding\n');
+ assert.equal(realpathSync(join(root,'.claude/skills/framework-review')),realpathSync(join(packageRoot,'.agents/skills/framework-review')));
+ assert.equal(adopt(root).changes.length,0);
+});
+test('a committed copy of a harness skill stops with a git rm hint, and every conflict is reported together',t=>{
+ const root=project(t);cpSync(join(packageRoot,'.agents/skills/test-data'),join(root,'.agents/skills/test-data'),{recursive:true});put(root,'.claude/skills/ROOTS.md','Team notes\n');
+ assert.throws(()=>adopt(root),error=>error.conflicts?.length===2 && /committed copy of the harness skill; run "git rm -r --cached \.agents\/skills\/test-data"/.test(error.message) && /Review \.claude\/skills\/ROOTS\.md/.test(error.message));
+ assert(!existsSync(join(root,'AGENTS.md')));assert.equal(readFileSync(join(root,'.claude/skills/ROOTS.md'),'utf8'),'Team notes\n');
+});
+test('the journal sees each file and link before it changes',t=>{
+ const root=project(t),events=[];put(root,'AGENTS.md','Team rules\n');
+ adoptProject({projectRoot:root,environment:'qa',mode:'test',journal:{file:(file,before)=>events.push(['file',file,before?.toString()??null]),link:(path,previous)=>events.push(['link',path,previous]),folder:path=>events.push(['folder',path])}});
+ assert.deepEqual(events.find(event=>event[1]==='AGENTS.md'),['file','AGENTS.md','Team rules\n']);
+ assert(events.some(event=>event[0]==='file' && event[1]==='.harness/links.json' && event[2]===null));
+ assert.equal(events.filter(event=>event[0]==='link').length,shipped.length*2);
+});
+test('every redirect this repository still keeps is a recognized legacy file',()=>{
+ // A source checkout keeps the redirects for its own sessions; the published package never ships them.
+ const source=existsSync(join(packageRoot,'.git'));assert.equal(existsSync(join(packageRoot,'.claude/skills')),source);if(!source)return;
+ const known=JSON.parse(readFileSync(join(packageRoot,'scripts/redirect-skill-hashes.json'),'utf8'));
+ const files=readdirSync(join(packageRoot,'.claude/skills'),{recursive:true,withFileTypes:true}).filter(entry=>entry.isFile()).map(entry=>join(entry.parentPath,entry.name));
+ assert(files.length>0);
+ for(const file of files) {
+  const key=relative(packageRoot,file).replaceAll('\\','/'),hash=createHash('sha256').update(readFileSync(file,'utf8').replaceAll('\r\n','\n')).digest('hex');
+  assert((known[key]??[]).includes(hash),`${key} needs its digest in scripts/redirect-skill-hashes.json`);
  }
 });
