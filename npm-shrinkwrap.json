@@ -1,12 +1,12 @@
 {
   "name": "playwright-pom-harness",
-  "version": "3.1.0",
+  "version": "3.1.1",
   "lockfileVersion": 3,
   "requires": true,
   "packages": {
     "": {
       "name": "playwright-pom-harness",
-      "version": "3.1.0",
+      "version": "3.1.1",
       "license": "MIT",
       "dependencies": {
         "@azure/msal-browser": "5.23.0",

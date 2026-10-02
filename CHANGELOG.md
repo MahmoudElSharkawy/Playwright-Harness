@@ -1,12 +1,19 @@
 # Changelog
 
-## Unreleased — page map leaves `.agentex/`
+## 3.1.1 — Retire .agentex and pin @azure/msal-browser
+
+Fresh installs get the cleared dependency graph again, and the package and setup no
+longer use the legacy `.agentex/` directory.
+
+### Upgrade actions
+
+- Run setup from the 3.1.1 archive in each project: `npx --yes --package "<full path to playwright-pom-harness-3.1.1.tgz>" pom-harness setup`.
+- Delete the `.agentex/cache/` line that 3.1.0 setup added to `.gitignore`; nothing uses it.
+
+### Changes
 
 - Ship the page-map template and contract with the `automate-suite` skill, as `assets/page-map-template.md` and `references/page-map.md`; the contract now requires review before facts are promoted. The package no longer ships `.agentex/`, and setup no longer migrates `.agentex/page-map/` or adds the unused `.agentex/cache/` ignore line.
-
-## Unreleased — pin `@azure/msal-browser`
-
-- Pin `@azure/msal-browser` 5.23.0 as an exact runtime dependency, as `@js-joda/core` and `tedious` are. `@azure/identity` accepts `^5.5.0`, so plain installs re-resolved it to 5.24.0 once that was published, and setup stopped on the drifted dependency closure.
+- Pin `@azure/msal-browser` 5.23.0 as an exact runtime dependency, as `@js-joda/core` and `tedious` are. `@azure/identity` accepts `^5.5.0`, so plain installs re-resolved it to 5.24.0 once that was published, and setup reported a drifted dependency closure.
 
 ## 3.1.0 — M18 archive adoption
 
