@@ -5,7 +5,7 @@ import {createHash} from 'node:crypto';
 import {tmpdir} from 'node:os';
 import {join,dirname,relative,isAbsolute} from 'node:path';
 import {spawnSync} from 'node:child_process';
-import {adoptProject} from '../scripts/lib/adoption.mjs';
+import {adoptProject,INSTRUCTION_BLOCK} from '../scripts/lib/adoption.mjs';
 import {consumerRoots,consumerPath,packageRoot} from '../scripts/lib/consumer-paths.mjs';
 import {loadEnvironment} from '../scripts/lib/project-config.mjs';
 import {npmPath} from '../scripts/ci/process.mjs';
@@ -243,6 +243,8 @@ function installedCopy(root) {
 const git=(root,...args)=>spawnSync('git',args,{cwd:root,encoding:'utf8'});
 // The 3.0.x managed block exactly as released.
 const releasedBlock='<!-- playwright-pom-harness -->\nUse the canonical skills discovered under `.agents/skills`. Resolve linked skills to their real package path for references. Keep package content immutable and consumer state under `.harness`. Preserve this project\'s existing instructions and code. Imported team libraries are derive-only.\n<!-- /playwright-pom-harness -->';
+// The 3.1.0 managed block exactly as released, before the branch rule.
+const released310Block='<!-- playwright-pom-harness -->\nUse the harness skills linked under `.claude/skills` and `.agents/skills`; resolve linked skills to their real package path for references. To install, update or configure the harness, follow the `harness-setup` skill. If the harness skills are missing, run `npx --no pom-harness setup`. Keep package content immutable and consumer state under `.harness`. Preserve this project\'s existing instructions and code. Imported team libraries are derive-only.\n<!-- /playwright-pom-harness -->';
 
 test('adoption without an environment links skills and creates no configuration',t=>{
  const root=project(t),result=adoptProject({projectRoot:root});
@@ -270,6 +272,13 @@ test('an earlier released block is replaced in place; an edited block stops adop
  assert.match(agents,/harness-setup/);assert.doesNotMatch(agents,/discovered under `\.agents\/skills`\. Resolve/);
  const edited=project(t);put(edited,'CLAUDE.md',releasedBlock.replace('derive-only.','derive-only. Team addition.'));
  assert.throws(()=>adopt(edited),/edited harness instruction block in CLAUDE\.md/);assert(!existsSync(join(edited,'AGENTS.md')));
+});
+test('the 3.1.0 block is replaced in place by the block with the branch rule',t=>{
+ const root=project(t);put(root,'CLAUDE.md',`Team rules\n\n${released310Block}\n`);adopt(root);
+ const claude=readFileSync(join(root,'CLAUDE.md'),'utf8');
+ assert(claude.startsWith('Team rules\n\n<!-- playwright-pom-harness -->\n'));assert(claude.includes(INSTRUCTION_BLOCK));
+ assert.match(claude,/Never commit or push directly to the default branch/);assert.equal(claude.split('<!-- playwright-pom-harness -->').length,2);
+ assert.deepEqual(adopt(root).changes,[]);
 });
 test('links are repaired after a project move and from an old sibling clone; foreign links stop',t=>{
  const base=project(t),first=join(base,'first'),moved=join(base,'moved');mkdirSync(first);

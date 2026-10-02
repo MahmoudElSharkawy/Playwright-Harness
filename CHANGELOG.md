@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased — default branch rule
+
+- Add the branch rule to the managed instruction block that setup merges into a project's `CLAUDE.md` and `AGENTS.md`: never commit or push directly to the default branch; reuse the ongoing feature branch, or create `automation/<source-id>-<slug>`, `harness/<topic>`, `feature/<topic>` or `fix/<topic>`; deliver through a pull request, committing, pushing or opening one only with the user's authorization. Setup replaces the released 3.0.x and 3.1.0 blocks in place; an edited block still stops setup for review. The pipeline guide's prerequisites point to the rule.
+
 ## 3.1.0 — M18 archive adoption
 
 A project now adopts the harness from its versioned release archive in one command,

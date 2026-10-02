@@ -48,7 +48,9 @@ SOURCE → REFINE → EXPLORE → PREPARE → AUTHOR → CANDIDATE → REVIEW �
   `strict: true` ([M13](M13-GENERATION.md#two-independent-scoped-green-runs)).
 - ADO is needed only for ADO sources or delivery. Configure it in
   `.harness/integrations.json` ([M12](M12-ADO.md#consumer-configuration)).
-- Work on a feature branch, following the consumer's branch and delivery rules.
+- Work on a feature branch, following the branch rule that setup adds to the project's
+  `CLAUDE.md` and `AGENTS.md`: for example `automation/<source-id>-<slug>` for
+  generated suites, delivered through a pull request.
 
 Run harness commands from the consumer folder as `npx --no pom-harness <command>`;
 `npx --no pom-harness help` lists them. The underlying scripts also accept
