@@ -8,6 +8,7 @@ import {spawnSync} from 'node:child_process';
 import {adoptProject} from '../scripts/lib/adoption.mjs';
 import {consumerRoots,consumerPath,packageRoot} from '../scripts/lib/consumer-paths.mjs';
 import {loadEnvironment} from '../scripts/lib/project-config.mjs';
+import {npmPath} from '../scripts/ci/process.mjs';
 
 function project(t) {
  const base=realpathSync(tmpdir()),root=mkdtempSync(join(base,'pom-adopt-'));
@@ -152,6 +153,62 @@ test('legacy ADO entrypoints refuse the package as consumer before contacting a 
    assert.notEqual(wrong.status,0);assert.match(wrong.stderr,/separate consumer/);
    const run=spawnSync(process.execPath,[script,'--project-root',root],{encoding:'utf8',cwd:packageRoot,env:{...process.env,AZURE_PAT:'',AZURE_DEVOPS_EXT_PAT:'',AZURE_ORG:'',AZURE_URL:'',AZURE_PROJECT:''}});
    assert.notEqual(run.status,0);assert.doesNotMatch(run.stderr,/separate consumer|ENOENT/);
+ }
+});
+
+// Exercise npm's real cwd and argument forwarding, rather than resolving scripts directly.
+function exampleShortcut(name, args, fromRoot) {
+ const run=spawnSync(process.execPath,[npmPath(),'--silent',...(fromRoot?['--prefix','examples']:[]),'run',name,'--',...args],{
+  cwd:fromRoot?packageRoot:join(packageRoot,'examples'),encoding:'utf8',windowsHide:true,timeout:30000,
+  env:{...process.env,AZURE_PAT:'',AZURE_DEVOPS_EXT_PAT:'',AZURE_ORG:'',AZURE_URL:'',AZURE_PROJECT:''}
+ });
+ assert.ifError(run.error);assert.doesNotMatch(run.stderr,/MODULE_NOT_FOUND|Cannot find module/);
+ return run;
+}
+function shortcutConsumer(t) {
+ const root=join(project(t),'consumer with spaces');mkdirSync(root);return root;
+}
+for(const [name,args,entrypoint] of [
+ ['fetch:suite',['--plan','7','--suite','10'],'fetch-ado-suite'],
+ ['fetch:story',['--story','200'],'fetch-ado-story'],
+ ['publish:results',['--plan','7','--suite','10','--dry-run'],'publish-ado-results']
+]) test(`example npm shortcut ${name} reaches guarded configuration from both directories`,t=>{
+ const root=shortcutConsumer(t);
+ for(const fromRoot of [true,false]) {
+  const run=exampleShortcut(name,['--project-root',root,...args],fromRoot);
+  assert.equal(run.status,1,run.stderr);
+  assert.equal(run.stderr.trim(),`[${entrypoint}] Configure an explicit HTTPS ADO collection URL.`);
+  assert.deepEqual(readdirSync(root),[]); // Configuration refusal precedes dispatch or writes.
+ }
+});
+test('example npm shortcut check:conventions scans the explicit consumer from both directories',t=>{
+ const root=shortcutConsumer(t);
+ put(root,'src/pages/LoginPage.ts',readFileSync(join(packageRoot,'examples/src/pages/LoginPage.ts'),'utf8'));
+ for(const fromRoot of [true,false]) {
+  const run=exampleShortcut('check:conventions',['--root',root,'--json','--fail-on-warn'],fromRoot);
+  assert.equal(run.status,0,run.stderr);const result=JSON.parse(run.stdout);
+  assert.equal(result.files,1);assert(result.ruleApplications>0);
+  assert.deepEqual(result.fresh,[]);assert.deepEqual(result.freshWarn,[]);
+ }
+});
+test('example npm shortcut harness:metrics reads actual consumer state from both directories',t=>{
+ const root=shortcutConsumer(t);
+ put(root,'test/ado-suite-10/_verify-state.json',JSON.stringify({cases:{7:{status:'passed',greens:2}}}));
+ for(const fromRoot of [true,false]) {
+  const run=exampleShortcut('harness:metrics',['--project-root',root,'--json'],fromRoot);
+  assert.equal(run.status,0,run.stderr);const result=JSON.parse(run.stdout);
+  assert.deepEqual(result.suites.map(s=>[s.suite,s.total,s.passed]),[['ado-suite-10',1,1]]);
+  assert.equal(result.totals.total,1);assert.equal(result.totals.passed,1);
+ }
+});
+test('example npm shortcut tracker renders only to the explicit consumer from both directories',t=>{
+ const root=shortcutConsumer(t),output='reports/shortcut output.html';
+ put(root,'.harness/state/tracker/plan-7.json',registry([7]));put(root,'.harness/state/tracker/history.jsonl','');
+ for(const fromRoot of [true,false]) {
+  const run=exampleShortcut('tracker',['--project-root',root,'--plan','7','--out',output],fromRoot);
+  assert.equal(run.status,0,run.stderr);assert.match(run.stdout,/plan 7 · 1 cases/);
+  assert.match(readFileSync(join(root,output),'utf8'),/Synthetic case 7/);
+  rmSync(join(root,output)); // Each invocation must create the report itself.
  }
 });
 

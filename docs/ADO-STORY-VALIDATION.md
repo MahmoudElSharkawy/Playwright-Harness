@@ -147,3 +147,30 @@ The actual npm shortcut was checked from the example directory using an external
 consumer path containing spaces. Entrypoint resolution and argument forwarding
 passed; deliberately absent ADO configuration failed before any remote request.
 This startup check does not claim live ADO retrieval.
+
+## Remaining example shortcuts
+
+The bundled `fetch:suite`, `check:conventions`, `harness:metrics`, `publish:results`
+and `tracker` shortcuts now also resolve scripts in the parent harness package.
+The example's Playwright `test` command remains local to its test project.
+From the harness repository root, select the example manifest explicitly:
+
+```sh
+npm --prefix examples run fetch:story -- --project-root <separate-consumer-path> --story 200
+npm --prefix examples run check:conventions -- --root <separate-consumer-path>
+npm --prefix examples run harness:metrics -- --project-root <separate-consumer-path> --json
+```
+
+npm runs these scripts from the example directory even when called from the
+harness root. Use an absolute consumer path or resolve it from `examples`.
+As above, copying the manifest into a consumer requires adjusting all six harness
+paths to its actual installed package location; adoption does not copy scripts.
+
+Six regression tests invoke the actual npm shortcuts from both directories
+(12 invocations), forwarding a separate consumer path containing spaces.
+The convention check scans nonzero scope, metrics read synthetic verified state,
+and the tracker renders a report into the consumer. The three ADO shortcuts
+reach configuration validation and refuse deliberately absent configuration
+before dispatch or writes. These are startup and local-behavior checks, with no
+live ADO retrieval or publication claim. Before correcting the remaining paths,
+five of these tests failed with missing entrypoints; the story test passed.

@@ -5,6 +5,7 @@
 - Constrain the fresh CI consumer to the existing cleared dependency versions when npm relocates the shrinkwrap; retain exact provenance checks without changing dependencies or notices.
 - Parse npm JSON from stdout while preserving combined, hashed diagnostics; add three CI regression tests.
 - Correct the bundled example's `fetch:story` shortcut to resolve the parent package script; document its explicit external consumer and adoption path requirements.
+- Correct the remaining five bundled harness shortcuts; exercise all six through actual npm invocations from the package root and example directory in the adoption tests.
 
 ## Unreleased — ADO story retrieval
 
