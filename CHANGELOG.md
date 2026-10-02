@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased — consumer seeding guidance
+
+- Document seeding a fresh consumer from `examples` in the adoption guide: repoint the six copied harness shortcuts to the installed package location and keep `--root .` on `check:conventions`, which otherwise targets the package. The README links it from installation and the agent adoption protocol. No script, test or example change.
+
 ## Unreleased — installed validation repair
 
 - Constrain the fresh CI consumer to the existing cleared dependency versions when npm relocates the shrinkwrap; retain exact provenance checks without changing dependencies or notices.

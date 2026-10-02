@@ -40,6 +40,42 @@ Planning validates conflicts before writes. Application also detects changed pla
 files; it is not a filesystem transaction. After an interruption, inspect the summary
 and retry; do not discard existing consumer work.
 
+## Seeding a fresh consumer from examples
+
+Adoption copies no harness scripts and seeds no framework files. When a fresh
+consumer starts from `examples`, copy only the files it needs and fill in its names.
+The copied `package.json` also needs its six harness shortcuts repointed. In the
+package they resolve `../scripts` and run against a separate consumer passed
+explicitly; copied unchanged, they point at the consumer's parent directory. Use the
+same relative package location as the adoption command. With the package at
+`../playwright-pom-harness`, merge these entries into the copied `scripts` and keep
+its local `test` command:
+
+```json
+{
+  "scripts": {
+    "fetch:suite": "node ../playwright-pom-harness/scripts/fetch-ado-suite.mjs",
+    "fetch:story": "node ../playwright-pom-harness/scripts/fetch-ado-story.mjs",
+    "check:conventions": "node ../playwright-pom-harness/scripts/check-conventions.mjs --root .",
+    "harness:metrics": "node ../playwright-pom-harness/scripts/harness-metrics.mjs",
+    "publish:results": "node ../playwright-pom-harness/scripts/publish-ado-results.mjs",
+    "tracker": "node ../playwright-pom-harness/scripts/generate-tracker.mjs"
+  }
+}
+```
+
+Quote a package path that contains spaces:
+`"tracker": "node \"../Harness Package/scripts/generate-tracker.mjs\""`.
+
+npm runs these shortcuts from the consumer root. The fetch, publication, metrics and
+tracker commands default to that directory as their project root. The convention
+checker defaults to its own package, so its shortcut keeps `--root .`; without it, the
+checker targets the package and stops with a validation error. The ADO shortcuts
+still require explicit [M12 configuration](M12-ADO.md). Harness commands in the
+example CI templates need the same path, and the CI job must provide the package
+there. Verify from the consumer that `npm run check:conventions` reports nonzero file
+and rule counts.
+
 ## Deliberate profiles and separate targets
 
 `.harness/project.json`:

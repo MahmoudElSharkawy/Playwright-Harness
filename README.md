@@ -102,6 +102,11 @@ application code, host settings and imported libraries. Customized existing skil
 require a reviewed merge; the command refuses to overwrite them. It does not install
 dependencies, seed application code, enable hooks, or configure external services.
 
+A fresh framework seeded from `examples` must also repoint the six harness shortcuts
+in its copied `package.json`. They resolve `../scripts` inside this package; copied
+unchanged, they point at the consumer's parent directory. See
+[seeding a fresh consumer](docs/M3-ADOPTION.md#seeding-a-fresh-consumer-from-examples).
+
 For Claude, start the native host in the consumer with the installed package:
 
 ```sh
@@ -120,8 +125,9 @@ consumer adoption. Determine the consumer's current framework and installed pack
 
 - **Fresh repository:** adopt the harness, then seed appropriate files from `examples`
   only as part of the requested framework setup. Fill in the consumer's names,
-  destinations and reporter choices. Examples are optional starting points, not live
-  tests against a supplied application.
+  destinations and reporter choices, and repoint the copied harness shortcuts
+  ([seeding a fresh consumer](docs/M3-ADOPTION.md#seeding-a-fresh-consumer-from-examples)).
+  Examples are optional starting points, not live tests against a supplied application.
 - **Existing framework:** adopt only the harness integration. Preserve application
   and framework code; map existing folders to the canonical layer map. Surface
   mismatches as decisions instead of silently renaming or replacing files.
