@@ -9,6 +9,7 @@
       "version": "3.1.0",
       "license": "MIT",
       "dependencies": {
+        "@azure/msal-browser": "5.23.0",
         "@js-joda/core": "6.1.0",
         "@playwright/cli": "0.1.22",
         "mssql": "12.7.2",

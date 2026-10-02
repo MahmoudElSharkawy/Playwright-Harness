@@ -81,8 +81,9 @@ or redistribution of Allure, Java, browsers or database images is introduced.
 M18 makes the M4 native CLI graph exact runtime dependencies, so a client's install of
 the archive supplies the browser runtime: `@playwright/cli` 0.1.22 with Playwright and
 Playwright Core 1.64.0-alpha-1790635538000, all Apache-2.0. It also pins the already
-recorded `@js-joda/core` 6.1.0 (BSD-3-Clause) and `tedious` 20.0.0 (MIT), which npm
-otherwise re-resolved on a plain install. npm installs these packages from the registry; no implementation is
+recorded `@js-joda/core` 6.1.0 (BSD-3-Clause), `tedious` 20.0.0 (MIT) and
+`@azure/msal-browser` 5.23.0 (MIT), which npm otherwise re-resolved on a plain install.
+npm installs these packages from the registry; no implementation is
 copied or bundled. The [runtime inventory](../scripts/runtime-dependency-licenses.json)
 gains the three CLI records, with the same integrity values as the spike inventory, and
 now covers 90 records. The spike keeps its own lock and inventory for its development tests.

@@ -128,4 +128,7 @@ Decisions:
 - Pin `tedious` 20.0.0 the same way. With npm 11.19.0 (CI, and Linux in Docker), a plain install
   re-resolved `tedious` itself to 20.3.3, which `mssql` 12.7.2 accepts (`^19.2.2 || ^20.0.0`).
   npm 11.12.1 kept 20.0.0, so the drift showed only on the newer npm. The consumer flows caught it.
+- Pin `@azure/msal-browser` 5.23.0 the same way. `@azure/identity` accepts `^5.5.0`, so once
+  5.24.0 was published on 2026-10-02, plain installs with npm 11.19.0 and npm 12.2.0 re-resolved
+  it on Linux and Windows. The consumer flows caught it.
 - Do not pin `@types/node`. Projects bring their own (the examples use `^24`), so a pin would only add a second copy. It contains type declarations only. `check` reports its drift as information rather than as a failure.
