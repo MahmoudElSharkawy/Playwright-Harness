@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased — pin `@azure/msal-browser`
+
+- Pin `@azure/msal-browser` 5.23.0 as an exact runtime dependency, as `@js-joda/core` and `tedious` are. `@azure/identity` accepts `^5.5.0`, so plain installs re-resolved it to 5.24.0 once that was published, and setup stopped on the drifted dependency closure.
+
 ## 3.1.0 — M18 archive adoption
 
 A project now adopts the harness from its versioned release archive in one command,
