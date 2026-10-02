@@ -1,9 +1,5 @@
 # Changelog
 
-## Unreleased — default branch rule
-
-- Add the branch rule to the managed instruction block that setup merges into a project's `CLAUDE.md` and `AGENTS.md`: never commit or push directly to the default branch; reuse the ongoing feature branch, or create `automation/<source-id>-<slug>`, `harness/<topic>`, `feature/<topic>` or `fix/<topic>`; deliver through a pull request, committing, pushing or opening one only with the user's authorization. Setup replaces the released 3.0.x and 3.1.0 blocks in place; an edited block still stops setup for review. The pipeline guide's prerequisites point to the rule.
-
 ## 3.1.0 — M18 archive adoption
 
 A project now adopts the harness from its versioned release archive in one command,
@@ -28,13 +24,14 @@ and updates the same way. Teammates and CI get it from `npm ci`.
 - Preflight the new version's complete adoption plan before installing. Journal every write, removed folder and replaced link target, so `setup --restore` returns the project to its pre-setup bytes; it runs `npm ci` only when a lockfile existed before.
 - Migrate legacy `.claude/skills` folders by digest, including the 3.0.x redirects. A folder whose tracked data would move into the git-ignored `.harness/state/` is kept and reported.
 - Compare managed instruction blocks after newline normalization, so CRLF clones update cleanly. A released block is replaced; an edited block still stops setup. The new block points to the `harness-setup` skill.
+- Add the branch rule to the managed instruction block that setup merges into a project's `CLAUDE.md` and `AGENTS.md`: never commit or push directly to the default branch; reuse the ongoing feature branch, or create `automation/<source-id>-<slug>`, `harness/<topic>`, `feature/<topic>` or `fix/<topic>`; deliver through a pull request, committing, pushing or opening one only with the user's authorization. Setup replaces the released 3.0.x and 3.1.0 blocks in place; an edited block still stops setup for review. The pipeline guide's prerequisites point to the rule.
 - Make the environment profile optional; add one with `setup --environment <name> --mode <mode>`.
 - Add a minimal starter for projects without Playwright: configuration and utilities, with exact dependencies installed alongside the harness, and no demo pages or tests. `src/config/targets.ts` reads destinations from `.harness/targets.json`, so they are entered once.
 - Add the `harness-setup` skill. It covers install, update, configuration (the mode question, targets, Azure DevOps, empty secret keys, CI pipelines), teammates and rollback.
 
 ### Runtime and package
 
-- Ship the pinned native CLI (`@playwright/cli` 0.1.22 with its Playwright build) as a runtime dependency, resolved from the package location instead of the nested spike install. Pin `@js-joda/core` 6.1.0. Add their provenance records. The spike stays development-only.
+- Ship the pinned native CLI (`@playwright/cli` 0.1.22 with its Playwright build) as a runtime dependency, resolved from the package location instead of the nested spike install. Pin `@js-joda/core` 6.1.0 and `tedious` 20.0.0, which npm re-resolved on plain installs. Add their provenance records. The spike stays development-only.
 - Stop shipping `.claude/` (redirect skills and the permissive settings template) and `CLAUDE.md`. Hooks move to `scripts/hooks/claude-hooks.example.json`, without a permissions block.
 - `check-conventions` checks the current folder by default. The API and database runtimes read default credentials from the project's `.env` without changing `process.env`; the shell wins.
 - Pin the examples' Playwright, Allure and CLI versions exactly, and add the TypeScript settings that generation needs.
