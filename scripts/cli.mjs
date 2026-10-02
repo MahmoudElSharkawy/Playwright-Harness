@@ -46,7 +46,7 @@ function print(result, json) {
     lines.push(`Skill links: ${result.links.created} created, ${result.links.repaired} repaired, ${result.links.removed} removed.`);
     list('Changed files:', result.changed); list('Replaced legacy folders:', result.removedFolders); list('Added starter files:', result.starter); list('Needs a decision:', result.reports);
     lines.push('Readiness:', ...result.readiness.map(item => `  ${item.status.padEnd(24)} ${item.name}${item.detail ? ` (${item.detail})` : ''}`));
-    list('Errors:', result.errors); list('Notes:', result.notes); list(`Upgrade actions since ${result.previousVersion ?? 'your previous setup'}:`, result.upgradeActions); list('Next:', result.next);
+    list('Errors:', result.errors); list('Notes:', result.notes); list(`Upgrade actions since ${result.previousVersion}:`, result.upgradeActions); list('Next:', result.next);
   } else if (result.status === 'PLANNED') {
     lines.push(result.archive ? `Setup would install playwright-pom-harness ${result.version} from ${result.archive}.` : `Setup would update this project's playwright-pom-harness ${result.version} setup.`);
     list('Files it would change:', result.changes); lines.push(`Skill links: ${result.links.created} to create, ${result.links.repaired} to repair, ${result.links.removed} to remove.`);

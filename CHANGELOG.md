@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased — upgrade actions only on update
+
+- A first setup no longer lists upgrade actions; they appear only when updating from an earlier installed version. Previously a fresh install, a repair run and a configuration run listed every version's actions under "since your previous setup".
+
 ## 3.1.1 — Retire .agentex and pin @azure/msal-browser
 
 Fresh installs get the cleared dependency graph again, and the package and setup no

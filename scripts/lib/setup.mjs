@@ -231,16 +231,16 @@ function installBrowsers(projectRoot, roots, {skip, packageRoot, journal}) {
   return status;
 }
 const compare = (left, right) => {const a = left.split(/[.-]/).map(Number), b = right.split(/[.-]/).map(Number); for (let i = 0; i < 3; i++) if (a[i] !== b[i]) return a[i] - b[i]; return 0;};
-/** The CHANGELOG "### Upgrade actions" of every version after the previous one, up to this one. */
+/** The CHANGELOG "### Upgrade actions" of every version after the previous one, up to this one. A run without a previous version has none. */
 export function upgradeActions(previousVersion, version, changelog = join(runningPackage, 'CHANGELOG.md')) {
-  if (!existsSync(changelog)) return [];
+  if (!previousVersion || !existsSync(changelog)) return [];
   const actions = [];let current, inActions = false;
   for (const line of readFileSync(changelog, 'utf8').split(/\r?\n/)) {
     const heading = line.match(/^## (\d+\.\d+\.\d+)\b/);
     if (heading) {current = heading[1]; inActions = false; continue;}
     if (/^## /.test(line)) {current = undefined; inActions = false; continue;}
     if (/^### /.test(line)) {inActions = /^### Upgrade actions\s*$/.test(line); continue;}
-    if (inActions && current && /^- /.test(line) && compare(current, version) <= 0 && (!previousVersion || compare(current, previousVersion) > 0)) actions.push(`${current}: ${line.slice(2)}`);
+    if (inActions && current && /^- /.test(line) && compare(current, version) <= 0 && compare(current, previousVersion) > 0) actions.push(`${current}: ${line.slice(2)}`);
   }
   return actions;
 }
