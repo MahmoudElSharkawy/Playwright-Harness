@@ -175,12 +175,6 @@ export function adoptProject({projectRoot,installedRoot=packageRoot,environment,
     const file=consumerPath(roots,`.claude/skills/plan-tracker/data/${name}`),content=readFileSync(file);
     migrateState(`.claude/skills/plan-tracker/data/${name}`,`.harness/state/tracker/${name}`,content);
   }
-  // Only pages migrate: a legacy README and template are package files, now shipped with automate-suite.
-  const legacyPages=consumerPath(roots,'.agentex/page-map');
-  if(existsSync(legacyPages))for(const name of readdirSync(legacyPages).filter(n=>n.endsWith('.md') && !/^(_template|README)\.md$/i.test(n))) {
-    const file=consumerPath(roots,`.agentex/page-map/${name}`),content=readFileSync(file);
-    migrateState(`.agentex/page-map/${name}`,`.harness/knowledge/ui/${name}`,content);
-  }
   // Instruction blocks compare newline-normalized text, so a CRLF checkout reruns cleanly.
   // A block matching an earlier released text is replaced; an edited block stops adoption.
   const releasedBlocks=readJson(join(roots.packageRoot,'scripts/managed-digests.json')).instructionBlocks;
