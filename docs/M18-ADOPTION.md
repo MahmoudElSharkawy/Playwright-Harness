@@ -125,4 +125,7 @@ npm 11.12.1. The packed harness was installed into a fresh project with
 
 Decisions:
 - Pin `@js-joda/core` 6.1.0 as an exact direct dependency, with its existing provenance record.
+- Pin `tedious` 20.0.0 the same way. With npm 11.19.0 (CI, and Linux in Docker), a plain install
+  re-resolved `tedious` itself to 20.3.3, which `mssql` 12.7.2 accepts (`^19.2.2 || ^20.0.0`).
+  npm 11.12.1 kept 20.0.0, so the drift showed only on the newer npm. The consumer flows caught it.
 - Do not pin `@types/node`. Projects bring their own (the examples use `^24`), so a pin would only add a second copy. It contains type declarations only. `check` reports its drift as information rather than as a failure.
