@@ -11,12 +11,12 @@ example; generation and reporting integration are later milestones.
 
 This example assumes `environment` was loaded from the consumer configuration and
 `roots` contains absolute package, consumer-project and fresh consumer-run locations.
-Imports below are relative to a caller beside the installed package. A normal service
+Imports below resolve the harness installed in the consumer's `node_modules`. A normal service
 method can delegate to `runtime.execute` with the same definition and typed bindings.
 
 ```js
-import {createRun} from '../playwright-pom-harness/scripts/lib/execution-core/index.mjs';
-import {defineApiOperation, createApiRuntime} from '../playwright-pom-harness/scripts/lib/api/index.mjs';
+import {createRun} from 'playwright-pom-harness/scripts/lib/execution-core/index.mjs';
+import {defineApiOperation, createApiRuntime} from 'playwright-pom-harness/scripts/lib/api/index.mjs';
 
 const find = defineApiOperation({
   id: 'find-record', target: 'qa-api',

@@ -147,6 +147,14 @@
       "integrity": "sha512-H8NTMRDJqad/leyv/D/A3kSOsf5/58Ydj4DJGDyaCWk9OU/zuZOLhndVffJgQjsgrn5GC0znHMHie7TfvPPG4w=="
     },
     {
+      "path": "node_modules/@playwright/cli",
+      "version": "0.1.22",
+      "license": "Apache-2.0",
+      "optional": false,
+      "resolved": "https://registry.npmjs.org/@playwright/cli/-/cli-0.1.22.tgz",
+      "integrity": "sha512-6WMkQNM4VEzqMkdr/l60X9Cr7i+tI/arK87IWz2K7pB6j8I2ZJ8KN+1JfhJDLnK+SXnab6Op8xGt4adcGLsyfA=="
+    },
+    {
       "path": "node_modules/@tediousjs/connection-string",
       "version": "1.1.0",
       "license": "MIT",
@@ -545,6 +553,22 @@
       "optional": false,
       "resolved": "https://registry.npmjs.org/pgpass/-/pgpass-1.0.5.tgz",
       "integrity": "sha512-FdW9r/jQZhSeohs1Z3sI1yxFQNFvMcnmfuj4WBMUTxOrAyLMaTcE1aAMBiTlbMNaXvBCQuVi0R7hd8udDSP7ug=="
+    },
+    {
+      "path": "node_modules/playwright",
+      "version": "1.64.0-alpha-1790635538000",
+      "license": "Apache-2.0",
+      "optional": false,
+      "resolved": "https://registry.npmjs.org/playwright/-/playwright-1.64.0-alpha-1790635538000.tgz",
+      "integrity": "sha512-/5XDUMxpOd/9AojJtWDFIRV3EJZNQ0AwvK69wgt3CPzy8wTgiBG9pX45VfxtqtvIRGwfWzMhrvawNKreG69Snw=="
+    },
+    {
+      "path": "node_modules/playwright-core",
+      "version": "1.64.0-alpha-1790635538000",
+      "license": "Apache-2.0",
+      "optional": false,
+      "resolved": "https://registry.npmjs.org/playwright-core/-/playwright-core-1.64.0-alpha-1790635538000.tgz",
+      "integrity": "sha512-pNwaXirhXMRLaRQs4NQ18EpTdtDoFwyPH9FOaaDC7YXG4hpwE2xmwCic/1srbuExVQC7zT9LJSJpDBAru+Vo9A=="
     },
     {
       "path": "node_modules/postgres-array",

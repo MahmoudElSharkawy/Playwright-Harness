@@ -12,12 +12,13 @@ parser, host adapter or generic workflow engine.
 
 ## Installation and targets
 
-Use Node 24 and the exact [M4 dependency graph](M4-PLAYWRIGHT-CLI.md). Install the
-CLI and browser with the documented commands there. M6 reuses that installation
-under `scripts/spikes/playwright-cli`; it does not install a second CLI, use a global
-command, or fall back to floating `npx` dependencies. The version-specific adapter
-checks all three package versions, the frozen lock hash and the effective native
-profile. A version update must repeat the M4 gate before changing this adapter.
+Use Node 24. The exact [M4 dependency graph](M4-PLAYWRIGHT-CLI.md) — `@playwright/cli`
+and its Playwright build — is a runtime dependency of the harness, resolved from the
+harness package's own location, so every installation carries it. Setup downloads its
+Chromium (`npx --no pom-harness setup`; in a package checkout,
+`node scripts/ci/browsers.mjs`). It never uses a global command or floating `npx`
+dependencies. The version-specific adapter checks all three package versions and the
+effective native profile. A version update must repeat the M4 gate before changing this adapter.
 
 Add browser targets to existing consumer configuration by merging:
 

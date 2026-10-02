@@ -132,8 +132,8 @@ npm run probe:mixed -- --linux-client --browser-client-image=sha256:<image-id>
 ```
 
 Use the actual 64-digit image ID. The container copies the publication inventory,
-installs the root lockfile with lifecycle scripts disabled, and copies the pinned
-native CLI graph from the browser image. It connects to the disposable SQL Server
+installs the root lockfile, including the pinned native CLI, with lifecycle scripts
+disabled, and uses the browser provisioned in the image. It connects to the disposable SQL Server
 through its owned Docker network; the UI/HTTP fixture runs on container loopback.
 No checkout, Git history, private audit storage or database volume is mounted.
 Browser, database, client and network ownership cleanup are checked. Unavailable

@@ -2,7 +2,7 @@
 /**
  * check-conventions.mjs — mechanical enforcement of the skill library's grep-able laws.
  *
- * The authoritative rules live in .claude/skills/ (design-conventions §4/§6 and the
+ * The authoritative rules live in .agents/skills/ (design-conventions §4/§6 and the
  * per-layer playbooks); this script enforces only their mechanically checkable subset.
  * Legacy violations recorded in scripts/conventions-baseline.json report as
  * "legacy (fix-when-touched)" and do not fail the run — new violations do.
@@ -19,16 +19,15 @@
  */
 
 import { readFileSync, writeFileSync, existsSync, readdirSync, statSync, realpathSync } from 'node:fs';
-import { resolve, join, relative, basename, dirname, isAbsolute } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { resolve, join, relative, basename, isAbsolute } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { secretFindings } from './lib/package-validation.mjs';
 
 const CLI_ARGS = process.argv.slice(2);
 const rootIndex = CLI_ARGS.indexOf('--root');
-const ROOT = rootIndex < 0 ? resolve(dirname(fileURLToPath(import.meta.url)), '..')
-  : resolve(CLI_ARGS[rootIndex + 1] || '.');
+// The framework under check is the project the command runs in, unless --root names another.
+const ROOT = resolve(rootIndex < 0 ? process.cwd() : CLI_ARGS[rootIndex + 1] || '.');
 const BASELINE_PATH = join(ROOT, 'scripts', 'conventions-baseline.json');
 /** Layer name -> physical location (design-conventions, 2026-09-01 src/ layout ruling).
  *  Rules reference layers by short name; paths resolve through this map. */
@@ -449,7 +448,7 @@ function main() {
   }
 
   files = [...new Set(files)];
-  if (files.length === 0) throw new Error('zero matching framework files; choose --root (for this package: --root examples). This is not a passing validation.');
+  if (files.length === 0) throw Object.assign(new Error('zero matching framework files; run it from the project folder or pass --root <project> (for this package: --root examples). This is not a passing validation.'), {fixedMessage: true});
   const realRoot = realpathSync(ROOT);
   for (const file of files) {
     const rel=relative(realRoot,realpathSync(file)).replaceAll('\\','/');
@@ -516,7 +515,8 @@ function main() {
   return fresh.length || (has('--fail-on-warn') && freshWarn.length) ? 1 : 0;
 }
 
-try { process.exitCode=main(); } catch {
-  console.error('[check-conventions] error: validation did not complete. Check arguments, nonzero scope, Git reference, file access and baseline format. Source omitted.');
+try { process.exitCode=main(); } catch (error) {
+  // Only fixed, source-free messages are shown; anything else could echo project content.
+  console.error(error?.fixedMessage ? `[check-conventions] error: ${error.message}` : '[check-conventions] error: validation did not complete. Check arguments, nonzero scope, Git reference, file access and baseline format. Source omitted.');
   process.exitCode=2;
 }

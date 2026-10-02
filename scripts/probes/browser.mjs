@@ -6,7 +6,7 @@ import {resolve, join} from 'node:path';
 import {createHash} from 'node:crypto';
 import {createRun, defineOperation} from '../lib/execution-core/index.mjs';
 import {browserLifecycleOperations, runBrowserScenario} from '../lib/browser/index.mjs';
-import {prepareNativeSession, NativeFailure} from '../lib/browser/native-cli.mjs';
+import {prepareNativeSession, NativeFailure, nativeCliInstallation} from '../lib/browser/native-cli.mjs';
 import {processCall, stopTree, treeGone} from '../lib/browser/processes.mjs';
 import {packageRoot, consumerRoots} from '../lib/consumer-paths.mjs';
 import {within} from '../lib/skill-roots.mjs';
@@ -268,7 +268,7 @@ try {
       const workRoot = await realpath(join(roots(name).runRoot, 'protected'));
       const records = JSON.parse(await readFile(join(roots(name).runRoot, 'observations.json'), 'utf8'));
       const session = records.scenarios[0].attempts[0].outputs.find(value => value.name === 'sessionIdentity').value;
-      const cli = join(packageRoot, 'scripts/spikes/playwright-cli/node_modules/@playwright/cli/playwright-cli.js');
+      const cli = nativeCliInstallation(packageRoot).executable;
       const options = {cwd: workRoot, timeoutMs: 30000, env: {...process.env, CI: '1', NO_UPDATE_NOTIFIER: '1'}};
       const close = await processCall(process.execPath, [cli, '--json', `-s=${session}`, 'close'], options);
       for (const tree of ownership) if (!await treeGone(tree)) await stopTree(tree, Date.now() + 30000);

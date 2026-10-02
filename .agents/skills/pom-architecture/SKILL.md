@@ -30,7 +30,7 @@ src/pages/    → GUI business layer: page classes (locators + actions + validat
 src/apis/     → API business layer: Apis<Domain> service classes
 src/dbs/      → DB business layer: Dbs<Domain> service classes
 src/utils/    → technical layer: ApiActions / DBActions facades — ALL complexity lives here
-src/config/   → environment & DB coordinates, values via process.env (formerly resources/config/)
+src/config/   → environment & DB coordinates, values from .harness/targets.json or process.env (formerly resources/config/)
 resources/    → testData/ (one JSON per spec, per-case tc<id> clusters) + Queries/ (team-owned DB-query knowledge library — derive-only, see service-classes) + apisCollections/ (team API-collection knowledge library — derive-only, harness-curated on import, see service-classes)
 playwright.config.ts → baseURL, reporters (Allure/HTML/JSON/CTRF), projects, global setup/teardown
 global-setup.ts / global-teardown.ts → run lifecycle (technical family): run hygiene only, details in utility-classes
@@ -57,3 +57,4 @@ utils; nothing reaches upward or skips a layer (a spec never calls `page.locator
 | Test data files, expected values, environment data | [test-data](../test-data/SKILL.md) |
 | An `Apis<Domain>` or `Dbs<Domain>` service class | [service-classes](../service-classes/SKILL.md) |
 | Technical plumbing in `utils/` (logging, attachments, connections) | [utility-classes](../utility-classes/SKILL.md) |
+| Installing, updating or configuring the harness itself — environments, targets, secrets, CI | [harness-setup](../harness-setup/SKILL.md) |

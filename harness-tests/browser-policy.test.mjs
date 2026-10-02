@@ -1,12 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {resolve, join, dirname} from 'node:path';
+import {resolve, join} from 'node:path';
 import fs from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {syncBuiltinESMExports} from 'node:module';
 import {createRun, defineOperation, authorizeOperation} from '../scripts/lib/execution-core/index.mjs';
 import {browserLifecycleOperations, browserCapabilities} from '../scripts/lib/browser/index.mjs';
-import {validateNativeArguments, classifyNative, prepareNativeSession} from '../scripts/lib/browser/native-cli.mjs';
+import {validateNativeArguments, classifyNative, prepareNativeSession, nativeCliInstallation} from '../scripts/lib/browser/native-cli.mjs';
 import {processCall, expandTree} from '../scripts/lib/browser/processes.mjs';
 import {within} from '../scripts/lib/skill-roots.mjs';
 import {runInput, environment} from './fixtures/execution-core.mjs';
@@ -77,21 +77,42 @@ test('owned process trees never adopt an older process through a reused parent P
   assert.deepEqual(expandTree(all, [daemon]).map(item => item.pid), [40, 41, 42]);
 });
 
+// A fake installed package laid out as npm installs it; versions are the proven pins.
+async function fakeNativeInstallation(packageRoot, {cli = '0.1.22', playwright = '1.64.0-alpha-1790635538000'} = {}) {
+  const manifests = {
+    '': {name: 'playwright-pom-harness', version: '0.0.0'},
+    'node_modules/@playwright/cli': {name: '@playwright/cli', version: cli},
+    'node_modules/playwright': {name: 'playwright', version: playwright, exports: {'./package.json': './package.json'}},
+    // The exported coreBundle target is deliberately absent, as in a damaged installation.
+    'node_modules/playwright-core': {name: 'playwright-core', version: playwright, exports: {'./package.json': './package.json', './lib/coreBundle': './lib/coreBundle.js'}},
+  };
+  for (const [path, manifest] of Object.entries(manifests)) {
+    await fs.mkdir(join(packageRoot, path), {recursive: true}); await fs.writeFile(join(packageRoot, path, 'package.json'), JSON.stringify(manifest));
+  }
+}
+
 test('damaged native prerequisites fail before acquiring or copying private storage', async () => {
   const root = await fs.mkdtemp(join(tmpdir(), 'harness-browser-prerequisite-'));
   try {
     const packageRoot = join(root, 'package'), projectRoot = join(root, 'consumer'), runRoot = join(projectRoot, 'run');
-    const relative = 'scripts/spikes/playwright-cli', installation = join(packageRoot, relative);
-    await fs.mkdir(projectRoot); await fs.mkdir(installation, {recursive: true});
-    await fs.copyFile(resolve(relative, 'package-lock.json'), join(installation, 'package-lock.json'));
-    for (const name of ['@playwright/cli','playwright','playwright-core']) {
-      const target = join(installation, 'node_modules', name, 'package.json'); await fs.mkdir(dirname(target), {recursive: true});
-      await fs.copyFile(resolve(relative, 'node_modules', name, 'package.json'), target);
-    }
+    await fs.mkdir(projectRoot); await fakeNativeInstallation(packageRoot);
     const storageState = join(projectRoot, 'synthetic-state.json'); await fs.writeFile(storageState, '{"cookies":[],"origins":[]}');
     await assert.rejects(prepareNativeSession({packageRoot, projectRoot, runRoot}, {origins: ['https://app.example.test'], storageState}), {code: 'MODULE_NOT_FOUND'});
     await assert.rejects(fs.stat(runRoot), {code: 'ENOENT'});
   } finally {await removeFixture(root);}
+});
+
+test('a native CLI graph other than the proven pins is refused', async () => {
+  const root = await fs.mkdtemp(join(tmpdir(), 'harness-browser-pins-'));
+  try {
+    await fakeNativeInstallation(root, {playwright: '1.64.0'});
+    assert.throws(() => nativeCliInstallation(root), /exact proven native CLI graph/);
+  } finally {await removeFixture(root);}
+});
+
+test('the installed native CLI resolves from the package location', async () => {
+  const installation = nativeCliInstallation(resolve('.'));
+  for (const file of [installation.executable, installation.coreBundle, installation.installer]) assert.equal((await fs.stat(file)).isFile(), true);
 });
 
 test('post-copy preparation failure removes only newly acquired private storage and reports remediation status', async () => {

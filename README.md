@@ -1,12 +1,104 @@
 # Playwright POM Harness
 
-A portable convention library and adoption toolkit for Playwright/TypeScript
-Page Object Model projects, shared by Claude Code and Codex.
+Conventions, skills and tools that let Claude Code and Codex write and maintain
+Playwright/TypeScript Page Object Model test automation in your project, with
+reviewed code and verified runs. Version: see [VERSION](VERSION) and [CHANGELOG.md](CHANGELOG.md).
 
-All 13 skills live in `.agents/skills`. Claude's plugin manifest and native Codex
-consumer links resolve to the same maintained files. Legacy `.claude/skills`
-Markdown files are compatibility redirects. Package version: see [VERSION](VERSION)
-and [CHANGELOG.md](CHANGELOG.md).
+## Get started
+
+You need Node 24, git, and Claude Code or Codex. Open your project folder and ask the AI:
+
+1. **"Install the harness from https://github.com/MahmoudElSharkawy/Playwright-Harness."**
+   The AI downloads the latest release, verifies its checksum, runs setup, and shows
+   you a summary and the diff. Review the changes and commit them. If the skills do
+   not appear yet, run `/reload-skills` in Claude Code, or restart Codex.
+2. **"Here is my project information; configure the harness and use it."** Give it
+   your application URLs, databases and environments. The AI asks whether test runs
+   may change data in each environment, writes the configuration, and adds empty
+   keys to `.env` for you to fill in. It then reports what is ready and continues
+   with your request.
+3. **Later: "Update the harness and preserve my project customizations."**
+
+**Without AI:** download `playwright-pom-harness-<version>.tgz` from the
+[latest release](https://github.com/MahmoudElSharkawy/Playwright-Harness/releases/latest)
+into your project folder, with its `.sha256` file if you want setup to verify it. Run the
+command below, then commit the changes.
+
+```sh
+npx --yes --package "<full path to the .tgz>" pom-harness setup
+```
+
+Pass the archive through `--package`: `npx <path>` alone exits without running setup.
+Afterwards, `npx --no pom-harness check` reports what is ready, and
+`npx --no pom-harness help` lists the commands.
+
+**Teammates and CI:** `npm ci`. It installs the harness from the archive committed under
+`.harness/vendor/` and restores the skill links. Configuration (step 2) adds the
+browser install step to your CI pipeline.
+
+**Roll back:** ask the AI to "roll back the harness update", or run
+`npx --no pom-harness unlink`, then `git revert <the update commit>`, then `npm ci`.
+
+Setup installs the harness as an exact development dependency and links its skills
+into `.claude/skills/` and `.agents/skills/`. It merges a short block into `AGENTS.md`
+and `CLAUDE.md` and adds ignore lines. In a project without Playwright, it also adds
+a minimal starter: configuration and utilities, with no demo pages or tests. It never
+overwrites your files. If it cannot merge something safely, it stops before changing
+anything and says why.
+
+## For AI agents
+
+Once installed, follow the `harness-setup` skill. To install or update:
+
+1. Resolve "latest" to one release tag: `tag_name` from
+   `https://api.github.com/repos/MahmoudElSharkawy/Playwright-Harness/releases/latest`,
+   or the tag the user named.
+2. From that same tag, download `playwright-pom-harness-<version>.tgz` and
+   `playwright-pom-harness-<version>.tgz.sha256` into the project folder:
+   `https://github.com/MahmoudElSharkawy/Playwright-Harness/releases/download/<tag>/<file>`.
+3. Verify the archive's SHA-256 against the `.sha256` file.
+4. From the project folder, run `npx --yes --package "<absolute path to the .tgz>" pom-harness setup`.
+   Never use a bare path.
+5. Show the summary and `git status`. If setup stopped, show its reasons and ask the
+   user; never work around them.
+6. If the skills are not listed yet, ask the user to run `/reload-skills` in Claude Code,
+   or to restart Codex.
+
+Rules:
+
+- Never extract the archive or copy package files by hand. Never ask for secret values:
+  secrets go into empty `.env` keys that the user fills in.
+- In Codex, approve network access and the npm cache for the download and the install.
+- Preserve the project's instructions, code, settings and imported team libraries.
+  Files in `resources/Queries` and `resources/apisCollections` are derive-only sources.
+- `VERSION` and `CHANGELOG.md` belong to the harness; a project never bumps them.
+- Changes to a project's `scripts/conventions-baseline.json` need a team decision.
+- `npx --no pom-harness check` reports readiness. A link is not proof that a host loaded
+  a skill: confirm that the skill is discovered in the actual host.
+- Commit, push, publish or deliver only with the user's authorization.
+
+## How automation works
+
+The harness turns a scenario suite into reviewed Playwright POM automation:
+
+```text
+SOURCE → REFINE → EXPLORE → PREPARE → AUTHOR → CANDIDATE → REVIEW → VERIFY ×2 → READY → DELIVER
+```
+
+A local JSON source, or an explicitly configured ADO suite or story, is refined without
+changing its expectations and run against the configured application to collect
+evidence. Agents then write or reuse POM code. A fresh independent reviewer must approve
+it, and two separate scoped Playwright runs of the same candidate must pass. Repairs are
+limited to three rounds per source batch. READY does not authorize delivery; PRs and ADO
+publishing are optional and need explicit authorization.
+
+See [the automation pipeline](docs/PIPELINE.md) for each phase's inputs, outputs,
+commands and contract documents. Agents run it through the `automate-suite` skill.
+
+## Capabilities
+
+The skills live in `.agents/skills`; setup links them for Claude Code and Codex.
+Each milestone below has a guide and a validation record.
 
 M3 adds safe adoption into a separate consumer, consumer-owned state, local scenario
 loading and deliberate environment-profile selection. It does not implement browser,
@@ -80,101 +172,14 @@ scenario lifecycles. Sequential remains the default; explicit parallel batches r
 independent resources and preserve isolated evidence, cleanup and verdicts. See
 [M16 validation](docs/M16-VALIDATION.md).
 
-## Install into a project
-
-Keep this package in its own directory; do not overlay it on application code.
-From the consumer, run the installed package's adoption command with an explicit
-profile, inspect its preview, then apply the same command without `--dry-run`:
-
-```sh
-node ../playwright-pom-harness/scripts/adopt-project.mjs --project-root . --environment qa --mode test --dry-run
-node ../playwright-pom-harness/scripts/adopt-project.mjs --project-root . --environment qa --mode test
-```
-
-Use the actual relative package location. Choose `test`, `protected` or `custom`
-deliberately; environment names do not grant permissions. The package may also be
-installed inside the consumer in a dedicated directory. Consumers cannot be inside
-the package. Node 24 is the validated runtime.
-
-The command links 13 canonical skills for Codex, merges small instruction blocks
-and ignore entries, initializes configuration and consumer state, and preserves
-application code, host settings and imported libraries. Customized existing skills
-require a reviewed merge; the command refuses to overwrite them. It does not install
-dependencies, seed application code, enable hooks, or configure external services.
-
-A fresh framework seeded from `examples` must also repoint the six harness shortcuts
-in its copied `package.json`. They resolve `../scripts` inside this package; copied
-unchanged, they point at the consumer's parent directory. See
-[seeding a fresh consumer](docs/M3-ADOPTION.md#seeding-a-fresh-consumer-from-examples).
-
-For Claude, start the native host in the consumer with the installed package:
-
-```sh
-claude --plugin-dir ../playwright-pom-harness
-```
-
-Read [the adoption guide](docs/M3-ADOPTION.md) for configuration, migration receipts,
-local-source format, hook wiring and validation. No ADO account or AgenTeX plugin is
-needed to adopt the skills or load local scenarios.
-
-## For AI agents: adoption protocol
-
-**Step 0 — orient.** Read this README, [the architecture reference](docs/HARNESS.md)
-and [the adoption guide](docs/M3-ADOPTION.md). Distinguish package maintenance from
-consumer adoption. Determine the consumer's current framework and installed package:
-
-- **Fresh repository:** adopt the harness, then seed appropriate files from `examples`
-  only as part of the requested framework setup. Fill in the consumer's names,
-  destinations and reporter choices, and repoint the copied harness shortcuts
-  ([seeding a fresh consumer](docs/M3-ADOPTION.md#seeding-a-fresh-consumer-from-examples)).
-  Examples are optional starting points, not live tests against a supplied application.
-- **Existing framework:** adopt only the harness integration. Preserve application
-  and framework code; map existing folders to the canonical layer map. Surface
-  mismatches as decisions instead of silently renaming or replacing files.
-
-**Hard rules:**
-
-1. Merge instructions, configuration, settings and ignore files; never overwrite
-   consumer customizations. Inspect the adoption preview and report its actual diff.
-2. Keep credentials out of committed files. Use secret references; `.env` and private
-   host settings remain ignored. Do not place consumer data in the package.
-3. Package `VERSION` and `CHANGELOG.md` belong to the package. Compare versions and
-   changelog changes when upgrading; do not bump them from an adopting project.
-   A new package location requires reviewed relinking, not deletion of custom skills.
-4. Imported files in `resources/Queries` and `resources/apisCollections` are immutable
-   sources for derived assets. Do not copy private sample identities into test data.
-5. Consumer `scripts/conventions-baseline.json` changes require a team decision.
-   Do not expand it to hide newly introduced violations or narrow validation scope.
-6. Route framework work through the canonical skills and the consumer's instructions.
-   Reuse the current suitable feature branch and add commits. Deliver through review;
-   external pushes, publishing and release actions require the user's authorization.
-
-**Verify before reporting adoption complete:**
-
-- Confirm the preview/apply results, configuration, existing-file preservation and
-  all 13 links. Repeat adoption should produce no changes.
-- Verify native discovery for each intended host in the actual consumer. A link or
-  valid manifest alone is not proof that the host loaded it.
-- Run consumer dependency installation and typechecking when framework code is present.
-  Run the installed convention checker with `--root <consumer>` and inspect its
-  nonzero file/rule counts. Empty framework scope is incomplete, not a clean pass.
-- List the consumer's Playwright tests; run scoped tests only with configured targets.
-  Listing/typechecking does not prove browser or database integration.
-- If hooks are explicitly enabled, verify their startup and consumer state paths.
-  The adopter preserves existing host settings and does not enable permissive defaults.
-
-**Report:** copied/merged/linked files, preserved customizations, remaining values or
-manual merges, and passed/failed/blocked/unperformed checks. Do not claim unavailable
-hosts or external integration tests passed.
-
 ## Components and compatibility
 
 | Package content | Purpose |
 |---|---|
-| `.agents/skills` | Canonical conventions, routing, review and process skills |
-| `.claude-plugin/plugin.json` | Native Claude packaging of the canonical library |
-| `.claude/skills` | Legacy Markdown redirects |
-| `scripts/adopt-project.mjs` | Consumer onboarding and known-legacy migration |
+| `.agents/skills` | Canonical conventions, routing, review, process and setup skills |
+| `.claude-plugin/plugin.json` | Claude plugin packaging of the same library, for development and proofs |
+| `scripts/cli.mjs` | The `pom-harness` command: setup, check, unlink and the workflow scripts |
+| `scripts/adopt-project.mjs` | The adoption engine setup uses, including known-legacy migration |
 | `scripts/load-local-source.mjs` | Validate local scenarios and record source provenance |
 | `scripts/spikes/playwright-cli` | Development-only pinned native CLI viability probes |
 | `scripts/lib/execution-core` | Shared execution records, policy decisions and result/evidence validation |
@@ -184,9 +189,9 @@ hosts or external integration tests passed.
 | `scripts/lib/parallel` | Opt-in bounded batches of independent sequential scenarios |
 | `scripts/lib/integrations` | Optional ADO sources, outcome/work-item management, source-control delivery and receipts |
 | `scripts/check-conventions.mjs` | Mechanical POM convention checks |
-| `scripts/hooks/guard.mjs` | Optional advisory Claude hooks |
+| `scripts/hooks/guard.mjs` | Optional advisory Claude hooks, wired by `scripts/hooks/claude-hooks.example.json` |
 | `scripts/generate-tracker.mjs`, `scripts/harness-metrics.mjs` | Consumer reporting tools |
-| `examples` | Synthetic POM examples and dependency manifest |
+| `examples` | The starter's source, synthetic POM examples and the dependency manifest |
 | `resources` | Derive-only team-library contracts |
 
 The legacy ADO suite workflow retains its fetch, PR and result-publication entrypoints
@@ -195,8 +200,7 @@ depend on AgenTeX. Current generation, review and verification use the M13 proce
 and shared runtimes. Historical plugin commands remain compatibility reference only.
 Existing service/helper patterns remain valid. Catalogs are optional reuse assets.
 
-The old `.claude/settings.json` is a permissive compatibility template, not an
-installation default. Hooks remain advisory and fail open; they do not replace host
+Hooks are optional and never enabled by setup. They remain advisory and fail open; they do not replace host
 permissions, reliable test verdicts or remote branch policies.
 
 ## Package validation and release
@@ -234,7 +238,7 @@ installs it and its locked development fixtures, checks its dependency graph,
 runs that checklist and verifies installation immutability. See M17 for the
 separate native proofs and authenticated host prerequisites.
 
-The package tests inspect the separately installed, pinned CLI configuration resolver.
+The package tests inspect the pinned native CLI installed with the root dependencies.
 They do not require a browser download; live M4 probes have separate prerequisites.
 The SQL Server runtime uses the root lockfile's pinned driver. `npm run probe:database`
 separately provisions, tests and removes a disposable development SQL Server through
@@ -257,7 +261,9 @@ See [M1 validation](docs/M1-VALIDATION.md), [provenance](docs/PROVENANCE.md) and
 [security guidance](SECURITY.md). Original rights are owner-cleared and required
 notices retained. The owner confirmed historical credential revocation/rotation on
 2026-10-01; the credential was not tested or reproduced.
-The package is private; a clean validation run is not public-release authorization.
+The npm package stays private. A release attaches the validated archive and its checksum to a
+GitHub release, as [the release guide](docs/RELEASING.md) describes, and requires the owner's
+authorization; a clean validation run is not that authorization.
 
 See [M3 validation](docs/M3-VALIDATION.md) for actual adoption, local-source and
 native-host results. [M4 validation](docs/M4-VALIDATION.md) records the focused CLI

@@ -69,7 +69,7 @@ receipt must contain the digest and case count of the resulting manifest.
 
 ## Fixed native proof
 
-Install the root dependency lock and the separate pinned M4 CLI lock, and provision
+Install the root dependency lock, which includes the pinned native CLI, and provision
 the matching browser cache. Docker, authenticated local Claude and Codex CLIs and
 Node 24 are required. No authentication values are supplied on command lines or
 copied into proof files. Database credentials are newly generated and exist only in

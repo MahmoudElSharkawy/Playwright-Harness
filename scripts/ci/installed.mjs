@@ -25,6 +25,7 @@ const archive = join(workspace, packed[0].filename), install = join(workspace, '
 writeFileSync(join(install, 'package.json'), JSON.stringify({name: 'harness-installed-validation', version: '1.0.0', private: true, overrides}), {flag: 'wx'});
 run([npm, 'install', '--ignore-scripts', '--no-audit', '--no-fund', '--install-strategy=nested', archive], install);
 const installedRoot = realpathSync.native(join(install, 'node_modules/playwright-pom-harness'));
+// The runtime resolves the native CLI as a normal dependency; the spike's own install serves only its tests.
 for (const prefix of ['examples', 'scripts/spikes/playwright-cli']) run([npm, 'ci', '--ignore-scripts', '--no-audit', '--no-fund', '--prefix', join(installedRoot, prefix)], install);
 const lock = JSON.parse(readFileSync(join(installedRoot, 'npm-shrinkwrap.json'), 'utf8'));
 assert.deepEqual(lock, expectedLock, 'Distributed dependency lock differs from the packed source.');

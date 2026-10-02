@@ -1,0 +1,33 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          { "type": "command", "command": "node node_modules/playwright-pom-harness/scripts/hooks/guard.mjs session-start", "timeout": 10 }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          { "type": "command", "command": "node node_modules/playwright-pom-harness/scripts/hooks/guard.mjs pre-bash", "timeout": 10 }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          { "type": "command", "command": "node node_modules/playwright-pom-harness/scripts/hooks/guard.mjs post-bash", "timeout": 10 }
+        ]
+      },
+      {
+        "matcher": "Edit|Write|NotebookEdit",
+        "hooks": [
+          { "type": "command", "command": "node node_modules/playwright-pom-harness/scripts/hooks/guard.mjs post-edit", "timeout": 15 }
+        ]
+      }
+    ]
+  }
+}

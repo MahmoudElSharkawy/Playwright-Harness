@@ -109,12 +109,32 @@ test('JSON process output remains parseable with stderr notices while combined e
   assert.throws(() => JSON.parse(result.output));
   assert.match(readFileSync(log, 'utf8'), /Synthetic npm notice/); assert.equal(readFileSync(log, 'utf8'), result.output);
 });
-test('package contracts reject version drift and missing published dependency locks', t => {
+/** A package root holding every file the contracts read, copied from this checkout. */
+function contractRoot(t) {
   const root = temporary(t), source = new URL('../', import.meta.url);
-  for (const file of ['package.json', 'npm-shrinkwrap.json', '.claude-plugin/plugin.json']) save(join(root, file), JSON.parse(readFileSync(new URL(file, source), 'utf8')));
-  writeFileSync(join(root, 'VERSION'), readFileSync(new URL('VERSION', source))); assert.equal(checkContracts(root).scenarios, 26);
+  for (const file of ['package.json', 'npm-shrinkwrap.json', '.claude-plugin/plugin.json', 'examples/package.json', 'scripts/spikes/playwright-cli/package.json', 'scripts/managed-digests.json']) save(join(root, file), JSON.parse(readFileSync(new URL(file, source), 'utf8')));
+  for (const file of ['VERSION', 'CHANGELOG.md']) writeFileSync(join(root, file), readFileSync(new URL(file, source)));
+  return root;
+}
+test('package contracts reject version drift and missing published dependency locks', t => {
+  const root = contractRoot(t); assert.equal(checkContracts(root).scenarios, 26);
   writeFileSync(join(root, 'VERSION'), '0.0.0'); assert.throws(() => checkContracts(root));
   assert(publicationFindings({files: ['package.json', 'npm-shrinkwrap.json'], unexpected: []}, ['package.json']).some(finding => finding.file === 'npm-shrinkwrap.json'));
+});
+test('package contracts reject a native CLI pin that differs between manifests', t => {
+  const root = contractRoot(t);
+  const examples = JSON.parse(readFileSync(join(root, 'examples/package.json'), 'utf8')); examples.devDependencies['@playwright/cli'] = '^0.1.18'; save(join(root, 'examples/package.json'), examples);
+  assert.throws(() => checkContracts(root), /native CLI pin differs/);
+});
+test('package contracts require upgrade actions for the newest version and a recorded instruction block', t => {
+  const root = contractRoot(t), changelog = readFileSync(join(root, 'CHANGELOG.md'), 'utf8').replaceAll('\r\n', '\n'), version = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).version;
+  writeFileSync(join(root, 'CHANGELOG.md'), changelog.replace(`## ${version} `, '## 0.0.1 '));
+  assert.throws(() => checkContracts(root), /newest CHANGELOG version heading/);
+  writeFileSync(join(root, 'CHANGELOG.md'), changelog.replace('### Upgrade actions', '### Notes'));
+  assert.throws(() => checkContracts(root), /Upgrade actions/);
+  writeFileSync(join(root, 'CHANGELOG.md'), `## Unreleased — next\n\n- Later work.\n\n${changelog}`); assert.equal(checkContracts(root).status, 'PASS');
+  save(join(root, 'scripts/managed-digests.json'), {instructionBlocks: []});
+  assert.throws(() => checkContracts(root), /managed instruction block/);
 });
 test('native supervision refuses an existing evidence log before launching a child', async t => {
   const root = temporary(t), log = join(root, 'log'); writeFileSync(log, 'preserved');

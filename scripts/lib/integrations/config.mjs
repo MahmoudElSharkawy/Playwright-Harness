@@ -1,5 +1,6 @@
 import {existsSync, readFileSync} from 'node:fs';
 import {consumerPath} from '../consumer-paths.mjs';
+import {consumerEnvironment} from '../consumer-env.mjs';
 import {keys} from '../project-config.mjs';
 
 export function requireValue(condition, message) { if (!condition) throw new Error(message); }
@@ -40,14 +41,7 @@ export function validateAdoConfiguration(input) {
 
 /** Opt-in only. Never read this file, credentials or legacy configuration for a local source. */
 export function loadAdoConfiguration(roots, overrides = {}, shellEnvironment = process.env) {
-  const environment = {...shellEnvironment}, dotEnv = consumerPath(roots, '.env');
-  if (existsSync(dotEnv)) {
-    const bytes = readFileSync(dotEnv); requireValue(bytes.length <= 65536, 'Consumer .env exceeds 64 KiB.');
-    for (const line of bytes.toString('utf8').split(/\r?\n/)) {
-      const match = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/);
-      if (match && environment[match[1]] === undefined) environment[match[1]] = match[2].trim().replace(/^["']|["']$/g, '');
-    }
-  }
+  const environment = consumerEnvironment(roots, shellEnvironment);
   const modern = readConsumerJson(roots, '.harness/integrations.json', true);
   let input;
   if (modern !== undefined) {

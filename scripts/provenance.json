@@ -123,6 +123,12 @@
       "status": "created for this project; native CLI consumed as a separately installed development dependency",
       "targetLicense": "MIT",
       "thirdPartyCodeCopied": false
+    },
+    {
+      "scope": "M18 changes",
+      "status": "created for this project; the native CLI graph and @js-joda/core consumed as exact runtime dependencies that npm installs from the registry, not bundled",
+      "targetLicense": "MIT",
+      "thirdPartyCodeCopied": false
     }
   ],
   "ownerAttestation": {

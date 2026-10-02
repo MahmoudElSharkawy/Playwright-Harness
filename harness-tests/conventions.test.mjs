@@ -15,6 +15,12 @@ function fixture(t) {
 }
 function findings(result) { assert.notEqual(result.status,2,result.stderr);const data=JSON.parse(result.stdout);assert(data.files>0);assert(data.ruleApplications>0);return [...data.fresh,...data.freshWarn]; }
 const spec='tests/ExampleTests.spec.ts', page='src/pages/ExamplePage.ts';
+test('without --root the checker validates the project folder it runs in', t => {
+ const f=fixture(t), run=cwd=>spawnSync(process.execPath,[checker,'--json'],{cwd,encoding:'utf8',timeout:15000});
+ const result=run(f.root);assert.equal(result.status,0,result.stderr);assert.equal(JSON.parse(result.stdout).files,1);
+ const base=realpathSync(tmpdir()), empty=mkdtempSync(join(base,'pom-m1-'));t.after(()=>rmSync(empty,{recursive:true}));
+ const none=run(empty);assert.equal(none.status,2);assert.match(none.stderr,/run it from the project folder or pass --root/);
+});
 test('local source identities satisfy traceability without requiring an external TMS', t => {
  const f=fixture(t);f.put('resources/testData/ExampleTestJsonFile.json','{}');
  f.put(spec,'test("case",()=>{allure.testCaseId("local-case");});');

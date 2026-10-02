@@ -17,8 +17,8 @@ and mutable state. Never derive consumer paths from a skill's installation direc
 | `.harness/knowledge-candidates/` | Unreviewed observations, separate from reviewed knowledge |
 | `.harness/runs/` | Consumer run outputs and evidence |
 
-Initialize or merge with the [adoption command](../../scripts/adopt-project.mjs),
-following the [M3 guide](../../docs/M3-ADOPTION.md). Existing consumer instructions,
+Install, update and configure the harness with the [harness-setup](harness-setup/SKILL.md)
+skill (`npx --no pom-harness setup` in the consumer). Existing consumer instructions,
 framework code, settings and imported team libraries must be preserved. A customized
 skill requires a reviewed merge; do not replace it with a package link silently.
 Templates in skill assets are starting points, never live state. Knowledge promotion
@@ -29,8 +29,10 @@ External delivery still requires authorization. Host permissions remain host-spe
 Configured environment profiles do not bypass host controls. M3 loads and validates
 configuration and local sources; it does not execute browser, API or database operations.
 
-Legacy command examples using `node scripts/...` refer to the installed package
-script, not a consumer copy. Invoke `node <packageRoot>/scripts/<name>.mjs` from
-the consumer. State tools accept `--project-root <consumer>`; the convention checker
-uses `--root <consumer>`. Playwright test commands and framework paths refer to the
-consumer. Adoption does not copy scripts or enable hooks automatically.
+Command examples using `node scripts/<name>.mjs` refer to the installed package
+script, not a consumer copy. From the consumer, run them as
+`npx --no pom-harness <command>` (`npx --no pom-harness help` lists the commands) or as
+`node node_modules/playwright-pom-harness/scripts/<name>.mjs`. State tools accept
+`--project-root <consumer>`; the convention checker checks the current folder, or
+`--root <consumer>`. Playwright test commands and framework paths refer to the
+consumer. Setup does not copy scripts or enable hooks automatically.

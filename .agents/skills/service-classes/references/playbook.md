@@ -117,7 +117,8 @@ constructor(dbConfig: DBConnectionConfig) {
 ```
 
 DB config comes from the named catalog in `src/config/databases.ts` (credentials
-via `process.env` — the shared `DB_USER` / `DB_PASSWORD` keys), picked by the spec:
+via `process.env` — the variable the database target names, or the shared `DB_USER` /
+`DB_PASSWORD` keys), picked by the spec:
 `new DbsUserManagement(databases.applicationDb)` (`tests/User Management/DbUserManagementTests.spec.ts`).
 ❌ Hardcoding a base URL in the class — the commented-out
 `readonly baseURL = 'https://api.example.test'` in `src/apis/ApisUserManagement.ts` is

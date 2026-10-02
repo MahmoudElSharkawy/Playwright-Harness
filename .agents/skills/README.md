@@ -1,7 +1,7 @@
 # Skill Library — Playwright/TypeScript Test Framework
 
 
-All thirteen convention and workflow skills are maintained in this canonical library.
+All convention and workflow skills are maintained in this canonical library.
 Mutable state belongs to the consumer as specified in [ROOTS.md](ROOTS.md).
 
 Convention skills for this repository, structured SHAFT-style: each skill is a thin
@@ -28,6 +28,15 @@ open convention decisions remain in design-conventions.
 | 8 | [test-data](test-data/SKILL.md) | [playbook](test-data/references/playbook.md) | Data files, expected values, env settings, secrets, fixtures, unique data, seed & cleanup | One JSON per spec — name derived mechanically (`<Feature>Tests.spec.ts` ↔ `<Feature>TestJsonFile.json`, legacy aliases rejected); folder exactly `resources/testData/`; binary fixtures under `resources/testData/fixtures/<Feature>/` with the path stored **inside** the JSON; `testData` frozen at parse — no runtime key injection; credentials: self-invented = business input in JSON, anything pre-existing = `process.env` secret; payment cards synthetic + clustered; uniqueness = per-case `tc<id>` clusters with the TC id inside the base value + the one module-const timestamp (2026-08-24; format-constrained fields get distinct valid per-case values, no suffix); the reusability ladder (unique data → API/DB seed-and-cleanup via `resources/apisCollections/` (API) + `resources/Queries/` (DB) → GUI cleanup last resort); cluster related values; universal values deliberately duplicated per spec |
 | 9 | [service-classes](service-classes/SKILL.md) | [playbook](service-classes/references/playbook.md) | `Apis<Domain>` / `Dbs<Domain>` classes — endpoints, queries, lifecycle | Every endpoint/SQL string is a `readonly` `<op>_serviceName` / `<op>_query` field; new SQL sourced from the team query library `resources/Queries/` first (derive-only, 2026-08-24); new API endpoints sourced from the team collection library `resources/apisCollections/` first (derive-only, 2026-08-26); **all raw context verbs banned** (`.get/.post/.delete/…`, not just `.fetch()`) — an unused `apiActions` field is the bypass smell; `<Domain>` is a business-area noun, never an echo of one endpoint; SQL always `@param`-bound; `verify*` validations last, titles interpolate the distinguishing parameter; `close()` from `afterAll`; no hardcoded base URLs or payloads |
 | 10 | [utility-classes](utility-classes/SKILL.md) | [playbook](utility-classes/references/playbook.md) | Anything in `utils/` — facades, logging, attachments, redaction, connections — plus global lifecycle scripts | Litmus: utils = "how it's done reliably", zero domain nouns or `expect()`; one `<Noun>Actions` facade per technology; step per operation, `test.info().attach()` inside the step (never `step.attach()`); never-throw reporting — incl. **no `process.exit(1)` in reporting-only teardown**; global-setup/teardown = honorary utils, run hygiene only, no test context; report paths: one source in code, lockstep copies in docs/CI; `AUTO_ALLURE_OPEN` documented opt-out, desktop behaviors off when `CI` is set; facades stateless (no log buffers/file persistence); facade evolution preserves the report-facing surface |
+
+## Workflow skills
+
+| Skill | Use when |
+|---|---|
+| [automate-suite](automate-suite/SKILL.md) | Turning a local or configured Azure DevOps suite into reviewed POM automation with two scoped green runs |
+| [framework-review](framework-review/SKILL.md) | Reviewing a change against the conventions and producing a verdict |
+| [plan-tracker](plan-tracker/SKILL.md) | Recording a tracked plan's progress and regenerating its report |
+| [harness-setup](harness-setup/SKILL.md) | Installing, updating, configuring or rolling back the harness in a project |
 
 ## Checking them together
 

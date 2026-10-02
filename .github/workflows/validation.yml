@@ -21,7 +21,7 @@ jobs:
       matrix:
         os: [ubuntu-24.04, windows-2025]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
+    timeout-minutes: 90
     env:
       CI: '1'
       NO_UPDATE_NOTIFIER: '1'
@@ -43,6 +43,9 @@ jobs:
         run: node scripts/ci/native.mjs "${{ runner.temp }}/harness-installed" parallel
       - name: Prove cleanup after cooperative and forced timeouts
         run: node "${{ runner.temp }}/harness-installed/installation/node_modules/playwright-pom-harness/scripts/ci/timeout-proof.mjs" "${{ runner.temp }}/harness-timeout" ${{ runner.os == 'Linux' && 'mixed' || 'browser' }}
+      # Last, so the timing-sensitive native proofs above run before its hundreds of npm and git processes.
+      - name: Install, update, clone, roll back and fail in fresh consumer projects
+        run: node scripts/ci/consumer-flow.mjs "${{ runner.temp }}/harness-consumers" --archive "${{ runner.temp }}/harness-installed"
       - name: Retain sanitized check summary
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -53,5 +56,56 @@ jobs:
             ${{ runner.temp }}/harness-installed/native-browser.json
             ${{ runner.temp }}/harness-installed/native-parallel.json
             ${{ runner.temp }}/harness-timeout/timeout-proof.json
+            ${{ runner.temp }}/harness-consumers/consumer-flow.json
+          if-no-files-found: error
+          retention-days: 7
+      - name: Retain the validated release archive and its checksum
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-archive
+          path: ${{ runner.temp }}/harness-consumers/release/
+          if-no-files-found: error
+          retention-days: 30
+
+  npm12:
+    name: Consumer flows on npm 12 (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2025]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    env:
+      CI: '1'
+      NO_UPDATE_NOTIFIER: '1'
+      AUTO_ALLURE_OPEN: 'false'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      # Releases are packed with npm 11; this job checks that consumers on npm 12 can use them.
+      - name: Pack the archive with the bundled npm 11
+        run: |
+          mkdir -p "$RUNNER_TEMP/harness-archive"
+          npm --version
+          npm pack --ignore-scripts --pack-destination "$RUNNER_TEMP/harness-archive"
+      - name: Install npm 12 beside the bundled npm
+        run: npm install --prefix "$RUNNER_TEMP/npm12" --no-audit --no-fund npm@12
+      - name: Install, update, clone, roll back and fail in fresh consumer projects with npm 12
+        run: node scripts/ci/consumer-flow.mjs "$RUNNER_TEMP/harness-consumers" --archive "$RUNNER_TEMP/harness-archive" --npm "$RUNNER_TEMP/npm12/node_modules/npm/bin/npm-cli.js" --npm-major 12
+      - name: Retain the consumer flow summary
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: npm12-consumer-flow-${{ matrix.os }}
+          path: ${{ runner.temp }}/harness-consumers/consumer-flow.json
           if-no-files-found: error
           retention-days: 7

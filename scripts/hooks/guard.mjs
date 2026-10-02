@@ -2,7 +2,8 @@
 /**
  * guard.mjs — Claude Code lifecycle hooks for the playwright-pom harness.
  *
- * Registered in .claude/settings.json. Modes (argv[2]):
+ * Opt-in: a project merges the entries from scripts/hooks/claude-hooks.example.json into its
+ * own .claude/settings.json. Modes (argv[2]):
  *   session-start  SessionStart : inject the harness activation reminder
  *   pre-bash       PreToolUse   : (1) block direct pushes to master/main
  *                                 (2) block an UNCHANGED `playwright test` rerun

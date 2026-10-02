@@ -36,7 +36,8 @@ function prepare() {
   if (!installed) {
     const scope = inventory(source); if (scope.unexpected.length) throw new Error('Unclassified publication files.');
     for (const file of scope.files) {mkdirSync(dirname(join(packageRoot, file)), {recursive: true}); cpSync(join(source, file), join(packageRoot, file));}
-    for (const path of ['node_modules', 'scripts/spikes/playwright-cli/node_modules']) cpSync(join(source, path), join(packageRoot, path), {recursive: true, verbatimSymlinks: true});
+    // The root node_modules carries the pinned native CLI; the spike's own install is development-only.
+    cpSync(join(source, 'node_modules'), join(packageRoot, 'node_modules'), {recursive: true, verbatimSymlinks: true});
   }
   const projects = {};
   for (const nativeHost of ['codex', 'claude']) {

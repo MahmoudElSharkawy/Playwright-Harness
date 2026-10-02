@@ -15,10 +15,11 @@
 # variable group below.
 #
 # SECRETS: specs read env vars (.env locally). For CI, create a variable group
-# "<your-repo>-secrets" (Library → Variable groups) with the keys from
-# .env.example (DB_USER, DB_PASSWORD, SQLCMDPASSWORD marked secret; the
-# APP_LOGIN_* values; the non-secret *_SERVER/_PORT/_NAME coordinates), then
-# uncomment the variables block and the env mapping.
+# "<your-repo>-secrets" (Library → Variable groups) with the secret keys from
+# .env — the variables your .harness/targets.json names (for example APP_DB),
+# DB_USER/DB_PASSWORD for databases without a target, SQLCMDPASSWORD and the
+# APP_LOGIN_* values, all marked secret — then uncomment the variables block and the
+# env mapping. Destinations come from the committed .harness/targets.json.
 #
 # Deliberately headless & non-interactive: AUTO_ALLURE_OPEN=false suppresses the
 # Allure auto-open, PW_TEST_HTML_REPORT_OPEN=never suppresses the HTML report server
@@ -45,6 +46,9 @@ steps:
 
   - script: npx playwright install --with-deps chromium
     displayName: Install Chromium
+
+  - script: npx --no pom-harness check-conventions
+    displayName: Check POM conventions
 
   - script: CI=true AUTO_ALLURE_OPEN=false PW_TEST_HTML_REPORT_OPEN=never npx playwright test --project=chromium
     displayName: Run Playwright specs
@@ -83,6 +87,6 @@ steps:
   # Round-trip to ADO test points (opt-in): enable after linking the variable group,
   # and per automated suite. VERIFY writes _verify-state.json locally, so CI-side
   # publishing instead maps CTRF results; wire this only once a suite is stable.
-  # - script: AZURE_PAT=$(AZURE_PAT) node scripts/publish-ado-results.mjs --suite <suiteId>
+  # - script: AZURE_PAT=$(AZURE_PAT) npx --no pom-harness publish-results --suite <suiteId>
   #   displayName: Publish outcomes to ADO
   #   condition: always()

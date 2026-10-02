@@ -1,30 +1,74 @@
 # Changelog
 
-## Unreleased — Windows owned-process trees
+## Unreleased — default branch rule
+
+- Add the branch rule to the managed instruction block that setup merges into a project's `CLAUDE.md` and `AGENTS.md`: never commit or push directly to the default branch; reuse the ongoing feature branch, or create `automation/<source-id>-<slug>`, `harness/<topic>`, `feature/<topic>` or `fix/<topic>`; deliver through a pull request, committing, pushing or opening one only with the user's authorization. Setup replaces the released 3.0.x and 3.1.0 blocks in place; an edited block still stops setup for review. The pipeline guide's prerequisites point to the rule.
+
+## 3.1.0 — M18 archive adoption
+
+A project now adopts the harness from its versioned release archive in one command,
+and updates the same way. Teammates and CI get it from `npm ci`.
+
+### Upgrade actions
+
+- Run setup from the 3.1.0 archive in each project: `npx --yes --package "<full path to playwright-pom-harness-3.1.0.tgz>" pom-harness setup`. It replaces the sibling-checkout links and recognized legacy `.claude/skills` copies, and lists anything that needs a decision.
+- Stop launching Claude with `--plugin-dir ../playwright-pom-harness`; the project's linked skills replace it.
+- Repoint old hook commands and `package.json` shortcuts that run `../playwright-pom-harness/scripts/...` to `npx --no pom-harness <command>`; the hook template is now `node_modules/playwright-pom-harness/scripts/hooks/claude-hooks.example.json`.
+- Re-verify generated suites: the runtime library and its dependency graph changed.
+
+### Adoption
+
+- Add the `pom-harness` command (`scripts/cli.mjs`).
+  - `setup` installs the release archive as an exact development dependency committed under `.harness/vendor/`, or updates, repairs and configures the installed harness.
+  - `setup --restore` undoes the last run. `check` reports per-feature readiness and can add empty `.env` keys. `unlink` detaches the links before a rollback. The workflow scripts run as pass-through commands.
+  - Every command acts only as the project's own installation, at the version its lockfile records.
+- Link each skill into `.claude/skills/` and `.agents/skills/`, with `ROOTS.md` pointers. Links are junctions on Windows and relative symbolic links elsewhere.
+  - The committed `.harness/links.json` records them, and a guarded `postinstall` restores them after `npm ci`. Per-link ignore lines keep them out of git.
+  - Setup creates links only where nothing exists and repairs only content-free harness links. Anything else stops the run before any write, with every conflict listed.
+- Preflight the new version's complete adoption plan before installing. Journal every write, removed folder and replaced link target, so `setup --restore` returns the project to its pre-setup bytes; it runs `npm ci` only when a lockfile existed before.
+- Migrate legacy `.claude/skills` folders by digest, including the 3.0.x redirects. A folder whose tracked data would move into the git-ignored `.harness/state/` is kept and reported.
+- Compare managed instruction blocks after newline normalization, so CRLF clones update cleanly. A released block is replaced; an edited block still stops setup. The new block points to the `harness-setup` skill.
+- Make the environment profile optional; add one with `setup --environment <name> --mode <mode>`.
+- Add a minimal starter for projects without Playwright: configuration and utilities, with exact dependencies installed alongside the harness, and no demo pages or tests. `src/config/targets.ts` reads destinations from `.harness/targets.json`, so they are entered once.
+- Add the `harness-setup` skill. It covers install, update, configuration (the mode question, targets, Azure DevOps, empty secret keys, CI pipelines), teammates and rollback.
+
+### Runtime and package
+
+- Ship the pinned native CLI (`@playwright/cli` 0.1.22 with its Playwright build) as a runtime dependency, resolved from the package location instead of the nested spike install. Pin `@js-joda/core` 6.1.0. Add their provenance records. The spike stays development-only.
+- Stop shipping `.claude/` (redirect skills and the permissive settings template) and `CLAUDE.md`. Hooks move to `scripts/hooks/claude-hooks.example.json`, without a permissions block.
+- `check-conventions` checks the current folder by default. The API and database runtimes read default credentials from the project's `.env` without changing `process.env`; the shell wins.
+- Pin the examples' Playwright, Allure and CLI versions exactly, and add the TypeScript settings that generation needs.
+- Skills and guides run commands as `npx --no pom-harness <command>` and no longer hard-code the skill count. The pipeline templates check conventions.
+
+### Automation pipeline guide
+
+- Add `docs/PIPELINE.md`, one guide to the automation pipeline in execution order: ten named phases with their inputs, outputs, commands and gates, the repair loop, consumer state paths and a mapping from the legacy ADO phase names. It summarizes and links the M3–M16 contracts, which remain authoritative. The README gains a short "How automation works" section pointing to it.
+
+### Windows owned-process trees
 
 - Record a process as an owned descendant only when it was created no earlier than its parent. Windows keeps an exited parent's PID on its children and reuses PIDs, so browser cleanup could adopt older, unrelated processes and terminate them; this explains the intermittent Windows native browser gate failures, including a supervisor exit 1 with no summary. Creation identities compare exactly as integers, and a process without a readable identity is never adopted. A regression test covers the reused-PID case.
 - Apply the same rule to the development-only M4 CLI spike's own tree helpers. Its Windows probe re-run passes 13/13 checks; Linux was not re-run.
 
-## Unreleased — consumer seeding guidance
+### Consumer seeding guidance
 
-- Document seeding a fresh consumer from `examples` in the adoption guide: repoint the six copied harness shortcuts to the installed package location and keep `--root .` on `check:conventions`, which otherwise targets the package. The README links it from installation and the agent adoption protocol. No script, test or example change.
+- Document seeding a fresh consumer from `examples`. Superseded within this release: setup adds the starter, and harness commands run as `npx --no pom-harness <command>`, so no copied shortcuts need repointing.
 
-## Unreleased — installed validation repair
+### Installed validation repair
 
 - Constrain the fresh CI consumer to the existing cleared dependency versions when npm relocates the shrinkwrap; retain exact provenance checks without changing dependencies or notices.
 - Parse npm JSON from stdout while preserving combined, hashed diagnostics; add three CI regression tests.
 - Correct the bundled example's `fetch:story` shortcut to resolve the parent package script; document its explicit external consumer and adoption path requirements.
 - Correct the remaining five bundled harness shortcuts; exercise all six through actual npm invocations from the package root and example directory in the adoption tests.
 
-## Unreleased — ADO story retrieval
+### ADO story retrieval
 
 - Add read-only `fetch-ado-story.mjs --story <id>`: retrieve the test cases linked to a user story without plan or suite IDs. Tested By links by default; `--links tested-by,child,related` selects others per run.
 - Bind link targets to the configured collection, take test-case types from the project's test-case category, and report non-test or other-project items by ID without reading their content.
 - Reuse the suite case reader and bounds; write the suite contract under `test/ado-story-<id>/` and an `ado-story-<id>` neutral source. Suite fetch output is pinned unchanged; exclusions are recorded but not fingerprinted.
 - Include `ado-story-<id>` folders in convention, metrics and tracker scans. A case held by several folders counts once in metrics totals, from its newest verification; recorded results that disagree count it as no-state, and tracker sync skips it with a warning, in deterministic folder order. Library changes refresh consumers' M13 runtime fingerprints; re-verify after upgrading.
-- No story-scoped publication or automation marking, automate-suite skill route, version bump or live-tenant validation.
+- No story-scoped publication or automation marking, automate-suite skill route or live-tenant validation.
 
-## Unreleased — final-review corrections
+### Final-review corrections
 
 - Guarantee owned-browser cleanup after interrupted bodies or failed result recording, preserving frozen phases, assertion failures and the shared cleanup deadline.
 - Accept genuinely empty ADO metadata consistently through retrieval, conversion and legacy rendering; retain refinement for nonempty or malformed metadata.

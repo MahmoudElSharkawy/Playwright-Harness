@@ -25,7 +25,8 @@ deliberate adaptation from the Java originals, so reviewers can trace why a rule
   - `src/utils/` — `ApiActions`, `DBActions`, and future facades. Connections, logging,
     Allure attachments, redaction, retries — every technically complex concern.
   - `src/config/` — environment coordinates (applications, databases, integration APIs,
-    identity pools); values via `process.env`, never secrets (formerly `resources/config/`).
+    identity pools); values from `.harness/targets.json` (the starter's `targets.ts`)
+    or `process.env`, never secrets (formerly `resources/config/`).
 - **Run-lifecycle scripts** (`global-setup.ts` / `global-teardown.ts`) belong to the
   technical family alongside `utils/` (`try`/`catch`, loops, console allowed). Scope is
   strictly run hygiene: clear stale `allure-results/` before the run; generate/open the

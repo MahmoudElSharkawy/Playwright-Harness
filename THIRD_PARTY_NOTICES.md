@@ -1,7 +1,8 @@
 # Third-party notices and references
 
-M17 preserves the root dependency graph in the publishable `npm-shrinkwrap.json`;
-its 87 package identities and notices remain unchanged. npm may duplicate or
+M17 preserves the root dependency graph in the publishable `npm-shrinkwrap.json`.
+M18 adds the three native CLI packages described below, for 90 package identities;
+the existing identities and notices are unchanged. npm may duplicate or
 relocate dependency nodes during installation; the installed validation checks
 their exact identities, registry origins, integrity and on-disk package metadata.
 
@@ -53,11 +54,13 @@ packages or generated report bundles, preserve their upstream notices and the
 embedded asset notices; this source-only audit does not authorize such distribution.
 No dependency source or copyright is relicensed as harness MIT material.
 
-M4 installs `@playwright/cli` 0.1.22 and its exact Playwright/Playwright Core
-1.64.0-alpha-1790635538000 dependencies for development only. These three Apache-2.0
-packages and their registry integrity values are recorded in
-[the CLI dependency inventory](scripts/cli-dependency-licenses.json), also checked
-by `check:provenance`. Each installed package includes LICENSE; both Playwright
+M4 installed `@playwright/cli` 0.1.22 and its exact Playwright/Playwright Core
+1.64.0-alpha-1790635538000 dependencies for a development spike. M18 makes the same
+three Apache-2.0 packages exact runtime dependencies of the harness: npm installs them
+from the registry together with the package, and they are not bundled. Their registry
+integrity values are recorded in [the runtime inventory](scripts/runtime-dependency-licenses.json);
+the spike keeps [its own CLI dependency inventory](scripts/cli-dependency-licenses.json).
+Both are checked by `check:provenance`. Each installed package includes LICENSE; both Playwright
 packages also include NOTICE and ThirdPartyNotices.txt. Keep those files when
 redistributing the dependencies. The official CLI skill is read from the installed
 package, not copied or relicensed as a canonical harness skill.
@@ -89,7 +92,7 @@ separately installed runtime dependency. It adds 14 packages: `pg`, `pg-cloudfla
 `pg-connection-string`, `pg-int8`, `pg-pool`, `pg-protocol`, `pg-types`, `pgpass`,
 `postgres-array`, `postgres-bytea`, `postgres-date`, `postgres-interval`, `split2`
 and `xtend`. Their exact versions, MIT/ISC declarations and registry integrity
-values are recorded in the runtime inventory, now 87 records. All 14 installed
+values are recorded in the runtime inventory, then 87 records (90 since M18). All 14 installed
 packages were inspected for complete notices. Twelve include license files;
 `pg-types` includes its MIT notice in README.md (Brian M. Carlson, 2014), and
 `pgpass` includes its MIT notice in README.md (Hannes Hoerl, 2013-2016). Preserve

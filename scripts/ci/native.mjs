@@ -9,6 +9,7 @@ import {snapshotInstalledPackage} from '../lib/host-proof-files.mjs';
 import {completeChecks, completeNativeProof, browserDiagnostics} from './results.mjs';
 import {nativeProcess} from './native-process.mjs';
 import {recoverNativeProof} from './recovery.mjs';
+import {nativeCliInstallation} from '../lib/browser/native-cli.mjs';
 
 const [directory, kind] = process.argv.slice(2);
 assert(process.argv.length === 4 && ['browser', 'parallel'].includes(kind), 'Use <installed-workspace> browser|parallel.');
@@ -18,7 +19,7 @@ assert(within(installation, root) && within(workspace, installation));
 const installed = JSON.parse(readFileSync(join(workspace, 'installed.json'), 'utf8'));
 assert(installed.status === 'PASS' && installed.packageUnchanged && completeChecks(installed.checks.checks), 'Installed checks must pass first.');
 const before = snapshotInstalledPackage(installation), consumer = join(workspace, `native-${kind}`);
-const browser = command([join(root, 'scripts/spikes/playwright-cli/node_modules/playwright/cli.js'), 'install', '--with-deps', 'chromium'],
+const browser = command([nativeCliInstallation(root).installer, 'install', '--with-deps', 'chromium'],
   {cwd: workspace, log: join(workspace, `${kind}-browser-install.log`), timeout: 600000});
 let proof, assessment, cleanup, recovery;
 if (browser.status === 'PASS') {

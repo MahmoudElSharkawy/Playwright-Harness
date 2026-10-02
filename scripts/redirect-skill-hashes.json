@@ -1,0 +1,131 @@
+{
+  ".claude/skills/README.md": [
+    "0820d1736769995d261b29211d98e46869d65ac2e5ea203725b7b2af2ab1935a",
+    "130010232cfc8f53ca27c9f48a92602139002e84adb86c97ff7051ba5cb7f9e8",
+    "69cec16daa73786d735ddc41695f288f3d7af3d069513b566e0f94bb93982768",
+    "90f7ecb6ae81c1a6c44a027cf47eb91d97336373aa9600c65be3097679a96663"
+  ],
+  ".claude/skills/action-methods/SKILL.md": [
+    "2c7b6ff00ef8e96f34e6940886a4f14d69dc44946b83e183d408627fb0bcc764",
+    "6bf584d661430018c7c778fd76c0d2cc1687812aa23c454a07d8d92b2ab6224c"
+  ],
+  ".claude/skills/action-methods/references/playbook.md": [
+    "51fe4cf9c8c95eb23da9a43dbb229474d9e24aeb1b0a45c54e86f179fe050fa3",
+    "d7a6c37366cfaa4b5f71c6088f591344c02071e3dde04b092b6f61e64294c33e"
+  ],
+  ".claude/skills/automate-suite/SKILL.md": [
+    "7f979dd1d6d6867acd6d44198850f05966c9b7ff46cc5f80310c013618f1018d",
+    "e0786570b896838c3653944b93e3f2d4166e0c323e4d749697c0dca542d3c470"
+  ],
+  ".claude/skills/automate-suite/references/playbook.md": [
+    "0507a37aa537403ab5f3852baa43dbf7b11de436cb67e6dc25b12430190fa8f4",
+    "34e565560459fa0d3bd398ad09fc8d70b7684ff825031ff8911122a9332cda3f"
+  ],
+  ".claude/skills/automate-suite/references/prerequisite-dictionary.md": [
+    "75e7efe6f04cc354a1cfdffba25fadd9216532e991bdefaf99c9b39223edb9d5",
+    "76e9c2d7630da7c32ed83ca58673d445bb3bd90d86f9093c3bc69c1950e9fd08"
+  ],
+  ".claude/skills/element-locators/SKILL.md": [
+    "a7fa72da47a8ba3af426d91e93839d8dcda010af9655a4ca1a3175c6d31035e8",
+    "cb6d3e7fdde23cd3a611b6fe99f7b4e03f926673c2d06dfc3f06f63706e7d752"
+  ],
+  ".claude/skills/element-locators/references/playbook.md": [
+    "0df72b9c529b1bbde6aa2ff97b9963f694347d7b7a3d608f64e854849e0c4694",
+    "6053295a21718eed37f4f12658e623c02cd84e0f7292d9166bea60f0899380ac"
+  ],
+  ".claude/skills/framework-review/SKILL.md": [
+    "439537f2eeb6b127319a09cf77b45c6c92e1f581eca554c0e4881961691aef89",
+    "508310005f2264e7c05a3edc5fbe356556d2efea3e3c3e593fde4365b0570f30"
+  ],
+  ".claude/skills/framework-review/class-ledger.md": [
+    "64ca7a372c80e753519ffc7ea4e2cadd91018428cfd87d3c3e734ce31574e8fc",
+    "e94c4bd1f052be2fb82a046e65f1bb4f62a0150211216db1970ed8227988b1f4"
+  ],
+  ".claude/skills/framework-review/references/procedure.md": [
+    "16b687b31f99cd43fc15c30328a88e85bc8cf846a1851c6a258d9883de7ea5f2",
+    "ddc0bd5fbdb7f07e719e7835c105fdd7ccc279c786712c67358057bb5b051dc1"
+  ],
+  ".claude/skills/harness-setup/SKILL.md": [
+    "5fb264a69d2937631756cb81d7825cfaf509495d527bfb779667f97459d01c40"
+  ],
+  ".claude/skills/harness-setup/references/playbook.md": [
+    "655141a653700edfa3ebef611c67da2d409f8a1bb16fb5eabe0b25bd020ac59e"
+  ],
+  ".claude/skills/page-classes/SKILL.md": [
+    "8b1a5bf7346c67cb81942ca7254155632831604325fcc1e5410146e6643989c8",
+    "d8f652123b1ed4739892d8b2ecefd469924f694da9d9a1adc70ab6de8363a653"
+  ],
+  ".claude/skills/page-classes/references/playbook.md": [
+    "5e31c5b32c384b23ff8c1e37be22ef11983142819a8260cfcb099d4c92858ff4",
+    "c40637527c505b2a38bf4f32a482bbcef2f6827f4c6afc6ea1bbb2c2431b4373"
+  ],
+  ".claude/skills/plan-tracker/SKILL.md": [
+    "6d317ab88b84b499d48776d2f48fd37dd7512e7e2fd30ea33943431e96cf29a8",
+    "af4baf9c5ddc174d7dd9a7d76e314f5d391d5496fdcf128aa9bc7b782e40331c"
+  ],
+  ".claude/skills/plan-tracker/assets/tracker-template.html": [
+    "505830c0a020f96fdc53b88ec19b424d9a4e726098c2dcf59449fbd04cd1051c"
+  ],
+  ".claude/skills/plan-tracker/data/_registry-template.json": [
+    "a87766c01bf962fbd456a00857db2e9397d6074581cdcc3028d643ae283eadf2"
+  ],
+  ".claude/skills/plan-tracker/data/history.jsonl": [
+    "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  ],
+  ".claude/skills/pom-architecture/SKILL.md": [
+    "4ed5356511ebbc221f6c30a8475b11adb013470551b3bc067425c7ac99f3ee41",
+    "781124e01c3a61bee1fcce2e03ab5e1807ceb8fba3a44db23bb74e19f00a085d"
+  ],
+  ".claude/skills/pom-architecture/references/design-conventions.md": [
+    "42356be06675f6c060f12c9807e2165deb2ec9a62960d30b9b0aba01f2fe1cf9",
+    "7937328237aa2c1c8f5d1030c72da1a9d6e6a8e042f52bf32475a30dff5f8676"
+  ],
+  ".claude/skills/service-classes/SKILL.md": [
+    "28bded5865f9456fa563a56bd978cb6b962a532018946f45bfc39245289f517c",
+    "a44a5c251462ac58f63729d04de3b9c7bfd0ef1a00b5de3e856d016cf66ed14b"
+  ],
+  ".claude/skills/service-classes/references/playbook.md": [
+    "16e8d45f126a561887fb50655d55e5adaf8e7deafae7e4daeb3fbab3e0636b03",
+    "b805ed7a2334b1d1b24bc3d948da6c37065c9a000781cceff971a98549a79dec"
+  ],
+  ".claude/skills/test-classes/SKILL.md": [
+    "9567a1c38ca7a2e86d282bda247ff16a6b874778bd945477c7adba3e3ac51e6c",
+    "dd5508a76bb2efb04ffeb120a85f3464cf4f642b25eca427dbc84e42fdf5ff94"
+  ],
+  ".claude/skills/test-classes/references/playbook.md": [
+    "e5416f26f98abe742c38d0ebd2d6566370198d47b566142170525927b0d2b94a",
+    "eb3c3a26513c54cdc581e18bed09bffc7c97abfbf02f1fd238ea07033488b437"
+  ],
+  ".claude/skills/test-data/SKILL.md": [
+    "3112941eaa4ef5bbefea79cfebe54db1e2f3026eb97d5ac8d31d59117d812eae",
+    "d97afd039b84613e96d815fec48bbdbe18fc0a80b3e76dc263fb3df19dfa8fe4"
+  ],
+  ".claude/skills/test-data/references/playbook.md": [
+    "5671fcf4e8dfb7a3dc0509aca61dafc1312fea65371d1f3d80502efb28930dab",
+    "71a8dc9ab41cd5ac50f6ddd22678fc036a33bb5285042c7e0c80b44f6183c338"
+  ],
+  ".claude/skills/test-methods/SKILL.md": [
+    "30ea704dadc38aeaaed16f64db594ac688dfd67c6496cd9cc997bc0efd11b667",
+    "df0bba3d460548336bdc345e82a520b71385e89bc282fa1678edb1f671d51a33"
+  ],
+  ".claude/skills/test-methods/references/playbook.md": [
+    "e1fe7e3e8832b6b8da503709c24c7779046fc26647ee56599a48ea0312a63078",
+    "fcd858dc74747fad775107b6931b0c46c3c2ad78665692353a0bdb55544fbf56"
+  ],
+  ".claude/skills/utility-classes/SKILL.md": [
+    "ad7fb8fb2d08f2cf172e4410b1d0f183c3a28faa1f5fcbe2b9c41e64117d9c01",
+    "b6ba0cfce3671b9f2ad3bdbcaa52f223888ad758a59894a22774b6d5dee94dbb"
+  ],
+  ".claude/skills/utility-classes/references/playbook.md": [
+    "d2eb2059bd96e2c1912942549571525572cfab781500686d400ba0bce8389084",
+    "d68b57170e92227c33475cf030b02de10d25c865504cc6adaebbf34a5317b8a4"
+  ],
+  ".claude/skills/validation-methods/SKILL.md": [
+    "75a95278d119d24717e4541e09d4915c027216ecea1e7d9b5c2a6552e869ed0b",
+    "cfcaa77e4ca2c2eb4d62448d8f0993863f7134b423691c8bd12b08b2c256144d"
+  ],
+  ".claude/skills/validation-methods/references/playbook.md": [
+    "1a5e1167c33de82ca11673710a1b251885d994b46f5d7adce97e327be3d444ee",
+    "58cf28efbf4c599e73b2958cab5b1fc9ed3d610a6e2c92a88a65a7404bff6328"
+  ]
+}

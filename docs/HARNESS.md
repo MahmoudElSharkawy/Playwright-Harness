@@ -1,6 +1,6 @@
 # Playwright POM Harness reference
 
-M3 provides one canonical 13-skill library, thin native host packaging, safe consumer
+M3 provides one canonical skill library, thin native host packaging, safe consumer
 adoption, local-source loading and explicit environment-profile configuration. It
 does not implement the later browser/API/DB executors or full lifecycle parity.
 
@@ -38,18 +38,19 @@ effects, recovery and lifecycle obligations use the existing shared contracts.
 
 ## Package and consumer responsibilities
 
-Canonical skills, references, templates and scripts live in the immutable package.
-Codex discovers consumer links to `.agents/skills`; Claude loads the same content
-through `.claude-plugin/plugin.json`. Old `.claude/skills` files are redirects.
+Canonical skills, references, templates and scripts live in the immutable package,
+installed in the consumer's `node_modules` from the committed release archive. Codex
+discovers the consumer's per-skill links in `.agents/skills`, and Claude the same links
+in `.claude/skills`. Recognized old `.claude/skills` folders are migrated to links.
 Resolve links before opening sibling references; never maintain host-specific rule
 copies. The separate consumer owns app code, local sources, `.harness` configuration,
 reviewed knowledge, candidates, reports and session state.
 
-The adopter preflights conflicts and merges instructions/ignore rules. It preserves
+Setup preflights conflicts and merges instructions/ignore rules. It preserves
 custom code, host settings and imported team libraries. Recognized legacy instructions
 can become redirects; mutable records migrate with source fingerprints and conflict
-refusal. See [the adoption guide](M3-ADOPTION.md) and the
-[required protocol](../README.md#for-ai-agents-adoption-protocol).
+refusal. See [the adoption guide](M3-ADOPTION.md), the
+[AI protocol](../README.md#for-ai-agents) and the `harness-setup` skill.
 
 ## Sources and workflow
 
@@ -87,7 +88,7 @@ and intentionally persistent outcomes may remain.
 - Tracker rendering and metrics read consumer state. Templates remain in the package;
   a rendered empty report is not substantive validation coverage.
 - Optional Claude hooks use payload `cwd` (or the consumer working directory) and store
-  session records under consumer `.harness/state/hooks`. Adoption does not enable hooks
+  session records under consumer `.harness/state/hooks`. Setup does not enable hooks
   or copy broad host permissions. These helpers remain advisory and fail open.
 - Optional [ADO adapters](M12-ADO.md) separate retrieval, outcome publication/linking
   and source-control delivery. Retrieval selects a plan/suite or, read-only, the test
@@ -102,7 +103,7 @@ and intentionally persistent outcomes may remain.
 Node 24 is the supported package runtime. M1 establishes sanitized, owner-cleared
 source and truthful validation. M2 proved six representative locator decisions through
 both native hosts with actual skill/reference reads, immutable package checks and
-semantic comparison. M3 extends discovery to all 13 canonical skills and tests consumer
+semantic comparison. M3 extends discovery to all canonical skills and tests consumer
 adoption and local-source behavior. Native proof is specific to the tested hosts and
 platform; it is not full generation/review/verification parity.
 

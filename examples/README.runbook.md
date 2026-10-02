@@ -15,10 +15,11 @@ npm ci                                # always via the lockfile — never per-pa
 npx playwright install --with-deps    # browsers (first time / CI)
 ```
 
-Use Node 24. Copy `.env.example` to `.env` (gitignored) and configure both target
-coordinates and secrets — credentials
-and DB passwords come **only** from environment variables, loaded by dotenv in
-`playwright.config.ts`. Never commit a literal credential.
+Use Node 24. Destinations — application URLs, database servers — live in
+`.harness/targets.json` (read by `src/config/targets.ts`). Copy `.env.example` to `.env`
+(gitignored) and fill in the secrets — credentials and DB passwords come **only** from
+environment variables, loaded by dotenv in `playwright.config.ts`. Never commit a
+literal credential.
 
 ## Running tests
 
