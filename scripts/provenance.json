@@ -126,7 +126,7 @@
     },
     {
       "scope": "M18 changes",
-      "status": "created for this project; the native CLI graph, @js-joda/core and tedious consumed as exact runtime dependencies that npm installs from the registry, not bundled",
+      "status": "created for this project; the native CLI graph, @js-joda/core, tedious and @azure/msal-browser consumed as exact runtime dependencies that npm installs from the registry, not bundled",
       "targetLicense": "MIT",
       "thirdPartyCodeCopied": false
     }
