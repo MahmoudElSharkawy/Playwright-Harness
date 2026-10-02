@@ -28,16 +28,19 @@ const run = (argv, cwd) => command(argv, {cwd, env, timeout: 900000, log: join(w
 const npmVersion = run([npm, '--version'], workspace).stdout.trim();
 if (option('--npm-major')) assert.equal(npmVersion.split('.')[0], option('--npm-major'), `Expected npm ${option('--npm-major')}, found ${npmVersion}.`);
 
+// npm names an unscoped package's archive <name>-<version>.tgz; the shape of `npm pack --json` differs between npm 11 and 12.
+function pack(source, destination) {
+  const {version} = JSON.parse(readFileSync(join(source, 'package.json'), 'utf8')), file = join(destination, `playwright-pom-harness-${version}.tgz`);
+  assert.equal(run([npm, 'pack', '--ignore-scripts', '--pack-destination', destination], source).status, 'PASS', 'npm pack failed; inspect its log.');
+  assert(existsSync(file), `npm pack did not write ${basename(file)}.`); return file;
+}
 // The archive under test: given (a file, or the folder installed validation packed into), or packed here.
 let archive = option('--archive') && resolve(option('--archive'));
 if (archive && statSync(archive).isDirectory()) {
   const found = readdirSync(archive).filter(name => /^playwright-pom-harness-.+\.tgz$/.test(name));
   assert.equal(found.length, 1, 'Expected exactly one archive in the given folder.'); archive = join(archive, found[0]);
 }
-if (!archive) {
-  const packed = run([npm, 'pack', '--json', '--ignore-scripts', '--pack-destination', workspace], packageRoot);
-  assert.equal(packed.status, 'PASS', 'npm pack failed; inspect its log.'); archive = join(workspace, JSON.parse(packed.stdout)[0].filename);
-}
+if (!archive) archive = pack(packageRoot, workspace);
 const manifest = archiveManifest(archive), name = `playwright-pom-harness-${manifest.version}.tgz`;
 assert.equal(basename(archive), name, 'The archive needs its versioned release name.');
 // The release assets: exactly the archive these flows validate, and its checksum.
@@ -93,9 +96,7 @@ function nextArchive() {
     writeFileSync(join(source, file), JSON.stringify(data, null, 2) + '\n');
   }
   writeFileSync(join(source, 'VERSION'), `${version}\n`);
-  const packed = run([npm, 'pack', '--json', '--ignore-scripts', '--pack-destination', folder], source);
-  assert.equal(packed.status, 'PASS', 'Packing the next version failed; inspect its log.');
-  return {version, file: join(folder, JSON.parse(packed.stdout)[0].filename)};
+  return {version, file: pack(source, folder)};
 }
 
 const flows = [];
