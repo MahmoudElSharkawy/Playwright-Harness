@@ -4,6 +4,8 @@ The original implementation and review history below are retained. A subsequent
 independent Astra review found three blocking defects. Their corrective validation
 and current acceptance status are recorded in [M4 review resolution](M4-REVIEW-RESOLUTION.md).
 The earlier approval below is historical and does not approve those later repairs.
+A later Windows process-tree correction and its re-run are recorded at the
+[end of this record](#later-correction-windows-process-tree-adoption).
 
 Scope: focused official Playwright CLI viability spike, 2026-09-30. No execution
 core, browser executor, API/DB runtime, parallel harness dispatcher or new host
@@ -182,3 +184,17 @@ Existing protected recovery records remain excluded and were not read or copied.
 Stop at M4: the minimal core and executors remain planned and require the next
 implementation authorization. No release, tag, merge or new public repository is
 part of this spike.
+
+## Later correction: Windows process-tree adoption
+
+On 2026-10-02 the probe's owned-tree helpers were corrected: a process is adopted as
+a descendant only when it was created no earlier than its parent. Windows keeps an
+exited parent's PID on its children and reuses PIDs, so the original helpers could
+adopt an older, unrelated process and stop it during cleanup. The same defect caused
+intermittent hosted Windows failures in the production browser runtime, which
+received the same rule ([M6](M6-BROWSER.md)).
+
+Windows re-run after the correction: **13/13 checks, 68 native commands, 22
+registered artifacts, 529 package/dependency files hashed**. All five owned session
+trees stopped and the sentinel survived. Linux was not re-run; it re-parents orphans,
+so the rule does not change its trees. The results above remain historical.

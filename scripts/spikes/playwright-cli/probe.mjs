@@ -106,12 +106,16 @@ async function processes() {
   }
   return result;
 }
+// A child cannot predate its parent. Windows keeps an exited parent's PID on its children
+// and reuses PIDs, so an older process naming a member's PID belongs to an earlier holder.
+const created=p=>/^\d+$/.test(p.identity)?BigInt(p.identity):undefined;
+const childOf=(p,parent)=>p.parent===parent.pid && created(p)!==undefined && created(parent)!==undefined && created(p)>=created(parent);
 async function rememberTree(session,pid) {
   assert.ok(Number.isSafeInteger(pid) && pid>0,'missing native daemon identity');
   const all=await processes();
   const tree=all.filter(p=>p.pid===pid);
   assert.equal(tree.length,1,'daemon identity unavailable');
-  for(let i=0;i<tree.length;i++)tree.push(...all.filter(p=>p.parent===tree[i].pid && !tree.some(q=>q.pid===p.pid)));
+  for(let i=0;i<tree.length;i++)tree.push(...all.filter(p=>childOf(p,tree[i]) && !tree.some(q=>q.pid===p.pid)));
   owned.set(session,{pid,tree});
 }
 async function terminateKnown(record) {
@@ -123,7 +127,7 @@ async function terminateKnown(record) {
 async function refreshTree(record) {
   const all=await processes();
   const active=record.tree.filter(item=>all.some(p=>p.pid===item.pid && p.identity===item.identity));
-  for(let i=0;i<active.length;i++)active.push(...all.filter(p=>p.parent===active[i].pid && !active.some(q=>q.pid===p.pid)));
+  for(let i=0;i<active.length;i++)active.push(...all.filter(p=>childOf(p,active[i]) && !active.some(q=>q.pid===p.pid)));
   for(const item of active)if(!record.tree.some(p=>p.pid===item.pid && p.identity===item.identity))record.tree.push(item);
 }
 async function treeGone(record) {
