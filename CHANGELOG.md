@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased — installed validation repair
+
+- Constrain the fresh CI consumer to the existing cleared dependency versions when npm relocates the shrinkwrap; retain exact provenance checks without changing dependencies or notices.
+- Parse npm JSON from stdout while preserving combined, hashed diagnostics; add three CI regression tests.
+
 ## Unreleased — ADO story retrieval
 
 - Add read-only `fetch-ado-story.mjs --story <id>`: retrieve the test cases linked to a user story without plan or suite IDs. Tested By links by default; `--links tested-by,child,related` selects others per run.

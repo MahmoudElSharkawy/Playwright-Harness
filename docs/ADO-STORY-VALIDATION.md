@@ -95,3 +95,34 @@ Live tenant reads, permissions, process rules, the link URL forms a real organiz
 returns and ADO Server variants: **UNPERFORMED**. No tenant credentials were used and
 no ADO work item, test result or pull request was created or changed. Story-scoped
 publication, automation marking and an automate-suite story route are out of scope.
+
+## PR pipeline installation follow-up
+
+The original [PR validation run](https://github.com/MahmoudElSharkawy/Playwright-Harness/actions/runs/36941254526)
+failed on both Windows and Linux before package checks. npm re-resolved a compatible
+transitive range outside the cleared shrinkwrap: a local reproduction with CI's
+npm 11.19.0 installed `@types/node` 26.6.4 instead of the audited 26.6.3. The strict
+provenance check correctly rejected it; the story-retrieval tests were not reached.
+
+The fresh, private validation consumer now receives version constraints derived
+from the existing cleared lock. Package dependencies, lock contents and notices
+are unchanged. The distributed lock must equal the source lock, and the existing
+identity, URL, integrity, physical metadata and containment checks still apply.
+Conflicting versions in a future lock fail explicitly rather than collapsing into
+one constraint. This affects CI installation only, not consumer application policy.
+
+Separately, npm's JSON stdout is parsed without stderr notices; combined diagnostics
+remain preserved and hashed. Three new CI regressions cover scoped/relocated lock
+entries, invalid constraints and a real child process emitting JSON plus a notice.
+The focused CI suite passes all 19 tests. The actual installed archive's 14 package
+checks pass on Windows with npm 11.19.0, including 790 tests with zero failures,
+skips or cancellations. Conventions cover 16 example files / 61 rule applications,
+7 generation files / 40 applications and 2 workflow files / 2 applications.
+These checks do not claim live ADO coverage or replace the hosted native gates.
+
+Independent review of the original 21-file story diff found one nonblocking issue:
+the new `examples/package.json` shortcut `fetch:story` points to a consumer-local
+script that does not exist. Use the documented package-root command; remove or
+correct that shortcut separately. No story implementation was changed by the CI
+repair. Hosted Windows/Linux browser, database, parallel and timeout gates remain
+required on the updated PR.
