@@ -149,6 +149,8 @@ visible even if a later physical cleanup succeeds. If process ownership or stopp
 cannot be established, protected runtime storage remains for remediation and no clean
 pass is returned. Successful cleanup deletes temporary authentication and raw output.
 An exhausted cleanup window records an unexecuted timeout and a failed obligation.
+A descendant is recorded only if it was created no earlier than its parent, so a
+reused Windows parent PID never adopts an older process.
 Any later scoped remediation has a separate receipt and leaves the failed run intact.
 
 Pass an external `storageState` file only when restoration is intended. The adapter

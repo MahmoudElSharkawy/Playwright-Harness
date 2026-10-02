@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased — Windows owned-process trees
+
+- Record a process as an owned descendant only when it was created no earlier than its parent. Windows keeps an exited parent's PID on its children and reuses PIDs, so browser cleanup could adopt older, unrelated processes and terminate them; this explains the intermittent Windows native browser gate failures, including a supervisor exit 1 with no summary. Creation identities compare exactly as integers, and a process without a readable identity is never adopted. A regression test covers the reused-PID case.
+
+## Unreleased — consumer seeding guidance
+
+- Document seeding a fresh consumer from `examples` in the adoption guide: repoint the six copied harness shortcuts to the installed package location and keep `--root .` on `check:conventions`, which otherwise targets the package. The README links it from installation and the agent adoption protocol. No script, test or example change.
+
 ## Unreleased — installed validation repair
 
 - Constrain the fresh CI consumer to the existing cleared dependency versions when npm relocates the shrinkwrap; retain exact provenance checks without changing dependencies or notices.
