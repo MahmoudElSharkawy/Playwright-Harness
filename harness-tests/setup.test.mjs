@@ -157,11 +157,12 @@ test('installed links are restored after npm ci and removed by unlink; team cont
  assert(!existsSync(join(root,'.agents/skills/test-data')));assert(!existsSync(join(root,'.agents/skills/ROOTS.md')));
  assert.equal(readFileSync(join(root,'.claude/skills/test-classes/SKILL.md'),'utf8'),'team skill');assert(existsSync(join(installed,'.agents/skills/test-data/SKILL.md')));
 });
-test('upgrade actions are collected for every version after the previous one',t=>{
+test('upgrade actions are collected for every version after the previous one; a first setup has none',t=>{
  const root=project(t),changelog=join(root,'CHANGELOG.md');
  put(root,'CHANGELOG.md','## Unreleased\n\n### Upgrade actions\n- not yet\n\n## 3.2.0 — Later\n\n### Upgrade actions\n- rerun setup\n\n## 3.1.0 — First\n\n- feature\n\n### Upgrade actions\n- re-verify suites\n- stop using --plugin-dir\n\n## 3.0.17 — Old\n\n### Upgrade actions\n- old action\n');
  assert.deepEqual(upgradeActions('3.0.17','3.2.0',changelog),['3.2.0: rerun setup','3.1.0: re-verify suites','3.1.0: stop using --plugin-dir']);
  assert.deepEqual(upgradeActions('3.1.0','3.1.0',changelog),[]);
+ assert.deepEqual(upgradeActions(undefined,'3.2.0',changelog),[]);
 });
 test('an interrupted stage 2 is reported with its recovery and completes on a rerun',t=>{
  const root=project(t);archive(join(root,archiveName));
