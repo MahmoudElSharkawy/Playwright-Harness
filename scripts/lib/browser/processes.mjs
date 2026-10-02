@@ -38,15 +38,21 @@ export async function processInventory(deadlineAt = Infinity) {
 }
 
 const alive = (all, process) => all.some(item => item.pid === process.pid && item.identity === process.identity);
+// A child cannot predate its parent. Windows keeps a dead parent's PID on its children
+// and reuses PIDs, so an older process naming a member's PID belongs to an earlier holder.
+const created = item => /^\d+$/.test(item.identity) ? BigInt(item.identity) : undefined;
+const childOf = (item, parent) => item.parent === parent.pid && created(item) !== undefined && created(parent) !== undefined && created(item) >= created(parent);
+export function expandTree(all, tree) {
+  for (let index = 0; index < tree.length; index++) tree.push(...all.filter(item => childOf(item, tree[index]) && !tree.some(known => known.pid === item.pid)));
+  return tree;
+}
 export async function rememberTree(pid) {
   const all = await processInventory(), tree = all.filter(item => item.pid === pid);
   if (!Number.isSafeInteger(pid) || tree.length !== 1) throw new Error('Owned daemon identity unavailable.');
-  for (let index = 0; index < tree.length; index++) tree.push(...all.filter(item => item.parent === tree[index].pid && !tree.some(known => known.pid === item.pid)));
-  return tree;
+  return expandTree(all, tree);
 }
 export async function refreshTree(tree, deadlineAt) {
-  const all = await processInventory(deadlineAt), active = tree.filter(item => alive(all, item));
-  for (let index = 0; index < active.length; index++) active.push(...all.filter(item => item.parent === active[index].pid && !active.some(known => known.pid === item.pid)));
+  const all = await processInventory(deadlineAt), active = expandTree(all, tree.filter(item => alive(all, item)));
   for (const item of active) if (!tree.some(known => known.pid === item.pid && known.identity === item.identity)) tree.push(item);
 }
 export async function stopTree(tree, deadlineAt) {

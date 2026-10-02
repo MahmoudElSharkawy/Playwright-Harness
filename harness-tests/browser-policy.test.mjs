@@ -7,7 +7,7 @@ import {syncBuiltinESMExports} from 'node:module';
 import {createRun, defineOperation, authorizeOperation} from '../scripts/lib/execution-core/index.mjs';
 import {browserLifecycleOperations, browserCapabilities} from '../scripts/lib/browser/index.mjs';
 import {validateNativeArguments, classifyNative, prepareNativeSession} from '../scripts/lib/browser/native-cli.mjs';
-import {processCall} from '../scripts/lib/browser/processes.mjs';
+import {processCall, expandTree} from '../scripts/lib/browser/processes.mjs';
 import {within} from '../scripts/lib/skill-roots.mjs';
 import {runInput, environment} from './fixtures/execution-core.mjs';
 import {requiredBrowserChecks, completeBrowserChecks} from '../scripts/probes/browser-checks.mjs';
@@ -68,6 +68,13 @@ test('native child execution bounds output and supports cancellation without inv
   const limited = await processCall(process.execPath, ['-e', 'process.stdout.write("x".repeat(10000))'], {timeoutMs: 5000, maxBytes: 100}); assert.equal(limited.kind, 'OUTPUT_LIMIT');
   const controller = new AbortController(); controller.abort();
   const cancelled = await processCall(process.execPath, ['-e', 'process.exit(9)'], {signal: controller.signal}); assert.equal(cancelled.kind, 'CANCELLED'); assert.equal(cancelled.dispatched, false);
+});
+test('owned process trees never adopt an older process through a reused parent PID', () => {
+  // Windows keeps a dead parent's PID on its children; the daemon later reused PID 40.
+  const daemon = {pid: 40, parent: 8, identity: '134041248000000005'};
+  const all = [daemon, {pid: 41, parent: 40, identity: '134041248000000005'}, {pid: 42, parent: 41, identity: '134041248000000900'},
+    {pid: 50, parent: 40, identity: '134041248000000004'}, {pid: 51, parent: 50, identity: '134041248000000950'}, {pid: 60, parent: 40, identity: null}];
+  assert.deepEqual(expandTree(all, [daemon]).map(item => item.pid), [40, 41, 42]);
 });
 
 test('damaged native prerequisites fail before acquiring or copying private storage', async () => {
