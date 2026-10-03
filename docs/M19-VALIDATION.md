@@ -3,10 +3,27 @@
 Validation update on 2026-10-04; local Node 24.15.0, hosted Node 24.21.0. All ten strict-review code
 findings have been addressed and a fresh independent reviewer approved the fixes.
 Full acceptance remains incomplete: real-agent/ADO acceptance is pending and
-hosted Windows validation failed twice at different gates. The first hosted
+the latest hosted installed-package checks failed the secrets gate on both platforms.
+Earlier hosted Windows validation failed twice at different gates. The first hosted
 installed checks passed on both platforms and all Linux gates passed. Local
 installed tests also have two failures described below. The scripted fixture
 driver does not prove agent adaptation.
+
+The [first PR validation run](https://github.com/MahmoudElSharkawy/Playwright-Harness/actions/runs/37156853698)
+checked head `a000e0941b8896c4bf98458d88f2ab8c4e0fb02d`. All 901 installed tests
+passed on Windows and Linux, as did both npm 12 consumer-flow jobs. The secrets
+validator rejected a synthetic token assignment in the new CI diagnostic test;
+the other 12 static checks passed. Native probes did not run after that gate failed.
+The fixture now uses the accepted `<synthetic-token>` placeholder; the validator
+is unchanged and the diagnostics exclusion assertion remains intact. Focused
+CI-helper tests pass 26/26 and the secrets check passes. Hosted validation of
+this correction remains pending.
+
+Correction checks: all 13 static checks pass, CI-helper tests pass 26/26, and
+independent review approved the fixture correction. The full local sandbox run
+passed 881/901 tests: two known adoption junction failures and 18 failures when
+Windows process inspection was unavailable. Rerunning the affected runtime files
+with the required process-inspection access passed 30/30; no runtime code changed.
 
 | Gate | Status |
 |---|---|
@@ -35,11 +52,12 @@ The unchanged Windows rerun stopped at two unit-test failures; its receipt has
 counts but no failed locations. Diagnostic-only changes now retain known test
 file/line locations and finite retry stage/status facts for the next run. All
 26 CI-helper tests pass, including bounded serialization of an ordinary error.
-Independent review approved those diagnostics, pushed as `a1257b2`. Validation
-of that commit is still pending: GitHub Actions API requests returned HTTP 503
-or stalled, and a new run could not be confirmed. The earlier Windows failures
-remain unresolved; neither a passing local retry nor the diagnostic change
-closes that gate.
+Independent review approved those diagnostics, pushed as `a1257b2`. Before PR
+creation, validation could not be confirmed because GitHub Actions API requests
+returned HTTP 503 or stalled. The confirmed PR run above subsequently passed all
+901 tests on both platforms but stopped at the synthetic secrets finding. The
+earlier Windows native-probe failure remains unresolved; neither a passing local
+retry nor the diagnostic change closes that gate.
 
 The live checks cover login reuse, secret handling, mixed checked/observed
 conditions, historical FAIL preservation, asynchronous evidence binding,

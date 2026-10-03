@@ -97,7 +97,7 @@ test('incomplete browser diagnostics publish only known check names and statuses
   assert.deepEqual(browserDiagnostics(undefined), []);
 });
 test('failed execution diagnostics retain retry stages without exposing raw messages or arbitrary facts', t => {
-  const checks = [{name: 'read-retry', status: 'FAIL', message: 'private-token', diagnostic: {stage: 'await-retry', hostState: 'FINISHED', attempt: 1, actual: 'private-token', token: 'private-token'}},
+  const checks = [{name: 'read-retry', status: 'FAIL', message: 'private-token', diagnostic: {stage: 'await-retry', hostState: 'FINISHED', attempt: 1, actual: 'private-token', token: '<synthetic-token>'}},
     {name: 'read-retry', status: 'FAIL', diagnostic: {stage: 'private-token'}}, {name: 'private-token', status: 'FAIL'}, null];
   assert.deepEqual(executeDiagnostics({checks}), [{name: 'read-retry', status: 'FAIL', diagnostic: {stage: 'await-retry', hostState: 'FINISHED', attempt: 1}}, {name: 'read-retry', status: 'FAIL'}]);
   assert.deepEqual(executeDiagnostics({checks: [{name: 'read-retry', status: 'FAIL', diagnostic: {stage: 'assessment', actual: 'INDETERMINATE'}}]}), [{name: 'read-retry', status: 'FAIL', diagnostic: {stage: 'assessment', actual: 'INDETERMINATE'}}]);
