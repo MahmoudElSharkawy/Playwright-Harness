@@ -35,7 +35,8 @@ router) and follow its routing table.
 
 | When the user asks to… | Invoke |
 |---|---|
-| "Automate suite `<id>`" / "automate plan `<id>` suite `<id>`", "fetch the cases from Azure and automate them", "run the ADO suite and generate the scripts", or resume any phase of that pipeline (fetch / explore / generate / verify) | `automate-suite` — the end-to-end pipeline orchestrator (it routes into the layer skills below itself) |
+| "Execute / run manual tests for ADO suite or story `<id>`", `/execute-test`, with no code generation | `execute-test` — live execution, verified reports and optional ADO delivery |
+| "Automate suite `<id>`" / "automate plan `<id>` suite `<id>`", "fetch the cases from Azure and automate them", "run the ADO suite and generate the scripts", or resume that code-generation pipeline (fetch / explore / generate / verify) | `automate-suite` — the end-to-end pipeline orchestrator (it routes into the layer skills below itself) |
 | "Automate this test case / test suite", "create scripts for Azure (DevOps) suite `<id>` / test case `<id>`", "write automation for this story / scenario" | `pom-architecture` first, then the per-layer skills below as the work touches each layer |
 | Create or restructure a spec file — naming, `test.describe`, hooks, setup/teardown | `test-classes` |
 | Write, review, or refactor an individual test — title, Allure metadata, tags, body flow | `test-methods` |

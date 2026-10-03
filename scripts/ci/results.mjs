@@ -1,5 +1,6 @@
 // CI evidence checks only. These never compute a scenario verdict.
 import {completeBrowserChecks, requiredBrowserChecks} from '../probes/browser-checks.mjs';
+import {completeExecuteChecks} from '../probes/execute-checks.mjs';
 
 export function browserDiagnostics(assessment) {
   return Array.isArray(assessment?.checks) ? assessment.checks
@@ -8,7 +9,7 @@ export function browserDiagnostics(assessment) {
 }
 export function completeNativeProof(kind, proof, recovery, assessment, cleanup) {
   return proof?.status === 'PASS' && recovery?.complete === true && assessment?.status === 'PASS' &&
-    (kind === 'browser' ? completeBrowserChecks(assessment.checks) : kind === 'parallel' &&
+    (kind === 'browser' ? completeBrowserChecks(assessment.checks) : kind === 'execute' ? completeExecuteChecks(assessment.checks) && assessment.fixtureServersClosed === true && ['end', 'per-step'].every(mode => Number.isFinite(assessment.diagnosticsLatencyMs?.[mode]) && assessment.diagnosticsLatencyMs[mode] >= 0) : kind === 'parallel' &&
       assessment.comparison?.status === 'PASS' && Array.isArray(assessment.counts) && assessment.counts.length === 2 &&
       assessment.counts.every(count => count.scenarios === 13 && count.assertions > 0 && count.evidence > 0) &&
       cleanup?.ownedDatabasesRemoved === true && cleanup?.fixtureServersClosed === true);

@@ -238,3 +238,7 @@ Story retrieval follows the documented [link types](https://learn.microsoft.com/
 and resolves test-case types through [work-item type categories](https://learn.microsoft.com/en-us/rest/api/azure/devops/wit/work-item-type-categories/get?view=azure-devops-rest-7.1).
 These documents informed project-authored code; no third-party implementation
 was copied and no dependency was added.
+
+## M19 manual delivery extension
+
+Manual execution adds bug-category/field/path validation, read-only WIQL and validateOnly requests, bounded attachment uploads and ado.bugs defaults. Create acknowledgements persist identity in the same fsynced record. Manual publication uses unique persisted names, plan-scoped paged List Runs recovery, full iteration grouping and revision flags. Both delivery routes reassess evidence and block unrepaired integrity failures. See [M19](M19-EXECUTE.md).

@@ -118,7 +118,7 @@ export function createApiRuntime(run, inputRoots, {signal, resolveCredential, re
   /** Execute one definition with typed bindings. Retry is finite and enabled only by established effect facts. */
   async function execute(options) {
     requireThat(!busy && !finished && !state.busy && !state.finished, 'API execution must be sequential and inside the active runtime.');
-    keys(options, ['operation', 'invocationId', 'phase', 'inputs', 'retry', 'resource', 'lifecycle'], 'API invocation');
+    keys(options, ['operation', 'invocationId', 'phase', 'inputs', 'retry', 'resource', 'lifecycle', 'unresolvedChecks'], 'API invocation');
     const operation = validateApiOperation(options.operation), definition = operation.definition;
     const invocationId = options.invocationId, phase = options.phase ?? 'EXERCISE'; id(invocationId); oneOf(phase, Object.keys(phases));
     const inputs = getBindings(options.inputs ?? []), retry = options.retry ?? true;
@@ -132,6 +132,8 @@ export function createApiRuntime(run, inputRoots, {signal, resolveCredential, re
     if (definition.recovery?.reconcile) checkPrivateBinding(definition.recovery.reconcile.request);
     requireThat(typeof retry === 'boolean' && !histories.has(invocationId) && phases[phase] >= state.phaseNumber, 'Invalid sequential API invocation.');
     const expected = scope.expectations.filter(item => item.operationId === operation.id && item.invocationId === invocationId);
+    const unresolved = new Set(options.unresolvedChecks ?? []);
+    requireThat(Array.isArray(options.unresolvedChecks ?? []) && unresolved.size === (options.unresolvedChecks ?? []).length && [...unresolved].every(check => expected.some(item => item.id === check)), 'Unresolved checks must belong to the frozen invocation.');
     requireThat(expected.every(item => item.phase === undefined || item.phase === phase), 'API invocation differs from its frozen phase.');
     requireThat(expected.length === definition.checks.length && definition.checks.every(check => expected.some(item => item.id === check.id)), 'API checks must match the frozen invocation expectations.');
     requireThat(expected.every(item => item.requiredEvidence.every(kind => ['response', 'assertion', 'observation'].includes(kind))), 'API assertions require supported evidence kinds.');
@@ -215,8 +217,8 @@ export function createApiRuntime(run, inputRoots, {signal, resolveCredential, re
               let observed = '[REDACTED]';
               if (!sensitive) {try {observed = publicSelection(response, check.select);} catch {observed = '[REDACTED OR UNAVAILABLE]';}}
               const assertionId = evidence(current, 'assertion', {check: check.id, passed, actual: observed, expected: sensitive ? '[REDACTED]' : comparison(expectedValue)});
-              current.assertions.find(item => item.id === check.id).status = passed ? 'PASS' : 'FAIL';
-              Object.assign(current.assertions.find(item => item.id === check.id), {reliable: true, evidenceIds: [responseId, observationId, assertionId]});
+              current.assertions.find(item => item.id === check.id).status = unresolved.has(check.id) ? 'INDETERMINATE' : passed ? 'PASS' : 'FAIL';
+              Object.assign(current.assertions.find(item => item.id === check.id), {reliable: !unresolved.has(check.id), evidenceIds: [responseId, observationId, assertionId]});
             }
             for (const extraction of definition.extract ?? []) {
               const value = select(response, extraction.select), actual = value === null ? 'null' : Array.isArray(value) ? 'array' : typeof value;

@@ -132,7 +132,9 @@ and record what actually happens before any code is written.
   cleaned up, required restorations are explicit, and intentionally persistent outcomes
   may remain. Knowledge candidates need review before promotion.
 
-Exploration uses library interfaces rather than a single command:
+Standalone manual execution uses the [execute-test skill](../.agents/skills/execute-test/SKILL.md)
+and [M19 host](M19-EXECUTE.md), with no code generation. Automation exploration
+continues to use these library interfaces:
 
 | Need | Interface | Contract |
 |---|---|---|

@@ -4,6 +4,11 @@ Conventions, skills and tools that let Claude Code and Codex write and maintain
 Playwright/TypeScript Page Object Model test automation in your project, with
 reviewed code and verified runs. Version: see [VERSION](VERSION) and [CHANGELOG.md](CHANGELOG.md).
 
+For live manual execution, ask `/execute-test suite <id> [plan <id>] [on qa]`
+or `/execute-test story <id>`. The agent runs browser/API/DB cases, produces a
+verified dashboard and defect list, and can preview ADO bug filing and suite
+outcomes. See [manual execution](docs/M19-EXECUTE.md). No POM code is generated.
+
 ## Get started
 
 You need Node 24, git, and Claude Code or Codex. Open your project folder and ask the AI:

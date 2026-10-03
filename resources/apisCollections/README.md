@@ -6,7 +6,7 @@ their methods, payload shapes, auth flow, and the variable-chaining recipes that
 them into working journeys (e.g. authenticate → create a record → confirm it). They are
 the API counterpart of `resources/Queries/` — durable application knowledge the harness
 consults instead of rediscovering. Governed by the 2026-08-26 "Team API-collection
-library & AgenTeX config sources" ruling (design-conventions, Decision records).
+library & configuration sources" ruling (design-conventions, Decision records).
 
 ## Ownership & lifecycle — curated on import (differs from `resources/Queries/`)
 
@@ -47,7 +47,7 @@ Consumption paths:
 | automate-suite REFINE / prerequisite dictionary `api` routes | converting seed/verification intents to `api:` steps | proposed `integration/*_api.json` catalog entries (user-confirmed before EXPLORE) |
 | automate-suite GENERATE / service-classes | authoring `Apis<Domain>` classes | `readonly <operation>_serviceName` fields, request payload shapes (typed parameter objects), auth flow |
 | test-data reusability ladder (step 2) | a rerun fails on consumed/stale data | the API seed/cleanup route that makes the case re-runnable |
-| AgenTeX execution (`api:` steps) | running refined specs | only ever cataloged `integration/*_api.json` entries — the executor never reads this folder or composes its own HTTP |
+| Manual execution / native API runtime | frozen operation definitions | derive collection requests into parameterized defineApiOperation definitions; source samples are never replayed |
 
 ## Adaptation rules (collection request → framework/catalog artifact)
 
@@ -57,7 +57,7 @@ Consumption paths:
    (`collection-library-bypassed`).
 2. **Base URLs are environment data, not endpoint data.** The `{{baseUrl}}`-style
    variables map to `playwright.config.ts` / config files for the POM layer and to
-   the catalog's env-key indirection (`${API_BASE_URL}`-style) for AgenTeX — never
+   the configured target baseUrl for native execution — never
    hardcoded in a class or spec. Note: an export may point its Token request at a
    **different host** than the business requests (e.g. a dev token host alongside qc
    business hosts) — preserve the distinction as separate variables
@@ -75,8 +75,8 @@ Consumption paths:
    equivalent TypeScript in the framework's test-data/utils layers; never execute the
    JavaScript itself.
 5. **Auth is the chained `{{token}}`** from the Token request — in the framework this
-   is an `Apis<Domain>` action whose response feeds subsequent calls; in an AgenTeX
-   catalog it is the `auth` block's env-key indirection. Literal tokens never appear
+   is an `Apis<Domain>` action whose response feeds subsequent calls; in native execution
+   it is the target credentialRef and protected input indirection. Literal tokens never appear
    anywhere.
 6. **Internal-host requests** (ops/back-office endpoints on internal IPs) are ops
    levers, not customer-facing endpoints — treat them as seed/fixture material with

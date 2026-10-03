@@ -6,7 +6,7 @@ import {requireRun} from '../execution-core/inputs.mjs';
 import {data, id, oneOf, typedValue} from '../execution-core/data.mjs';
 import {within} from '../skill-roots.mjs';
 import {prepareNativeSession, NativeFailure} from './native-cli.mjs';
-import {createScenarioState, requireScenarioState, acceptBrowserStorage, finishScenario, inputBindings, publicValue, phaseOrder} from '../sequential/state.mjs';
+import {createScenarioState, requireScenarioState, acceptBrowserStorage, finishScenario, inputBindings, publicValue, rememberSensitive, phaseOrder} from '../sequential/state.mjs';
 
 export const browserCapabilities = Object.freeze(['browserReads', 'browserMutations']);
 // Bound trusted asynchronous callbacks as well as native commands. This cannot preempt
@@ -37,12 +37,13 @@ export function browserLifecycleOperations(target) {
 }
 
 /** One sequential browser scenario. The callback uses the official native CLI, not a harness action language. */
-export async function runBrowserScenario(run, roots, {target, storageState, signal, nativeTimeoutMs, commandTimeoutMs, execution, onUnavailable} = {}, body) {
+export async function runBrowserScenario(run, roots, {target, storageState, secrets = {}, signal, nativeTimeoutMs, commandTimeoutMs, execution, onUnavailable} = {}, body) {
   requireRun(run); id(target);
   if (run.inputs.scenarios.length !== 1 || typeof body !== 'function') throw new Error('M6 accepts one sequential browser scenario per run.');
   if (signal !== undefined && !(signal instanceof AbortSignal)) throw new Error('Cancellation needs an AbortSignal.');
   const scope = run.inputs.scenarios[0], lifecycle = browserLifecycleOperations(target);
   const state = execution ? requireScenarioState(execution, run, roots) : createScenarioState(run, roots);
+  for (const value of Object.values(secrets)) rememberSensitive(state, value);
   if (state.storageReady || state.busy) throw new Error('Browser session must acquire this scenario storage first.');
   if (onUnavailable !== undefined && (!execution || typeof onUnavailable !== 'function')) throw new Error('Unavailable handling belongs to the mixed scenario owner.');
   for (const operation of lifecycle) if (!authorizeOperation(run, operation, browserCapabilities).allowed) throw new Error('Owned browser lifecycle is not frozen or permitted for this target.');
@@ -55,7 +56,7 @@ export async function runBrowserScenario(run, roots, {target, storageState, sign
   const origins = run.inputs.environment.targets.browser[target].origins;
   const initialWindow = checkExecutionWindow(run, {phase: 'SETUP', signal});
   if (!initialWindow.allowed) throw new NativeFailure(initialWindow.reason === 'CANCELLED' ? 'CANCELLED' : 'TIMEOUT');
-  const native = await prepareNativeSession(roots, {origins, storageState, ...(nativeTimeoutMs === undefined ? {} : {nativeTimeoutMs}), ...(commandTimeoutMs === undefined ? {} : {commandTimeoutMs})});
+  const native = await prepareNativeSession(roots, {origins, storageState, secrets, ...(nativeTimeoutMs === undefined ? {} : {nativeTimeoutMs}), ...(commandTimeoutMs === undefined ? {} : {commandTimeoutMs})});
   let nativeCleanup;
   const closeOwnedSession = () => {
     state.cleanupStartedAt ??= Date.now();
@@ -139,7 +140,7 @@ export async function runBrowserScenario(run, roots, {target, storageState, sign
       await missing('UNAVAILABLE', nextPhase); state.phaseNumber = nextPhase;
       if (nextPhase === 3) state.cleanupStartedAt ??= Date.now(); cleanupStartedAt = state.cleanupStartedAt;
       for (let number = 1; number <= run.inputs.limits.maxAttempts; number++) {
-        const current = record(operation, invocationId, phase, number, inputs); let failure, dispatched = false, explicitEffect = false, active = true;
+        const current = record(operation, invocationId, phase, number, inputs); let failure, dispatched = false, explicitEffect = false, active = true, manualRetry = false;
         const asserted = new Set(), pending = new Set(), nativePending = new Set(), eventStart = native.events.length;
         const controller = new AbortController(); let expired = false;
         const expire = () => {expired = true; active = false; controller.abort();};
@@ -149,6 +150,16 @@ export async function runBrowserScenario(run, roots, {target, storageState, sign
         if (!authorization.allowed) {current.outcome = 'BLOCKED'; current.failureClass = 'POLICY'; current.effect.certainty = 'not-executed';}
         else {
           const context = {
+            diagnostic: args => {
+              requireActive();
+              if (!Array.isArray(args) || !['console', 'requests'].includes(args[0]) || args.slice(1).some(value => !['error', 'warning', 'info', 'debug', '--clear'].includes(value))) throw new Error('Unsupported diagnostic command.');
+              return track((async () => {
+                try {return {notice: false, reply: await native.command(args, {...currentWindow(), signal: controller.signal})};}
+                catch (error) {if (error instanceof NativeFailure && error.classification === 'EXECUTOR') return {notice: true, reason: error.reason ?? 'COMMAND_ERROR'}; throw error;}
+              })());
+            },
+            rememberSensitive: value => {requireActive(); rememberSensitive(state, value);},
+            retryAfterReconciliation: () => {requireActive(); if (current.reconciliation?.kind !== 'confirmed-no-effect') throw new Error('Manual retry needs confirmed no-effect reconciliation.'); manualRetry = true;},
             native: args => {
               requireActive(); explicitEffect = false;
               return track((async () => {
@@ -206,7 +217,7 @@ export async function runBrowserScenario(run, roots, {target, storageState, sign
         // the fixed failure classification already records the useful outcome.
         await observeAutomatic(current, 'observation', {nativeEvents: native.events.slice(eventStart).map(event => ({command: diagnostic(event.command), classification: event.classification, dispatched: event.dispatched})), ...(failure ? {failureClass: current.failureClass} : {})});
         finish(current); history.push(scenario.attempts.at(-1));
-        if (finished || !retry || decideRecovery(run, history, {evidence: observations.evidence, roots, cleanupStartedAt}).action !== 'RETRY') return history.at(-1);
+        if (finished || !retry && !manualRetry || decideRecovery(run, history, {evidence: observations.evidence, roots, cleanupStartedAt}).action !== 'RETRY') return history.at(-1);
       }
       return history.at(-1);
     } finally {busy = state.busy = false;}

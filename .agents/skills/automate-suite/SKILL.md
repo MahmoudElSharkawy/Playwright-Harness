@@ -22,7 +22,6 @@ Source → refinement → observed execution → durable POM generation
   knowledge are distinct. Never weaken assertions or silently promote runtime candidates.
 - Browser mechanics use the official Playwright CLI skill through the existing browser
   ownership/evidence boundary. API/DB operations use the shared deterministic runtimes.
-  AgenTeX is an architectural reference, not a required host or runtime.
 - Follow configured environment capabilities. Catalogs, deterministic helpers and fixed
   inline parameterized definitions are peers. Imported team libraries are derive-only.
   Ordinary permitted mutations need no repeated harness approval.

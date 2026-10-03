@@ -38,6 +38,8 @@ jobs:
         run: node scripts/ci/installed.mjs "${{ runner.temp }}/harness-installed"
       - name: Prove native browser behavior from the installed archive
         run: node scripts/ci/native.mjs "${{ runner.temp }}/harness-installed" browser
+      - name: Prove manual execution and recovery from the installed archive
+        run: node scripts/ci/native.mjs "${{ runner.temp }}/harness-installed" execute
       - name: Prove API, SQL Server, PostgreSQL and bounded execution on Linux
         if: runner.os == 'Linux'
         run: node scripts/ci/native.mjs "${{ runner.temp }}/harness-installed" parallel
@@ -54,6 +56,7 @@ jobs:
           path: |
             ${{ runner.temp }}/harness-installed/installed.json
             ${{ runner.temp }}/harness-installed/native-browser.json
+            ${{ runner.temp }}/harness-installed/native-execute.json
             ${{ runner.temp }}/harness-installed/native-parallel.json
             ${{ runner.temp }}/harness-timeout/timeout-proof.json
             ${{ runner.temp }}/harness-consumers/consumer-flow.json
