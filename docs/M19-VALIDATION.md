@@ -35,6 +35,11 @@ The unchanged Windows rerun stopped at two unit-test failures; its receipt has
 counts but no failed locations. Diagnostic-only changes now retain known test
 file/line locations and finite retry stage/status facts for the next run. All
 26 CI-helper tests pass, including bounded serialization of an ordinary error.
+Independent review approved those diagnostics, pushed as `a1257b2`. Validation
+of that commit is still pending: GitHub Actions API requests returned HTTP 503
+or stalled, and a new run could not be confirmed. The earlier Windows failures
+remain unresolved; neither a passing local retry nor the diagnostic change
+closes that gate.
 
 The live checks cover login reuse, secret handling, mixed checked/observed
 conditions, historical FAIL preservation, asynchronous evidence binding,
