@@ -1,14 +1,31 @@
 // CI evidence checks only. These never compute a scenario verdict.
 import {completeBrowserChecks, requiredBrowserChecks} from '../probes/browser-checks.mjs';
+import {completeExecuteChecks, requiredExecuteChecks, retryProbeDiagnostic} from '../probes/execute-checks.mjs';
 
 export function browserDiagnostics(assessment) {
   return Array.isArray(assessment?.checks) ? assessment.checks
     .filter(check => requiredBrowserChecks.includes(check?.name) && ['PASS', 'FAIL'].includes(check.status))
     .map(({name, status}) => ({name, status})) : [];
 }
+export function executeDiagnostics(assessment) {
+  return Array.isArray(assessment?.checks) ? assessment.checks.filter(check => requiredExecuteChecks.includes(check?.name) && ['PASS', 'FAIL'].includes(check.status)).map(check => {
+    const result = {name: check.name, status: check.status}, diagnostic = retryProbeDiagnostic(check.diagnostic);
+    if (check.name === 'read-retry' && check.status === 'FAIL' && diagnostic) result.diagnostic = diagnostic;
+    return result;
+  }) : [];
+}
+/** Only known source filenames and numeric locations leave the private TAP log. */
+export function testFailureLocations(output, files) {
+  const locations = new Map();
+  for (const match of output.matchAll(/^\s+location: ['"]([^\r\n]+):(\d+):(\d+)['"]\r?$/gm)) {
+    const file = match[1].split(/[\\/]/).at(-1), line = Number(match[2]), column = Number(match[3]);
+    if (files.includes(file) && Number.isSafeInteger(line) && line > 0 && Number.isSafeInteger(column) && column > 0) locations.set(`${file}:${line}:${column}`, {file, line, column});
+  }
+  return [...locations.values()].slice(0, 100);
+}
 export function completeNativeProof(kind, proof, recovery, assessment, cleanup) {
   return proof?.status === 'PASS' && recovery?.complete === true && assessment?.status === 'PASS' &&
-    (kind === 'browser' ? completeBrowserChecks(assessment.checks) : kind === 'parallel' &&
+    (kind === 'browser' ? completeBrowserChecks(assessment.checks) : kind === 'execute' ? completeExecuteChecks(assessment.checks) && assessment.fixtureServersClosed === true && ['end', 'per-step'].every(mode => Number.isFinite(assessment.diagnosticsLatencyMs?.[mode]) && assessment.diagnosticsLatencyMs[mode] >= 0) : kind === 'parallel' &&
       assessment.comparison?.status === 'PASS' && Array.isArray(assessment.counts) && assessment.counts.length === 2 &&
       assessment.counts.every(count => count.scenarios === 13 && count.assertions > 0 && count.evidence > 0) &&
       cleanup?.ownedDatabasesRemoved === true && cleanup?.fixtureServersClosed === true);

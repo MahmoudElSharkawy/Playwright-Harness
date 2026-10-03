@@ -48,6 +48,7 @@ utils; nothing reaches upward or skips a layer (a spec never calls `page.locator
 
 | Working on | Specialist skill |
 |---|---|
+| Executing ADO manual cases interactively, with reports and optional bug/result delivery | [execute-test](../execute-test/SKILL.md) |
 | A page class (new page, header/footer/skeleton area, refactor) | [page-classes](../page-classes/SKILL.md) |
 | Finding, naming, or repairing an element locator | [element-locators](../element-locators/SKILL.md) |
 | A spec file's skeleton — describe block, hooks, wiring | [test-classes](../test-classes/SKILL.md) |

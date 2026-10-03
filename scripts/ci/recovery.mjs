@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import {readFile, readdir, realpath, lstat, rm} from 'node:fs/promises';
 import {join} from 'node:path';
 import {within} from '../lib/skill-roots.mjs';
-import {processCall, stopTree, treeGone} from '../lib/browser/processes.mjs';
-import {nativeCliInstallation} from '../lib/browser/native-cli.mjs';
+import {processCall} from '../lib/browser/processes.mjs';
+import {recoverOwnedRun} from '../lib/browser/recovery.mjs';
 
 const uuid = '[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}';
 const absent = reply => reply.exitCode !== 0 && !reply.kind && /No such (?:object|container)/i.test(reply.stderr);
@@ -50,23 +50,7 @@ export async function recoverNativeProof(packageRoot, consumer) {
         await plain(run, 'directory');
         const workRoot = join(run, 'protected');
         try {await plain(workRoot, 'directory');} catch (error) {if (error.code === 'ENOENT') continue; throw error;}
-        const file = join(workRoot, 'native-ownership.json'); assert((await plain(file, 'file')).size <= 1024 * 1024);
-        const record = JSON.parse(await readFile(file, 'utf8'));
-        assert(record.version === 1 && /^harness_[a-f0-9]{32}$/.test(record.session) && ['prepared', 'opening', 'opened'].includes(record.stage) && Array.isArray(record.trees));
-        for (const tree of record.trees) assert(Array.isArray(tree) && tree.length > 0 && tree.every(item => Number.isSafeInteger(item.pid) && item.pid > 0 && typeof item.identity === 'string' && /^\d+$/.test(item.identity)));
-        const cli = args => processCall(process.execPath, [nativeCliInstallation(packageRoot).executable, '--json', `-s=${record.session}`, ...args],
-          {cwd: workRoot, timeoutMs: 30000, env: {...process.env, CI: '1', NO_UPDATE_NOTIFIER: '1'}});
-        const closed = await cli(['close']); assert.equal(closed.exitCode, 0); const close = JSON.parse(closed.stdout);
-        assert(close.session === record.session && ['closed', 'not-open'].includes(close.status));
-        // A lost open response is recoverable through a live named-session close. If
-        // neither a live close nor process identities exist, preserve uncertainty.
-        assert(record.stage === 'prepared' || record.trees.length || close.status === 'closed', 'Open effect remains uncertain.');
-        for (const tree of record.trees) {if (!await treeGone(tree)) await stopTree(tree, Date.now() + 30000); assert(await treeGone(tree));}
-        const deleted = await cli(['delete-data']); assert.equal(deleted.exitCode, 0);
-        const listed = await cli(['list']); assert.equal(listed.exitCode, 0);
-        assert(Array.isArray(JSON.parse(listed.stdout).browsers) && !JSON.parse(listed.stdout).browsers.some(item => item.name === record.session));
-        assert(within(consumer, await realpath(workRoot)) && await realpath(workRoot) === workRoot); await plain(workRoot, 'directory');
-        await rm(workRoot, {recursive: true}); result.browsers++;
+        const recovery = await recoverOwnedRun(packageRoot, consumer, run); assert(recovery.complete, 'Browser ownership recovery did not complete.'); result.browsers++;
       } catch {fail('BROWSER_RECOVERY');}
     }
   } catch (error) {if (error.code !== 'ENOENT') fail('BROWSER_JOURNAL');}

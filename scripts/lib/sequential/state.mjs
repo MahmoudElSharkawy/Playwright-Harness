@@ -1,7 +1,7 @@
 // Shared only because the browser/API/database runtimes now execute one scenario.
 import {mkdirSync, writeFileSync, lstatSync, realpathSync, existsSync} from 'node:fs';
 import {dirname, basename, join} from 'node:path';
-import {assessRun} from '../execution-core/index.mjs';
+import {assessRun, checkExecutionWindow} from '../execution-core/index.mjs';
 import {requireRun} from '../execution-core/inputs.mjs';
 import {data, requireThat, typedValue, fingerprint} from '../execution-core/data.mjs';
 import {resolveSkillRoots, realFuture} from '../skill-roots.mjs';
@@ -28,6 +28,27 @@ export function requireScenarioState(state, run, roots) {
   const checked = resolveSkillRoots(roots);
   for (const name of ['packageRoot', 'projectRoot', 'runRoot']) requireThat(physical(checked[name]) === physical(state.roots[name]), 'Shared execution roots differ.');
   return state;
+}
+
+/** Business cleanup must leave the configured reserve for owned runtime shutdown. */
+export function checkWorkWindow(state, {phase, signal, now = Date.now()} = {}) {
+  const window = checkExecutionWindow(state.run, {phase, signal, now, cleanupStartedAt: state.cleanupStartedAt});
+  if (!['CLEANUP', 'RESTORE'].includes(phase) || !state.cleanupReserveMs) return window;
+  const remainingMs = Math.max(0, window.remainingMs - state.cleanupReserveMs);
+  return {...window, remainingMs, allowed: window.allowed && remainingMs > 0, reason: remainingMs ? window.reason : 'DEADLINE_EXCEEDED'};
+}
+
+export function observationBudgetReached(state, pendingAttempt) {
+  if (state.observationBudgetExceeded) return true;
+  let nodes = 0;
+  const serialized = JSON.stringify({...state.observations, ...(pendingAttempt ? {pendingAttempt} : {})}, (key, value) => {nodes++; return value;});
+  return Buffer.byteLength(serialized) >= 0.7 * 1024 * 1024 || nodes >= 0.7 * 20000;
+}
+export function requireObservationCapacity(state, pendingAttempt) {
+  if (state.boundedObservations && observationBudgetReached(state, pendingAttempt)) {
+    state.observationBudgetExceeded = true;
+    throw Object.assign(new Error('OBSERVATION_LIMIT: finish the scenario.'), {code: 'OBSERVATION_LIMIT'});
+  }
 }
 
 export function initializeStorage(state) {

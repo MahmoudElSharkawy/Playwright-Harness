@@ -29,7 +29,7 @@ values, sometimes prose-annotated. Consumption paths:
 | automate-suite REFINE | converting verification/seed intents to `db:` steps | proposed `integration/*_db.json` catalog entries (user-confirmed before EXPLORE) |
 | automate-suite GENERATE / service-classes | authoring `Dbs<Domain>` classes | `readonly <operation>_query` fields (`@param`-parameterized) — service-classes practice 3 |
 | test-data reusability ladder (step 2) | a rerun fails on consumed/stale data | the seed/reset/cleanup SQL that makes the case re-runnable |
-| AgenTeX execution (`db:` steps) | running refined specs | only ever cataloged `integration/*_db.json` entries — the executor never reads this folder or runs its own SQL |
+| Manual execution / native DB runtime | frozen operation definitions | derive one parameterized statement into defineDatabaseOperation; source samples are never replayed |
 
 ## Adaptation rules (library snippet → executable query)
 
@@ -50,7 +50,7 @@ values, sometimes prose-annotated. Consumption paths:
    recipes are sanctioned for API/DB data preparation through `Dbs<Domain>` classes
    when no API path exists — iron law 8's precedence still applies, and the
    automate-suite triage still gates anything hard-to-reverse. DDL (DROP/TRUNCATE/ALTER)
-   is never derived; the AgenTeX executor refuses it even if cataloged.
+   is never derived; the native runtime refuses unsupported capabilities.
 6. **Connection details are environment data, not query data.** Server/database
    coordinates appearing in snippets (e.g. `db-host\INSTANCE,1433`, database
    `AppDbQC`) belong in the named catalog `src/config/databases.ts` —

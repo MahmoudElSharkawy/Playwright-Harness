@@ -87,6 +87,8 @@ export function runCheck({projectRoot, packageRoot, addEnvKeys = false}) {
       if (!selected.apiTargets.length && !selected.databaseTargets.length && !(selected.browserTargets ?? []).length) feature('API and database targets', WAITING, `environment ${project.defaultEnvironment} has no targets yet`);
       else if (missing.size || malformed.length) feature('API and database targets', WAITING, [missing.size && `missing secrets: ${[...missing].join(', ')}`, malformed.length && `not {"user","password"} JSON: ${malformed.join(', ')}`].filter(Boolean).join('; '));
       else feature('API and database targets', READY);
+      const families = [['API', selected.apiTargets.length], ['DB', selected.databaseTargets.length], ['browser', (selected.browserTargets ?? []).length]].map(([family, count]) => `${family}: ${count ? 'configured' : 'not configured'}`);
+      feature('manual test execution', OPTIONAL, `${families.join('; ')}. execute next checks only the selected scenario's targets and secret references.`);
     } catch (error) {errors.push(`.harness configuration is invalid: ${error.message}`);}
   }
   if (!existsSync(consumerPath(roots, '.harness/integrations.json'))) feature('Azure DevOps', OPTIONAL);

@@ -4,6 +4,13 @@
   "publicationAuthorized": false,
   "sources": [
     {
+      "scope": "M19 manual execution",
+      "status": "Project-authored live host, condition ledger, reports, ADO delivery and fixtures, reusing existing runtimes. Official Microsoft REST contracts informed metadata, validateOnly and paging. No third-party implementation copied or new dependency.",
+      "targetLicense": "MIT",
+      "thirdPartyCodeCopied": false,
+      "codeCopied": false
+    },
+    {
       "scope": "ADO story retrieval follow-up",
       "status": "Project-authored read-only story retrieval reusing the M12 transport, ownership checks and suite case reader. Official Microsoft link-type and work-item type category documentation informed relation handling; no third-party implementation copied and no new dependency.",
       "targetLicense": "MIT",

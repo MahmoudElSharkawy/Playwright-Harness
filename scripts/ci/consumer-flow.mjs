@@ -198,7 +198,7 @@ flow('C7', 'A rollback across the old layout keeps project data and writes nothi
   const root = project('c7-old-layout', {'package.json': manifestText('old-layout')});
   assert.equal(run([npm, 'install'], root).status, 'PASS', 'Creating the lockfile failed.');
   // The old layout: copied .claude/skills folders (the 3.0.x redirects) holding team data.
-  const legacy = readdirSync(join(packageRoot, '.claude/skills'), {withFileTypes: true}).filter(entry => entry.isDirectory() && entry.name !== 'harness-setup').map(entry => entry.name);
+  const legacy = readdirSync(join(packageRoot, '.claude/skills'), {withFileTypes: true}).filter(entry => entry.isDirectory() && !['harness-setup', 'execute-test'].includes(entry.name)).map(entry => entry.name);
   for (const skill of legacy) cpSync(join(packageRoot, '.claude/skills', skill), join(root, '.claude/skills', skill), {recursive: true});
   const data = {'.claude/skills/framework-review/class-ledger.md': '# Class ledger\n\n- Synthetic team finding: locator suffixes.\n',
     '.claude/skills/automate-suite/references/prerequisite-dictionary.md': '# Prerequisites\n\n- A synthetic approved customer exists before quoting.\n',

@@ -4,6 +4,23 @@
 
 - `docs/RELEASING.md`: running the consumer flows locally is optional when the release pull request's `Harness validation` run passes, because CI runs them on Windows and Linux with npm 11 and npm 12.
 
+## 3.2.0 — M19 manual execution
+
+Execute captured ADO manual cases interactively through the native browser, API and DB runtimes, with condition-bound verdicts, verified reports and recoverable ADO delivery.
+
+### Upgrade actions
+
+- Re-run setup from the 3.2.0 archive in each project.
+- Upgrade teammates before adding browser startUrl/users or ado.bugs configuration keys; earlier validators reject them.
+- For optional bug/result delivery, configure a PAT with Work Items and Test Management read/write scopes. Previews remain the default.
+
+### Changes
+
+- Add the execute-test skill and execute CLI, captured revisions/iterations, a sequential live host, cleanup receipts, login reuse, diagnostics and dashboard/defect reporting.
+- Reassess evidence before delivery, retain historical valid FAILs and let explicit valid reruns replace integrity-invalid runs while preserving audit history.
+- Flush create identities in ADO acknowledgements and recover filings/publications through stable tags/names. No new runtime dependencies.
+- Enforce exact subject identity, visual evidence, end-step artifact integrity and bounded provenance; reserve cleanup time across browser/API/DB work. Normalize ADO classification paths, filter point maps after omissions, retain revision flags and stabilize parameterized diagnostic fingerprints.
+
 ## 3.1.2 — Upgrade actions only on update
 
 A first setup now ends with its readiness and next steps, without upgrade actions that

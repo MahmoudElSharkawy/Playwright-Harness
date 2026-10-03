@@ -127,5 +127,8 @@
   ".claude/skills/validation-methods/references/playbook.md": [
     "1a5e1167c33de82ca11673710a1b251885d994b46f5d7adce97e327be3d444ee",
     "58cf28efbf4c599e73b2958cab5b1fc9ed3d610a6e2c92a88a65a7404bff6328"
+  ],
+  ".claude/skills/execute-test/SKILL.md": [
+    "839abbf42f3fe623a3857120d920f9708908596f212e92375efa05e10295285b"
   ]
 }

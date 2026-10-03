@@ -13,6 +13,7 @@ const SCRIPTS = {
   'fetch-suite': 'fetch-ado-suite.mjs', 'fetch-story': 'fetch-ado-story.mjs', 'publish-results': 'publish-ado-results.mjs',
   'tag-workitem': 'tag-ado-workitem.mjs', 'relink-story': 'relink-ado-story.mjs', pr: 'ado-pr.mjs', 'load-source': 'load-local-source.mjs',
   generate: 'generate-tests.mjs', 'render-results': 'render-results.mjs', 'generate-allure': 'generate-allure.mjs',
+  execute: 'execute-test.mjs',
 };
 const USAGE = `pom-harness ${VERSION}
 

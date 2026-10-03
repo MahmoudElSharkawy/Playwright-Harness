@@ -8,10 +8,12 @@ export const stages = Object.freeze([['setup', 'SETUP'], ['exercise', 'EXERCISE'
 /** Shared preflight lets a batch reject invalid jobs before any scenario starts. */
 export function prepareSequential(run, options = {}, callbacks = {}) {
   requireRun(run); requireThat(run.inputs.scenarios.length === 1, 'Sequential execution needs one scenario.');
-  keys(options, ['signal', 'api', 'database', 'browser', 'explorations'], 'sequential options');
+  keys(options, ['signal', 'api', 'database', 'browser', 'explorations', 'cleanupReserveMs', 'boundedObservations'], 'sequential options');
   keys(callbacks, stages.map(([name]) => name), 'phase callbacks');
   for (const callback of Object.values(callbacks)) requireThat(typeof callback === 'function', 'Phase callbacks must be functions.');
   requireThat(options.signal === undefined || options.signal instanceof AbortSignal, 'Cancellation needs an AbortSignal.');
+  requireThat(options.cleanupReserveMs === undefined || integer(options.cleanupReserveMs, 0, run.inputs.limits.cleanupTimeoutMs - 1), 'Cleanup reserve must fit inside its window.');
+  requireThat(options.boundedObservations === undefined || typeof options.boundedObservations === 'boolean', 'Bounded observations must be a boolean.');
   const copied = {...options};
   for (const family of ['api', 'database']) if (options[family] !== undefined) {
     keys(options[family], ['resolveCredential', 'resolveSensitive', 'storeSensitive'], `${family} options`);
@@ -19,7 +21,7 @@ export function prepareSequential(run, options = {}, callbacks = {}) {
     copied[family] = Object.freeze({...options[family]});
   }
   if (options.browser !== undefined) {
-    keys(options.browser, ['target', 'storageState', 'nativeTimeoutMs', 'commandTimeoutMs'], 'browser options');
+    keys(options.browser, ['target', 'storageState', 'secrets', 'nativeTimeoutMs', 'commandTimeoutMs'], 'browser options');
     id(options.browser.target);
     for (const [name, maximum] of [['nativeTimeoutMs', 60000], ['commandTimeoutMs', 120000]]) requireThat(options.browser[name] === undefined || integer(options.browser[name], 1, maximum), 'Browser timeouts must be positive and bounded.');
     requireThat(options.browser.storageState === undefined || typeof options.browser.storageState === 'string', 'Browser state must be a file reference.');

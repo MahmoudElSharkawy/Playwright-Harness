@@ -29,11 +29,11 @@ ctrf/
 # playwright-cli transient scratch (snapshots/console dumps) — recreated on every browser run
 .playwright-cli/
 
-# AgenTeX run artifacts (reports, screenshots, logs per run)
+# Legacy manual execution artifacts (reports, screenshots, logs per run)
 /executions/
 # Imported manual cases can contain private source content.
 /test/
-# AgenTeX — never commit these: they hold live credentials
+# Legacy authentication storage — never commit live credentials
 test/.auth/
 # and this one is only a cache — ui-check re-fetches these design baselines
 test/.ui-baselines/

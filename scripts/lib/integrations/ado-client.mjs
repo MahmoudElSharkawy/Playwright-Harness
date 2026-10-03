@@ -21,10 +21,11 @@ export function createAdoClient({configuration, roots, resolveCredential, fetchI
     requireValue(url.href.startsWith(scopedBase) && !decoded.includes('..') && !url.username && !url.password, 'ADO route escapes the configured project.');
     return url.href;
   }
-  async function request(route, {method = 'GET', body, patch = false, beforeDispatch, projectLookup = false} = {}) {
+  async function request(route, {method = 'GET', body, patch = false, raw = false, contentType, beforeDispatch, projectLookup = false} = {}) {
     requireValue(!projectLookup || method === 'GET', 'Project identity lookup is read-only.');
-    const url = destination(route, projectLookup), serialized = body === undefined ? undefined : JSON.stringify(body);
-    requireValue(serialized === undefined || Buffer.byteLength(serialized) <= config.maxResponseBytes, 'ADO request exceeds configured bound.');
+    requireValue(!raw || Buffer.isBuffer(body) && contentType === 'application/octet-stream', 'Raw ADO bodies require bounded attachment bytes.');
+    const url = destination(route, projectLookup), serialized = body === undefined ? undefined : raw ? body : JSON.stringify(body);
+    requireValue(serialized === undefined || Buffer.byteLength(serialized) <= (raw ? config.bugs?.maxAttachmentBytes ?? 2 * 1024 * 1024 : config.maxResponseBytes), 'ADO request exceeds configured bound.');
     let credential; try { credential = await resolveCredential(); } catch { throw new AdoError('credential-unresolved'); }
     requireValue(typeof credential === 'string' && credential.length > 0 && !/[\r\n]/.test(credential), 'ADO credential reference is unresolved.');
     const controller = new AbortController(), timer = setTimeout(() => controller.abort(), config.timeoutMs);
@@ -32,7 +33,7 @@ export function createAdoClient({configuration, roots, resolveCredential, fetchI
     try {
       beforeDispatch?.();
       response = await fetchImpl(url, {method, redirect: 'manual', signal: controller.signal,
-        headers: {Authorization: `Basic ${Buffer.from(`:${credential}`).toString('base64')}`, Accept: 'application/json', 'Content-Type': patch ? 'application/json-patch+json' : 'application/json'}, body: serialized});
+        headers: {Authorization: `Basic ${Buffer.from(`:${credential}`).toString('base64')}`, Accept: 'application/json', 'Content-Type': raw ? contentType : patch ? 'application/json-patch+json' : 'application/json'}, body: serialized});
       if (response.status === 203 || [401, 403].includes(response.status)) throw new AdoError('authentication-rejected', response.status);
       if (response.status >= 300 && response.status < 400) throw new AdoError('redirect-refused', response.status);
       if (!response.ok) throw new AdoError('request-rejected', response.status);
@@ -82,7 +83,7 @@ export function createAdoClient({configuration, roots, resolveCredential, fetchI
   }
   function delivery(kind, execute, sourceFingerprint) {
     requireValue(execute === true, 'External ADO writes require explicit execution authorization.');
-    requireValue(['outcomes', 'automation', 'tags', 'relations', 'pull-request'].includes(kind), 'Unknown ADO delivery kind.');
+    requireValue(['outcomes', 'automation', 'tags', 'relations', 'pull-request', 'bugs'].includes(kind), 'Unknown ADO delivery kind.');
     const id = randomUUID(), receipt = `.harness/state/integrations/${id}.jsonl`;
     const file = consumerPath(roots, receipt); mkdirSync(dirname(file), {recursive: true});
     // Recheck after mkdir and use exclusive creation; each event is flushed before dispatch.
@@ -95,14 +96,17 @@ export function createAdoClient({configuration, roots, resolveCredential, fetchI
     record({event: 'authorized', kind, destinationFingerprint: digest(base), ...(sourceFingerprint ? {sourceFingerprint} : {})});
     let stopped = false;
     return Object.freeze({id, receipt,
-      async write(operation, route, body, {method = 'PATCH', patch = false} = {}) {
+      async write(operation, route, body, {method = 'PATCH', patch = false, raw = false, contentType, onIdentity} = {}) {
         requireValue(!stopped && ['PATCH', 'POST'].includes(method), 'ADO delivery is stopped or method unsupported.');
         requireValue(/^[a-z-]+$/.test(operation), 'Invalid ADO operation label.');
-        destination(route); const requestFingerprint = digest(JSON.stringify({route, method, body})); let dispatched = false;
+        destination(route); const requestFingerprint = digest(JSON.stringify({route, method, body: raw ? digest(body) : body})); let dispatched = false;
         record({event: 'prepared', operation, requestFingerprint});
         try {
-          const result = await request(route, {method, body, patch, beforeDispatch() {record({event: 'dispatching', operation, requestFingerprint, effect: 'uncertain'}); dispatched = true;}});
-          record({event: 'acknowledged', operation, requestFingerprint, effect: 'confirmed'}); return result.data;
+          const result = await request(route, {method, body, patch, raw, contentType, beforeDispatch() {record({event: 'dispatching', operation, requestFingerprint, effect: 'uncertain'}); dispatched = true;}});
+          const key = {'create-run': 'runId', 'create-bug': 'workItemId', 'upload-attachment': 'attachmentId', 'create-pull-request': 'pullRequestId'}[operation], value = key === 'pullRequestId' ? result.data.pullRequestId : result.data.id;
+          const identity = key && ((Number.isSafeInteger(value) && value > 0) || adoGuid(value)) ? {[key]: value} : undefined;
+          record({event: 'acknowledged', operation, requestFingerprint, effect: 'confirmed', ...(identity ? {identity} : {})});
+          if (identity) await onIdentity?.(identity); return result.data;
         } catch (error) {
           stopped = true;
           record({event: 'incomplete', operation, requestFingerprint, effect: dispatched ? 'uncertain' : 'not-executed', code: error instanceof AdoError ? error.code : 'local-failure'});
@@ -121,8 +125,17 @@ export function createAdoClient({configuration, roots, resolveCredential, fetchI
       incomplete() { stopped = true; record({event: 'verification-incomplete'}); return new Error(`ADO verification incomplete; inspect receipt ${receipt}. Reconcile before another delivery.`); }
     });
   }
+  const cache = new Map();
+  const cached = (key, action) => {if (!cache.has(key)) cache.set(key, Promise.resolve().then(action)); return cache.get(key);};
   return Object.freeze({configuration: config, read, list, delivery, projectIdentity, requireWorkItemProject,
+    cachedRead: route => cached(`read:${route}`, () => read(route)),
+    async wiql(query) {
+      requireValue(typeof query === 'string' && query.length <= 16000 && /^SELECT\s+/i.test(query) && !/;|\b(?:INSERT|UPDATE|DELETE|DROP)\b/i.test(query), 'WIQL must be a bounded read-only SELECT.');
+      return (await request('wit/wiql?api-version=7.1', {method: 'POST', body: {query}})).data;
+    },
+    validateWorkItem(type, body) {requireValue(typeof type === 'string' && type.trim() && type.length <= 150 && !/[\/\\?#\r\n]/.test(type), 'Invalid bug work-item type.'); return cached(`validate:${type}:${digest(JSON.stringify(body))}`, async () => (await request(`wit/workitems/$${encodeURIComponent(type)}?validateOnly=true&api-version=7.1`, {method: 'POST', body, patch: true})).data);},
+    upload(delivery, bytes, name, options = {}) {requireValue(typeof name === 'string' && /^[A-Za-z0-9_.-]{1,100}$/.test(name), 'Invalid attachment name.'); return delivery.write('upload-attachment', `wit/attachments?fileName=${encodeURIComponent(name)}&api-version=7.1`, bytes, {method: 'POST', raw: true, contentType: 'application/octet-stream', ...options});},
     // This POST has a documented read-only contract; callers cannot select a mutation route.
-    async workItems(ids, fields) { return (await request('wit/workitemsbatch?api-version=7.1', {method: 'POST', body: {ids, fields, errorPolicy: 'fail'}})).data; }
+    async workItems(ids, fields) {requireValue(Array.isArray(ids) && ids.length > 0 && ids.length <= 200, 'ADO work-item batches require 1–200 IDs.'); return (await request('wit/workitemsbatch?api-version=7.1', {method: 'POST', body: {ids, fields, errorPolicy: 'fail'}})).data;}
   });
 }
