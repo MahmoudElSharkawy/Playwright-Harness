@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased — optional local consumer flows
+
+- `docs/RELEASING.md`: running the consumer flows locally is optional when the release pull request's `Harness validation` run passes, because CI runs them on Windows and Linux with npm 11 and npm 12.
+
 ## 3.1.2 — Upgrade actions only on update
 
 A first setup now ends with its readiness and next steps, without upgrade actions that

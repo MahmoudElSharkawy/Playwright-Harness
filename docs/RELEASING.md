@@ -26,6 +26,14 @@ authorization. A green workflow is not that authorization ([M17](M17-CI.md#accep
 ```sh
 npm run check:ci
 npm run test:installed -- <new external folder>
+```
+
+The consumer flows are optional locally. The release pull request's `Harness validation`
+run executes all of them on Windows and Linux with npm 11 and npm 12; when it passes, a
+local run only repeats them. Run them locally when CI is unavailable, or to check a
+change to setup, adoption or packaging before pushing:
+
+```sh
 node scripts/ci/consumer-flow.mjs <new external folder>
 ```
 
@@ -34,7 +42,7 @@ project without Playwright and an existing framework. They then rerun setup, clo
 CRLF, update to the next version, run two versions side by side, roll back across the
 old layout, stop on a preflight conflict, recover from a failure after install, check a
 CI pipeline, and adopt a folder under a parent `package.json`. They need registry access
-and skip browser downloads.
+and about 2 GB of free disk space, and skip browser downloads.
 
 ## 3. Pre-publication checklist
 
