@@ -6,7 +6,7 @@ import {join, resolve} from 'node:path';
 import {command, hash} from './process.mjs';
 import {within} from '../lib/skill-roots.mjs';
 import {snapshotInstalledPackage} from '../lib/host-proof-files.mjs';
-import {completeChecks, completeNativeProof, browserDiagnostics} from './results.mjs';
+import {completeChecks, completeNativeProof, browserDiagnostics, executeDiagnostics} from './results.mjs';
 import {nativeProcess} from './native-process.mjs';
 import {recoverNativeProof} from './recovery.mjs';
 import {nativeCliInstallation} from '../lib/browser/native-cli.mjs';
@@ -37,7 +37,7 @@ const complete = completeNativeProof(kind, proof, recovery, assessment, cleanup)
 const summary = {version: 1, kind, status: complete && packageUnchanged ? 'PASS' : 'INCOMPLETE', platform: process.platform, node: process.version,
   archive: installed.archive, packageUnchanged, browserInstallation: browser.status, ...(recovery ? {recovery} : {}),
   process: proof ? {status: proof.status, exitCode: proof.exitCode, diagnostic: proof.diagnostic, log: `${kind}-native.log`, sha256: proof.sha256} : {status: 'UNPERFORMED'},
-  ...(kind === 'browser' ? {checks: browserDiagnostics(assessment)} : kind === 'execute' ? {checks: assessment?.checks?.map(({name, status}) => ({name, status})), diagnosticsLatencyMs: assessment?.diagnosticsLatencyMs} : {}),
+  ...(kind === 'browser' ? {checks: browserDiagnostics(assessment)} : kind === 'execute' ? {checks: executeDiagnostics(assessment), diagnosticsLatencyMs: assessment?.diagnosticsLatencyMs} : {}),
   ...(complete ? {...(kind === 'parallel' ? {checks: assessment.counts} : {}),
     assessmentSha256: hash(readFileSync(join(consumer, kind === 'browser' ? 'browser-proof.json' : kind === 'execute' ? 'execute-proof.json' : 'assessment.json'))), ...(cleanup ? {cleanup, databases: assessment.databases} : {})} : {})};
 writeFileSync(join(workspace, `native-${kind}.json`), JSON.stringify(summary, null, 2), {flag: 'wx', mode: 0o600});

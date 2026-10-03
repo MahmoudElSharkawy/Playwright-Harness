@@ -19,7 +19,7 @@ import {collectExecution, writeExecutionReport} from '../lib/execute/report.mjs'
 import {lockStatus} from '../lib/execute/lock.mjs';
 import {delay} from '../lib/execute/mailbox.mjs';
 import {processInventory} from '../lib/browser/processes.mjs';
-import {completeExecuteChecks} from './execute-checks.mjs';
+import {completeExecuteChecks, retryProbeDiagnostic} from './execute-checks.mjs';
 import {proofSignal} from './cancellation.mjs';
 
 assert.equal(process.argv.length, 3, 'Use one new external consumer directory.');
@@ -85,9 +85,9 @@ const reference = (snapshot, role, name) => {
 async function click(f, name) {const seen = await look(f); return doCommand(f, 'native', 'click', reference(seen.snapshot, 'button', name));}
 async function checkPage(f, key, index = 1, wait) {return doCommand(f, 'check', key, '--condition', String(index), '--read', 'page', ...(wait ? ['--wait', String(wait)] : []));}
 async function ending(f, effect = 'none') {return doCommand(f, 'end-step', '--effect', effect);}
-async function awaitStatus(f, test, timeout = 90000) {
+async function awaitStatus(f, test, timeout = 90000, observe = () => {}) {
   const deadline = Date.now() + timeout;
-  while (Date.now() < deadline) {const result = await executeMain(roots, ['status', f.executionId]); if (test(result.host)) return result.host; await delay(100);}
+  while (Date.now() < deadline) {const result = await executeMain(roots, ['status', f.executionId]); observe(result.host); if (test(result.host)) return result.host; await delay(100);}
   throw new Error('Host did not reach its expected state.');
 }
 async function finish(f, expected = 'PASS') {
@@ -96,8 +96,10 @@ async function finish(f, expected = 'PASS') {
   assert(view.runs.filter(row => row.state === 'ASSESSED').every(row => row.result.scenarios[0].requiredLifecycleComplete)); return view;
 }
 async function check(name, action) {
-  try {proofSignal.throwIfAborted(); const facts = await action(); checks.push({name, status: 'PASS', facts});}
-  catch (error) {checks.push({name, status: 'FAIL', message: error.message});}
+  let diagnostic = {};
+  const mark = (stage, facts = {}) => {diagnostic = {stage, ...facts};};
+  try {proofSignal.throwIfAborted(); const facts = await action(mark); checks.push({name, status: 'PASS', facts});}
+  catch (error) {const facts = retryProbeDiagnostic({...diagnostic, actual: error.actual}); checks.push({name, status: 'FAIL', message: error.message, ...(facts ? {diagnostic: facts} : {})});}
   unavailable = false; console.log(JSON.stringify(checks.at(-1)));
   const owner = await lockStatus(roots);
   if (owner) try {await executeMain(roots, ['stop', owner.executionId]);} catch { /* Recovery below proves ownership before stopping leftovers. */ }
@@ -177,11 +179,17 @@ try {
     }
     return samples;
   });
-  await check('read-retry', async () => {
+  await check('read-retry', async mark => {
+    mark('start');
     const f = fixture(['"Execution fixture" is present.']); await next(f); const begun = await doCommand(f, 'begin-step', 's001'); unavailable = true;
-    const failed = await executeMain(roots, ['do', f.executionId, 'native', 'goto', origin]); assert.equal(failed.status, 'ERROR'); unavailable = false;
-    await ending(f); await awaitStatus(f, state => state.attempt === 2); await doCommand(f, 'native', 'goto', origin); await checkPage(f, begun.contracts[0].key); await ending(f);
-    const view = await finish(f), attempts = view.runs.at(-1).result.scenarios[0].attempts.filter(attempt => attempt.identity.invocationId === 's001'); assert.equal(attempts.length, 2); return {attempts: 2, stability: view.runs.at(-1).result.stability};
+    mark('first-navigation'); const failed = await executeMain(roots, ['do', f.executionId, 'native', 'goto', origin]); assert.equal(failed.status, 'ERROR'); unavailable = false;
+    mark('end-first-attempt'); await ending(f);
+    mark('await-retry'); await awaitStatus(f, state => state.attempt === 2, 90000, state => mark('await-retry', {hostState: state?.state, attempt: state?.attempt}));
+    mark('retry-navigation'); await doCommand(f, 'native', 'goto', origin);
+    mark('retry-check'); await checkPage(f, begun.contracts[0].key);
+    mark('end-retry'); await ending(f);
+    mark('assessment'); const view = await finish(f), attempts = view.runs.at(-1).result.scenarios[0].attempts.filter(attempt => attempt.identity.invocationId === 's001');
+    mark('attempt-count'); assert.equal(attempts.length, 2); return {attempts: 2, stability: view.runs.at(-1).result.stability};
   });
   await check('mutation-reconciliation', async () => {
     const f = fixture(['"Execution fixture" is present.'], {mutate: refinement => {const step = refinement.scenarios[0].steps[0]; step.capability = 'mutations'; delete step.readOnlyContract;}});

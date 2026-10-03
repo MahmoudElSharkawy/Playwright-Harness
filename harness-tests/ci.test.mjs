@@ -5,8 +5,10 @@ import {tmpdir} from 'node:os';
 import {join, dirname} from 'node:path';
 import {validateInstalledGraph, clearedOverrides} from '../scripts/ci/distribution.mjs';
 import {checkContracts} from '../scripts/ci/contracts.mjs';
-import {testCounts, completeTests, completeChecks, requiredChecks, completeNativeProof, browserDiagnostics} from '../scripts/ci/results.mjs';
+import {testCounts, completeTests, completeChecks, requiredChecks, completeNativeProof, browserDiagnostics, executeDiagnostics, testFailureLocations} from '../scripts/ci/results.mjs';
 import {requiredBrowserChecks} from '../scripts/probes/browser-checks.mjs';
+import {retryProbeDiagnostic} from '../scripts/probes/execute-checks.mjs';
+import {writeJson, readBounded} from '../scripts/lib/execute/storage.mjs';
 import {within} from '../scripts/lib/skill-roots.mjs';
 import {command} from '../scripts/ci/process.mjs';
 import {publicationFindings} from '../scripts/lib/package-validation.mjs';
@@ -93,6 +95,20 @@ test('incomplete browser diagnostics publish only known check names and statuses
     {name: 'Private synthetic token', status: 'FAIL'}, {name: requiredBrowserChecks[1], status: 'Private synthetic token'}, null];
   assert.deepEqual(browserDiagnostics({status: 'INCOMPLETE', checks}), [{name: requiredBrowserChecks[0], status: 'FAIL'}]);
   assert.deepEqual(browserDiagnostics(undefined), []);
+});
+test('failed execution diagnostics retain retry stages without exposing raw messages or arbitrary facts', t => {
+  const checks = [{name: 'read-retry', status: 'FAIL', message: 'private-token', diagnostic: {stage: 'await-retry', hostState: 'FINISHED', attempt: 1, actual: 'private-token', token: 'private-token'}},
+    {name: 'read-retry', status: 'FAIL', diagnostic: {stage: 'private-token'}}, {name: 'private-token', status: 'FAIL'}, null];
+  assert.deepEqual(executeDiagnostics({checks}), [{name: 'read-retry', status: 'FAIL', diagnostic: {stage: 'await-retry', hostState: 'FINISHED', attempt: 1}}, {name: 'read-retry', status: 'FAIL'}]);
+  assert.deepEqual(executeDiagnostics({checks: [{name: 'read-retry', status: 'FAIL', diagnostic: {stage: 'assessment', actual: 'INDETERMINATE'}}]}), [{name: 'read-retry', status: 'FAIL', diagnostic: {stage: 'assessment', actual: 'INDETERMINATE'}}]);
+  assert.deepEqual(executeDiagnostics(undefined), []);
+  const error = new Error('Host did not reach its expected state.'), file = join(temporary(t), 'assessment.json');
+  const failed = {name: 'read-retry', status: 'FAIL', message: error.message, diagnostic: retryProbeDiagnostic({stage: 'await-retry', hostState: undefined, attempt: undefined, actual: error.actual})};
+  writeJson(file, {checks: [failed]}); assert.deepEqual(readBounded(file), {checks: [{name: 'read-retry', status: 'FAIL', message: error.message, diagnostic: {stage: 'await-retry'}}]});
+});
+test('failed TAP locations expose only known test files and positive source coordinates', () => {
+  const output = "not ok 1 synthetic\n  ---\n  location: 'C:\\private-user\\harness-tests\\execute-host.test.mjs:27:3'\n  error: 'private-token'\n  ...\nnot ok 2 synthetic\n  location: '/private-user/harness-tests/execute-host.test.mjs:27:3'\n  location: '/private-user/private-token.test.mjs:1:1'\n  location: '/private-user/harness-tests/execute-host.test.mjs:0:1'\n";
+  assert.deepEqual(testFailureLocations(output, ['execute-host.test.mjs']), [{file: 'execute-host.test.mjs', line: 27, column: 3}]);
 });
 test('native parallel proof still requires both substantive scopes and complete cleanup', () => {
   const assessment = {status: 'PASS', comparison: {status: 'PASS'}, counts: [{scenarios: 13, assertions: 35, evidence: 166}, {scenarios: 13, assertions: 35, evidence: 166}]};

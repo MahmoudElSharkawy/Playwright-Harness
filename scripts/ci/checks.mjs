@@ -6,7 +6,7 @@ import {randomUUID} from 'node:crypto';
 import assert from 'node:assert/strict';
 import {command, npmPath} from './process.mjs';
 import {packageRoot} from '../lib/consumer-paths.mjs';
-import {testCounts, completeTests, completeChecks} from './results.mjs';
+import {testCounts, completeTests, completeChecks, testFailureLocations} from './results.mjs';
 import {realFuture, within} from '../lib/skill-roots.mjs';
 
 /** One fixed package check list. Missing, failed, skipped and empty tests do not pass. */
@@ -30,7 +30,7 @@ export function runChecks(root, audit) {
     const result = command(args, {cwd: root, env, log: join(audit, `${id}.log`)});
     const counts = id === 'tests' ? testCounts(result.output) : undefined;
     const check = {id, status: result.status === 'PASS' && (!counts || completeTests(counts)) ? 'PASS' : 'FAIL', exitCode: result.exitCode, diagnostic: result.diagnostic, log: `${id}.log`, sha256: result.sha256,
-      ...(counts ? {counts} : {})}; console.log(JSON.stringify(check)); return check;
+      ...(counts ? {counts, ...(!completeTests(counts) ? {failureLocations: testFailureLocations(result.output, tests)} : {})} : {})}; console.log(JSON.stringify(check)); return check;
   });
   const summary = {version: 1, status: completeChecks(checks) ? 'PASS' : 'FAIL', platform: process.platform, node: process.version, testFiles: tests.length, checks};
   writeFileSync(join(audit, 'checks.json'), JSON.stringify(summary, null, 2), {flag: 'wx', mode: 0o600}); return summary;
