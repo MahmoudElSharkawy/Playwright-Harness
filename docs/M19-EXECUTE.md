@@ -39,6 +39,8 @@ and credential references actually used by the selected scenario.
 Execution uses the captured snapshot. Remote revisions are rechecked in batches
 of at most 200 only before bug filing or result publication. Changes are flagged;
 changed cases are excluded from results unless `--include-changed` is requested.
+Delivery saves the last revision check for subsequent reports; dashboards label
+its timestamp and executed/current revisions without making extra ADO requests.
 
 ## Host ownership and evidence
 
@@ -77,12 +79,22 @@ self-comparisons and same-step typed-field readbacks are refused.
 Grounded observations are reliable and labeled; ambiguity, insufficiency and
 synthetic expectations remain INDETERMINATE. Registered evidence tampering causes
 integrity failure with no verdict. See [verdicts](../.agents/skills/execute-test/references/verdicts.md).
+End-step verifies registered files and hashes before assertions, effects or the
+next step. Subject matching uses normalized full names; visual judgments require
+screenshots even when the condition has no quoted or numeric literals.
 
 Failures poison new verdicts while preserving established FAILs. Automatic retries
 need a read-only contract and are capped at three. Mutation retries require
 confirmed no-effect reconciliation. Resource cleanup uses core resource/lifecycle
 receipts, with identity outputs passed into cleanup attempts. Persistent and
 no-obligation resources use not-required; existing/restore lifecycles are deferred.
+The host finishes at 70% of the observation budget and bounds browser assertion
+provenance to 64 KiB. Earlier finalized FAILs remain recorded; an observation too
+large to retain stays unresolved. `FINISH_REQUIRED` means stop issuing commands
+and inspect the report. API/DB assertion artifacts retain their runtime limits.
+Business cleanup returns five minutes before its 10/20-minute window ends,
+including cancellation of in-flight operations, reserving that time for owned
+session shutdown. Shorter test windows reserve half their duration.
 
 ## Login, diagnostics and reports
 

@@ -2,10 +2,13 @@ import {isDeepStrictEqual} from 'node:util';
 import {data, requireThat, fingerprint} from '../execution-core/data.mjs';
 import {normalize, subjectDetails} from './refinement.mjs';
 
+export const ASSERTION_BYTES = 64 * 1024;
+export const assertionEvidence = result => data({schema: 'execute-assertion/1', ...result.provenance, status: result.status, method: result.method}, ASSERTION_BYTES);
+
 export function matchesSubject(frozen, observed) {
   const subject = subjectDetails(frozen);
   return subject.kind === 'page' ? observed?.kind === 'page' : observed && subject.kind === observed.kind
-    && (!subject.role || subject.role === observed.role) && normalize(observed.name).includes(normalize(subject.name));
+    && (!subject.role || subject.role === observed.role) && normalize(observed.name) === normalize(subject.name);
 }
 export function matchingRead(condition, read, resolved, supplied = resolved.value, exact = false) {
   const compatible = {present: ['page', 'region', 'text'], absent: ['page', 'region', 'text'], equals: ['text', 'value'], url: ['url'], count: ['count']};
@@ -41,7 +44,7 @@ export function mandatoryLiterals(condition, bindings = {}) {
 export class VerdictLedger {
   constructor(contracts, {verificationOnly = false, bindings = {}} = {}) {
     this.contracts = contracts; this.verificationOnly = verificationOnly; this.bindings = bindings;
-    this.results = []; this.stateVersion = 0; this.firstActionVersion = null; this.poisoned = false;
+    this.results = []; this.stateVersion = 0; this.firstActionVersion = null; this.poisoned = false; this.finishRequired = false;
   }
   changed() {this.stateVersion++; this.firstActionVersion ??= this.stateVersion;}
   condition(key, index) {
@@ -50,12 +53,25 @@ export class VerdictLedger {
   }
   timing(contract) {
     requireThat(!this.poisoned, 'ATTEMPT_POISONED');
+    requireThat(!this.finishRequired, 'OBSERVATION_LIMIT: finish the scenario.');
     if (this.verificationOnly) return;
     if (contract.condition.precondition) requireThat(this.firstActionVersion === null, 'PRECONDITION_TOO_LATE');
     else requireThat(this.firstActionVersion !== null, 'PREMATURE_CHECK');
   }
   add(contract, value) {
-    const result = data({seq: this.results.length + 1, conditionId: contract.id, stateVersion: this.stateVersion, invalidated: false, ...value}, 64 * 1024);
+    requireThat(!this.finishRequired, 'OBSERVATION_LIMIT: finish the scenario.');
+    let result = data({seq: this.results.length + 1, conditionId: contract.id, stateVersion: this.stateVersion, invalidated: false, ...value});
+    const provenance = {schema: 'execute-assertion/1', version: 1, contract, results: [...this.results.filter(item => item.conditionId === contract.id), result], finalStateVersion: Number.MAX_SAFE_INTEGER, status: 'INDETERMINATE', method: 'unresolved'};
+    const bytes = Buffer.byteLength(JSON.stringify(provenance));
+    this.finishRequired = bytes >= ASSERTION_BYTES * 0.7;
+    let fits = bytes <= ASSERTION_BYTES - 2048;
+    if (fits) try {data(provenance, ASSERTION_BYTES - 2048);} catch {fits = false;}
+    if (!fits) {
+      this.finishRequired = true;
+      // Preserve all finalized results. An observation that cannot fit is unresolved,
+      // with its raw read still registered separately; it cannot establish PASS.
+      result = {seq: result.seq, conditionId: contract.id, stateVersion: this.stateVersion, invalidated: false, method: 'unresolved', matching: true, status: 'INDETERMINATE', reason: 'insufficient-evidence', budgetExceeded: true, evidenceIds: []};
+    }
     this.results.push(result); return result;
   }
   checked(key, index, {read, resolved, supplied = resolved.value, exact = false, evidenceIds, typedSubjects} = {}) {
@@ -74,6 +90,7 @@ export class VerdictLedger {
     const literals = mandatoryLiterals(contract.condition, this.bindings);
     requireThat(literals.every(literal => normalize(observed).includes(normalize(literal))), 'Observation must name the condition literals.');
     const snapshotText = artifacts.filter(item => item.kind === 'snapshot').map(item => item.text ?? '').join('\n');
+    if (whyNotChecked === 'visual-only') requireThat(artifacts.some(item => item.kind === 'screenshot'), 'Visual judgment needs a screenshot.');
     if (status === 'PASS' && literals.some(literal => !normalize(snapshotText).includes(normalize(literal)))) requireThat(artifacts.some(item => item.kind === 'screenshot'), 'Visual PASS needs a screenshot.');
     return this.add(contract, {method: 'observed', matching: true, status, observed, rationale, ...(actual === undefined ? {} : {actual}), whyNotChecked, evidenceIds: artifacts.map(item => item.id)});
   }

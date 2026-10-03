@@ -1,12 +1,12 @@
 import {readFile, writeFile, lstat, realpath} from 'node:fs/promises';
 import {join, resolve} from 'node:path';
 import {randomUUID} from 'node:crypto';
-import {defineOperation, authorizeOperation, checkExecutionWindow, attemptRecord, decideRecovery, registerEvidence} from '../execution-core/index.mjs';
+import {defineOperation, authorizeOperation, checkExecutionWindow, attemptRecord, decideRecovery, registerEvidence, verifyEvidence} from '../execution-core/index.mjs';
 import {requireRun} from '../execution-core/inputs.mjs';
 import {data, id, oneOf, typedValue} from '../execution-core/data.mjs';
 import {within} from '../skill-roots.mjs';
 import {prepareNativeSession, NativeFailure} from './native-cli.mjs';
-import {createScenarioState, requireScenarioState, acceptBrowserStorage, finishScenario, inputBindings, publicValue, rememberSensitive, phaseOrder} from '../sequential/state.mjs';
+import {createScenarioState, requireScenarioState, acceptBrowserStorage, finishScenario, inputBindings, publicValue, rememberSensitive, phaseOrder, checkWorkWindow, observationBudgetReached, requireObservationCapacity} from '../sequential/state.mjs';
 
 export const browserCapabilities = Object.freeze(['browserReads', 'browserMutations']);
 // Bound trusted asynchronous callbacks as well as native commands. This cannot preempt
@@ -74,8 +74,9 @@ export async function runBrowserScenario(run, roots, {target, storageState, secr
     return {identity, operationFingerprint: operation.fingerprint, startedAt: Date.now(), endedAt: Date.now(), outcome: 'SUCCESS', failureClass: 'NONE', effect: {certainty: 'none', resourceIds: []},
       inputs: data(inputs), outputs: [], assertions: scope.expectations.filter(item => item.operationId === operation.id && item.invocationId === invocationId).map(item => ({id: item.id, status: 'NOT_EVALUATED', reliable: false, evidenceIds: []})), evidenceIds: [], supportedCapabilities: [...browserCapabilities]};
   }
-  function window(attempt, cleanup = false) {
-    const value = checkExecutionWindow(run, {phase: attempt.identity.phase, signal: cleanup ? undefined : signal, cleanupStartedAt: state.cleanupStartedAt});
+  function window(attempt, cleanup = false, work = false) {
+    const options = {phase: attempt.identity.phase, signal: cleanup ? undefined : signal};
+    const value = work ? checkWorkWindow(state, options) : checkExecutionWindow(run, {...options, cleanupStartedAt: state.cleanupStartedAt});
     if (!value.allowed) throw new NativeFailure(value.reason === 'CANCELLED' ? 'CANCELLED' : 'TIMEOUT');
     return {timeoutMs: value.remainingMs, ...(cleanup ? {} : {signal})};
   }
@@ -132,6 +133,7 @@ export async function runBrowserScenario(run, roots, {target, storageState, secr
     if (nextPhase < state.phaseNumber || histories.has(invocationId) || typeof action !== 'function' || typeof retry !== 'boolean') throw new Error('Invalid sequential invocation.');
     if (operation.family !== 'browser' || operation.target !== target) throw new Error('Browser operation must use this session target.');
     inputs = inputBindings(state, inputs);
+    requireObservationCapacity(state, record(operation, invocationId, phase, 1, inputs));
     if (scope.expectations.some(item => item.invocationId === invocationId && item.operationId === operation.id && item.phase !== undefined && item.phase !== phase)) throw new Error('Browser invocation differs from its frozen phase.');
     const authorization = authorizeOperation(run, operation, browserCapabilities);
     if (operation.source.kind === 'exploration' && !observations.operations.some(item => item.id === operation.id)) observations.operations.push(operation);
@@ -144,7 +146,7 @@ export async function runBrowserScenario(run, roots, {target, storageState, secr
         const asserted = new Set(), pending = new Set(), nativePending = new Set(), eventStart = native.events.length;
         const controller = new AbortController(); let expired = false;
         const expire = () => {expired = true; active = false; controller.abort();};
-        const currentWindow = () => window(current, nextPhase === 3);
+        const currentWindow = () => window(current, nextPhase === 3, true);
         const requireActive = () => {if (!active) throw new Error('The browser attempt context has ended.');};
         const track = (promise, native = false) => {pending.add(promise); if (native) nativePending.add(promise); promise.catch(error => {failure ??= error;}).finally(() => {pending.delete(promise); nativePending.delete(promise);}); return promise;};
         if (!authorization.allowed) {current.outcome = 'BLOCKED'; current.failureClass = 'POLICY'; current.effect.certainty = 'not-executed';}
@@ -168,6 +170,12 @@ export async function runBrowserScenario(run, roots, {target, storageState, secr
               })(), true);
             },
             evidence: (kind, value) => {requireActive(); return track(observe(current, kind, execution ? publicValue(state, value) : value));},
+            verifyEvidence: () => {
+              requireActive(); const ids = new Set(current.evidenceIds);
+              for (const record of observations.evidence) if (ids.has(record.id)) {verifyEvidence(run, roots, record); ids.delete(record.id);}
+              if (ids.size) throw new Error('Registered attempt evidence is missing.');
+            },
+            observationBudgetReached: () => {requireActive(); return observationBudgetReached(state, current);},
             artifact: (kind, filename, sanitize) => {requireActive(); return track((async () => {
               if (typeof sanitize !== 'function') throw new Error('Native artifacts require explicit sanitization before evidence registration.');
               const source = await realpath(resolve(native.workRoot, filename)), stat = await lstat(source);
@@ -180,7 +188,7 @@ export async function runBrowserScenario(run, roots, {target, storageState, secr
             assertion: input => {requireActive(); const value = data(input), index = current.assertions.findIndex(item => item.id === value.id); if (index < 0 || asserted.has(value.id)) throw new Error('Assertion is outside the frozen invocation or already recorded.'); asserted.add(value.id); current.assertions[index] = value;},
             effect: effect => {requireActive(); current.effect = data(effect); explicitEffect = true;},
             reconciliation: value => {requireActive(); current.reconciliation = data(value);},
-            output: input => {requireActive(); if (execution && input.sensitivity === 'public') publicValue(state, input.value); const value = typedValue({...data(input), producer: {runId: run.id, scenarioId: scope.id, attemptId: current.identity.attemptId, name: input.name}}, run.inputs.limits.maxValueBytes); current.outputs.push(value); return value;},
+            output: input => {requireActive(); if (execution && input.sensitivity === 'public') publicValue(state, input.value); const value = typedValue({...data(input), producer: {runId: run.id, scenarioId: scope.id, attemptId: current.identity.attemptId, name: input.name}}, run.inputs.limits.maxValueBytes); requireObservationCapacity(state, {...current, outputs: [...current.outputs, value]}); current.outputs.push(value); return value;},
             resource: value => {requireActive(); const resource = {...data(value), originAttemptId: current.identity.attemptId}; if (scenario.resources.some(item => item.id === resource.id)) throw new Error('Resource identity already exists.'); scenario.resources.push(resource);},
             lifecycle: (resourceId, value) => {
               requireActive(); const resource = scenario.resources.find(item => item.id === resourceId), update = data(value);

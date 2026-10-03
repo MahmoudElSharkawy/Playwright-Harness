@@ -139,7 +139,9 @@ export function freezeExecution(roots, executionId) {
         requireThat(Array.isArray(expectation.conditions) && expectation.conditions.length > 0 && expectation.conditions.length <= 30 && normalize(expectation.conditions.map(condition => condition.text).join(' ')) === normalize(original.description), 'Conditions must preserve source text.');
         expectation.conditions.forEach((condition, index) => {
           validateCondition(condition, original, source, referenceValues);
-          const contract = {id: conditionId(expectation.key, index + 1), key: expectation.key, index: index + 1, condition, synthetic: original.synthetic}; contracts.push(contract);
+          const contract = {id: conditionId(expectation.key, index + 1), key: expectation.key, index: index + 1, condition, synthetic: original.synthetic};
+          if (step.family === 'browser') data(contract, 32 * 1024); // Reserve assertion space for observations and finalization.
+          contracts.push(contract);
           expectations.push({id: contract.id, description: condition.text, operationId: step.id, invocationId: step.id, phase: step.phase, requiredEvidence: original.synthetic ? ['assertion'] : step.family === 'browser' ? ['assertion', 'snapshot'] : ['response', 'assertion']});
         });
       }
@@ -161,6 +163,8 @@ export function freezeExecution(roots, executionId) {
     const operations = steps.map(step => step.operation); if (targets.length) operations.push(...browserLifecycleOperations(targets[0]));
     const limits = {maxAttempts: 3, timeoutMs: 2 * 60 * 60 * 1000, cleanupTimeoutMs: steps.some(step => step.phase === 'CLEANUP') ? 20 * 60 * 1000 : 10 * 60 * 1000, maxValueBytes: 256 * 1024, ...refinement.limits};
     requireThat(limits.timeoutMs <= 8 * 60 * 60 * 1000, 'Execution timeout exceeds 8 hours.');
+    requireThat(limits.maxAttempts <= 3 && limits.maxValueBytes <= 256 * 1024, 'Execution permits at most 3 attempts and 256 KiB values.');
+    requireThat(limits.cleanupTimeoutMs <= 20 * 60 * 1000, 'Execution cleanup exceeds 20 minutes.');
     createRun({id: 'freeze-validation', environment, operations, scenarios: [{id: source.id, expectations}], limits});
     scenarios.push({id: source.id, steps, operations, expectations, limits, ...(targets.length ? {browserTarget: targets[0]} : {})});
   }

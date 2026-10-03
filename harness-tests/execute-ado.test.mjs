@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {writeFileSync, mkdirSync} from 'node:fs';
+import {writeFileSync, mkdirSync, readFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {adoFixture} from './fixtures/ado.mjs';
 import {executionFixture, executeApi} from './fixtures/execute.mjs';
@@ -9,6 +9,7 @@ import {deliverExecution} from '../scripts/lib/execute/delivery.mjs';
 import {createRun} from '../scripts/lib/execution-core/index.mjs';
 import {runInput} from '../scripts/lib/execute/host.mjs';
 import {readFrozen, writeJson, ownedFile, saveExecution} from '../scripts/lib/execute/storage.mjs';
+import {writeExecutionReport} from '../scripts/lib/execute/report.mjs';
 const writes = f => f.state.requests.filter(request => request.method !== 'GET' && request.path !== 'wit/workitemsbatch' && request.path !== 'wit/wiql' && !request.query.includes('validateOnly=true'));
 async function fixture(t, {fail = false} = {}) {
   const ado = await adoFixture(t), execution = await executionFixture(t, {organizationUrl: ado.config.organizationUrl, handler: fail ? (req, res) => {res.writeHead(500); res.end('{}');} : undefined}); execution.apiStep(); execution.freeze(); const run = await executeApi(execution);
@@ -36,6 +37,26 @@ test('integrity failures block both deliveries before reads; valid rerun repairs
 test('changed revisions are flagged and excluded unless explicitly included', async t => {
   const f = await fixture(t); f.ado.state.items.get(101).rev = 2; const preview = await f.deliver('publish-results'); assert.deepEqual(preview.omitted, [{caseId: 101, reason: 'source-changed'}]);
   const included = await f.deliver('publish-results', {execute: true, 'include-changed': true}); assert.equal(included.count, 1); assert(f.ado.state.results[0].comment.includes('revision=1/2; SOURCE CHANGED')); assert(f.ado.state.results[0].comment.length <= 400);
+  const requests = f.ado.state.requests.length, report = writeExecutionReport(f.execution.roots, f.execution.executionId), html = readFileSync(join(f.execution.projectRoot, report.directory, 'index.html'), 'utf8');
+  assert.match(html, /Last checked before delivery/); assert.match(html, /executed revision 1; current revision 2 — SOURCE CHANGED/); assert.equal(f.ado.state.requests.length, requests);
+});
+
+test('bug paths support real structural roots and nested nodes without accepting another node', async t => {
+  const f = await fixture(t, {fail: true}); f.ado.config.bugs = {areaPath: 'demo\\Area\\Team A', iterationPath: 'demo\\Release 1'};
+  assert.equal((await f.deliver('file-bugs')).bugs.length, 1); assert.equal(writes(f.ado).length, 0);
+  f.ado.state.fault = ({path, send}) => {if (path.startsWith('wit/classificationnodes/areas')) {send({path: '\\demo\\Area\\Other'}); return true;}};
+  await assert.rejects(f.deliver('file-bugs'), /path did not match/); assert.equal(writes(f.ado).length, 0);
+});
+
+for (const omit of ['source-changed', 'no-verdict']) test(`point-map entries for ${omit} cases do not block eligible publication`, async t => {
+  const ado = await adoFixture(t), execution = await executionFixture(t, {organizationUrl: ado.config.organizationUrl, cases: [101, 102].map(id => ({id, rev: 1, title: `Case ${id}`, parameters: null, steps: [{action: 'Read status', expected: 'Status is 200'}]}))});
+  execution.apiStep(0, 0); execution.apiStep(0, 1); execution.freeze(); await executeApi(execution, {scenarioIndex: 1});
+  if (omit === 'source-changed') {await executeApi(execution); ado.state.items.get(101).rev = 2;}
+  const map = join(execution.projectRoot, 'points.json'); writeJson(map, {101: 11, 102: 12});
+  const client = () => createAdoClient({configuration: ado.config, roots: execution.roots, resolveCredential: () => ado.credential, fetchImpl: ado.fetchImpl});
+  const deliver = () => deliverExecution(execution.roots, execution.executionId, 'publish-results', {'point-map': map}, {client: client()});
+  const preview = await deliver(); assert.deepEqual(preview.cases.map(tc => tc.caseId), [102]); assert.deepEqual(preview.omitted, [{caseId: 101, reason: omit}]);
+  writeJson(map, {999: 11, 102: 12}); await assert.rejects(deliver(), /outside captured scope/); assert.equal(writes(ado).length, 0);
 });
 
 test('concurrent bug deliveries have one owner and cannot create duplicate work items', async t => {

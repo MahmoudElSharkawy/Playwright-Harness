@@ -7,10 +7,21 @@ import {reportDirectory, writeReports} from '../reporting/index.mjs';
 import {escapeHtml} from '../reporting/render.mjs';
 import {readFrozen, readBounded, ownedFile, listRunRecords} from './storage.mjs';
 import {restoreRun, deleteLogin} from './host.mjs';
-import {aggregateSourceConditions} from './verdicts.mjs';
+import {aggregateSourceConditions, ASSERTION_BYTES} from './verdicts.mjs';
 
 const order = ['FAIL', 'NEEDS_REVIEW', 'BLOCKED'];
-export const diagnosticSignature = text => String(text).replace(/[a-f\d]{8}-[a-f\d]{4}-[a-f\d]{4}-[a-f\d]{4}-[a-f\d]{12}/gi, '<id>').replace(/\b\d+\b/g, '#');
+export function diagnosticSignature(text, {bindings = {}, values = []} = {}) {
+  const replacements = new Map();
+  const add = (value, placeholder) => {if (typeof value === 'string' && value.trim()) for (const form of [value, encodeURIComponent(value)]) if (!replacements.has(form)) replacements.set(form, placeholder);};
+  for (const value of Object.values(bindings)) add(value, '<parameter>');
+  for (const value of values) add(value, '<value>');
+  let signature = String(text).replace(/https?:\/\/[^/\s<>"']+/g, '<origin>');
+  if (replacements.size) {
+    const alternatives = [...replacements.keys()].sort((a, b) => b.length - a.length).map(value => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    signature = signature.replace(new RegExp(`(?<![\\p{L}\\p{N}_])(?:${alternatives.join('|')})(?![\\p{L}\\p{N}_])`, 'gu'), value => replacements.get(value));
+  }
+  return signature.replace(/[a-f\d]{8}-[a-f\d]{4}-[a-f\d]{4}-[a-f\d]{4}-[a-f\d]{12}/gi, '<id>').replace(/\b\d+\b/g, '#');
+}
 export function groupStatus(statuses) {return order.find(status => statuses.includes(status)) ?? (statuses.length && statuses.every(status => status === 'SKIPPED') ? 'SKIPPED' : 'PASS');}
 export function defectFingerprint(source, item) {
   const canonical = {v: 1, org: source.organizationUrl, project: source.project, caseId: item.caseId, kind: item.kind, sourceStep: item.sourceStep,
@@ -26,9 +37,9 @@ function conditionRecords(result, roots, scenario) {
     let provenance = null, method = 'unresolved';
     if (pair) {
       if (step.family !== 'browser' && ['PASS', 'FAIL'].includes(pair.assertion.status)) method = 'checked';
-      for (const evidenceId of pair.assertion.evidenceIds) {
+      for (const evidenceId of step.family === 'browser' ? pair.assertion.evidenceIds : []) {
         const record = result.evidence.find(item => item.id === evidenceId && item.kind === 'assertion'); if (!record) continue;
-        const value = readBounded(join(roots.runRoot, record.path), 64 * 1024);
+        const value = readBounded(join(roots.runRoot, record.path), ASSERTION_BYTES);
         if (value.schema === 'execute-assertion/1') {
           requireThat(fingerprint(value.contract) === fingerprint(contract), 'Assertion contract differs from frozen source.'); provenance = value; method = value.method;
         }
@@ -68,7 +79,9 @@ export function collectExecution(roots, executionId) {
       history: history.map(run => ({runId: run.runId, state: run.state, verdict: run.result?.status ?? null, supersededIntegrity: run.state === 'INTEGRITY_FAILURE' && !unresolvedIntegrity.includes(run)})),
       methods: chosen ? Object.fromEntries(['checked', 'observed', 'mixed', 'unresolved'].map(method => [method, aggregateSourceConditions(chosen.conditions).filter(expectation => expectation.method === method).length])) : {checked: 0, observed: 0, mixed: 0, unresolved: 0}};
   });
-  return {...loaded, runs, scenarios, integrityFailures: scenarios.filter(scenario => scenario.state === 'INTEGRITY_FAILURE').map(scenario => scenario.id)};
+  const revisionFile = ownedFile(roots, executionId, 'delivery/revisions.json'), revisionCheck = existsSync(revisionFile) ? readBounded(revisionFile) : null;
+  if (revisionCheck) requireThat(revisionCheck.version === 1 && revisionCheck.sourceFingerprint === loaded.execution.sourceFingerprint && typeof revisionCheck.checkedAt === 'string' && Number.isFinite(Date.parse(revisionCheck.checkedAt)) && Array.isArray(revisionCheck.revisions), 'Revision receipt differs from captured execution.');
+  return {...loaded, runs, scenarios, revisionCheck, integrityFailures: scenarios.filter(scenario => scenario.state === 'INTEGRITY_FAILURE').map(scenario => scenario.id)};
 }
 export function executionDefects(view) {
   const groups = new Map();
@@ -81,7 +94,8 @@ export function executionDefects(view) {
       const fp = defectFingerprint(view.source, item), group = groups.get(fp) ?? {fingerprint: fp, ...item, occurrences: []}; group.occurrences.push({runId: row.runId, scenarioId: source.id, status: item.status, evidenceIds: item.evidenceIds}); groups.set(fp, group);
     }
     for (const diagnostic of row.diagnostics) for (const entry of diagnostic.entries.filter(entry => !entry.notice && (entry.detail || entry.path))) {
-      const step = scenario.steps.find(step => step.id === diagnostic.stepId), signature = diagnosticSignature(entry.path ?? entry.detail);
+      const step = scenario.steps.find(step => step.id === diagnostic.stepId), values = row.result.scenarios[0].attempts.flatMap(attempt => [...attempt.inputs, ...attempt.outputs].filter(value => value.sensitivity === 'public').map(value => value.value));
+      const signature = diagnosticSignature(entry.path ?? entry.detail, {bindings: source.bindings, values});
       const item = {kind: 'diagnostic', caseId: source.caseId, sourceStep: step?.sourceSteps[0] ?? 0, signature, title: `${source.title}: ${entry.kind} diagnostic`, status: 'DIAGNOSTIC', method: 'diagnostic', runId: row.runId, scenarioId: source.id, stepId: diagnostic.stepId, evidenceIds: [diagnostic.evidenceId]};
       const fp = defectFingerprint(view.source, item), group = groups.get(fp) ?? {fingerprint: fp, ...item, occurrences: []}; group.occurrences.push({runId: row.runId, scenarioId: source.id, status: item.status, evidenceIds: item.evidenceIds}); groups.set(fp, group);
     }
@@ -105,8 +119,9 @@ export function writeExecutionReport(roots, executionId, {keepLogin = false} = {
     if (!png && !jpeg) return ''; imageBytes += bytes.length; return `<img alt="Verified execution context" src="data:image/${png ? 'png' : 'jpeg'};base64,${bytes.toString('base64')}">`;
   };
   const cards = view.scenarios.map(scenario => `<article><h2>${h(scenario.title)} · ${h(scenario.id)}</h2><strong>${h(scenario.status ?? (scenario.state === 'INTEGRITY_FAILURE' ? 'INTEGRITY FAILURE (no verdict)' : scenario.state))}</strong><p>Checked ${scenario.methods.checked}; observed ${scenario.methods.observed}; mixed ${scenario.methods.mixed}; unresolved ${scenario.methods.unresolved}.</p>${view.runs.filter(row => row.scenarioId === scenario.id).map(row => `<details><summary>${h(row.runId)} — ${h(row.result?.status ?? row.state)}</summary>${row.state === 'ASSESSED' ? `<a href="runs/${h(row.runId)}/index.html">Core report</a>${row.conditions.map(condition => `<details><summary>${h(condition.status)} (${h(condition.method)}): ${h(condition.condition.text)}</summary><pre>${h(JSON.stringify(condition.provenance ?? condition.condition, null, 2))}</pre></details>`).join('')}<h3>Cleanup</h3><pre>${h(JSON.stringify(row.result.scenarios[0].resources, null, 2))}</pre><h3>Diagnostics</h3><pre>${h(JSON.stringify(row.diagnostics, null, 2))}</pre>${['FAIL', 'NEEDS_REVIEW'].includes(row.result.status) ? row.result.evidence.filter(record => record.kind === 'screenshot').map(record => image(row, record)).join('') : ''}` : `<p>${h(row.reason ?? row.state)}</p>`}</details>`).join('')}</article>`).join('');
-  write('index.html', `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'"><title>${h(view.source.title)}</title><style>body{font:16px/1.55 system-ui;max-width:1100px;margin:40px auto;padding:24px;color:#172d42;background:#f5f7fa}article{background:white;padding:24px;margin:20px 0;border:1px solid #ccd5df;border-radius:12px}pre{white-space:pre-wrap;overflow-wrap:anywhere}summary{cursor:pointer;padding:8px}img{max-width:100%;height:auto}strong{font-size:1.2em}</style></head><body><h1>${h(view.source.title)}</h1><p>${h(executionId)} · ${defects.length} defect group(s)</p><p><a href="summary.md">Summary</a> · <a href="defects.md">Defects</a></p>${cards}<h2>Source exclusions</h2><pre>${h(JSON.stringify(view.source.excluded, null, 2))}</pre></body></html>\n`);
-  const manifest = {version: 1, status: 'WRITTEN', executionId, sourceFingerprint: view.execution.sourceFingerprint, freezeFingerprint: view.execution.freezeFingerprint, scenarios: view.scenarios, defects: defects.length, artifacts};
+  const revisionSummary = view.revisionCheck ? '<section><h2>Source revisions</h2><p>Last checked before delivery: ' + h(view.revisionCheck.checkedAt) + '</p>' + view.source.cases.map(tc => {const changed = view.revisionCheck.revisions.find(change => change.caseId === tc.id); return '<p>Case ' + h(tc.id) + ': executed revision ' + h(tc.rev) + '; current revision ' + h(changed?.current ?? tc.rev) + (changed ? ' — SOURCE CHANGED</p><pre>' + h(JSON.stringify(changed)) + '</pre>' : ' — unchanged at last check</p>');}).join('') + '</section>' : '';
+  write('index.html', `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'"><title>${h(view.source.title)}</title><style>body{font:16px/1.55 system-ui;max-width:1100px;margin:40px auto;padding:24px;color:#172d42;background:#f5f7fa}article{background:white;padding:24px;margin:20px 0;border:1px solid #ccd5df;border-radius:12px}pre{white-space:pre-wrap;overflow-wrap:anywhere}summary{cursor:pointer;padding:8px}img{max-width:100%;height:auto}strong{font-size:1.2em}</style></head><body><h1>${h(view.source.title)}</h1><p>${h(executionId)} · ${defects.length} defect group(s)</p><p><a href="summary.md">Summary</a> · <a href="defects.md">Defects</a></p>${revisionSummary}${cards}<h2>Source exclusions</h2><pre>${h(JSON.stringify(view.source.excluded, null, 2))}</pre></body></html>\n`);
+  const manifest = {version: 1, status: 'WRITTEN', executionId, sourceFingerprint: view.execution.sourceFingerprint, freezeFingerprint: view.execution.freezeFingerprint, revisionCheck: view.revisionCheck, scenarios: view.scenarios, defects: defects.length, artifacts};
   writeFileSync(join(output, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n', {flag: 'wx', mode: 0o600, flush: true});
   if (!keepLogin) deleteLogin(roots, executionId); return {status: 'WRITTEN', executionId, directory: path, scenarios: view.scenarios, defects: defects.length};
 }

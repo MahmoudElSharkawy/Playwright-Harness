@@ -3,7 +3,7 @@ import {join} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {data, fingerprint, requireThat, id} from '../execution-core/data.mjs';
 import {NativeFailure} from '../browser/native-cli.mjs';
-import {VerdictLedger, matchingRead, compareRead, requireIndependent, aggregateSourceConditions} from './verdicts.mjs';
+import {VerdictLedger, matchingRead, compareRead, requireIndependent, aggregateSourceConditions, assertionEvidence} from './verdicts.mjs';
 import {expectedValue, normalize} from './refinement.mjs';
 import {delay} from './mailbox.mjs';
 import {protect} from '../generation/storage.mjs';
@@ -170,18 +170,20 @@ export class BrowserCommands {
     const artifactId = await this.context.evidence('observation', {diagnostics: facts, partOfVerdict: false});
     this.artifacts.set(artifactId, {id: artifactId, kind: 'observation', stateVersion: this.ledger.stateVersion}); return facts;
   }
-  async finalize(effect) {
+  async finalize(effect, {interrupted = false} = {}) {
     const bound = artifactId => this.artifacts.has(artifactId);
     let results = this.ledger.aggregate({artifactValid: bound});
-    if (results.some(result => ['FAIL', 'INDETERMINATE'].includes(result.status))) try {await this.screenshot();} catch (error) {this.failure = error; this.ledger.poisoned = true;}
-    if (this.diagnostics === 'per-step' || this.diagnostics === 'end' && (this.lastBrowserStep || results.some(result => ['FAIL', 'INDETERMINATE'].includes(result.status)))) try {await this.diagnosticsCapture();} catch { /* Preserve the underlying execution failure and historical assertions. */ }
+    if (!interrupted && results.some(result => ['FAIL', 'INDETERMINATE'].includes(result.status))) try {await this.screenshot();} catch (error) {this.failure = error; this.ledger.poisoned = true;}
+    if (!interrupted && (this.diagnostics === 'per-step' || this.diagnostics === 'end' && (this.lastBrowserStep || results.some(result => ['FAIL', 'INDETERMINATE'].includes(result.status))))) try {await this.diagnosticsCapture();} catch { /* Preserve the underlying execution failure and historical assertions. */ }
     results = this.ledger.aggregate({artifactValid: bound});
     for (const result of results) {
-      const assertionId = await this.context.evidence('assertion', {schema: 'execute-assertion/1', ...result.provenance, status: result.status, method: result.method});
+      const assertionId = await this.context.evidence('assertion', assertionEvidence(result));
       result.evidenceIds.push(assertionId); this.artifacts.set(assertionId, {id: assertionId, kind: 'assertion', stateVersion: this.ledger.stateVersion});
       const required = this.step.contracts.find(contract => contract.id === result.id)?.synthetic ? ['assertion'] : ['assertion', 'snapshot'];
       if (['PASS', 'FAIL'].includes(result.status) && !required.every(kind => result.evidenceIds.some(id => this.artifacts.get(id)?.kind === kind))) {result.status = 'INDETERMINATE'; result.reliable = false; result.reason = 'insufficient-evidence';}
     }
+    try {this.context.verifyEvidence();}
+    catch (cause) {throw Object.assign(new Error('EVIDENCE_INTEGRITY_FAILURE', {cause}), {code: 'EVIDENCE_INTEGRITY_FAILURE'});}
     const created = this.step.creates?.[0];
     if (created && !this.ledger.poisoned && effect === 'confirmed' && this.outputs.has(created.identityOutput)) {
       const output = this.outputs.get(created.identityOutput), action = created.intent === 'temporary' ? 'cleanup' : created.intent === 'persistent' ? 'retain' : 'none';

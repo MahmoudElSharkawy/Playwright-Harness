@@ -1,9 +1,9 @@
 import {randomUUID} from 'node:crypto';
 import {isDeepStrictEqual} from 'node:util';
-import {authorizeOperation, checkExecutionWindow, attemptRecord, decideRecovery, registerEvidence} from '../execution-core/index.mjs';
+import {authorizeOperation, attemptRecord, decideRecovery, registerEvidence} from '../execution-core/index.mjs';
 import {requireRun} from '../execution-core/inputs.mjs';
 import {data, fingerprint, id, keys, oneOf, requireThat, typedValue, protectedReference} from '../execution-core/data.mjs';
-import {createScenarioState, requireScenarioState, initializeStorage, writeScenario, finishScenario, rememberSensitive, publicValue as checkedPublicValue} from '../sequential/state.mjs';
+import {createScenarioState, requireScenarioState, initializeStorage, writeScenario, finishScenario, rememberSensitive, publicValue as checkedPublicValue, checkWorkWindow, requireObservationCapacity} from '../sequential/state.mjs';
 import {databaseCapabilities, validateDatabaseOperation, bindDatabase, select, expected} from './definition.mjs';
 import {DatabaseFailure, bounded, credentials} from './shared.mjs';
 import * as sqlserver from './sqlserver-driver.mjs';
@@ -92,10 +92,12 @@ export function createDatabaseRuntime(run, inputRoots, {signal, resolveCredentia
       const previous = observations.operations.find(item => item.id === operation.id); requireThat(!previous || previous.fingerprint === operation.fingerprint, 'Run-local database definition changed.'); if (!previous) observations.operations.push(operation);
     }
     phaseNumber = state.phaseNumber = phases[phase]; if (phaseNumber === 3) state.cleanupStartedAt ??= Date.now(); cleanupStartedAt = state.cleanupStartedAt;
+    requireObservationCapacity(state, record(operation, invocationId, phase, 1, inputs));
     busy = state.busy = true; const history = []; histories.set(invocationId, history); let resolvedBindings;
     try {
       for (let number = 1; number <= run.inputs.limits.maxAttempts; number++) {
-        const current = record(operation, invocationId, phase, number, inputs), controller = new AbortController(), window = checkExecutionWindow(run, {phase, signal, cleanupStartedAt});
+        const current = record(operation, invocationId, phase, number, inputs), controller = new AbortController(), window = checkWorkWindow(state, {phase, signal});
+        requireObservationCapacity(state, current);
         const cancel = () => controller.abort('CANCELLED'), budget = Math.min(window.remainingMs, d.timeoutMs ?? 10000);
         if (phaseNumber !== 3) signal?.addEventListener('abort', cancel, {once: true});
         let timer, response, failure;
@@ -147,7 +149,8 @@ export function createDatabaseRuntime(run, inputRoots, {signal, resolveCredentia
               const output = {name: extraction.name, type, sensitivity: extraction.sensitivity, producer: {runId: run.id, scenarioId: scope.id, attemptId: current.identity.attemptId, name: extraction.name}};
               if (extraction.sensitivity === 'sensitive') {requireThat(storeSensitive, 'Sensitive extraction needs protected storage.'); remember(value); output.protectedRef = await bounded(() => storeSensitive(value, {identity: current.identity, name: extraction.name, signal: controller.signal}), controller.signal);}
               else {requireThat(!extraction.select.path.some(part => sensitiveKey(String(part))) && !sensitiveSelectors.some(selector => overlaps(selector, extraction.select)), 'Sensitive selections cannot produce public outputs.'); output.value = publicValue(value);}
-              current.outputs.push(typedValue(output, run.inputs.limits.maxValueBytes));
+              const retained = typedValue(output, run.inputs.limits.maxValueBytes);
+              requireObservationCapacity(state, {...current, outputs: [...current.outputs, retained]}); current.outputs.push(retained);
             }
           }
         } catch (error) {

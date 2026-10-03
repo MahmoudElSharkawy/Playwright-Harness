@@ -31,7 +31,7 @@ export async function adoFixture(t, overrides = {}) {
     if (path === 'wit/workitemtypecategories/microsoft.bugcategory') return send({referenceName: 'Microsoft.BugCategory', defaultWorkItemType: {name: 'Bug'}, workItemTypes: [{name: 'Bug'}]});
     if (path === 'wit/workitemtypes/bug/fields') return send({value: ['System.Title', 'System.Tags', 'System.AreaPath', 'System.IterationPath', 'System.AssignedTo', 'Microsoft.VSTS.TCM.ReproSteps', 'Microsoft.VSTS.Common.Priority', 'Microsoft.VSTS.Common.Severity'].map(referenceName => ({referenceName, ...(referenceName.endsWith('Priority') ? {allowedValues: [1, 2, 3, 4]} : {})}))});
     if (path === 'wit/workitemtypes/bug/states') return send({value: [{name: 'New', category: 'Proposed'}, {name: 'Active', category: 'InProgress'}, {name: 'Closed', category: 'Completed'}]});
-    if (path.startsWith('wit/classificationnodes/')) return send({path: '\\demo' + path.split('/').slice(3).map(part => `\\${decodeURIComponent(part)}`).join('')});
+    if (path.startsWith('wit/classificationnodes/')) return send({path: `\\demo\\${path.split('/')[2] === 'areas' ? 'Area' : 'Iteration'}` + path.split('/').slice(3).map(part => `\\${decodeURIComponent(part)}`).join('')});
     if (path === 'wit/wiql') {const tag = body.query.match(/\[System.Tags\] CONTAINS '([^']+)'/)?.[1]; return send({workItems: [...items.values()].filter(item => String(item.fields['System.Tags'] ?? '').split(';').map(tag => tag.trim()).includes(tag)).map(item => ({id: item.id}))});}
     if (path === 'wit/workitems/$bug' && req.method === 'POST') {
       const fields = Object.fromEntries(body.filter(op => op.path.startsWith('/fields/')).map(op => [op.path.slice(8), op.value]));

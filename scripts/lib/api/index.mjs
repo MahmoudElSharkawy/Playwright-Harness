@@ -1,9 +1,9 @@
 import {randomUUID} from 'node:crypto';
 import {isDeepStrictEqual} from 'node:util';
-import {authorizeOperation, checkExecutionWindow, attemptRecord, decideRecovery, registerEvidence} from '../execution-core/index.mjs';
+import {authorizeOperation, attemptRecord, decideRecovery, registerEvidence} from '../execution-core/index.mjs';
 import {requireRun} from '../execution-core/inputs.mjs';
 import {data, fingerprint, id, keys, oneOf, requireThat, typedValue, protectedReference} from '../execution-core/data.mjs';
-import {createScenarioState, requireScenarioState, initializeStorage, writeScenario, finishScenario, rememberSensitive, publicValue as checkedPublicValue} from '../sequential/state.mjs';
+import {createScenarioState, requireScenarioState, initializeStorage, writeScenario, finishScenario, rememberSensitive, publicValue as checkedPublicValue, checkWorkWindow, requireObservationCapacity} from '../sequential/state.mjs';
 import {apiCapabilities, validateApiOperation, buildRequest, bind, select} from './definition.mjs';
 import {ApiFailure, send, bounded} from './transport.mjs';
 import {consumerEnvironment} from '../consumer-env.mjs';
@@ -159,12 +159,14 @@ export function createApiRuntime(run, inputRoots, {signal, resolveCredential, re
       if (!previous) observations.operations.push(operation);
     }
     phaseNumber = state.phaseNumber = phases[phase]; if (phaseNumber === 3) state.cleanupStartedAt ??= Date.now(); cleanupStartedAt = state.cleanupStartedAt;
+    requireObservationCapacity(state, record(operation, invocationId, phase, 1, inputs));
     busy = state.busy = true; const history = []; histories.set(invocationId, history); let refresh = false, resolvedBindings;
     try {
       for (let number = 1; number <= run.inputs.limits.maxAttempts; number++) {
         const current = record(operation, invocationId, phase, number, inputs), controller = new AbortController();
+        requireObservationCapacity(state, current);
         const cancel = () => controller.abort('CANCELLED');
-        const window = checkExecutionWindow(run, {phase, signal, cleanupStartedAt});
+        const window = checkWorkWindow(state, {phase, signal});
         const budget = Math.min(window.remainingMs, definition.timeoutMs ?? 10000);
         let timer, response, dispatched = false, failure, bindings;
         if (phaseNumber !== 3) signal?.addEventListener('abort', cancel, {once: true});
@@ -233,7 +235,8 @@ export function createApiRuntime(run, inputRoots, {signal, resolveCredential, re
                 requireThat(!(extraction.select.from === 'header' && sensitiveKey(extraction.select.path[0])) && !extraction.select.path.some(part => sensitiveKey(String(part))), 'Sensitive selectors cannot produce public outputs.');
                 output.value = publicSelection(response, extraction.select);
               }
-              current.outputs.push(typedValue(output, run.inputs.limits.maxValueBytes));
+              const retained = typedValue(output, run.inputs.limits.maxValueBytes);
+              requireObservationCapacity(state, {...current, outputs: [...current.outputs, retained]}); current.outputs.push(retained);
             }
             if (controller.signal.aborted) throw new ApiFailure(controller.signal.reason === 'TIMEOUT' ? 'TIMEOUT' : 'CANCELLED', true);
           }

@@ -65,6 +65,7 @@ export async function runHostedScenario(roots, executionId, runId, nonce, {runti
   const runRoots = {...roots, runRoot: ownedFile(roots, executionId, runId)}, directory = controlDirectory(roots, executionId, runId), box = mailboxFactory(directory, runId, nonce);
   box.save({pid: process.pid});
   const controller = new AbortController(), privateEnvironment = consumerEnvironment(roots), protectedValues = new Map(), outputs = new Map(), diagnosticsState = {console: 0, requests: new Set()};
+  const cleanupReserveMs = Math.min(5 * 60 * 1000, Math.floor(run.inputs.limits.cleanupTimeoutMs / 2));
   const secrets = {}, privateValues = [];
   for (const step of scenario.steps.filter(step => step.login)) {
     const configured = loaded.freeze.environment.targets.browser[step.target].users[step.login.user], handle = step.login.user.toUpperCase().replaceAll('-', '_');
@@ -84,6 +85,7 @@ export async function runHostedScenario(roots, executionId, runId, nonce, {runti
     attempt: active?.context?.identity.number ?? null, active: Boolean(active), ...patch});
   const finishStep = (frame, attempt) => {
     if (active === frame) active = null;
+    if (stopped) return;
     for (const output of attempt?.outputs ?? []) outputs.set(output.name, {...outputs.get(output.name), ...output, family: frame.step.family});
     phaseFrame.cursor++; saveStatus(); if (phaseFrame.cursor >= phaseFrame.steps.length) phaseFrame.done.resolve();
   };
@@ -92,18 +94,32 @@ export async function runHostedScenario(roots, executionId, runId, nonce, {runti
     const output = outputs.get(binding.source.slice(7)); requireThat(output, 'Earlier output is unavailable.');
     const {family, subject, ...typed} = output; return {...typed, name: binding.name};
   });
+  let stopping, stopReason;
+  const interrupt = (reason, {integrity = false} = {}) => {
+    if (stopping) return stopping;
+    stopped = true; stopReason = reason;
+    stopping = (async () => {
+      const frame = active;
+      if (frame?.commands && !frame.closing) {
+        frame.closing = true; frame.commands.ledger.poisoned = true;
+        if (!integrity) try {await frame.commands.finalize('uncertain', {interrupted: true});} catch { /* Core assessment remains authoritative, including integrity failures. */ }
+      }
+    })().finally(() => {controller.abort(); active?.done?.resolve(); phaseFrame?.done.resolve();});
+    return stopping;
+  };
   const callbacks = Object.fromEntries([['setup', 'SETUP'], ['exercise', 'EXERCISE'], ['verify', 'VERIFY'], ['cleanup', 'CLEANUP']].map(([name, phase]) => [name, async context => {
     const steps = scenario.steps.filter(step => step.phase === phase || phase === 'CLEANUP' && step.phase === 'RESTORE');
     phaseFrame = {context, phase, steps, cursor: 0, done: deferred()};
     if (!steps.length || stopped) return;
-    saveStatus(); await phaseFrame.done.promise;
+    const timer = phase === 'CLEANUP' ? setTimeout(() => {interrupt('CLEANUP_RESERVE').catch(error => {loopFailure ??= error;});}, run.inputs.limits.cleanupTimeoutMs - cleanupReserveMs) : undefined;
+    try {saveStatus(); await phaseFrame.done.promise;} finally {clearTimeout(timer);}
   }]));
   const browser = scenario.browserTarget ? {target: scenario.browserTarget, secrets} : undefined;
   if (browser) {
     const login = scenario.steps.find(step => step.login), state = login && ownedFile(roots, executionId, `auth/${browser.target}-${login.login.user}.json`);
     if (state && existsSync(state)) browser.storageState = state;
   }
-  const execution = runtime(run, runRoots, {signal: controller.signal, api: resolver, database: resolver, ...(browser ? {browser} : {})}, callbacks)
+  const execution = runtime(run, runRoots, {signal: controller.signal, cleanupReserveMs, boundedObservations: true, api: resolver, database: resolver, ...(browser ? {browser} : {})}, callbacks)
     .then(result => {complete = true; finalState = stopped ? 'INTERRUPTED' : 'FINISHED'; updateRun(roots, executionId, runId, {state: finalState, endedAt: Date.now()}); box.save({state: 'FINISHING', active: false, verdict: result.status}); return result;}, error => {
       complete = true; const state = existsSync(join(runRoots.runRoot, 'observations.json')) ? 'INTEGRITY_FAILURE' : 'INTERRUPTED';
       finalState = state; updateRun(roots, executionId, runId, {state, endedAt: Date.now()}); box.save({state: 'FINISHING', active: false, reason: state === 'INTEGRITY_FAILURE' ? 'Assessment rejected the recorded execution.' : 'Execution did not finish.'}); return undefined;
@@ -119,8 +135,11 @@ export async function runHostedScenario(roots, executionId, runId, nonce, {runti
       const created = step.creates?.[0]; if (created) input.resource = {id: created.resource, output: created.identityOutput, ownership: 'harness', intent: created.intent};
       if (step.cleanupResource) input.lifecycle = {resourceId: step.cleanupResource};
       const frame = {step}; active = frame; saveStatus();
-      try {const attempt = await phaseFrame.context[step.family].execute(input); finishStep(frame, attempt); return {status: 'STEP_COMPLETE', step: step.id, outcome: attempt.outcome, assertions: attempt.assertions};}
-      catch (error) {active = null; phaseFrame.done.reject(error); throw error;}
+      try {
+        const attempt = await phaseFrame.context[step.family].execute(input);
+        if (phaseFrame.context.observationBudgetReached()) {await interrupt('OBSERVATION_LIMIT'); return {status: 'FINISH_REQUIRED', reason: 'OBSERVATION_LIMIT', step: step.id, outcome: attempt.outcome, assertions: attempt.assertions};}
+        finishStep(frame, attempt); return {status: 'STEP_COMPLETE', step: step.id, outcome: attempt.outcome, assertions: attempt.assertions};
+      } catch (error) {active = null; if (error.code === 'OBSERVATION_LIMIT') await interrupt(error.code); else phaseFrame.done.reject(error); throw error;}
     }
     requireThat(phaseFrame.context.browser, 'Browser runtime is unavailable.');
     const started = deferred(), frame = {step, started}; active = frame;
@@ -137,17 +156,20 @@ export async function runHostedScenario(roots, executionId, runId, nonce, {runti
   const dispatch = async args => {
     const [command, ...rest] = args;
     if (command === 'status') return {...box.state, nextStep: currentStep() ?? null};
+    requireThat(!stopped || command === 'stop' || command === 'finish-scenario', 'SCENARIO_STOPPING');
     if (command === 'begin-step') return begin(rest[0]);
     if (command === 'skip-step') {requireThat(!active && currentStep()?.id === rest[0] && currentStep().optional === true && !currentStep().contracts.length && !(currentStep().creates?.length) && !currentStep().cleanupResource, 'Only optional steps with no required expectations or resource obligations may be skipped.'); phaseFrame.cursor++; saveStatus(); if (phaseFrame.cursor >= phaseFrame.steps.length) phaseFrame.done.resolve(); return {status: 'STEP_SKIPPED', step: rest[0]};}
     if (command === 'stop' || command === 'finish-scenario') {
       if (command === 'finish-scenario') requireThat(!active && (!currentStep() || complete), 'Finish all frozen steps before finishing the scenario.');
-      else {stopped = true; if (active?.commands && !active.closing) {active.commands.ledger.poisoned = true; try {await active.commands.finalize('uncertain');} catch { /* Assessment will retain the interrupted evidence. */ }} active?.done?.resolve(); controller.abort(); phaseFrame?.done.resolve();}
+      else await interrupt('USER_STOP');
       await execution; return {status: finalState, runId};
     }
     requireThat(active?.commands && !active.closing, 'Begin a browser step before sending live commands.');
     if (command === 'end-step') {
       const {options} = parseOptions(rest); requireThat(options.effect === undefined || ['none', 'confirmed', 'not-executed', 'uncertain'].includes(options.effect), 'Unsupported effect certainty.');
-      const result = await active.commands.finalize(options.effect); active.closing = true; active.done.resolve(); return result;
+      const frame = active; frame.closing = true;
+      try {const result = await frame.commands.finalize(options.effect); frame.done.resolve(); return result;}
+      catch (error) {frame.closing = false; throw error;}
     }
     return active.commands.dispatch(args);
   };
@@ -155,22 +177,26 @@ export async function runHostedScenario(roots, executionId, runId, nonce, {runti
     while (!complete) {
       if (loopFailure) throw loopFailure;
       if (!stopped && (Date.now() - lastCommand > idleMs || commands >= 3000)) {
-        stopped = true;
-        if (active?.commands && !active.closing) {active.commands.ledger.poisoned = true; try {await active.commands.finalize('uncertain');} catch { /* Preserve established assertions on interruption. */ }}
-        controller.abort(); active?.done?.resolve(); phaseFrame?.done.resolve();
+        await interrupt('HOST_LIMIT');
       }
       const request = box.take(); if (!request) {await delay(50); continue;}
       commands++; lastCommand = Date.now();
       let reply;
-      try {reply = request.cached ?? await dispatch(request.args);} catch (error) {reply = {status: 'ERROR', reason: redact(String(error.message).slice(0, 4000), privateValues), ...(error.detail ? {detail: redact(error.detail, privateValues)} : {})};}
+      try {reply = request.cached ?? await dispatch(request.args);}
+      catch (error) {
+        if (error.code === 'EVIDENCE_INTEGRITY_FAILURE') await interrupt(error.code, {integrity: true});
+        else if (error.code === 'OBSERVATION_LIMIT') await interrupt(error.code);
+        reply = {status: 'ERROR', reason: redact(String(error.message).slice(0, 4000), privateValues), ...(error.detail ? {detail: redact(error.detail, privateValues)} : {})};
+      }
+      if (!stopped && active?.commands && !active.closing && (active.commands.ledger.finishRequired || active.context.observationBudgetReached())) {
+        await interrupt('OBSERVATION_LIMIT'); reply = {...reply, status: 'FINISH_REQUIRED', reason: 'OBSERVATION_LIMIT'};
+      }
       try {reply = data(redact(reply, privateValues), 256 * 1024);} catch {reply = {status: 'ERROR', reason: 'Command reply exceeded its bounded format.'};}
       box.reply(request, reply);
     }
     return await execution;
   } catch (error) {
-    stopped = true;
-    if (active?.commands && !active.closing) {active.commands.ledger.poisoned = true; try {await active.commands.finalize('uncertain');} catch { /* Keep earlier registered failures. */ }}
-    controller.abort(); active?.done?.resolve(); phaseFrame?.done.resolve();
+    await interrupt('HOST_ERROR');
     try {await execution;} catch { /* Persisted runtime observations remain the authority. */ }
     finalState = 'INTERRUPTED'; try {updateRun(roots, executionId, runId, {state: finalState, endedAt: Date.now()});} catch { /* A persistence fault cannot claim a successful completion. */ }
     throw error;
@@ -179,7 +205,7 @@ export async function runHostedScenario(roots, executionId, runId, nonce, {runti
     // Native cleanup removes protected storage only after proving owned process
     // absence. Keep the creation-identity lock if that proof is incomplete.
     if (!existsSync(join(runRoots.runRoot, 'protected'))) await releaseHost(roots, nonce);
-    try {box.save({state: finalState ?? 'INTERRUPTED'});} catch { /* Ownership is retained when native cleanup still needs recovery. */ }
+    try {box.save({state: finalState ?? 'INTERRUPTED', ...(stopReason ? {stopReason} : {})});} catch { /* Ownership is retained when native cleanup still needs recovery. */ }
   }
 }
 

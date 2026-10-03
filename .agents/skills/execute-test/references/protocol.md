@@ -43,6 +43,9 @@ attempts. Confirmed resource creation also requires its captured identity.
 
 Replies are bounded private agent communications, never evidence. Reportable
 observations go through `check`, `evidence`, `note` or `capture`.
+`FINISH_REQUIRED` with `OBSERVATION_LIMIT` means the host is settling the scenario
+before its evidence budget is exhausted. Stop sending live commands, await the
+terminal status and inspect the report; do not replay the last action.
 If mailbox persistence fails, the host settles runtime cleanup before releasing
 ownership. Incomplete cleanup retains the ownership record for recovery.
 

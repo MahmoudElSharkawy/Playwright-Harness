@@ -43,7 +43,9 @@ async function validatePath(client, group, path) {
   if (!path) return;
   const project = await client.projectIdentity(), parts = path.split('\\'); requireThat(parts[0].toLowerCase() === project.name.toLowerCase(), 'Bug path belongs to another project.');
   const suffix = parts.slice(1).map(encodeURIComponent).join('/'), found = await client.cachedRead(`wit/classificationnodes/${group}${suffix ? `/${suffix}` : ''}?api-version=7.1`);
-  requireThat(typeof found.path === 'string' && found.path.replace(/^\\/, '').toLowerCase() === path.toLowerCase(), 'ADO area/iteration path did not match.');
+  const nodeParts = typeof found.path === 'string' ? found.path.replace(/^\\/, '').split('\\') : [];
+  const structure = group === 'areas' ? 'area' : 'iteration';
+  requireThat(nodeParts[1]?.toLowerCase() === structure && [nodeParts[0], ...nodeParts.slice(2)].join('\\').toLowerCase() === path.toLowerCase(), 'ADO area/iteration path did not match.');
 }
 function draftMetadata(drafts, fp, defaults, title) {
   const input = drafts?.[fp] ?? {}; requireThat(input && typeof input === 'object' && !Array.isArray(input) && Object.keys(input).every(key => ['title', 'severity', 'priority', 'notes'].includes(key)), 'Only bug title, severity, priority and notes are editable.');
@@ -161,10 +163,12 @@ async function reconcilePublication(client, roots, row, planId) {
 }
 async function publishResults(client, roots, executionId, view, revisions, options) {
   requireThat(view.source.scope.kind === 'suite', 'Story executions file bugs; publishing results requires suite scope.');
-  const {planId, suiteId} = view.source.scope, journal = ledger(roots, executionId, 'publications'), save = () => journal.save(journal.value), points = await client.list(`test/Plans/${planId}/Suites/${suiteId}/points?api-version=7.1`, 'offset'), pointIds = options['point-map'] ? readBounded(options['point-map']) : {}, omitted = [];
+  const {planId, suiteId} = view.source.scope, journal = ledger(roots, executionId, 'publications'), save = () => journal.save(journal.value), points = await client.list(`test/Plans/${planId}/Suites/${suiteId}/points?api-version=7.1`, 'offset'), suppliedPoints = options['point-map'] ? readBounded(options['point-map']) : {}, pointIds = {}, omitted = [];
+  requireThat(suppliedPoints && typeof suppliedPoints === 'object' && !Array.isArray(suppliedPoints) && Object.keys(suppliedPoints).every(caseId => view.source.cases.some(tc => String(tc.id) === caseId)), 'Point selections contain cases outside captured scope.');
+  for (const pointId of Object.values(suppliedPoints)) adoId(pointId);
   const eligible = view.source.cases.filter(tc => {
     if (!options['include-changed'] && revisions.some(change => change.caseId === tc.id)) {omitted.push({caseId: tc.id, reason: 'source-changed'}); return false;}
-    const candidates = points.filter(point => adoId(point.testCase.id) === tc.id), selected = Object.hasOwn(pointIds, tc.id) ? candidates.filter(point => adoId(point.id) === adoId(pointIds[tc.id])) : candidates;
+    const candidates = points.filter(point => adoId(point.testCase.id) === tc.id), selected = Object.hasOwn(suppliedPoints, tc.id) ? candidates.filter(point => adoId(point.id) === adoId(suppliedPoints[tc.id])) : candidates;
     if (!selected.length) {omitted.push({caseId: tc.id, reason: 'no-test-point'}); return false;} requireThat(selected.length === 1, 'Ambiguous test point; provide --point-map.');
     if (!view.scenarios.some(scenario => scenario.caseId === tc.id && scenario.selectedRunId && (scenario.state === 'ASSESSED' || scenario.status === 'FAIL'))) {omitted.push({caseId: tc.id, reason: 'no-verdict'}); return false;}
     pointIds[tc.id] = adoId(selected[0].id); return true;
@@ -199,5 +203,6 @@ async function deliverOwned(roots, executionId, command, options, {client: provi
   const client = provided ?? createAdoClient({...loadAdoConfiguration(roots), roots});
   requireThat(client.configuration.organizationUrl === view.source.organizationUrl && client.configuration.project.toLowerCase() === view.source.project.toLowerCase(), 'ADO destination differs from captured source.');
   const revisions = await checkSourceRevisions(view.source, createAdoTestSource(client));
+  writeJson(ownedFile(roots, executionId, 'delivery/revisions.json'), {version: 1, sourceFingerprint: view.execution.sourceFingerprint, checkedAt: new Date().toISOString(), revisions});
   return command === 'file-bugs' ? fileBugs(client, roots, executionId, view, revisions, options) : publishResults(client, roots, executionId, view, revisions, options);
 }

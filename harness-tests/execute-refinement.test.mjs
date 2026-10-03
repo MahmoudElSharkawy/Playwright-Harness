@@ -17,3 +17,14 @@ test('freeze rejects rewording, unlabeled reads, unsupported ownership and chang
   step.readOnlyContract = {reason: 'Read fixture'}; step.creates = [{resource: 'r', identityOutput: 'id', intent: 'restore'}]; assert.throws(f.freeze, /Unsupported resource/);
   delete step.creates; f.freeze(); const receipt = f.read(`.harness/runs/${f.executionId}/freeze.json`); receipt.scenarios[0].steps[0].optional = true; f.put(`.harness/runs/${f.executionId}/freeze.json`, receipt); assert.throws(() => readFrozen(f.roots, f.executionId), /receipt changed/);
 });
+
+test('freeze enforces M19 upper bounds while accepting shorter execution budgets', async t => {
+  const f = await executionFixture(t); f.apiStep();
+  for (const [key, value] of [['maxAttempts', 20], ['maxValueBytes', 1024 * 1024], ['cleanupTimeoutMs', 21 * 60 * 1000]]) {
+    const previous = f.refinement.limits[key]; f.refinement.limits[key] = value;
+    assert.throws(f.freeze, /at most 3 attempts|cleanup exceeds/);
+    if (previous === undefined) delete f.refinement.limits[key]; else f.refinement.limits[key] = previous;
+  }
+  Object.assign(f.refinement.limits, {maxAttempts: 3, maxValueBytes: 256 * 1024}); f.freeze();
+  const limits = readFrozen(f.roots, f.executionId).freeze.scenarios[0].limits; assert.equal(limits.timeoutMs, 20000); assert.equal(limits.maxAttempts, 3);
+});

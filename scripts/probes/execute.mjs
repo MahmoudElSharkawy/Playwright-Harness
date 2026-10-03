@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // A fixed driver exercises the same mailbox protocol used by a live agent.
 import assert from 'node:assert/strict';
-import {mkdirSync, readFileSync, existsSync, readdirSync} from 'node:fs';
+import {mkdirSync, readFileSync, writeFileSync, existsSync, readdirSync} from 'node:fs';
 import {join, resolve} from 'node:path';
 import {createServer} from 'node:http';
 import {randomUUID} from 'node:crypto';
@@ -34,6 +34,7 @@ ${signed ? '' : '<label>Username<input id="user"></label><label>Password<input i
 <fieldset disabled><button id="save">Save</button></fieldset><label>Status<input id="status" value="Bad" readonly></label><button id="good">Make good</button>
 <button id="async">Start update</button><p id="async-status">Waiting</p><div role="region" aria-label="Panel" style="background:blue;color:white;padding:16px">Panel<input aria-label="Panel text"><input type="checkbox" aria-label="Panel choice"><input type="hidden" value="Ignored"></div>
 <button id="new">New record</button><div id="record"></div>
+<label>Long status<textarea readonly>${'x'.repeat(8000)}</textarea></label>
 <script>
 const login=document.querySelector('#login');if(login)login.onclick=async()=>{const response=await fetch('/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({username:document.querySelector('#user').value,password:document.querySelector('#password').value})});if(response.ok)location.href='/account';};
 document.querySelector('#good').onclick=()=>document.querySelector('#status').value='Good';
@@ -144,6 +145,26 @@ try {
     await delay(10500); const later = await look(f); assert(later.snapshot.includes('Changed')); await ending(f, 'confirmed');
     const view = await finish(f), row = view.runs.at(-1), earlier = row.result.evidence.find(record => record.id === passed.result.evidenceIds[0]);
     assert(readFileSync(join(row.roots.runRoot, earlier.path), 'utf8').includes('Ready')); return {checkBoundToOwnSnapshot: true, laterSnapshotChanged: true};
+  });
+  await check('integrity-stop', async () => {
+    const f = fixture(['"Execution fixture" is present.', '"Execution fixture" is present.'], {mutate: refinement => {const later = refinement.scenarios[0].steps[1]; later.capability = 'mutations'; delete later.readOnlyContract;}});
+    await next(f); const begun = await doCommand(f, 'begin-step', 's001'); await doCommand(f, 'native', 'goto', origin); const passed = await checkPage(f, begun.contracts[0].key);
+    writeFileSync(ownedFile(roots, f.executionId, `${f.runId}/evidence/${passed.result.evidenceIds[0]}`), 'Tampered fixture snapshot');
+    const refused = await executeMain(roots, ['do', f.executionId, 'end-step', '--effect', 'none']); assert.equal(refused.reason, 'EVIDENCE_INTEGRITY_FAILURE');
+    await awaitStatus(f, state => state.state === 'INTEGRITY_FAILURE'); const view = collectExecution(roots, f.executionId); assert.equal(view.scenarios[0].status, null);
+    const observations = readBounded(ownedFile(roots, f.executionId, `${f.runId}/observations.json`));
+    assert(observations.scenarios[0].attempts.filter(attempt => attempt.identity.invocationId === 's002').every(attempt => attempt.effect.certainty === 'not-executed'));
+    assert(!existsSync(ownedFile(roots, f.executionId, `${f.runId}/protected`))); return {noVerdict: true, laterMutationNotDispatched: true, ownedSessionClosed: true};
+  });
+  await check('provenance-budget', async () => {
+    const f = fixture(['Long status equals "Good".'], {mutate: refinement => {refinement.scenarios[0].steps[0].expectations[0].conditions = [condition('Long status equals "Good".', 'equals', 'Good', {element: {role: 'textbox', name: 'Long status'}})];}});
+    await next(f); const begun = await doCommand(f, 'begin-step', 's001'); await doCommand(f, 'native', 'goto', origin); const seen = await look(f), ref = reference(seen.snapshot, 'textbox', 'Long status');
+    let stopped = false, count = 0;
+    for (; count < 10 && !stopped; count++) {const reply = await doCommand(f, 'check', begun.contracts[0].key, '--read', `value ${ref}`); stopped = reply.status === 'FINISH_REQUIRED';}
+    assert(stopped && count < 10); const view = await finish(f, 'FAIL'), row = view.runs.at(-1);
+    assert(row.result.evidence.filter(record => record.kind === 'assertion').every(record => record.bytes <= 64 * 1024));
+    const report = writeExecutionReport(roots, f.executionId); assert.equal(report.scenarios[0].status, 'FAIL'); assert.equal(report.scenarios[0].state, 'ASSESSED');
+    return {checksBeforeStop: count, assertionsWithin64KiB: true, historicalFailPreserved: true, reportIntegrityValid: true};
   });
   await check('diagnostics-modes', async () => {
     const samples = {};

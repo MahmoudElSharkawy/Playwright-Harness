@@ -11,7 +11,7 @@ test('supporting comparisons never decide a condition and finalized checked FAIL
 });
 test('invalidated FAIL caps later PASS; checked PASS plus grounded observed FAIL conflicts', () => {
   const l = ledger(); const failed = checked(l, false); l.invalidate(failed.seq, 'wrong-target'); checked(l); assert.equal(l.aggregate()[0].status, 'INDETERMINATE');
-  const other = ledger(); checked(other); other.observed('k1', 1, {status: 'FAIL', observed: 'Save is enabled', rationale: 'The control is enabled', actual: 'Enabled', whyNotChecked: 'visual-only', artifacts: [{id: 'snap', kind: 'snapshot', stateVersion: 0, text: 'button Save'}]}); assert.equal(other.aggregate()[0].reason, 'contradiction');
+  const other = ledger(); checked(other); other.observed('k1', 1, {status: 'FAIL', observed: 'Save is enabled', rationale: 'The control is enabled', actual: 'Enabled', whyNotChecked: 'visual-only', artifacts: [{id: 'snap', kind: 'snapshot', stateVersion: 0, text: 'button Save'}, {id: 'image', kind: 'screenshot', stateVersion: 0}]}); assert.equal(other.aggregate()[0].reason, 'contradiction');
 });
 test('vacuity, timing and direct self comparisons are refused', () => {
   assert.throws(() => compareRead({...condition, predicate: 'present'}, {kind: 'page', value: 'Save'}, ''), /VACUOUS/); assert(compareRead({...condition, predicate: 'equals'}, {kind: 'value', value: ''}, ''));
@@ -24,4 +24,21 @@ test('vacuity, timing and direct self comparisons are refused', () => {
 test('poisoning preserves historical FAIL and never invents a pass from literals', () => {
   const l = ledger(); checked(l, false); l.poisoned = true; assert.equal(l.aggregate()[0].status, 'FAIL'); assert.throws(() => checked(l), /POISONED/);
   const empty = ledger(); assert.equal(empty.aggregate()[0].status, 'INDETERMINATE');
+});
+
+test('prefix and suffix names cannot substitute for a frozen subject', () => {
+  for (const name of ['Save as', 'Auto Save', 'Unsaved']) for (const disabled of [true, false]) {
+    const l = ledger(), result = checked(l, disabled, {kind: 'element', role: 'button', name});
+    assert.equal(result.matching, false); assert.equal(l.aggregate()[0].status, 'INDETERMINATE');
+    checked(l); assert.equal(l.aggregate()[0].status, 'PASS');
+  }
+  const l = ledger(); assert(checked(l, true, {kind: 'element', role: 'button', name: '  SAVE  '}).matching);
+});
+
+test('visual judgments require screenshots even without missing literals', () => {
+  for (const text of ['The banner looks centered', 'The "Save" banner looks centered']) for (const status of ['PASS', 'FAIL']) {
+    const l = ledger({text, predicate: 'observational', subject: 'page'}), observation = {status, observed: text, rationale: 'Judged the rendered layout', actual: 'Banner position', whyNotChecked: 'visual-only', artifacts: [{id: 'snap', kind: 'snapshot', stateVersion: 0, text}]};
+    assert.throws(() => l.observed('k1', 1, observation), /screenshot/);
+    observation.artifacts.push({id: 'image', kind: 'screenshot', stateVersion: 0}); l.observed('k1', 1, observation); assert.equal(l.aggregate()[0].status, status);
+  }
 });
