@@ -1,6 +1,15 @@
 # Changelog
 
-## Unreleased — upgrade actions only on update
+## 3.1.2 — Upgrade actions only on update
+
+A first setup now ends with its readiness and next steps, without upgrade actions that
+do not apply.
+
+### Upgrade actions
+
+- Run setup from the 3.1.2 archive in each project: `npx --yes --package "<full path to playwright-pom-harness-3.1.2.tgz>" pom-harness setup`.
+
+### Changes
 
 - A first setup no longer lists upgrade actions; they appear only when updating from an earlier installed version. Previously a fresh install, a repair run and a configuration run listed every version's actions under "since your previous setup".
 
