@@ -20,13 +20,17 @@ async function fixture(t, {capability = 'reads', ...nativeOptions} = {}) {
   f.save(); f.freeze();
   const loaded = readFrozen(f.roots, f.executionId), scenario = loaded.freeze.scenarios[0], source = loaded.source.scenarios[0];
   const run = createRun(runInput(loaded.freeze, source, scenario, `run-${randomUUID()}`)), roots = {...f.roots, runRoot: join(f.projectRoot, '.harness/runs', f.executionId, run.id)}, native = fakeNative(nativeOptions);
-  const execute = (action, options = {}) => runSequentialScenario(run, roots, {browser: {target: 'ui', nativeSession: native.factory}, ...options}, {exercise: async phase => {
+  const execute = async (action, options = {}) => {
+    let assertionError;
+    const result = await runSequentialScenario(run, roots, {browser: {target: 'ui', nativeSession: native.factory}, ...options}, {exercise: async phase => {
     const frozen = scenario.steps[0];
     await phase.browser.attempt({operation: frozen.operation, invocationId: frozen.id, retry: frozen.capability === 'reads'}, async context => {
       const commands = new BrowserCommands({context, step: frozen, sourceScenario: source, references: loaded.freeze.referenceValues, outputs: new Map(), roots, executionId: f.executionId, runId: run.id, diagnostics: 'off'});
-      await action(commands, context, frozen.contracts[0].key);
+      try {await action(commands, context, frozen.contracts[0].key);} catch (error) {if (error instanceof assert.AssertionError) assertionError ??= error; throw error;}
     });
-  }});
+    }});
+    if (assertionError) throw assertionError; return result;
+  };
   const persist = () => {
     const input = runInput(loaded.freeze, source, scenario, run.id, run.startedAt);
     writeJson(ownedFile(f.roots, f.executionId, `snapshots/${run.id}.json`), {version: 1, executionId: f.executionId, scenarioId: scenario.id, runId: run.id, freezeFingerprint: loaded.execution.freezeFingerprint, inputFingerprint: run.inputFingerprint, input, explicitRerun: false}, {exclusive: true});
@@ -98,14 +102,14 @@ for (const fact of ['action', 'capture']) test(`F5: ${fact} prevents not-execute
 });
 
 for (const command of ['screenshot', 'state-save']) test(`F6: ${command} failure poisons a real attempt`, async t => {
-  const f = await fixture(t, {command: args => args[0] === command ? {stdout: JSON.stringify({error: 'Synthetic capture failure'}), exitCode: 1, dispatched: true} : undefined});
+  const f = await fixture(t, {command: args => args[0] === command ? {stdout: JSON.stringify({error: 'Synthetic capture failure'}), exitCode: 1, dispatched: true} : undefined}); let settled = false;
   const result = await f.execute(async (commands, context, key) => {
     await commands.check(key, 1, {read: 'state e1'});
     if (command === 'screenshot') await assert.rejects(commands.screenshot());
     else {commands.step = {...commands.step, login: {user: 'tester', landmark: 'Save'}}; await assert.rejects(commands.dispatch(['save-login']));}
-    assert(commands.ledger.poisoned); await commands.finalize('none');
+    assert(commands.ledger.poisoned); await commands.finalize('none'); settled = true;
   });
-  assert.notEqual(result.status, 'PASS');
+  assert(settled); assert.notEqual(result.status, 'PASS');
 });
 
 for (const boundary of ['dispatch', 'polling', 'finalization']) test(`H4: expiry during ${boundary} settles recorded FAIL exactly once`, async t => {
