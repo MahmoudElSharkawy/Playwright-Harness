@@ -6,6 +6,20 @@
 - Re-run setup to replace managed old-name links. Recognized legacy prerequisite knowledge migrates to `.harness/knowledge/prerequisites.md`; customized folders and foreign links are preserved for review. No old-name alias is installed.
 - `docs/RELEASING.md`: running the consumer flows locally is optional when the release pull request's `Harness validation` run passes, because CI runs them on Windows and Linux with npm 11 and npm 12.
 
+## 3.2.1 — Clearer final execution reports
+
+### Upgrade actions
+
+- Re-run setup from the 3.2.1 archive in each project to use the redesigned final execution report for future executions.
+- New report folders use one `execute-` prefix. Existing report folders and their links remain usable.
+
+### Changes
+
+- Add a compact case-level dashboard, outcome chart, attention list, and searchable, filterable, sortable test results.
+- Present expected and actual results, verification methods, retry history, cleanup and diagnostics as readable evidence, with full raw records available on demand.
+- Keep case outcomes separate from historical attempts, verification classifications, diagnostic occurrences and defect groups; preserve execution and verdict semantics.
+- Add responsive layouts and screenshot previews, with offline and no-JavaScript support and a hash-authorized inline script. No new runtime dependencies.
+
 ## 3.2.0 — M19 manual execution
 
 Execute captured ADO manual cases interactively through the native browser, API and DB runtimes, with condition-bound verdicts, verified reports and recoverable ADO delivery.

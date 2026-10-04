@@ -1,6 +1,6 @@
 {
   "name": "playwright-pom-harness",
-  "version": "3.2.0",
+  "version": "3.2.1",
   "description": "Canonical POM skills with consumer-owned state and local-source onboarding.",
   "license": "MIT",
   "skills": [
