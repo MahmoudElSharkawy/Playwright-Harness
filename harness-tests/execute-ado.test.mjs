@@ -55,7 +55,7 @@ for (const omit of ['source-changed', 'no-verdict']) test(`point-map entries for
   if (omit === 'source-changed') {await executeApi(execution); ado.state.items.get(101).rev = 2;}
   const map = join(execution.projectRoot, 'points.json'); writeJson(map, {101: 11, 102: 12});
   const client = () => createAdoClient({configuration: ado.config, roots: execution.roots, resolveCredential: () => ado.credential, fetchImpl: ado.fetchImpl});
-  const deliver = () => deliverExecution(execution.roots, execution.executionId, 'publish-results', {'point-map': map}, {client: client()});
+  const deliver = () => deliverExecution(execution.roots, execution.executionId, 'publish-results', {'point-map': map}, {client: client(), inventory: async () => [{pid: process.pid, identity: '1'}]});
   const preview = await deliver(); assert.deepEqual(preview.cases.map(tc => tc.caseId), [102]); assert.deepEqual(preview.omitted, [{caseId: 101, reason: omit}]);
   writeJson(map, {999: 11, 102: 12}); await assert.rejects(deliver(), /outside captured scope/); assert.equal(writes(ado).length, 0);
 });
