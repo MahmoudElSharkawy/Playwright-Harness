@@ -1,4 +1,4 @@
-import {existsSync, readFileSync, writeFileSync} from 'node:fs';
+import {existsSync, readFileSync, writeFileSync, openSync, fstatSync, readSync, closeSync, constants} from 'node:fs';
 import {join} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {assessRun} from '../execution-core/index.mjs';
@@ -7,9 +7,9 @@ import {reportDirectory, writeReports} from '../reporting/index.mjs';
 import {escapeHtml} from '../reporting/render.mjs';
 import {readFrozen, readBounded, ownedFile, listRunRecords} from './storage.mjs';
 import {restoreRun, deleteLogin} from './host.mjs';
-import {aggregateSourceConditions, ASSERTION_BYTES} from './verdicts.mjs';
+import {aggregateSourceConditions, ASSERTION_BYTES, compareRead, matchingRead, coverageAllows} from './verdicts.mjs';
 
-const order = ['FAIL', 'NEEDS_REVIEW', 'BLOCKED'];
+export const markdownText = value => String(value).replace(/\r?\n/g, ' ').replace(/[\\`*_{}\[\]()<>#+.!|~-]/g, '\\$&');
 export function diagnosticSignature(text, {bindings = {}, values = []} = {}) {
   const replacements = new Map();
   const add = (value, placeholder) => {if (typeof value === 'string' && value.trim()) for (const form of [value, encodeURIComponent(value)]) if (!replacements.has(form)) replacements.set(form, placeholder);};
@@ -22,14 +22,24 @@ export function diagnosticSignature(text, {bindings = {}, values = []} = {}) {
   }
   return signature.replace(/[a-f\d]{8}-[a-f\d]{4}-[a-f\d]{4}-[a-f\d]{4}-[a-f\d]{12}/gi, '<id>').replace(/\b\d+\b/g, '#');
 }
-export function groupStatus(statuses) {return order.find(status => statuses.includes(status)) ?? (statuses.length && statuses.every(status => status === 'SKIPPED') ? 'SKIPPED' : 'PASS');}
+export function readVerifiedEvidence(roots, record) {
+  const handle = openSync(join(roots.runRoot, record.path), constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
+  try {
+    const stat = fstatSync(handle); requireThat(stat.isFile() && stat.size === record.bytes, 'Registered evidence changed during reading.');
+    const bytes = Buffer.alloc(record.bytes + 1); let length = 0, count;
+    while (length < bytes.length && (count = readSync(handle, bytes, length, bytes.length - length, length)) > 0) length += count;
+    requireThat(length === record.bytes && fstatSync(handle).size === record.bytes && digest(bytes.subarray(0, length)) === record.sha256, 'Registered evidence changed during reading.'); return bytes.subarray(0, length);
+  } finally {closeSync(handle);}
+}
 export function defectFingerprint(source, item) {
   const canonical = {v: 1, org: source.organizationUrl, project: source.project, caseId: item.caseId, kind: item.kind, sourceStep: item.sourceStep,
     ...(item.kind === 'expectation' ? {expectedIndex: item.expectedIndex, conditionIndex: item.conditionIndex, conditionTemplate: item.conditionTemplate} : {signature: item.signature})};
   return `harness-defect-${fingerprint(canonical).slice(0, 12)}`;
 }
 function conditionRecords(result, roots, scenario) {
-  const conditions = [], diagnostics = [];
+  const conditions = [], diagnostics = [], parsed = new Map();
+  // A single verified byte buffer supplies both comparisons and diagnostics.
+  const read = record => {if (!parsed.has(record.id)) parsed.set(record.id, JSON.parse(readVerifiedEvidence(roots, record).toString('utf8'))); return parsed.get(record.id);};
   for (const step of scenario.steps) for (const contract of step.contracts) {
     const attempts = result.scenarios[0].attempts.filter(attempt => attempt.identity.invocationId === step.id);
     const pairs = attempts.map(attempt => ({attempt, assertion: attempt.assertions.find(item => item.id === contract.id)})).filter(pair => pair.assertion);
@@ -39,18 +49,35 @@ function conditionRecords(result, roots, scenario) {
       if (step.family !== 'browser' && ['PASS', 'FAIL'].includes(pair.assertion.status)) method = 'checked';
       for (const evidenceId of step.family === 'browser' ? pair.assertion.evidenceIds : []) {
         const record = result.evidence.find(item => item.id === evidenceId && item.kind === 'assertion'); if (!record) continue;
-        const value = readBounded(join(roots.runRoot, record.path), ASSERTION_BYTES);
-        if (value.schema === 'execute-assertion/1') {
+        requireThat(record.bytes <= ASSERTION_BYTES, 'Assertion evidence exceeds its bound.');
+        const value = read(record);
+        if (['execute-assertion/1', 'execute-assertion/2'].includes(value.schema)) {
           requireThat(fingerprint(value.contract) === fingerprint(contract), 'Assertion contract differs from frozen source.'); provenance = value; method = value.method;
+          if (value.schema === 'execute-assertion/2') for (const comparison of value.results) {
+            if (comparison.method === 'checked') requireThat(comparison.read?.artifactId && comparison.read.digest, 'Checked browser evidence has no verified read provenance.');
+            if (!comparison.read?.artifactId) continue;
+            const artifact = result.evidence.find(item => item.id === comparison.read.artifactId);
+            requireThat(artifact?.kind === 'observation' && pair.attempt.evidenceIds.includes(artifact.id), 'Read artifact is not associated with its assertion attempt.');
+            const observed = read(artifact);
+            requireThat(fingerprint(observed) === comparison.read.digest && observed.readKind === comparison.read.kind && fingerprint(observed.subject) === fingerprint(comparison.read.subject), 'Read provenance changed.');
+            const observedRead = {...comparison.read, value: observed.actual, coverage: observed.coverage};
+            const passed = compareRead(contract.condition, observedRead, comparison.supplied, comparison.exact);
+            requireThat(comparison.matching === matchingRead(contract.condition, observedRead, comparison.expected, comparison.supplied, comparison.exact), 'Comparison binding changed.');
+            requireThat(comparison.status === (coverageAllows(contract.condition, observedRead, passed) ? passed ? 'PASS' : 'FAIL' : 'INDETERMINATE'), 'Comparison differs from verified read.');
+          }
         }
       }
     }
-    conditions.push({stepId: step.id, ...contract, status: pair?.assertion.status ?? 'NOT_EVALUATED', method, provenance,
+    conditions.push({stepId: step.id, family: step.family, legacy: provenance?.schema === 'execute-assertion/1', ...contract, status: pair?.assertion.status ?? 'NOT_EVALUATED', method, provenance,
       evidenceIds: pair?.assertion.evidenceIds ?? []});
   }
   for (const record of result.evidence.filter(item => item.kind === 'observation' && item.bytes <= 256 * 1024)) {
-    let value; try {value = readBounded(join(roots.runRoot, record.path), 256 * 1024);} catch {continue;}
-    if (Array.isArray(value.diagnostics)) diagnostics.push({stepId: record.identity.invocationId, evidenceId: record.id, entries: value.diagnostics});
+    let value; try {value = read(record);} catch (error) {if (error instanceof SyntaxError) continue; throw error;}
+    if (Array.isArray(value.diagnostics)) {
+      const step = scenario.steps.find(item => item.id === record.identity.invocationId), assertions = result.evidence.filter(item => item.kind === 'assertion' && item.identity.attemptId === record.identity.attemptId).map(read);
+      const legacy = step?.family === 'browser' && (!assertions.length || assertions.some(item => item.schema !== 'execute-assertion/2'));
+      diagnostics.push({stepId: record.identity.invocationId, evidenceId: record.id, entries: value.diagnostics, family: step?.family ?? null, legacy});
+    }
   }
   return {conditions, diagnostics};
 }
@@ -91,16 +118,31 @@ export function executionDefects(view) {
       const expected = source.expectations.find(item => item.key === condition.key), item = {kind: 'expectation', caseId: source.caseId, sourceStep: expected.step, expectedIndex: expected.expected,
         conditionIndex: condition.index, conditionTemplate: expected.template, title: `${source.title}: ${condition.condition.text}`, status: condition.status,
         evidenceIds: condition.evidenceIds, runId: row.runId, scenarioId: source.id, stepId: condition.stepId, method: condition.method};
-      const fp = defectFingerprint(view.source, item), group = groups.get(fp) ?? {fingerprint: fp, ...item, occurrences: []}; group.occurrences.push({runId: row.runId, scenarioId: source.id, status: item.status, evidenceIds: item.evidenceIds}); groups.set(fp, group);
+      const fp = defectFingerprint(view.source, item), group = groups.get(fp) ?? {fingerprint: fp, ...item, occurrences: []}; group.occurrences.push({runId: row.runId, scenarioId: source.id, status: item.status, evidenceIds: item.evidenceIds, legacy: condition.legacy, family: condition.family, method: condition.method}); groups.set(fp, group);
     }
     for (const diagnostic of row.diagnostics) for (const entry of diagnostic.entries.filter(entry => !entry.notice && (entry.detail || entry.path))) {
       const step = scenario.steps.find(step => step.id === diagnostic.stepId), values = row.result.scenarios[0].attempts.flatMap(attempt => [...attempt.inputs, ...attempt.outputs].filter(value => value.sensitivity === 'public').map(value => value.value));
       const signature = diagnosticSignature(entry.path ?? entry.detail, {bindings: source.bindings, values});
       const item = {kind: 'diagnostic', caseId: source.caseId, sourceStep: step?.sourceSteps[0] ?? 0, signature, title: `${source.title}: ${entry.kind} diagnostic`, status: 'DIAGNOSTIC', method: 'diagnostic', runId: row.runId, scenarioId: source.id, stepId: diagnostic.stepId, evidenceIds: [diagnostic.evidenceId]};
-      const fp = defectFingerprint(view.source, item), group = groups.get(fp) ?? {fingerprint: fp, ...item, occurrences: []}; group.occurrences.push({runId: row.runId, scenarioId: source.id, status: item.status, evidenceIds: item.evidenceIds}); groups.set(fp, group);
+      const fp = defectFingerprint(view.source, item), group = groups.get(fp) ?? {fingerprint: fp, ...item, occurrences: []}; group.occurrences.push({runId: row.runId, scenarioId: source.id, status: item.status, evidenceIds: item.evidenceIds, legacy: diagnostic.legacy, family: diagnostic.family}); groups.set(fp, group);
     }
   }
   return [...groups.values()];
+}
+export function legacyCase(view, caseId) {
+  return view.scenarios.filter(item => item.caseId === caseId).some(scenario => view.runs.some(run => run.scenarioId === scenario.id && run.state === 'ASSESSED'
+    && (run.runId === scenario.selectedRunId || run.result.status === 'FAIL') && run.conditions.some(item => item.family === 'browser' && item.legacy)));
+}
+export function deliverableDefects(view, include = '') {
+  const selected = new Set(include ? include.split(',') : []), skipped = [], defects = [];
+  requireThat([...selected].every(item => ['needs-review', 'diagnostics'].includes(item)), 'Include supports needs-review,diagnostics.');
+  for (const defect of executionDefects(view)) {
+    const occurrences = defect.occurrences.filter(item => !item.legacy && (item.status === 'FAIL' && ['checked', 'observed', 'mixed'].includes(item.method ?? defect.method)
+      || item.status === 'INDETERMINATE' && selected.has('needs-review') || item.status === 'DIAGNOSTIC' && selected.has('diagnostics')));
+    if (occurrences.length) defects.push({...defect, status: occurrences.some(item => item.status === 'FAIL') ? 'FAIL' : defect.status, occurrences});
+    else skipped.push({fingerprint: defect.fingerprint, reason: defect.occurrences.some(item => item.legacy) ? 'legacy-evidence' : 'not-selected'});
+  }
+  return {defects, skipped};
 }
 export function writeExecutionReport(roots, executionId, {keepLogin = false} = {}) {
   const view = collectExecution(roots, executionId), defects = executionDefects(view), path = `reports/harness/execute-${executionId}-${randomUUID()}`, output = reportDirectory(roots, path), artifacts = [];
@@ -108,9 +150,9 @@ export function writeExecutionReport(roots, executionId, {keepLogin = false} = {
   for (const row of view.runs.filter(run => run.state === 'ASSESSED')) {
     const receipt = writeReports(roots, row.result, {directory: `${path}/runs/${row.runId}`}); requireThat(receipt.status === 'WRITTEN', 'A per-run report could not be written.');
   }
-  const summary = `# ${view.source.title}\n\nExecution: ${executionId}\n\n| Scenario | Outcome | Checked / observed / mixed |\n|---|---|---|\n${view.scenarios.map(row => `| ${row.id} | ${row.status ?? (row.state === 'INTEGRITY_FAILURE' ? 'INTEGRITY FAILURE (no verdict)' : row.state)} | ${row.methods.checked} / ${row.methods.observed} / ${row.methods.mixed} |`).join('\n')}\n\nExclusions: ${view.source.excluded.length}. Defect groups: ${defects.length}.\n`;
+  const summary = `# ${markdownText(view.source.title)}\n\nExecution: ${executionId}\n\n| Scenario | Outcome | Checked / observed / mixed |\n|---|---|---|\n${view.scenarios.map(row => `| ${markdownText(row.id)} | ${row.status ?? (row.state === 'INTEGRITY_FAILURE' ? 'INTEGRITY FAILURE (no verdict)' : row.state)} | ${row.methods.checked} / ${row.methods.observed} / ${row.methods.mixed} |`).join('\n')}\n\nExclusions: ${view.source.excluded.length}. Defect groups: ${defects.length}.\n`;
   write('summary.md', summary); write('defects.json', JSON.stringify(defects, null, 2) + '\n');
-  write('defects.md', `# Defect list\n\n${defects.map(item => `- ${item.fingerprint}: ${item.status} — ${item.title} (${item.occurrences.length} occurrence(s))`).join('\n')}\n`);
+  write('defects.md', `# Defect list\n\n${defects.map(item => `- ${item.fingerprint}: ${item.status} — ${markdownText(item.title)} (${item.occurrences.length} occurrence(s))`).join('\n')}\n`);
   let imageBytes = 0;
   const h = escapeHtml, image = (row, record) => {
     if (record.bytes > 2 * 1024 * 1024 || imageBytes + record.bytes > 20 * 1024 * 1024) return '';

@@ -1,4 +1,4 @@
-import {parseStepsXml, htmlToText} from './ado-steps.mjs';
+import {parseStepsXml, htmlToText, parameterNames} from './ado-steps.mjs';
 import {adoId, requireValue, workItemLinkId} from './config.mjs';
 import {validateLocalSource, loadLocalSource} from '../local-source.mjs';
 import {emptyAdoMetadata} from './ado-metadata.mjs';
@@ -44,11 +44,12 @@ export function createAdoTestSource(client) {
             dependencies[node.ref] = item.rev;
             requireValue(Number.isInteger(item.rev) && item.rev > 0, 'ADO shared-step revision is incomplete.');
             requireValue(emptyAdoMetadata(item.fields['Microsoft.VSTS.TCM.LocalDataSource'], 'NewDataSet'), 'Shared parameter sets are unsupported.');
-            for (const match of String(item.fields['Microsoft.VSTS.TCM.Parameters'] ?? '').matchAll(/<param\b[^>]*\bname="([^"]+)"/g)) sharedParameters.add(match[1]);
+            for (const name of parameterNames(item.fields['Microsoft.VSTS.TCM.Parameters'])) sharedParameters.add(name);
           }
           result.push(...(await expand(item.fields['Microsoft.VSTS.TCM.Steps'], [...trail, node.ref])).map(step => ({...step, fromShared: node.ref})));
         }
-        requireValue(result.length <= 1000 && shared.size <= 500, 'ADO expanded steps exceed scope limits.');
+        requireValue(result.length <= 1000, 'step-limit');
+        requireValue(shared.size <= 500, 'shared-step-limit');
       }
       return result;
     }
@@ -68,7 +69,7 @@ export function createAdoTestSource(client) {
       } catch (error) {
         if (!tolerant || error instanceof AdoError || error.ownershipFatal) throw error;
         if (cases.at(-1)?.id === id) cases.pop();
-        const reason = /cycle/.test(error.message) ? 'shared-step-cycle' : /nesting/.test(error.message) ? 'shared-step-depth' : /scope limits/.test(error.message) ? 'shared-step-limit' : /Shared parameter/.test(error.message) ? 'shared-parameter-set' : /absent/.test(error.message) ? 'no-steps' : 'unparsable-steps';
+        const reason = /cycle/.test(error.message) ? 'shared-step-cycle' : /nesting/.test(error.message) ? 'shared-step-depth' : ['step-limit', 'shared-step-limit', 'parameters-without-data'].includes(error.message) ? error.message : /Shared parameter/.test(error.message) ? 'shared-parameter-set' : /absent/.test(error.message) ? 'no-steps' : 'unparsable-steps';
         excluded.push({id, reason});
       }
     }

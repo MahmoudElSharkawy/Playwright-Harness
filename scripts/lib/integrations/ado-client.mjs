@@ -5,6 +5,7 @@ import {consumerPath} from '../consumer-paths.mjs';
 import {validateAdoConfiguration, requireValue, adoGuid} from './config.mjs';
 
 const digest = value => createHash('sha256').update(value).digest('hex');
+export const adoRequestFingerprint = (route, method, body, raw = false) => digest(JSON.stringify({route, method, body: raw ? digest(body) : body}));
 export class AdoError extends Error {
   constructor(code, status) { super(`ADO ${code}${status ? ` (HTTP ${status})` : ''}.`); this.code = code; this.status = status; }
 }
@@ -99,19 +100,21 @@ export function createAdoClient({configuration, roots, resolveCredential, fetchI
       async write(operation, route, body, {method = 'PATCH', patch = false, raw = false, contentType, onIdentity} = {}) {
         requireValue(!stopped && ['PATCH', 'POST'].includes(method), 'ADO delivery is stopped or method unsupported.');
         requireValue(/^[a-z-]+$/.test(operation), 'Invalid ADO operation label.');
-        destination(route); const requestFingerprint = digest(JSON.stringify({route, method, body: raw ? digest(body) : body})); let dispatched = false;
-        record({event: 'prepared', operation, requestFingerprint});
+        destination(route); const requestFingerprint = adoRequestFingerprint(route, method, body, raw); let dispatched = false;
+        record({event: 'prepared', operation, requestFingerprint}); let data, identity;
         try {
           const result = await request(route, {method, body, patch, raw, contentType, beforeDispatch() {record({event: 'dispatching', operation, requestFingerprint, effect: 'uncertain'}); dispatched = true;}});
           const key = {'create-run': 'runId', 'create-bug': 'workItemId', 'upload-attachment': 'attachmentId', 'create-pull-request': 'pullRequestId'}[operation], value = key === 'pullRequestId' ? result.data.pullRequestId : result.data.id;
-          const identity = key && ((Number.isSafeInteger(value) && value > 0) || adoGuid(value)) ? {[key]: value} : undefined;
+          identity = key && ((Number.isSafeInteger(value) && value > 0) || adoGuid(value)) ? {[key]: value} : undefined;
           record({event: 'acknowledged', operation, requestFingerprint, effect: 'confirmed', ...(identity ? {identity} : {})});
-          if (identity) await onIdentity?.(identity); return result.data;
+          data = result.data;
         } catch (error) {
           stopped = true;
           record({event: 'incomplete', operation, requestFingerprint, effect: dispatched ? 'uncertain' : 'not-executed', code: error instanceof AdoError ? error.code : 'local-failure'});
           throw new Error(`ADO delivery incomplete; inspect receipt ${receipt}. No automatic replay.`);
         }
+        // The acknowledgement is durable. A local callback failure must not rewrite a confirmed effect as uncertain.
+        if (identity) await onIdentity?.(identity); return data;
       },
       verified(identity) {
         requireValue(!stopped && identity && Object.values(identity).every(value => Number.isSafeInteger(value) && value > 0), 'Invalid ADO verification identity.');
@@ -126,7 +129,7 @@ export function createAdoClient({configuration, roots, resolveCredential, fetchI
     });
   }
   const cache = new Map();
-  const cached = (key, action) => {if (!cache.has(key)) cache.set(key, Promise.resolve().then(action)); return cache.get(key);};
+  const cached = (key, action) => {if (!cache.has(key)) {const pending = Promise.resolve().then(action); cache.set(key, pending); pending.catch(() => {if (cache.get(key) === pending) cache.delete(key);});} return cache.get(key);};
   return Object.freeze({configuration: config, read, list, delivery, projectIdentity, requireWorkItemProject,
     cachedRead: route => cached(`read:${route}`, () => read(route)),
     async wiql(query) {

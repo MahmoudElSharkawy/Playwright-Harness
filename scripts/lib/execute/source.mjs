@@ -1,16 +1,11 @@
-import {decodeEntities} from '../integrations/ado-steps.mjs';
+import {decodeEntities, parameterNames} from '../integrations/ado-steps.mjs';
+export {parameterNames} from '../integrations/ado-steps.mjs';
 import {sourceExpectations} from '../generation/handoff.mjs';
 import {secretFindings} from '../package-validation.mjs';
 import {data, fingerprint, requireThat} from '../execution-core/data.mjs';
+import {EXECUTION_DOCUMENT} from './storage.mjs';
 
 const sensitive = name => /password|passwd|pwd|secret|token|credential|authorization|connectionstring|api.?key|cookie/i.test(name);
-export function parameterNames(xml) {
-  if (!xml || /^\s*<parameters\s*\/>\s*$/i.test(xml)) return [];
-  requireThat(typeof xml === 'string' && /<parameters\b/.test(xml), 'parameters-without-data');
-  const names = [...xml.matchAll(/<param\b[^>]*\bname=(?:"([^"]+)"|'([^']+)')[^>]*\/?\s*>/g)].map(match => decodeEntities(match[1] ?? match[2]));
-  requireThat(names.length > 0 && new Set(names.map(name => name.toLowerCase())).size === names.length && names.every(name => /^[A-Za-z_][\w -]{0,79}$/.test(name)), 'parameters-without-data');
-  return names;
-}
 /** ADO's bounded DataSet subset. Text values retain whitespace and empty cells. */
 export function parseIterations(xml) {
   if (!xml || /^\s*<NewDataSet\s*\/>\s*$/i.test(xml) || /^\s*<NewDataSet>\s*<\/NewDataSet>\s*$/i.test(xml)) return [];
@@ -46,9 +41,10 @@ export function prepareSource(fetched, scope) {
       requireThat(!names.length || rows.length > 0, 'parameters-without-data');
       requireThat(rows.length <= 100, 'iteration-limit');
       requireThat(!tc.steps.some(step => secretFindings('expected.json', step.expected ?? '').length), 'credential-in-expected');
+      requireThat(!tc.steps.some(step => secretFindings('action.json', step.action ?? '').length), 'credential-in-source');
       const template = tc.steps.map(step => ({action: step.action, expected: step.expected ? [step.expected] : [], ...(step.fromShared ? {fromShared: step.fromShared} : {})}));
       const generated = (rows.length ? rows : [{}]).map((row, index) => {
-        const values = {}, needsBinding = [];
+        const values = Object.create(null), needsBinding = [];
         for (const name of names) {
           const column = Object.keys(row).find(key => key.toLowerCase() === name.toLowerCase());
           requireThat(column !== undefined, 'parameters-without-data');
@@ -70,13 +66,13 @@ export function prepareSource(fetched, scope) {
       cases.push({id: tc.id, rev: tc.rev, contentSha256: tc.contentSha256 ?? fingerprint({title: tc.title, steps: template, parameters: tc.parameters, data: tc.dataTableXml ?? null}), sharedIds: Object.keys(tc.sharedRevisions ?? {}).map(Number)});
       Object.assign(sharedSteps, tc.sharedRevisions ?? {});
     } catch (error) {
-      const reasons = ['no-steps', 'step-limit', 'shared-parameter-set', 'parameters-without-data', 'iteration-limit', 'data-table-unparsable', 'shared-step-parameters-unbound', 'credential-in-expected'];
+      const reasons = ['no-steps', 'step-limit', 'shared-parameter-set', 'parameters-without-data', 'iteration-limit', 'data-table-unparsable', 'shared-step-parameters-unbound', 'credential-in-expected', 'credential-in-source'];
       excluded.push({id: tc.id, reason: reasons.includes(error.message) ? error.message : 'unparsable-steps'});
     }
   }
   requireThat(scenarios.length > 0, 'No executable cases; inspect source exclusions.');
   return data({version: 1, scope, organizationUrl: fetched.organizationUrl, project: fetched.project, title: fetched.suiteName ?? fetched.storyTitle,
-    scenarios, cases, sharedSteps, excluded, ...(fetched.storyRev ? {scopeRev: fetched.storyRev} : {})}, 2 * 1024 * 1024);
+    scenarios, cases, sharedSteps, excluded, ...(fetched.storyRev ? {scopeRev: fetched.storyRev} : {})}, EXECUTION_DOCUMENT.maximum, EXECUTION_DOCUMENT);
 }
 /** Delivery-only freshness check. Shared-step changes flag every dependent case. */
 export async function checkSourceRevisions(source, adoSource) {

@@ -170,14 +170,17 @@ export function createDatabaseRuntime(run, inputRoots, {signal, resolveCredentia
           } else if (!scenario.issues.includes('indeterminate-outcome')) scenario.issues.push('indeterminate-outcome');
         }
         if (lifecycle) {
-          const existing = scenario.resources.find(r => r.id === lifecycle.resourceId), complete = current.outcome === 'SUCCESS' && current.effect.certainty === 'confirmed' && (phase !== 'RESTORE' || response?.restorationGuardVerified);
+          const existing = scenario.resources.find(r => r.id === lifecycle.resourceId), complete = current.outcome === 'SUCCESS' && current.assertions.every(item => item.status === 'PASS' && item.reliable) && current.effect.certainty === 'confirmed' && (phase !== 'RESTORE' || response?.restorationGuardVerified);
           const proof = evidence(current, 'lifecycle', {resourceId: existing.id, complete, ...(phase === 'RESTORE' ? {guard: 'version', verified: response?.restorationGuardVerified === true} : {})});
           if (current.effect.certainty === 'confirmed') current.effect.resourceIds.push(existing.id);
           existing.lifecycle = {...existing.lifecycle, status: complete ? 'completed' : phase === 'RESTORE' && response?.affectedRows === 0 ? 'conflict' : 'failed', attemptId: current.identity.attemptId, evidenceIds: [proof], ...(phase === 'RESTORE' ? {guard: {kind: 'version', evidenceIds: [proof]}} : {})};
         }
         evidence(current, 'observation', {target: operation.target, dispatched: current.effect.certainty !== 'not-executed', effect: current.effect.certainty, ...(failure ? {reason: failure.reason} : {})});
         current.endedAt = Date.now();
-        if (current.outcome === 'SUCCESS' && current.endedAt > (phaseNumber === 3 ? cleanupStartedAt + run.inputs.limits.cleanupTimeoutMs : run.deadlineAt)) {current.outcome = 'INFRASTRUCTURE_FAILURE'; current.failureClass = 'TIMEOUT';}
+        if (current.outcome === 'SUCCESS' && current.endedAt > (phaseNumber === 3 ? cleanupStartedAt + run.inputs.limits.cleanupTimeoutMs : run.deadlineAt)) {
+          current.outcome = 'INFRASTRUCTURE_FAILURE'; current.failureClass = 'TIMEOUT';
+          if (lifecycle) scenario.resources.find(item => item.id === lifecycle.resourceId).lifecycle.status = 'failed';
+        }
         const completed = attemptRecord(run, current); history.push(completed); scenario.attempts.push(completed);
         if (!retry || !failure || !['TRANSPORT','TIMEOUT'].includes(failure.reason) || signal?.aborted && phaseNumber !== 3 || decideRecovery(run, history, {evidence: observations.evidence, roots, cleanupStartedAt}).action !== 'RETRY') return completed;
       }

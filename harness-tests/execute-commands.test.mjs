@@ -81,11 +81,11 @@ for (const corrupt of ['missing', 'changed']) test(`end-step rejects ${corrupt} 
   assert.equal(f.assertions.length, 0); assert(!f.calls.some(([name]) => ['effect', 'resource', 'lifecycle'].includes(name)));
 });
 
-test('repeated large checks stop at the provenance budget and retain an assessed historical FAIL', async t => {
+test('V6: compact repeated checks stop at the provenance budget and retain an assessed historical FAIL', async t => {
   const core = coreFixture(t, {scenarios: scope(['snapshot', 'assertion'])}), f = commandFixture(core.roots.projectRoot, {core, predicate: 'equals', expected: {source: 'source-text', value: 'A'}, text: 'x'.repeat(8000)});
   f.step.contracts[0].id = 'visible'; let count = 0;
-  while (!f.commands.ledger.finishRequired && count < 10) {await f.commands.dispatch(['check', 'k1', '--read', 'text e2']); count++;}
-  assert(count < 10); assert(f.commands.ledger.finishRequired); assert.equal(f.commands.ledger.aggregate()[0].status, 'FAIL');
+  while (!f.commands.ledger.finishRequired && count < 200) {await f.commands.dispatch(['check', 'k1', '--read', 'text e2']); count++;}
+  assert(count < 200); assert(f.commands.ledger.finishRequired); assert.equal(f.commands.ledger.aggregate()[0].status, 'FAIL');
   await assert.rejects(f.commands.dispatch(['check', 'k1', '--read', 'text e2']), /OBSERVATION_LIMIT/);
   await f.commands.finalize('none');
   const assertion = [...f.evidence.values()].find(item => item.kind === 'assertion').value;
@@ -93,10 +93,10 @@ test('repeated large checks stop at the provenance budget and retain an assessed
   core.current.assertions = f.assertions; core.current.outcome = 'ASSERTION_FAILURE'; core.current.failureClass = 'ASSERTION'; assert.equal(core.assess().status, 'FAIL');
 });
 
-test('a single oversized read cannot hide a failed comparison behind an earlier PASS', async t => {
+test('V6: a 100 KiB read is assessed FAIL without exhausting assertion provenance', async t => {
   const core = coreFixture(t), f = commandFixture(core.roots.projectRoot, {core, predicate: 'equals', expected: {source: 'source-text', value: 'A'}, text: 'A'});
   await f.commands.dispatch(['check', 'k1', '--read', 'text e2']); f.text('x'.repeat(100000));
-  const reply = await f.commands.dispatch(['check', 'k1', '--read', 'text e2']); assert(reply.result.budgetExceeded); assert.equal(f.commands.ledger.aggregate()[0].status, 'INDETERMINATE');
-  await f.commands.finalize('none'); assert.equal(f.assertions[0].status, 'INDETERMINATE');
+  const reply = await f.commands.dispatch(['check', 'k1', '--read', 'text e2']); assert(!reply.result.budgetExceeded); assert.equal(f.commands.ledger.aggregate()[0].status, 'FAIL');
+  await f.commands.finalize('none'); assert.equal(f.assertions[0].status, 'FAIL');
   assert(Buffer.byteLength(JSON.stringify([...f.evidence.values()].find(item => item.kind === 'assertion').value)) <= ASSERTION_BYTES);
 });

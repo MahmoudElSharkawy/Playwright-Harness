@@ -18,6 +18,15 @@ const put = (root, path, value) => { const file = join(root, path); mkdirSync(di
 const legacy = () => ({manifest: {cases: [{id: 101}, {id: 102}]}, state: {cases: {'101': {status: 'passed', greens: 2}, '102': {status: 'failed', classification: 'app-defect'}}}});
 const publication = () => { const {manifest, state} = legacy(); return prepareLegacyPublication(manifest, state); };
 const writes = f => f.state.requests.filter(req => req.method !== 'GET' && req.path !== 'wit/workitemsbatch');
+
+test('C8: acknowledged ADO writes survive local callback failure and rejected cache entries can recover', async t => {
+  const f = await adoFixture(t), delivery = f.client.delivery('bugs', true);
+  await assert.rejects(delivery.write('create-bug', 'wit/workitems/$Bug?api-version=7.1', [{op: 'add', path: '/fields/System.Title', value: 'Synthetic defect'}], {method: 'POST', patch: true, onIdentity() {throw new Error('Injected local callback failure');}}), /Injected local callback/);
+  const events = f.receipts()[0]; assert(events.some(event => event.event === 'acknowledged' && event.identity.workItemId)); assert(!events.some(event => event.event === 'incomplete')); assert.equal(writes(f).length, 1);
+  let fail = true; f.state.fault = ({path, send}) => {if (path === 'testplan/plans' && fail) {send({}, 503); return true;}};
+  await assert.rejects(f.client.cachedRead('testplan/plans?api-version=7.1')); fail = false;
+  assert((await f.client.cachedRead('testplan/plans?api-version=7.1')).value);
+});
 const publish = (f, extra = {}) => createAdoTestManagement(f.client).publish({publication: publication(), planId: 1, suiteId: 2, ...extra});
 function cli(f, command, args = []) { return runCompatibility(command, ['--project-root', f.roots.projectRoot, ...args], {fetchImpl: f.fetchImpl, environment: {[f.config.credentialRef]: f.credential}}); }
 function configure(f) { put(f.roots.projectRoot, '.harness/integrations.json', {version: 1, ado: f.config}); }

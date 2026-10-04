@@ -1,4 +1,4 @@
-import {readFile, writeFile, lstat, realpath} from 'node:fs/promises';
+import {readFile, writeFile, lstat, realpath, unlink} from 'node:fs/promises';
 import {join, resolve} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {defineOperation, authorizeOperation, checkExecutionWindow, attemptRecord, decideRecovery, registerEvidence, verifyEvidence} from '../execution-core/index.mjs';
@@ -6,6 +6,7 @@ import {requireRun} from '../execution-core/inputs.mjs';
 import {data, id, oneOf, typedValue} from '../execution-core/data.mjs';
 import {within} from '../skill-roots.mjs';
 import {prepareNativeSession, NativeFailure} from './native-cli.mjs';
+import {prepareSettlement, projectOutcome} from './settlement.mjs';
 import {createScenarioState, requireScenarioState, acceptBrowserStorage, finishScenario, inputBindings, publicValue, rememberSensitive, phaseOrder, checkWorkWindow, observationBudgetReached, requireObservationCapacity} from '../sequential/state.mjs';
 
 export const browserCapabilities = Object.freeze(['browserReads', 'browserMutations']);
@@ -13,7 +14,7 @@ export const browserCapabilities = Object.freeze(['browserReads', 'browserMutati
 // synchronous JavaScript; host process limits remain responsible for that case.
 function boundedWork(action, currentWindow, signal, expire = () => {}) {
   return new Promise((resolveResult, reject) => {
-    let settled = false, timer;
+    let settled = false, expiring = false, timer;
     const finish = (error, value) => {
       if (settled) return; settled = true; clearTimeout(timer); signal?.removeEventListener('abort', check);
       if (error) reject(error); else resolveResult(value);
@@ -21,13 +22,13 @@ function boundedWork(action, currentWindow, signal, expire = () => {}) {
     const check = () => {
       clearTimeout(timer);
       try {const window = currentWindow(); timer = setTimeout(check, window.timeoutMs);}
-      catch (error) {expire(); finish(error);}
+      catch (error) {if (!expiring) {expiring = true; Promise.resolve().then(() => expire(error)).then(() => finish(error), () => finish(error));}}
     };
     signal?.addEventListener('abort', check); check();
-    if (!settled) Promise.resolve().then(() => {if (!settled) return action();}).then(value => {
-      if (settled) return;
-      try {currentWindow(); finish(undefined, value);} catch (error) {expire(); finish(error);}
-    }, error => finish(error));
+    if (!settled && !expiring) Promise.resolve().then(() => {if (!settled && !expiring) return action();}).then(value => {
+      if (settled || expiring) return;
+      try {currentWindow(); finish(undefined, value);} catch {check();}
+    }, error => {if (!expiring) finish(error);});
   });
 }
 /** Include these ownership operations in the immutable run before executing a scenario. */
@@ -37,7 +38,7 @@ export function browserLifecycleOperations(target) {
 }
 
 /** One sequential browser scenario. The callback uses the official native CLI, not a harness action language. */
-export async function runBrowserScenario(run, roots, {target, storageState, secrets = {}, signal, nativeTimeoutMs, commandTimeoutMs, execution, onUnavailable} = {}, body) {
+export async function runBrowserScenario(run, roots, {target, storageState, secrets = {}, signal, nativeTimeoutMs, commandTimeoutMs, execution, onUnavailable, nativeSession = prepareNativeSession} = {}, body) {
   requireRun(run); id(target);
   if (run.inputs.scenarios.length !== 1 || typeof body !== 'function') throw new Error('M6 accepts one sequential browser scenario per run.');
   if (signal !== undefined && !(signal instanceof AbortSignal)) throw new Error('Cancellation needs an AbortSignal.');
@@ -56,7 +57,8 @@ export async function runBrowserScenario(run, roots, {target, storageState, secr
   const origins = run.inputs.environment.targets.browser[target].origins;
   const initialWindow = checkExecutionWindow(run, {phase: 'SETUP', signal});
   if (!initialWindow.allowed) throw new NativeFailure(initialWindow.reason === 'CANCELLED' ? 'CANCELLED' : 'TIMEOUT');
-  const native = await prepareNativeSession(roots, {origins, storageState, secrets, ...(nativeTimeoutMs === undefined ? {} : {nativeTimeoutMs}), ...(commandTimeoutMs === undefined ? {} : {commandTimeoutMs})});
+  if (typeof nativeSession !== 'function') throw new Error('Native session factory must be a function.');
+  const native = await nativeSession(roots, {origins, storageState, secrets, ...(nativeTimeoutMs === undefined ? {} : {nativeTimeoutMs}), ...(commandTimeoutMs === undefined ? {} : {commandTimeoutMs})});
   let nativeCleanup;
   const closeOwnedSession = () => {
     state.cleanupStartedAt ??= Date.now();
@@ -81,15 +83,16 @@ export async function runBrowserScenario(run, roots, {target, storageState, secr
     return {timeoutMs: value.remainingMs, ...(cleanup ? {} : {signal})};
   }
   const cleanupWindow = () => {state.cleanupStartedAt ??= Date.now(); cleanupStartedAt = state.cleanupStartedAt; return window({identity: {phase: 'CLEANUP'}}, true);};
-  async function evidence(attempt, kind, bytes) {
+  async function evidence(attempt, kind, bytes, guard = () => {}) {
     oneOf(kind, ['observation','assertion','response','snapshot','screenshot','trace','reconciliation','lifecycle']);
     const artifactId = `artifact-${randomUUID()}`, path = `evidence/${artifactId}`;
     if (!Buffer.isBuffer(bytes) || !bytes.length || bytes.length > run.inputs.limits.maxEvidenceBytes) throw new Error('Evidence must be bounded sanitized bytes.');
     await writeFile(join(roots.runRoot, path), bytes, {mode: 0o600, flag: 'wx'});
+    try {guard();} catch (error) {await unlink(join(roots.runRoot, path)).catch(() => {}); throw error;}
     const artifact = registerEvidence(run, roots, {id: artifactId, identity: attempt.identity, kind, path, sanitized: true});
     observations.evidence.push(artifact); attempt.evidenceIds.push(artifactId); return artifactId;
   }
-  const observe = (attempt, kind, value) => evidence(attempt, kind, Buffer.from(JSON.stringify(data(value, run.inputs.limits.maxEvidenceBytes))));
+  const observe = (attempt, kind, value, guard) => evidence(attempt, kind, Buffer.from(JSON.stringify(data(value, run.inputs.limits.maxEvidenceBytes))), guard);
   const diagnostic = value => {try {return publicValue(state, value);} catch {return '[redacted]';}};
   // Fixed native facts are not application data. A confidential value can itself be
   // "OK" or true; matching it must not erase an executed effect or skip cleanup.
@@ -144,14 +147,42 @@ export async function runBrowserScenario(run, roots, {target, storageState, secr
       for (let number = 1; number <= run.inputs.limits.maxAttempts; number++) {
         const current = record(operation, invocationId, phase, number, inputs); let failure, dispatched = false, explicitEffect = false, active = true, manualRetry = false;
         const asserted = new Set(), pending = new Set(), nativePending = new Set(), eventStart = native.events.length;
-        const controller = new AbortController(); let expired = false;
-        const expire = () => {expired = true; active = false; controller.abort();};
+        const controller = new AbortController(); let expired = false, closing = false, beforeExpire, closingPromise, committed = false, context;
         const currentWindow = () => window(current, nextPhase === 3, true);
-        const requireActive = () => {if (!active) throw new Error('The browser attempt context has ended.');};
-        const track = (promise, native = false) => {pending.add(promise); if (native) nativePending.add(promise); promise.catch(error => {failure ??= error;}).finally(() => {pending.delete(promise); nativePending.delete(promise);}); return promise;};
+        const requireActive = () => {if (!active || closing) throw new Error('The browser attempt context has ended.');};
+        const commit = staged => {
+          if (!active || committed) throw new Error('The browser attempt has already settled.');
+          if (execution) for (const output of staged.outputs ?? []) if (output.sensitivity === 'public') publicValue(state, output.value);
+          const prepared = prepareSettlement(run, scenario, observations.evidence, current, staged, failure);
+          Object.assign(current, prepared.candidate);
+          for (const resource of prepared.resources) {const existing = scenario.resources.find(item => item.id === resource.id); if (existing) Object.assign(existing, resource); else scenario.resources.push(resource);}
+          explicitEffect = true; manualRetry = prepared.retry; committed = true;
+        };
+        const expire = reason => closingPromise ??= (async () => {
+          expired = closing = true; failure ??= reason; controller.abort();
+          state.cleanupStartedAt ??= Date.now(); cleanupStartedAt = state.cleanupStartedAt;
+          const remaining = Math.max(0, state.cleanupStartedAt + run.inputs.limits.cleanupTimeoutMs - Date.now());
+          const reserve = Math.min(5000, (state.cleanupReserveMs ?? 0) / 4, remaining);
+          const bounded = async (promise, milliseconds) => {let timer; try {await Promise.race([promise, new Promise(resolve => {timer = setTimeout(resolve, Math.max(0, milliseconds));})]);} finally {clearTimeout(timer);}};
+          if (nativePending.size) await bounded(Promise.allSettled([...nativePending]), remaining - reserve);
+          if (beforeExpire && reserve > 0) {
+            const until = Math.min(Date.now() + reserve, state.cleanupStartedAt + run.inputs.limits.cleanupTimeoutMs);
+            const guard = () => {if (!active || Date.now() >= until) throw new Error('Settlement window has ended.');};
+            const settlement = {
+              evidence: async (kind, value) => {guard(); return observe(current, kind, execution ? publicValue(state, value) : value, guard);},
+              verifyEvidence: () => {guard(); for (const item of observations.evidence.filter(item => current.evidenceIds.includes(item.id))) verifyEvidence(run, roots, item);},
+              commit: staged => {guard(); commit(staged);}, identity: context.identity
+            };
+            await bounded(Promise.resolve().then(() => beforeExpire(Object.freeze(settlement))).catch(error => {failure ??= error;}), until - Date.now());
+          }
+          active = false;
+        })();
+        const track = (promise, native = false) => {pending.add(promise); if (native) nativePending.add(promise); promise.catch(error => {if (!error.refused) failure ??= error;}).finally(() => {pending.delete(promise); nativePending.delete(promise);}); return promise;};
         if (!authorization.allowed) {current.outcome = 'BLOCKED'; current.failureClass = 'POLICY'; current.effect.certainty = 'not-executed';}
         else {
-          const context = {
+          context = {
+            onBeforeExpire: handler => {requireActive(); if (beforeExpire || typeof handler !== 'function') throw new Error('Register one expiry handler per attempt.'); beforeExpire = handler;},
+            commit: staged => {requireActive(); commit(staged);},
             diagnostic: args => {
               requireActive();
               if (!Array.isArray(args) || !['console', 'requests'].includes(args[0]) || args.slice(1).some(value => !['error', 'warning', 'info', 'debug', '--clear'].includes(value))) throw new Error('Unsupported diagnostic command.');
@@ -166,10 +197,10 @@ export async function runBrowserScenario(run, roots, {target, storageState, secr
               requireActive(); explicitEffect = false;
               return track((async () => {
                 try {const reply = await native.command(args, {...currentWindow(), signal: controller.signal}); dispatched = true; return reply;}
-                catch (error) {dispatched ||= error.dispatched === true; failure ??= error; throw error;}
+                catch (error) {if (!error.refused) {dispatched ||= error.dispatched === true; failure ??= error;} throw error;}
               })(), true);
             },
-            evidence: (kind, value) => {requireActive(); return track(observe(current, kind, execution ? publicValue(state, value) : value));},
+            evidence: (kind, value) => {requireActive(); return track(observe(current, kind, execution ? publicValue(state, value) : value, () => {if (!active) throw new Error('The browser attempt context has ended.');}));},
             verifyEvidence: () => {
               requireActive(); const ids = new Set(current.evidenceIds);
               for (const record of observations.evidence) if (ids.has(record.id)) {verifyEvidence(run, roots, record); ids.delete(record.id);}
@@ -181,7 +212,7 @@ export async function runBrowserScenario(run, roots, {target, storageState, secr
               const source = await realpath(resolve(native.workRoot, filename)), stat = await lstat(source);
               if (!within(await realpath(native.workRoot), source) || !stat.isFile() || stat.size > run.inputs.limits.maxEvidenceBytes) throw new Error('Native artifact escapes protected bounded storage.');
               const bytes = await sanitize(await readFile(source)); requireActive();
-              return await evidence(current, kind, bytes);
+              return await evidence(current, kind, bytes, requireActive);
             })());},
             // A protected location for native --filename/state-save arguments, never serialized as evidence.
             file: name => {requireActive(); id(name); return join(native.workRoot, name);},
@@ -200,6 +231,7 @@ export async function runBrowserScenario(run, roots, {target, storageState, secr
             identity: Object.freeze({...current.identity})
           };
           try {await boundedWork(() => action(context), currentWindow, signal, expire);} catch (error) {failure ??= error;}
+          if (closingPromise) await closingPromise;
           active = false;
           if (pending.size && !expired) {
             failure ??= new Error('Native work or evidence was not awaited.');
@@ -211,7 +243,7 @@ export async function runBrowserScenario(run, roots, {target, storageState, secr
           if (!dispatched && !failure) failure = new Error('A browser attempt needs an actual native observation.');
           if (dispatched && operation.capability === 'browserMutations' && !explicitEffect) current.effect.certainty = 'uncertain';
           const reliableFailure = current.assertions.some(item => item.status === 'FAIL' && item.reliable);
-          if (reliableFailure) {current.outcome = 'ASSERTION_FAILURE'; current.failureClass = 'ASSERTION';}
+          if (reliableFailure) Object.assign(current, projectOutcome(current, failure));
           else if (failure) {
             current.outcome = 'INFRASTRUCTURE_FAILURE'; current.failureClass = failure instanceof NativeFailure ? failure.classification : 'EXECUTOR';
             if (current.effect.certainty === 'none') current.effect.certainty = !dispatched ? 'not-executed' : operation.capability === 'browserReads' ? 'none' : 'uncertain';

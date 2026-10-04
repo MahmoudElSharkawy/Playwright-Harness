@@ -277,7 +277,7 @@ export function createApiRuntime(run, inputRoots, {signal, resolveCredential, re
         }
         if (lifecycle) {
           const existing = scenario.resources.find(item => item.id === lifecycle.resourceId);
-          const complete = current.outcome === 'SUCCESS' && current.effect.certainty === 'confirmed' && response?.status !== 412;
+          const complete = current.outcome === 'SUCCESS' && current.assertions.every(item => item.status === 'PASS' && item.reliable) && current.effect.certainty === 'confirmed' && response?.status !== 412;
           const proof = evidence(current, 'lifecycle', {resourceId: existing.id, complete, ...(lifecycle.guard ? {guard: lifecycle.guard} : {})});
           if (current.effect.certainty === 'confirmed') current.effect.resourceIds.push(existing.id);
           existing.lifecycle = {...existing.lifecycle, status: complete ? 'completed' : response?.status === 412 ? 'conflict' : 'failed', attemptId: current.identity.attemptId, evidenceIds: [proof],
@@ -286,7 +286,10 @@ export function createApiRuntime(run, inputRoots, {signal, resolveCredential, re
         evidence(current, 'observation', {target: operation.target, method: definition.request.method, dispatched, ...(failure ? {reason: failure.reason} : {}), effect: current.effect.certainty});
         current.endedAt = Date.now();
         // Synchronous evidence/serialization can cross the wall clock limit too.
-        if (current.outcome === 'SUCCESS' && current.endedAt > (phaseNumber === 3 ? cleanupStartedAt + run.inputs.limits.cleanupTimeoutMs : run.deadlineAt)) {current.outcome = 'INFRASTRUCTURE_FAILURE'; current.failureClass = 'TIMEOUT';}
+        if (current.outcome === 'SUCCESS' && current.endedAt > (phaseNumber === 3 ? cleanupStartedAt + run.inputs.limits.cleanupTimeoutMs : run.deadlineAt)) {
+          current.outcome = 'INFRASTRUCTURE_FAILURE'; current.failureClass = 'TIMEOUT';
+          if (lifecycle) scenario.resources.find(item => item.id === lifecycle.resourceId).lifecycle.status = 'failed';
+        }
         const completed = attemptRecord(run, current); history.push(completed); scenario.attempts.push(completed);
         const transient = failure && ['TRANSPORT', 'TIMEOUT', 'AUTHENTICATION_REJECTED'].includes(failure.reason);
         if (!retry || !transient || signal?.aborted && phaseNumber !== 3 || decideRecovery(run, history, {evidence: observations.evidence, roots, cleanupStartedAt}).action !== 'RETRY') return completed;

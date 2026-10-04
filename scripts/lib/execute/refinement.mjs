@@ -9,7 +9,7 @@ import {browserLifecycleOperations} from '../browser/index.mjs';
 import {loadEnvironment} from '../project-config.mjs';
 import {consumerEnvironment} from '../consumer-env.mjs';
 import {consumerPath} from '../consumer-paths.mjs';
-import {readExecution, readBounded, writeJson, saveExecution} from './storage.mjs';
+import {readExecution, readBounded, writeJson, saveExecution, EXECUTION_DOCUMENT} from './storage.mjs';
 
 export const normalize = value => String(value).replace(/\s+/g, ' ').trim().toLowerCase();
 const phases = Object.fromEntries(PHASES.map((phase, index) => [phase, Math.min(index, 3)]));
@@ -39,7 +39,7 @@ function references(roots, input) {
     let value, approved = false;
     if (reference.env) {
       requireThat(/^[A-Z][A-Z0-9_]*$/.test(reference.env) && !/PASSWORD|SECRET|TOKEN|CREDENTIAL|KEY|AUTH/i.test(reference.env), 'Use a non-secret reference variable.');
-      value = process.env[reference.env]; approved = value !== undefined;
+      value = consumerEnvironment(roots)[reference.env]; approved = value !== undefined;
     } else {
       const file = consumerPath(roots, reference.file), git = args => spawnSync('git', ['-c', `safe.directory=${roots.projectRoot}`, ...args], {cwd: roots.projectRoot, encoding: 'utf8', windowsHide: true});
       if (existsSync(file)) {
@@ -81,7 +81,7 @@ function operationFor(step, contracts, scenario, referenceValues) {
   const source = {kind: 'inline', reference: 'execute-refinement', version: '1.0.0'};
   if (step.family === 'browser') return defineOperation({id: step.id, family: 'browser', target: step.target, capability: step.capability === 'reads' ? 'browserReads' : 'browserMutations', source,
     definition: {intent: scenario.steps.filter(item => step.sourceSteps.includes(item.position)).map(item => item.action).join('\n'), ...(step.readOnlyContract ? {readOnlyContract: step.readOnlyContract} : {})}});
-  requireThat(step.operation && Array.isArray(step.checkProvenance), 'API/DB step needs an operation and per-condition checkProvenance.');
+  requireThat(step.operation && Array.isArray(step.checkProvenance), `${scenario.id}/${step.id}: API/DB step needs operation and checkProvenance. Map each runtime check, for example {check: "status", key: "<source-key>", condition: 1}.`);
   const definition = step.operation.definition ?? step.operation, copied = data(definition), checks = copied.checks;
   requireThat(Array.isArray(checks) && step.checkProvenance.length === checks.length && checks.length === contracts.length, 'Map each API/DB condition to exactly one runtime check.');
   const seen = new Set();
@@ -102,7 +102,7 @@ function operationFor(step, contracts, scenario, referenceValues) {
 }
 /** Freeze once, including independent per-condition core keys for API/DB runtimes. */
 export function freezeExecution(roots, executionId) {
-  const loaded = readExecution(roots, executionId), refinement = data(readBounded(join(loaded.directory, 'refinement.json')), 2 * 1024 * 1024);
+  const loaded = readExecution(roots, executionId), refinement = data(readBounded(join(loaded.directory, 'refinement.json'), EXECUTION_DOCUMENT.maximum), EXECUTION_DOCUMENT.maximum, EXECUTION_DOCUMENT);
   keys(refinement, ['version', 'environment', 'references', 'scenarios', 'limits'], 'execution refinement');
   requireThat(refinement.version === 1 && refinement.scenarios?.length === loaded.source.scenarios.length, 'Refinement must cover every scenario.');
   const refinementFingerprint = fingerprint(refinement);
@@ -169,9 +169,12 @@ export function freezeExecution(roots, executionId) {
     scenarios.push({id: source.id, steps, operations, expectations, limits, ...(targets.length ? {browserTarget: targets[0]} : {})});
   }
   const freeze = {version: 1, sourceFingerprint: loaded.execution.sourceFingerprint, refinementFingerprint, environment, environmentFingerprint: fingerprint(environment), referenceValues, scenarios};
-  writeJson(join(loaded.directory, 'freeze.json'), freeze, {exclusive: true});
-  saveExecution(roots, executionId, {...loaded.execution, freezeFingerprint: fingerprint(freeze)});
-  return {executionId, status: 'FROZEN', scenarios: scenarios.length};
+  writeJson(join(loaded.directory, 'freeze.json'), freeze, {exclusive: true, ...EXECUTION_DOCUMENT});
+  const guardRefs = [...new Set(scenarios.flatMap(scenario => scenario.steps.filter(step => step.login).map(step => environment.targets.browser[step.target].users[step.login.user].passwordRef)))].sort();
+  saveExecution(roots, executionId, {...loaded.execution, freezeFingerprint: fingerprint(freeze), guardRefs});
+  const warnings = scenarios.filter(scenario => scenario.browserTarget && Object.keys(environment.targets.browser[scenario.browserTarget].users ?? {}).length && !scenario.steps.some(step => step.login))
+    .map(scenario => ({scenarioId: scenario.id, reason: 'Configured users are unused; add a login binding if this case needs authentication.'}));
+  return {executionId, status: 'FROZEN', scenarios: scenarios.length, readiness: scopedReadiness(roots, freeze), warnings};
 }
 export function scopedReadiness(roots, freeze, scenarioId) {
   const scenarios = scenarioId ? freeze.scenarios.filter(item => item.id === scenarioId) : freeze.scenarios, environment = consumerEnvironment(roots), missing = new Set();

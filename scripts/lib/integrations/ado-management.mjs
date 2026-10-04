@@ -75,10 +75,10 @@ export function createAdoTestManagement(client) {
     } catch { throw delivery.incomplete(); }
   }
   return Object.freeze({
-    async publish({publication, planId, suiteId, pointIds = {}, execute = false, name, resumeRunId, onIdentity, onReceipt}) {
+    async publish({publication, planId, suiteId, pointIds = {}, execute = false, name, resumeRunId, onIdentity, onReceipt, points: providedPoints}) {
       requireValue(publications.has(publication), 'Use a validated publication input.'); planId = adoId(planId); suiteId = adoId(suiteId);
       requireValue(Object.keys(pointIds).every(id => publication.some(row => row.caseId === adoId(id))), 'Point selections contain cases outside publication scope.');
-      const points = await client.list(`test/Plans/${planId}/Suites/${suiteId}/points?api-version=7.1`, 'offset');
+      const points = providedPoints ?? await client.list(`test/Plans/${planId}/Suites/${suiteId}/points?api-version=7.1`, 'offset');
       requireValue(unique(points.map(point => adoId(point.id))), 'ADO returned duplicate points.');
       const rows = publication.map(row => {
         const candidates = points.filter(point => adoId(point.testCase?.id) === row.caseId);

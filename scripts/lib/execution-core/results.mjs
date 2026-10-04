@@ -31,6 +31,7 @@ function resourceIdentity(run, reference, origin, attempts) {
   return value;
 }
 
+export {lifecycle as validateResourceLifecycle};
 function lifecycle(run, resource, attempts, evidence) {
   keys(resource, ['id', 'originAttemptId', 'identity', 'ownership', 'intent', 'beforeStateRef', 'lifecycle'], 'resource');
   id(resource.id); id(resource.originAttemptId);

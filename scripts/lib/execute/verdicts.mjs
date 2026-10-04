@@ -3,7 +3,8 @@ import {data, requireThat, fingerprint} from '../execution-core/data.mjs';
 import {normalize, subjectDetails} from './refinement.mjs';
 
 export const ASSERTION_BYTES = 64 * 1024;
-export const assertionEvidence = result => data({schema: 'execute-assertion/1', ...result.provenance, status: result.status, method: result.method}, ASSERTION_BYTES);
+export const assertionEvidence = result => data({schema: 'execute-assertion/2', ...result.provenance, status: result.status, method: result.method}, ASSERTION_BYTES);
+export const coverageAllows = (condition, read, passed) => read.coverage?.complete !== false || typeof read.value === 'string' && (condition.predicate === 'present' && passed || condition.predicate === 'absent' && !passed);
 
 export function matchesSubject(frozen, observed) {
   const subject = subjectDetails(frozen);
@@ -34,7 +35,7 @@ export function requireIndependent(condition, resolved, read, typedSubjects = ne
   }
 }
 export function mandatoryLiterals(condition, bindings = {}) {
-  const text = condition.text, literals = [...text.matchAll(/["“]([^"”]+)["”]|'([^']+)'/g)].map(match => match[1] ?? match[2]);
+  const text = condition.text, literals = [...text.matchAll(/["“]([^"”]+)["”]|(?<![\p{L}\p{N}])'([^']+)'(?![\p{L}\p{N}])/gu)].map(match => match[1] ?? match[2]);
   literals.push(...(text.match(/\b\d+(?:\.\d+)?\b/g) ?? []));
   for (const value of Object.values(bindings)) if (String(value).trim() && text.includes(String(value))) literals.push(String(value));
   return [...new Set(literals)];
@@ -61,7 +62,7 @@ export class VerdictLedger {
   add(contract, value) {
     requireThat(!this.finishRequired, 'OBSERVATION_LIMIT: finish the scenario.');
     let result = data({seq: this.results.length + 1, conditionId: contract.id, stateVersion: this.stateVersion, invalidated: false, ...value});
-    const provenance = {schema: 'execute-assertion/1', version: 1, contract, results: [...this.results.filter(item => item.conditionId === contract.id), result], finalStateVersion: Number.MAX_SAFE_INTEGER, status: 'INDETERMINATE', method: 'unresolved'};
+    const provenance = {schema: 'execute-assertion/2', version: 2, contract, results: [...this.results.filter(item => item.conditionId === contract.id), result], finalStateVersion: Number.MAX_SAFE_INTEGER, status: 'INDETERMINATE', method: 'unresolved'};
     const bytes = Buffer.byteLength(JSON.stringify(provenance));
     this.finishRequired = bytes >= ASSERTION_BYTES * 0.7;
     let fits = bytes <= ASSERTION_BYTES - 2048;
@@ -79,7 +80,9 @@ export class VerdictLedger {
     requireIndependent(contract.condition, resolved, read, typedSubjects);
     const matching = matchingRead(contract.condition, read, resolved, supplied, exact), passed = compareRead(contract.condition, read, supplied, exact);
     requireThat(Array.isArray(evidenceIds) && evidenceIds.length > 0, 'A check needs registered observation evidence.');
-    return this.add(contract, {method: 'checked', matching, status: passed ? 'PASS' : 'FAIL', read, expected: resolved, supplied, exact, evidenceIds});
+    const {value: actual, ...reference} = read, complete = coverageAllows(contract.condition, read, passed);
+    const compact = read.artifactId ? {...reference, excerpt: String(typeof actual === 'object' ? JSON.stringify(actual) : actual).slice(0, 256)} : read;
+    return this.add(contract, {method: complete ? 'checked' : 'unresolved', matching, status: complete ? passed ? 'PASS' : 'FAIL' : 'INDETERMINATE', ...(complete ? {} : {reason: 'insufficient-evidence'}), read: compact, expected: resolved, supplied, exact, evidenceIds});
   }
   observed(key, index, {status, observed, rationale, actual, whyNotChecked, artifacts} = {}) {
     const contract = this.condition(key, index); this.timing(contract);
@@ -95,7 +98,7 @@ export class VerdictLedger {
     return this.add(contract, {method: 'observed', matching: true, status, observed, rationale, ...(actual === undefined ? {} : {actual}), whyNotChecked, evidenceIds: artifacts.map(item => item.id)});
   }
   indeterminate(key, index, reason) {
-    const contract = this.condition(key, index); this.timing(contract);
+    const contract = this.condition(key, index);
     requireThat(['ambiguous-expected', 'missing-reference-data', 'insufficient-evidence', 'blocked-by-defect'].includes(reason), 'Unknown indeterminate reason.');
     return this.add(contract, {method: 'unresolved', matching: true, status: 'INDETERMINATE', reason, evidenceIds: []});
   }
@@ -108,7 +111,7 @@ export class VerdictLedger {
   aggregate({skipped = false, artifactValid = () => true} = {}) {
     return this.contracts.map(contract => {
       const all = this.results.filter(item => item.conditionId === contract.id), valid = all.filter(item => !item.invalidated && item.matching && item.evidenceIds.every(artifactValid)
-        && (item.status === 'FAIL' || contract.condition.precondition || item.stateVersion === this.stateVersion));
+        && (item.status !== 'PASS' || contract.condition.precondition || item.stateVersion === this.stateVersion));
       const checkedFail = valid.find(item => item.method === 'checked' && item.status === 'FAIL'), checkedPass = valid.find(item => item.method === 'checked' && item.status === 'PASS');
       const observedFail = valid.find(item => item.method === 'observed' && item.status === 'FAIL'), observedPass = valid.find(item => item.method === 'observed' && item.status === 'PASS');
       let status, reason;
@@ -120,10 +123,10 @@ export class VerdictLedger {
       else if (valid.some(item => item.status === 'INDETERMINATE')) {status = 'INDETERMINATE'; reason = valid.find(item => item.status === 'INDETERMINATE').reason;}
       else if (checkedPass || observedPass) status = 'PASS';
       else {status = 'INDETERMINATE'; reason = 'unresolved';}
-      if (this.poisoned && !(status === 'FAIL' || contract.condition.precondition && ['PASS', 'FAIL'].includes(status))) status = 'NOT_EVALUATED';
+      if (this.poisoned && !(status === 'FAIL' || valid.some(item => item.method === 'unresolved' && item.status === 'INDETERMINATE') || contract.condition.precondition && ['PASS', 'FAIL'].includes(status))) status = 'NOT_EVALUATED';
       const kinds = new Set(valid.filter(item => item.status === status).map(item => item.method));
       return {id: contract.id, key: contract.key, index: contract.index, status, reliable: ['PASS', 'FAIL'].includes(status), method: kinds.size > 1 ? 'mixed' : [...kinds][0] ?? 'unresolved',
-        ...(reason ? {reason} : {}), evidenceIds: [...new Set(valid.flatMap(item => item.evidenceIds))], provenance: {version: 1, contract, results: all, finalStateVersion: this.stateVersion}};
+        ...(reason ? {reason} : {}), evidenceIds: [...new Set(valid.flatMap(item => item.evidenceIds))], provenance: {version: 2, contract, results: all, finalStateVersion: this.stateVersion}};
     });
   }
 }

@@ -5,6 +5,10 @@ import {fingerprint} from '../scripts/lib/execution-core/data.mjs';
 const condition = {text: 'Save button is disabled', predicate: 'state:disabled', subject: {element: {role: 'button', name: 'Save'}}, expected: null, precondition: false, exact: false, ambiguous: false};
 const ledger = (patch = {}) => new VerdictLedger([{id: 'c1', key: 'k1', index: 1, condition: {...condition, ...patch}, synthetic: false}], {verificationOnly: true});
 const checked = (l, disabled = true, subject = {kind: 'element', role: 'button', name: 'Save'}) => l.checked('k1', 1, {read: {kind: 'state', subject, value: {disabled}}, resolved: {value: null, source: 'none'}, evidenceIds: ['a1']});
+
+for (const reason of ['ambiguous-expected', 'missing-reference-data', 'insufficient-evidence', 'blocked-by-defect']) test(`V2: explicit ${reason} survives a page change and later PASS`, () => {
+  const l = ledger(); l.indeterminate('k1', 1, reason); l.changed(); checked(l); assert.equal(l.aggregate()[0].status, 'INDETERMINATE'); assert.equal(l.aggregate()[0].reason, reason);
+});
 test('supporting comparisons never decide a condition and finalized checked FAIL survives changes', () => {
   const l = ledger(); l.checked('k1', 1, {read: {kind: 'page', subject: {kind: 'page'}, value: 'Save'}, resolved: {value: null}, evidenceIds: ['a1']}); assert.equal(l.aggregate()[0].status, 'INDETERMINATE');
   checked(l); assert.equal(l.aggregate()[0].status, 'PASS'); checked(l, false); l.changed(); checked(l); assert.equal(l.aggregate()[0].status, 'FAIL');

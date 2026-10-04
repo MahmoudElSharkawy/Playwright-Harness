@@ -31,3 +31,15 @@ test('revision recheck uses batches of at most 200 and flags shared-step depende
   const changed = await checkSourceRevisions({cases, sharedSteps: {101: 0}}, createAdoTestSource(f.client)); assert.equal(changed.length, 405);
   const batches = f.state.requests.filter(request => request.path === 'wit/workitemsbatch'); assert.equal(batches.length, 3); assert(batches.every(request => request.body.ids.length <= 200));
 });
+
+test('S3: exclusions distinguish step and shared limits, parameter sets and source credentials', async t => {
+  const base = {id: 1, rev: 1, title: 'Valid', parameters: null, steps: [{action: 'Inspect', expected: 'Ready'}]}, tokenText = 'token' + '="' + 'fixture-value' + '"';
+  const source = prepareSource({organizationUrl: 'https://ado.example.test', project: 'demo', suiteName: 'Exclusions', cases: [base,
+    {...base, id: 2, steps: Array(1001).fill(base.steps[0])}, {...base, id: 3, sharedParameterSet: true},
+    {...base, id: 4, steps: [{action: tokenText, expected: 'Ready'}]}, {...base, id: 5, steps: [{action: 'Inspect', expected: tokenText}]}]}, {kind: 'suite', planId: 1, suiteId: 2});
+  assert.deepEqual(source.excluded.map(row => row.reason), ['step-limit', 'shared-parameter-set', 'credential-in-source', 'credential-in-expected']);
+  const f = await adoFixture(t), sharedIds = Array.from({length: 501}, (_, i) => 1000 + i);
+  for (const id of sharedIds) f.state.items.set(id, {id, rev: 1, fields: {'System.Title': 'Shared step', 'System.TeamProject': 'demo', 'Microsoft.VSTS.TCM.Steps': xml()}});
+  f.state.items.get(101).fields['Microsoft.VSTS.TCM.Steps'] = `<steps>${sharedIds.map(ref => `<compref id="${ref}" ref="${ref}"/>`).join('')}</steps>`;
+  const fetched = await createAdoTestSource(f.client).fetchSuite(1, 2, {tolerant: true}); assert.equal(fetched.excluded[0].reason, 'shared-step-limit');
+});

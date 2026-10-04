@@ -18,7 +18,8 @@ export function snapshotRefs(text) {
     const reference = node[3].match(/(?:^| )\[ref=((?:f\d+)?e\d+)\](?= |$)/)?.[1];
     if (!isSnapshotRef(reference)) continue;
     let name; try {name = node[2] ? JSON.parse(node[2]) : '';} catch {continue;}
-    refs.set(reference, {kind: ['region', 'main', 'navigation', 'dialog', 'form', 'group'].includes(node[1]) ? 'region' : 'element', role: node[1], name});
+    const subject = {kind: ['region', 'main', 'navigation', 'dialog', 'form', 'group'].includes(node[1]) ? 'region' : 'element', role: node[1], name};
+    Object.defineProperty(subject, 'active', {value: node[3].includes(' [active]')}); refs.set(reference, subject);
   }
   return refs;
 }

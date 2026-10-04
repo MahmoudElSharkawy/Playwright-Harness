@@ -1,5 +1,13 @@
 // Targeted ADO Steps XML and legacy Markdown compatibility, adapted from the supplied harness.
 import {emptyAdoMetadata} from './ado-metadata.mjs';
+import {requireValue} from './config.mjs';
+export function parameterNames(xml) {
+  if (!xml || /^\s*<parameters\s*\/>\s*$/i.test(xml) || /^\s*<parameters>\s*<\/parameters>\s*$/i.test(xml)) return [];
+  requireValue(typeof xml === 'string' && /<parameters\b/.test(xml), 'parameters-without-data');
+  const names = [...xml.matchAll(/<param\b[^>]*\bname=(?:"([^"]+)"|'([^']+)')[^>]*\/?\s*>/g)].map(match => decodeEntities(match[1] ?? match[2]));
+  requireValue(names.length > 0 && new Set(names.map(name => name.toLowerCase())).size === names.length && names.every(name => /^[A-Za-z_][\w -]{0,79}$/.test(name)), 'parameters-without-data');
+  return names;
+}
 export function slugify(s, max = 50) {
   return String(s).toLowerCase()
     .replace(/[^a-z0-9؀-ۿ]+/g, '-') // keep Arabic letters readable
