@@ -17,6 +17,12 @@ function project(t) {
 function put(root,path,text){const file=join(root,path);mkdirSync(dirname(file),{recursive:true});writeFileSync(file,text);}
 const adopt=root=>adoptProject({projectRoot:root,environment:'qa',mode:'test'});
 const shipped=readdirSync(join(packageRoot,'.agents/skills')).filter(name=>existsSync(join(packageRoot,'.agents/skills',name,'SKILL.md'))).sort();
+
+for (const host of ['.agents', '.claude']) test(`U2: ${host} consumer execute-test folder is preserved with rename guidance`, t => {
+ const root=project(t), path=`${host}/skills/execute-test/SKILL.md`, content='---\nname: execute-test\n---\nConsumer command\n';put(root,path,content);
+ assert.throws(()=>adopt(root), error=>error.conflicts.some(message=>message.includes('execute-test-team')&&message.includes('preserved')));
+ assert.equal(readFileSync(join(root,path),'utf8'),content);
+});
 const registry=ids=>JSON.stringify({planId:7,names:[],branches:[{name:'Synthetic',inScope:true}],suites:[{branch:0,id:10,name:'Synthetic',cases:ids.map(id=>({id,title:`Synthetic case ${id}`,desc:'fixture',verdict:'k',note:''}))}],manual:{},bugs:{}});
 test('fresh onboarding requires deliberate profile; preview writes nothing',t=>{
  const root=project(t);assert.throws(()=>adoptProject({projectRoot:root,environment:'qa'}));assert.deepEqual(readdirSync(root),[]);

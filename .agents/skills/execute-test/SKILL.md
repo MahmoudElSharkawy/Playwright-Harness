@@ -17,10 +17,13 @@ given by the user remains in force for ordinary permitted application operations
 1. Run `prepare suite|story <id> [--plan <id>] [--environment <name>] [--checkpoint]`.
    Read the captured source and exclusions. Edit only its draft `refinement.json`,
    following [refinement](references/refinement.md); then run `freeze <exec>`.
+   Complete required login, API/DB operations, provenance and cleanup declarations.
+   Resolve `readiness.ready: false` for the selected scenario before starting it.
 2. Read [protocol](references/protocol.md) and [verdicts](references/verdicts.md).
    Run `next <exec>` and drive its live commands. Adapt to the observed UI using
    fresh refs. Every expected condition needs a check, grounded observation or
    explicit unresolved reason. Actions alone do not establish a pass.
+   Use the returned `startUrl` and pause between cases when `checkpoint` is true.
 3. Repeat `next` until complete. Use `resume` or `next --rerun <scenario>` after
    an interruption or integrity failure. Report remaining blockers candidly.
 4. Run `report <exec>` and share the dashboard, methods, defects and cleanup

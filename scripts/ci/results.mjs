@@ -14,6 +14,13 @@ export function executeDiagnostics(assessment) {
     return result;
   }) : [];
 }
+export function nativeSummaryFields(kind, assessment, cleanup) {
+  const numeric = (input, names) => Object.fromEntries(names.filter(name => Number.isFinite(input?.[name]) && input[name] >= 0).map(name => [name, input[name]]));
+  if (kind === 'execute') return {diagnosticsLatencyMs: numeric(assessment?.diagnosticsLatencyMs, ['end', 'per-step'])};
+  if (kind !== 'parallel') return {};
+  return {checks: (assessment?.counts ?? []).slice(0, 2).map(item => numeric(item, ['scenarios', 'assertions', 'evidence'])),
+    ...(cleanup ? {cleanup: {ownedDatabasesRemoved: cleanup.ownedDatabasesRemoved === true, fixtureServersClosed: cleanup.fixtureServersClosed === true}} : {})};
+}
 /** Only known source filenames and numeric locations leave the private TAP log. */
 export function testFailureLocations(output, files) {
   const locations = new Map();

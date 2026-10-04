@@ -17,6 +17,10 @@ Execute captured ADO manual cases interactively through the native browser, API 
 ### Changes
 
 - Accept plain and frame-prefixed native browser references, including quoted snapshot keys; retain snapshot membership and state-version checks.
+- Settle browser attempts atomically across completion, interruption and deadlines; retain earlier failures and incomplete cleanup obligations.
+- Verify rendered DOM reads with explicit frame coverage and compact, rechecked assertion provenance. Legacy browser evidence remains readable with restricted delivery eligibility.
+- Recover bounded command receipts, owned sessions and ADO delivery without replaying uncertain mutations; default Bug candidates to reliable matching failures.
+- Support 500 ten-step scenarios within bounded aggregate documents, scoped readiness and host-bound command guards.
 - Add the execute-test skill and execute CLI, captured revisions/iterations, a sequential live host, cleanup receipts, login reuse, diagnostics and dashboard/defect reporting.
 - Reassess evidence before delivery, retain historical valid FAILs and let explicit valid reruns replace integrity-invalid runs while preserving audit history.
 - Flush create identities in ADO acknowledgements and recover filings/publications through stable tags/names. No new runtime dependencies.

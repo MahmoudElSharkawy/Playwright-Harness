@@ -36,7 +36,8 @@ ${signed ? '' : '<label>Username<input id="user"></label><label>Password<input i
 <button id="async">Start update</button><p id="async-status">Waiting</p><div role="region" aria-label="Panel" style="background:blue;color:white;padding:16px">Panel<input aria-label="Panel text"><input type="checkbox" aria-label="Panel choice"><input type="hidden" value="Ignored"></div>
 <button id="new">New record</button><div id="record"></div>
 <button>Order #1001</button><button>Status: Active</button><iframe title="Same origin" src="/frame"></iframe>
-<label>Long status<textarea readonly>${'x'.repeat(8000)}</textarea></label>
+<button onclick="confirm('Fixture confirmation')">Open dialog</button>
+<label>Long status<textarea readonly>${'x'.repeat(100 * 1024)}</textarea></label>
 <script>
 const login=document.querySelector('#login');if(login)login.onclick=async()=>{const response=await fetch('/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({username:document.querySelector('#user').value,password:document.querySelector('#password').value})});if(response.ok)location.href='/account';};
 document.querySelector('#good').onclick=()=>document.querySelector('#status').value='Good';
@@ -45,6 +46,7 @@ document.querySelector('#new').onclick=async()=>{await fetch('/record',{method:'
 console.error('Synthetic diagnostic');fetch('/diagnostic?privateQuery=omitted');
 </script></body></html>`;
 const server = createServer(async (request, response) => {
+  if (request.url === '/read-fixture') {response.writeHead(200, {'content-type': 'text/html'}); response.end(`<!doctype html><body><p>Sh<span>own</span></p><p hidden>Hidden secret</p><div style="visibility:hidden">Hidden parent<span style="visibility:visible">Visible child</span></div><div contenteditable role="textbox" aria-label="Notes">Saved note</div><input value="Editable echo"><button aria-label="Accessible only"></button><select aria-label="Country"><option value="US" selected>United States</option><option>Unselected label</option></select><div id="shadow"><span slot="label">Assigned label</span>Hidden light</div><iframe srcdoc="<p>Frame text</p>"></iframe><iframe sandbox srcdoc="<p>Unavailable content</p>"></iframe><script>document.querySelector('#shadow').attachShadow({mode:'open'}).innerHTML='<p>Shadow text</p><slot name="label">Fallback</slot>';</script></body>`); return;}
   if (request.url === '/frame') {response.writeHead(200, {'content-type': 'text/html'}); response.end('<button>Frame action</button>'); return;}
   if (unavailable) {request.socket.destroy(); return;}
   if (request.url.startsWith('/diagnostic')) {response.writeHead(500); response.end('Synthetic failure'); return;}
@@ -89,8 +91,8 @@ async function click(f, name) {const seen = await look(f); return doCommand(f, '
 async function checkPage(f, key, index = 1, wait) {return doCommand(f, 'check', key, '--condition', String(index), '--read', 'page', ...(wait ? ['--wait', String(wait)] : []));}
 async function ending(f, effect = 'none') {return doCommand(f, 'end-step', '--effect', effect);}
 async function awaitStatus(f, test, timeout = 90000, observe = () => {}) {
-  const deadline = Date.now() + timeout;
-  while (Date.now() < deadline) {const result = await executeMain(roots, ['status', f.executionId]); observe(result.host); if (test(result.host)) return result.host; await delay(100);}
+  const deadline = performance.now() + timeout;
+  while (performance.now() < deadline) {const result = await executeMain(roots, ['status', f.executionId]); observe(result.host); if (test(result.host)) return result.host; await delay(100);}
   throw new Error('Host did not reach its expected state.');
 }
 async function finish(f, expected = 'PASS') {
@@ -105,7 +107,7 @@ async function check(name, action) {
   catch (error) {const facts = retryProbeDiagnostic({...diagnostic, actual: error.actual}); checks.push({name, status: 'FAIL', message: error.message, ...(facts ? {diagnostic: facts} : {})});}
   unavailable = false; console.log(JSON.stringify(checks.at(-1)));
   const owner = await lockStatus(roots);
-  if (owner) try {await executeMain(roots, ['stop', owner.executionId]);} catch { /* Recovery below proves ownership before stopping leftovers. */ }
+  if (owner) try {await executeMain(roots, ['stop', owner.executionId]); await awaitStatus({executionId: owner.executionId}, state => ['FINISHED', 'INTERRUPTED', 'INTEGRITY_FAILURE'].includes(state.state));} catch { /* Recovery below proves ownership before stopping leftovers. */ }
 }
 let login;
 try {
@@ -121,6 +123,25 @@ try {
     await checkPage(f, begun.contracts[0].key); await ending(f, 'confirmed'); await finish(f);
     return {navigations: 2, iframe: true, reload: true};
   });
+  await check('rendered-reads', async () => {
+    const f = fixture(['"United States" is present. "Hidden secret" is absent.'], {mutate: refinement => {refinement.scenarios[0].steps[0].expectations[0].conditions = [condition('"United States" is present.', 'present', 'United States'), condition('"Hidden secret" is absent.', 'absent', 'Hidden secret')];}});
+    await next(f); const begun = await doCommand(f, 'begin-step', 's001'); await doCommand(f, 'native', 'goto', `${origin}/read-fixture`);
+    const present = await checkPage(f, begun.contracts[0].key); assert.equal(present.result.status, 'PASS');
+    const text = present.result.read.excerpt; for (const value of ['Shown', 'United States', 'Shadow text', 'Assigned label', 'Frame text', 'Visible child']) assert(text.includes(value));
+    for (const value of ['Hidden secret', 'Editable echo', 'Unselected label', 'Accessible only', 'Hidden light', 'Fallback', 'Hidden parent', 'Saved note']) assert(!text.includes(value));
+    assert.equal(text.split('Assigned label').length, 2); assert.equal(present.result.read.coverage.complete, false);
+    const seen = await look(f), editor = await doCommand(f, 'capture', 'editorText', '--read', `text ${reference(seen.snapshot, 'textbox', 'Notes')}`); assert.equal(editor.output.value, 'Saved note');
+    assert.equal((await checkPage(f, begun.contracts[0].key, 2)).result.status, 'INDETERMINATE'); await ending(f); await finish(f, 'NEEDS_REVIEW');
+    return {renderedText: true, selectedLabel: true, shadowAndSlotOnce: true, frameGap: true};
+  });
+  await check('modal-and-type', async () => {
+    const f = fixture(['Execution fixture is present.'], {mutate: refinement => {const step = refinement.scenarios[0].steps[0]; step.capability = 'mutations'; delete step.readOnlyContract;}});
+    await next(f); const begun = await doCommand(f, 'begin-step', 's001'); await doCommand(f, 'native', 'goto', origin);
+    let seen = await look(f); await doCommand(f, 'native', 'click', reference(seen.snapshot, 'textbox', 'Username')); await look(f); await doCommand(f, 'native', 'type', 'Synthetic public name');
+    await click(f, 'Open dialog'); const refused = await executeMain(roots, ['do', f.executionId, 'look']); assert.equal(refused.status, 'MODAL_PENDING');
+    await doCommand(f, 'native', 'dialog-dismiss'); await look(f); await checkPage(f, begun.contracts[0].key); await ending(f, 'confirmed'); await finish(f);
+    return {focusedType: true, modalRecovery: true};
+  });
   await check('login-reuse', async () => {
     login = fixture(['"Signed in" is present.'], {cases: 2, mutate: refinement => {for (const scenario of refinement.scenarios) {const step = scenario.steps[0]; step.capability = 'mutations'; delete step.readOnlyContract; step.login = {user: 'tester', landmark: 'Signed in'}; step.expectations[0].conditions = [condition('"Signed in" is present.', 'present', 'Signed in')];}}});
     await next(login); await doCommand(login, 'begin-step', 's001'); await doCommand(login, 'native', 'goto', origin);
@@ -134,7 +155,7 @@ try {
   });
   await check('no-secret-leaks', async () => {
     assert(login); const report = writeExecutionReport(roots, login.executionId);
-    const scan = directory => {for (const entry of readdirSync(directory, {withFileTypes: true})) {const file = join(directory, entry.name); if (entry.isDirectory()) {if (!['protected', 'auth'].includes(entry.name)) scan(file);} else if (/\.(json|jsonl|md|html|log)$/.test(entry.name)) {const text = readFileSync(file, 'utf8'); assert(!text.includes(credential)); assert(!text.includes(username));}}};
+    const scan = directory => {for (const entry of readdirSync(directory, {withFileTypes: true})) {const file = join(directory, entry.name); if (entry.isDirectory()) {if (!['protected', 'auth'].includes(entry.name)) scan(file);} else if (/\.(json|jsonl|md|html|log)$/.test(entry.name)) {const text = readFileSync(file, 'utf8'); assert(!text.includes(credential));}}};
     scan(ownedFile(roots, login.executionId, '.scan').replace(/[/\\]\.scan$/, '')); scan(join(projectRoot, report.directory));
     assert(!existsSync(ownedFile(roots, login.executionId, 'auth'))); return {publicArtifactsChecked: true, savedAuthenticationRemoved: true};
   });
@@ -146,7 +167,7 @@ try {
     const seen = await look(f); await doCommand(f, 'check', key, '--condition', '2', '--read', `state ${reference(seen.snapshot, 'button', 'Save')}`);
     const observedSnapshot = await look(f), screenshot = await doCommand(f, 'evidence', 'screenshot');
     await doCommand(f, 'observe', key, 'PASS', '--condition', '3', '--observed', 'Panel is blue.', '--rationale', 'The visible panel background is blue.', '--why-not-checked', 'visual-only', '--evidence', `${observedSnapshot.evidenceId},${screenshot.evidenceId}`);
-    const count = await doCommand(f, 'check', key, '--condition', '4', '--read', `count ${reference(observedSnapshot.snapshot, 'region', 'Panel')} textbox`); assert.equal(count.result.read.value, 1);
+    const count = await doCommand(f, 'check', key, '--condition', '4', '--read', `count ${reference(observedSnapshot.snapshot, 'region', 'Panel')} textbox`); assert.equal(count.result.read.excerpt, '1');
     const end = await ending(f); assert.equal(end.expectations[0].method, 'mixed'); const view = await finish(f); assert.equal(view.scenarios[0].methods.mixed, 1); return {conditions: 4, checked: 3, observed: 1, expectationMethod: 'mixed', textboxCountExcludesOtherInputs: true};
   });
   await check('fail-finality', async () => {
@@ -176,19 +197,19 @@ try {
   await check('provenance-budget', async () => {
     const f = fixture(['Long status equals "Good".'], {mutate: refinement => {refinement.scenarios[0].steps[0].expectations[0].conditions = [condition('Long status equals "Good".', 'equals', 'Good', {element: {role: 'textbox', name: 'Long status'}})];}});
     await next(f); const begun = await doCommand(f, 'begin-step', 's001'); await doCommand(f, 'native', 'goto', origin); const seen = await look(f), ref = reference(seen.snapshot, 'textbox', 'Long status');
-    let stopped = false, count = 0;
-    for (; count < 10 && !stopped; count++) {const reply = await doCommand(f, 'check', begun.contracts[0].key, '--read', `value ${ref}`); stopped = reply.status === 'FINISH_REQUIRED';}
-    assert(stopped && count < 10); const view = await finish(f, 'FAIL'), row = view.runs.at(-1);
+    const reply = await doCommand(f, 'check', begun.contracts[0].key, '--read', `value ${ref}`); assert.equal(reply.result.status, 'FAIL'); assert(reply.result.read.excerpt.length <= 256); assert.equal(reply.result.read.value, undefined);
+    await ending(f); const view = await finish(f, 'FAIL'), row = view.runs.at(-1);
     assert(row.result.evidence.filter(record => record.kind === 'assertion').every(record => record.bytes <= 64 * 1024));
     const report = writeExecutionReport(roots, f.executionId); assert.equal(report.scenarios[0].status, 'FAIL'); assert.equal(report.scenarios[0].state, 'ASSESSED');
-    return {checksBeforeStop: count, assertionsWithin64KiB: true, historicalFailPreserved: true, reportIntegrityValid: true};
+    assert(row.result.evidence.some(record => record.kind === 'observation' && record.bytes > 100 * 1024));
+    return {largeReadBytes: 100 * 1024, assertionsWithin64KiB: true, historicalFailPreserved: true, reportIntegrityValid: true};
   });
   await check('diagnostics-modes', async () => {
     const samples = {};
     for (const mode of ['end', 'per-step']) {
       const f = fixture(Array(3).fill('"Execution fixture" is present.'), {diagnostics: mode}); await next(f); let elapsed = 0;
       for (const step of f.refinement.scenarios[0].steps) {await doCommand(f, 'begin-step', step.id); await doCommand(f, 'native', 'goto', origin); await checkPage(f, step.expectations[0].key); const started = performance.now(); await ending(f); elapsed += performance.now() - started; await awaitStatus(f, state => !state.active || state.step !== step.id);}
-      const view = await finish(f), diagnostics = view.runs.at(-1).diagnostics; assert.equal(diagnostics.length, mode === 'end' ? 1 : 3);
+      const view = await finish(f), diagnostics = view.runs.at(-1).diagnostics; assert.equal(diagnostics.length, mode === 'end' ? 1 : 6);
       assert(diagnostics.some(record => record.entries.some(entry => entry.kind === 'console'))); assert(diagnostics.some(record => record.entries.some(entry => entry.kind === 'request')));
       assert(!JSON.stringify(diagnostics).includes('privateQuery')); latency[mode] = Math.round(elapsed); samples[mode] = {steps: 3, captures: diagnostics.length, endStepTotalMs: latency[mode]};
     }

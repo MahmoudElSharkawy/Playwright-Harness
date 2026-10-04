@@ -64,13 +64,37 @@ test('F1 F4 V1: failed mutation reconciles against a fresh snapshot and settles 
 });
 
 test('F5: invalid not-executed settlement leaves evaluated FAIL available for a valid commit', async t => {
-  const f = await fixture(t, {evaluate: () => ({disabled: false, enabled: true})});
+  const f = await fixture(t, {evaluate: () => ({disabled: false, enabled: true})}); let settled = false;
   const result = await f.execute(async (commands, context, key) => {
     await commands.check(key, 1, {read: 'state e1'});
     await assert.rejects(commands.finalize('not-executed'), /evaluated assertions/);
-    await commands.finalize('none');
+    await commands.finalize('none'); settled = true;
   });
-  assert.equal(result.status, 'FAIL');
+  assert(settled); assert.equal(result.status, 'FAIL');
+});
+
+test('F5: a genuinely unexecuted step settles without dispatching a business action', async t => {
+  const f = await fixture(t, {capability: 'mutations'});
+  const result = await f.execute(async commands => {await commands.finalize('not-executed');});
+  const attempt = result.scenarios[0].attempts.find(item => item.identity.phase === 'EXERCISE');
+  assert.equal(attempt.effect.certainty, 'not-executed');
+  assert.equal(attempt.outputs.length, 0); assert(attempt.assertions.every(item => !['PASS', 'FAIL'].includes(item.status)));
+  assert.notEqual(result.status, 'PASS'); assert(!f.native.calls.some(args => ['click', 'fill', 'type'].includes(args[0])));
+});
+
+for (const fact of ['action', 'capture']) test(`F5: ${fact} prevents not-executed settlement and keeps a valid settlement available`, async t => {
+  const f = await fixture(t, {capability: 'mutations'}); let settled = false;
+  const result = await f.execute(async commands => {
+    if (fact === 'action') {await commands.snapshot(); await commands.native(['click', 'e1']);}
+    else await commands.dispatch(['capture', 'captured', '--read', 'value e1']);
+    await assert.rejects(commands.finalize('not-executed'), /dispatched actions, outputs or evaluated assertions/);
+    await commands.finalize(fact === 'action' ? 'confirmed' : 'none'); settled = true;
+  });
+  assert(settled); const attempt = result.scenarios[0].attempts.find(item => item.identity.phase === 'EXERCISE');
+  assert.equal(attempt.effect.certainty, fact === 'action' ? 'confirmed' : 'none');
+  assert.equal(attempt.outputs.length, fact === 'capture' ? 1 : 0);
+  if (fact === 'capture') assert.equal(attempt.outputs[0].producer.attemptId, attempt.identity.attemptId);
+  assert.notEqual(result.status, 'PASS');
 });
 
 for (const command of ['screenshot', 'state-save']) test(`F6: ${command} failure poisons a real attempt`, async t => {

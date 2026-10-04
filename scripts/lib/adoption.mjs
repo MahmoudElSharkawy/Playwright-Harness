@@ -100,7 +100,7 @@ export function adoptProject({projectRoot,installedRoot=packageRoot,environment,
       const hash=digest(readFileSync(join(roots.projectRoot,file)));
       if(dataDestination(file) && !isRedirect(file,hash))data.push(file);
       else if(knownInstruction(file,hash))instructions.push({file,hash});
-      else return conflict(`Customized legacy skill needs a manual merge: ${file}`);
+      else return conflict(rel.endsWith('/execute-test')?`Consumer-owned ${rel} is preserved. Rename that skill and its frontmatter name (for example execute-test-team), then rerun setup to install the harness /execute-test.`:`Customized legacy skill needs a manual merge: ${file}`);
     }
     // Data is copied by the migration below. A folder whose tracked team data would only
     // survive as an untracked copy under .harness/state stays, and the user decides.
@@ -129,7 +129,7 @@ export function adoptProject({projectRoot,installedRoot=packageRoot,environment,
       if(entry.kind==='file') {conflict(`${rel} is a file where the harness links a skill; review it.`);continue;}
       if(dir==='.claude/skills') {planLegacyFolder(rel,path,source);continue;}
       const copy=existsSync(join(path,'SKILL.md')) && digest(readFileSync(join(path,'SKILL.md')))===digest(readFileSync(join(source,'SKILL.md')));
-      conflict(copy?`${rel} is a committed copy of the harness skill; run "git rm -r --cached ${rel}", delete the folder, then rerun setup.`:`Customized skill needs a manual merge: ${rel}`);
+      conflict(copy?`${rel} is a committed copy of the harness skill; run "git rm -r --cached ${rel}", delete the folder, then rerun setup.`:name==='execute-test'?`Consumer-owned ${rel} is preserved. Rename that skill and its frontmatter name (for example execute-test-team), then rerun setup to install the harness /execute-test.`:`Customized skill needs a manual merge: ${rel}`);
     }
   }
   for(const rel of listed) {

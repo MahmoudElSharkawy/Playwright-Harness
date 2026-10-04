@@ -42,8 +42,8 @@ phase can be re-entered idempotently.
 
 The PAT needs **Work Items: Read & Write**, **Test Management: Read & Write** (both
 verified in this project), and **Code: Read & Write** for PR creation.
-(For EXPLORE, the browser-testing skill ships its own `preflight.js` that probes the
-whole toolchain in one call — prefer it over individual checks when that phase runs.)
+For EXPLORE, follow the configured native-runtime readiness and handoff checks in
+[M13](../../../../docs/M13-GENERATION.md).
 
 ### 0b. Triage — depth from blast radius × reversibility
 
@@ -211,11 +211,8 @@ For standalone manual execution with no code generation, route to [execute-test]
 
 ## 4. GENERATE — skill-first POM automation
 
-Inputs: `_suite.json` (raw ADO steps + suggestions), the refined specs from phase 2
-(the executable expression of each case), the `codegen-notes/` of the run recorded
-in `_suite.json.explore.run` (reading them is the sanctioned exception to the "never
-read executions/" rule — nothing else under `executions/` is ever read; a run
-without notes means re-explore, not log mining), the git-tracked
+Inputs: the source cases and refinement from phase 2, the assessed exploration and
+frozen generation handoff described in [M13](../../../../docs/M13-GENERATION.md), the git-tracked
 `.harness/knowledge/ui/` (selector, landmark, and rendered-string authority proven by
 earlier runs), and the existing framework code as the living style reference.
 
@@ -525,7 +522,7 @@ with no intervening edit violates the workflow; the current hook is advisory.
 | BRANCH | current branch is `automation/ado-suite-<suiteId>-*` (never master) |
 | FETCH | `test/ado-suite-<suiteId>/_suite.json` exists (with ≥1 case) |
 | REFINE | every spec in the suite folder ends with a `## Refinement log` section, and every prose precondition is resolved per [prerequisite-dictionary.md](prerequisite-dictionary.md) (seed steps, GUI-chain expansion, or NEEDS-FIXTURE) |
-| EXPLORE | `_suite.json.explore` names a run whose `codegen-notes/` has one file per dispatched spec, or `explore.skipped` is true; missing stems → re-explore only those specs |
+| EXPLORE | Assessed exploration has a verified frozen [M13 generation handoff](../../../../docs/M13-GENERATION.md), preserving each source expectation and its evidence; missing evidence requires scoped exploration before generation |
 | GENERATE | every file in `_suite.json.resolvedSpecFiles` exists and, across them, every manifest tms id appears in an `allure.tms` call (grep `tests/*.spec.ts` before declaring a partial), AND the framework-review verdict is APPROVE |
 | VERIFY | `_verify-state.json` shows every case green with `greens ≥ 2` (two consecutive passing runs — the rerun-reusability gate) or terminally classified; a fresh session with no such file runs the spec (twice when green) to establish state |
 | DELIVER | PR exists for the branch (`_suite.json.pr` records its id/url); outcomes published when the user opted in; `--mark-automated` run only after merge |

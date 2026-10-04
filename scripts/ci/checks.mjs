@@ -27,7 +27,7 @@ export function runChecks(root, audit) {
   ];
   const env = {npm_execpath: npmPath(), npm_config_cache: join(audit, 'npm-cache')};
   const checks = definitions.map(([id, args]) => {
-    const result = command(args, {cwd: root, env, log: join(audit, `${id}.log`)});
+    const result = command(args, {cwd: root, env, log: join(audit, `${id}.log`), ...(id === 'tests' ? {timeout: 900000} : {})});
     const counts = id === 'tests' ? testCounts(result.output) : undefined;
     const check = {id, status: result.status === 'PASS' && (!counts || completeTests(counts)) ? 'PASS' : 'FAIL', exitCode: result.exitCode, diagnostic: result.diagnostic, log: `${id}.log`, sha256: result.sha256,
       ...(counts ? {counts, ...(!completeTests(counts) ? {failureLocations: testFailureLocations(result.output, tests)} : {})} : {})}; console.log(JSON.stringify(check)); return check;

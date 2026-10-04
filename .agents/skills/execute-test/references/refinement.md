@@ -9,6 +9,13 @@ Preserve every source action and bind each expectation once, at or after its sou
 step. Splitting is allowed only when normalized condition texts joined with spaces
 equal the original expectation. Never rewrite or weaken it. Drafts default to
 observational conditions; choose a deterministic predicate when it can be checked.
+REFINE must explicitly complete required login bindings, API/DB operation definitions,
+check provenance and resource/cleanup declarations; the draft does not infer these.
+Freeze reports the missing step/binding and returns scoped `readiness`. Configured
+users without login produce guidance, without blocking unrelated scenarios.
+Source/refinement/freeze aggregates permit 500 scenarios, 64 MiB, 2,000,000 JSON
+nodes and depth 32. Other artifacts retain their separate limits. Non-secret expected
+environment references use the consumer environment loader, including `.env`.
 
 ```json
 {

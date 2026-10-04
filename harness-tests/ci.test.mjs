@@ -5,7 +5,12 @@ import {tmpdir} from 'node:os';
 import {join, dirname} from 'node:path';
 import {validateInstalledGraph, clearedOverrides} from '../scripts/ci/distribution.mjs';
 import {checkContracts} from '../scripts/ci/contracts.mjs';
-import {testCounts, completeTests, completeChecks, requiredChecks, completeNativeProof, browserDiagnostics, executeDiagnostics, testFailureLocations} from '../scripts/ci/results.mjs';
+import {testCounts, completeTests, completeChecks, requiredChecks, completeNativeProof, browserDiagnostics, executeDiagnostics, testFailureLocations, nativeSummaryFields} from '../scripts/ci/results.mjs';
+
+test('U3: CI native summary allow-lists numeric metrics and cleanup flags', () => {
+  assert.deepEqual(nativeSummaryFields('execute', {diagnosticsLatencyMs: {end: 1, 'per-step': 2, unexpected: 'private'}}), {diagnosticsLatencyMs: {end: 1, 'per-step': 2}});
+  assert.deepEqual(nativeSummaryFields('parallel', {counts: [{scenarios: 13, assertions: 4, evidence: 5, extra: 'private'}], databases: 'private'}, {ownedDatabasesRemoved: true, fixtureServersClosed: true, extra: 'private'}), {checks: [{scenarios: 13, assertions: 4, evidence: 5}], cleanup: {ownedDatabasesRemoved: true, fixtureServersClosed: true}});
+});
 import {requiredBrowserChecks} from '../scripts/probes/browser-checks.mjs';
 import {retryProbeDiagnostic} from '../scripts/probes/execute-checks.mjs';
 import {writeJson, readBounded} from '../scripts/lib/execute/storage.mjs';
