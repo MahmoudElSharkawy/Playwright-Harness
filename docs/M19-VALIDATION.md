@@ -15,8 +15,43 @@ implementation review later in this document. They do not authorize merge or rel
 - Subsequent local installed suite: **980/983 PASS**, all 13 static checks pass and package content remains unchanged. Besides the two unchanged junction failures, an existing 120 ms test deadline expired during storage setup under concurrent load; the test passes in isolation and now controls its clock to test callback expiration deterministically. This archive predates the final H2 repair and is superseded.
 - Reviewed local installed candidate: **982/984 PASS**, all 13 static checks pass, 363 installed files match the archive and package content remains unchanged. Only the two documented local junction failures remain. After packing, three explicit F5 cases and callback-assertion propagation were added without changing runtime code; all **20/20** finalization tests pass, with independent approval. Hosted gates will test those additions in the final branch archive.
 - Same-version replacement proof: **PASS**, npm **11.12.1**, two distinct 3.2.0 archives. Replacement verifies 363 installed files; injected failure after candidate setup restores the original archive/manifest/lock/setup journal and `npm ci` content, retaining execution/report hashes. Proof receipt: ignored `reports/maintainer/replacement-proof.json`.
-- Final hosted installed archive and Windows/Linux native gates: **pending** at this document update. The pull request's current CI receipts identify that final archive; earlier failed local gates are not promoted to PASS.
-- Story 84 and changed-UI agent adaptation: **pending**. Real ADO writes/publication require an authorized sandbox with test points and remain pending. Synthetic ADO transport tests do not substitute for that acceptance.
+- Final hosted installed archive and Windows/Linux native gates: **PASS** on commit `01c0e080a5b1c5892c44c7e1a197402a1dc01471`, [workflow 37195482652](https://github.com/MahmoudElSharkawy/Playwright-Harness/actions/runs/37195482652). Each platform passed 987/987 tests, 13 static gates, 38 browser checks, 15 execute checks and three timeout proofs; package content was unchanged and owned cleanup completed. Both npm 12 consumer-flow jobs passed. These final receipts supersede the earlier failed local gates.
+- Fresh Story 84 agent execution: **completed**, 17 PASS, one observed application FAIL, zero unresolved and zero excluded. Case 126 observed an empty cart after logout, preventing the expected checkout prompt. The verified installed archive replaced the prior 3.2.0 build; all 28 original configuration/library/report files remained unchanged. Temporary-account cleanup completed; declared shared fixtures were retained. Results include checked, observed and mixed methods; the earlier inconclusive case-117 run remains in history. Execution: `execute-15aeccb7-2ddd-43b7-ad2a-d3daaa6a1da2`. ADO remained read-only.
+- Changed-UI agent acceptance: **PASS**, two real native-browser runs of the same frozen case on the verified final archive. See the acceptance record below. Real ADO writes/publication require an authorized sandbox with test points and remain pending; neither this fixture nor synthetic ADO transports establish live delivery acceptance.
+
+### Changed-UI agent acceptance, 2026-10-04
+
+Codex drove the live mailbox protocol against a local display-name form, selecting
+controls from each fresh snapshot. The helper served the fixture and dispatched
+commands; it did not select controls or execute a scripted adaptation loop.
+Variant B changed the input/button IDs, nested wrappers, DOM order and button
+position. Both variants kept the same origin, `/profile` URL, visible labels,
+save behavior and expected `"Saved for Ada"` confirmation.
+
+| Variant | Fresh textbox / Save refs | Reassessed result | Method / cleanup |
+|---|---|---|---|
+| A, baseline | `e5` / `e6` | PASS | Checked; owned browser cleanup complete |
+| B, changed UI | `e10` / `e7` | PASS | Checked; owned browser cleanup complete |
+
+Both runs used execution `execute-569ea506-0260-424b-b327-fcfa0217725d` and
+scenario `tc-901-r1`. Source, refinement and freeze file hashes stayed identical;
+the freeze fingerprint stayed
+`4b5a3f8a032388e0c7f917088e9ca95ec935b20a8c23ff06e75f4d9715ea0f55`.
+The candidate archive SHA-256 was
+`7d8f28b82d40f6b7c636234741dfb9981afbe1ad7514c246ec27a26136d1f7d7`;
+all 363 installed files matched before and after the runs. Each variant received
+exactly one save request. Both native sessions removed protected storage and
+released the execution lock; both fixture servers and listeners were stopped.
+Registered screenshots confirm the changed layout. No ADO requests or writes
+were made by this local acceptance check.
+
+Ignored maintainer evidence: `reports/maintainer/changed-ui-acceptance/result.json`,
+`acceptance.json` (full command/reply transcript), `variant-A.png`, `variant-B.png`
+and `server-cleanup.json`. The one-off helper is ignored maintainer tooling and
+does not ship. The initial fixture setup used a different Windows account from
+the native launcher and was denied access before dispatch; the accepted pair
+used a fresh fixture with one consistent Windows owner. This establishes the
+requested representative adaptation check, not adaptation to every possible UI.
 
 Candidate identities:
 
@@ -32,8 +67,9 @@ transaction, not a package command. It verifies both archive and installed conte
 hashes, accounts for npm's `.gitignore` extraction rename, retains the setup journal,
 and restores the journal with `modules:false` plus original manifest, lock, archive
 and setup state before `npm ci` on failure. It preserves execution data and reports.
-No existing consumer has been replaced. Reuse the validated archive; do not repack
-it for installation. A failed installed validation cannot be overridden by a direct probe.
+The completed Story 84 consumer replacement is recorded above. Reuse the validated
+archive; do not repack it for installation. A failed installed validation cannot be
+overridden by a direct probe.
 
 ## Finding → implemented change → regression proof
 
@@ -125,7 +161,7 @@ points to native fixed definitions, and recovery rejects invalid file types
 | Scoped readiness and manual reports | S4/S5/V7, API-only detached host, scale actual report collection |
 | ADO revision batches above 200 | `execute-source.test.mjs`: 405 cases/shared dependency, three batches ≤200 |
 | Delivery crash recovery at create/upload/link/results/complete | `execute-ado.test.mjs` durable IDs, uncertain upload isolation, publication-stage receipts and resume |
-| Installed archives on Windows/Linux and changed UI agent execution | Required external gates recorded separately; never inferred from offline fixtures |
+| Installed archives on Windows/Linux and changed UI agent execution | Final hosted receipts and the live two-variant acceptance above; never inferred from offline fixtures |
 
 ## Historical validation before this remediation
 
