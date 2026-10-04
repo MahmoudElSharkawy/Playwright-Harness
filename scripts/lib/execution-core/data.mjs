@@ -18,10 +18,10 @@ export function frozen(value) {
 }
 
 /** Bounded JSON only. Reject obvious credentials; callers must sanitize arbitrary observations. */
-export function data(value, maxBytes = 1024 * 1024) {
+export function data(value, maxBytes = 1024 * 1024, {maxNodes = 20000} = {}) {
   const active = new Set(); let nodes = 0;
   function copy(item, depth) {
-    requireThat(++nodes <= 20000 && depth <= 32, 'Execution data exceeds structural limits.');
+    requireThat(++nodes <= maxNodes && depth <= 32, 'Execution data exceeds structural limits.');
     if (item === null || typeof item === 'boolean' || typeof item === 'string') return item;
     if (typeof item === 'number') { requireThat(Number.isFinite(item), 'Execution numbers must be finite.'); return item; }
     requireThat(item && typeof item === 'object' && !active.has(item), 'Execution data must be acyclic JSON.');

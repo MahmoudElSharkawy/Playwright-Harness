@@ -1,40 +1,50 @@
-import {mkdirSync, existsSync, writeFileSync, unlinkSync} from 'node:fs';
+import {mkdirSync, unlinkSync} from 'node:fs';
 import {join} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {consumerPath} from '../consumer-paths.mjs';
 import {processInventory} from '../browser/processes.mjs';
 import {recoverOwnedRun} from '../browser/recovery.mjs';
-import {readBounded, writeJson} from './storage.mjs';
+import {readOptional, writeJson, publishExclusive} from './storage.mjs';
 import {requireThat, id, fingerprint} from '../execution-core/data.mjs';
 import {protect} from '../generation/storage.mjs';
 
 const same = (all, item) => item && all.some(process => process.pid === item.pid && process.identity === item.identity);
+const selfIdentities = new WeakMap();
 export async function processIdentity(pid = process.pid, inventory = processInventory) {
-  const item = (await inventory()).find(item => item.pid === pid); requireThat(item, 'Process creation identity is unavailable.'); return {pid: item.pid, identity: item.identity};
+  if (pid === process.pid && selfIdentities.has(inventory)) return selfIdentities.get(inventory);
+  const item = (await inventory()).find(item => item.pid === pid); requireThat(item, 'Process creation identity is unavailable.');
+  const identity = {pid: item.pid, identity: item.identity}; if (pid === process.pid) selfIdentities.set(inventory, identity); return identity;
 }
 export function lockPaths(roots, key = 'active') {
   id(key);
-  const directory = consumerPath(roots, '.harness/state/execute'); mkdirSync(directory, {recursive: true, mode: 0o700}); protect(directory);
+  const directory = consumerPath(roots, '.harness/state/execute'); mkdirSync(directory, {recursive: true, mode: 0o700});
+  protect(directory);
   return {directory, lock: join(directory, `${key}.lock`), mutex: join(directory, `${key}.lock.mutex`)};
 }
 /** Serialize short lock transitions. Absence is established by creation identity, never age. */
 export async function withTransition(roots, action, {inventory = processInventory, key = 'active', attempts = 100} = {}) {
   const paths = lockPaths(roots, key), holder = {...await processIdentity(process.pid, inventory), nonce: randomUUID()};
   for (let attempt = 0; attempt < attempts; attempt++) {
-    try {writeFileSync(paths.mutex, JSON.stringify(holder), {flag: 'wx', mode: 0o600, flush: true}); break;}
+    try {publishExclusive(paths.mutex, JSON.stringify(holder)); break;}
     catch (error) {
       if (error.code !== 'EEXIST') throw error;
-      const owner = readBounded(paths.mutex), all = await inventory();
+      let owner;
+      try {owner = readOptional(paths.mutex);} catch (error) {
+        if (!(error instanceof SyntaxError) && !['EPERM', 'EBUSY', 'EACCES'].includes(error.code)) throw error;
+        requireThat(attempt < attempts - 1, 'BUSY: execution mutex is not readable.'); continue;
+      }
+      if (!owner) {requireThat(attempt < attempts - 1, 'BUSY: execution mutex changed.'); continue;}
+      const all = await inventory();
       if (!same(all, owner)) {
-        if (existsSync(paths.mutex) && fingerprint(readBounded(paths.mutex)) === fingerprint(owner)) unlinkSync(paths.mutex);
+        if (fingerprint(readOptional(paths.mutex)) === fingerprint(owner)) try {unlinkSync(paths.mutex);} catch (error) {if (error.code !== 'ENOENT') throw error;}
         if (attempt === attempts - 1) throw new Error('BUSY: stale ownership changed; retry the command.');
         continue;
       }
       requireThat(attempt < attempts - 1, 'BUSY: execution ownership transition is active.'); await new Promise(resolve => setTimeout(resolve, 50));
     }
   }
-  try {return await action(paths, existsSync(paths.lock) ? readBounded(paths.lock) : null);}
-  finally {if (existsSync(paths.mutex)) {const owner = readBounded(paths.mutex); if (fingerprint(owner) === fingerprint(holder)) unlinkSync(paths.mutex);}}
+  try {return await action(paths, readOptional(paths.lock));}
+  finally {const owner = readOptional(paths.mutex); if (owner && fingerprint(owner) === fingerprint(holder)) try {unlinkSync(paths.mutex);} catch (error) {if (error.code !== 'ENOENT') throw error;}}
 }
 export async function acquireLauncher(roots, {executionId, runId}, options = {}) {
   return withTransition(roots, async (paths, current) => {
@@ -58,4 +68,4 @@ export async function claimHost(roots, nonce, options = {}) {
 export async function releaseHost(roots, nonce, options = {}) {
   return withTransition(roots, (paths, current) => {if (current?.nonce !== nonce) return false; unlinkSync(paths.lock); return true;}, options);
 }
-export async function lockStatus(roots) {const {lock} = lockPaths(roots); return existsSync(lock) ? readBounded(lock) : null;}
+export async function lockStatus(roots) {const {lock} = lockPaths(roots); return readOptional(lock);}
