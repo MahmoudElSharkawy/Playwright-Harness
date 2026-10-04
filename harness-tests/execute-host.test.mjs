@@ -90,6 +90,16 @@ test('H2: unknown spawned identity stays explicitly unresolved without declaring
   assert.equal(first.status, 'STARTING'); assert.equal(second.status, 'STARTING'); assert.equal(second.runId, first.runId); assert.equal(launches, 1);
 });
 
+test('H2: explicit rerun preserves the recovered terminal state of the previous host', async t => {
+  const f = await executionFixture(t); f.apiStep(); f.freeze(); let live = true;
+  const inventory = async () => [{pid: process.pid, identity: 'rerun-launcher'}, ...(live ? [{pid: 987654, identity: 'previous-host'}] : [])];
+  const first = await startScenario(f.roots, f.executionId, {inventory, readyTimeoutMs: 1, spawnHost: () => ({pid: 987654, exitCode: null, on() {}, unref() {}})});
+  writeJson(join(controlDirectory(f.roots, f.executionId, first.runId), 'host.json'), {runId: first.runId, state: 'READY'}); live = false;
+  const next = await startScenario(f.roots, f.executionId, {inventory, rerun: f.refinement.scenarios[0].id, readyTimeoutMs: 1, spawnHost() {throw new Error('Injected replacement startup failure');}});
+  assert.equal(next.status, 'START_FAILED'); assert.notEqual(next.runId, first.runId);
+  assert.deepEqual(readFrozen(f.roots, f.executionId).execution.runs.map(row => row.state), ['INTERRUPTED', 'START_FAILED']);
+});
+
 test('L4: CLI await preserves the original request identity when a terminal host has no receipt', async t => {
   const f = await executionFixture(t), runId = 'run-await-uncertain'; f.apiStep();
   const inventory = async () => [{pid: process.pid, identity: 'await-uncertain'}], {owner} = await hostedFixture(f, runId, {inventory});

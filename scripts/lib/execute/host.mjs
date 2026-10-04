@@ -278,7 +278,8 @@ export async function startScenario(roots, executionId, {rerun, foreground = fal
   const runId = `run-${randomUUID()}`, lock = await acquireLauncher(roots, {executionId, runId}, {inventory}), input = runInput(loaded.freeze, loaded.source.scenarios.find(item => item.id === scenario.id), scenario, runId), run = createRun(input);
   const snapshot = {version: 1, executionId, scenarioId: scenario.id, runId, freezeFingerprint: loaded.execution.freezeFingerprint, inputFingerprint: run.inputFingerprint, input, explicitRerun: Boolean(rerun)};
   writeJson(ownedFile(roots, executionId, `snapshots/${runId}.json`), snapshot, {exclusive: true});
-  saveExecution(roots, executionId, {...loaded.execution, runs: [...loaded.execution.runs, {runId, scenarioId: scenario.id, state: 'STARTING', startedAt: input.startedAt, explicitRerun: Boolean(rerun)}]});
+  const currentExecution = readBounded(ownedFile(roots, executionId, 'execution.json'));
+  saveExecution(roots, executionId, {...currentExecution, runs: [...currentExecution.runs, {runId, scenarioId: scenario.id, state: 'STARTING', startedAt: input.startedAt, explicitRerun: Boolean(rerun)}]});
   if (foreground) {console.log(JSON.stringify({status: 'STARTING', executionId, runId, foreground: true})); return runHostedScenario(roots, executionId, runId, lock.nonce);}
   const control = controlDirectory(roots, executionId, runId); mkdirSync(control, {recursive: true, mode: 0o700}); protect(control);
   const log = openSync(join(control, 'host.log'), 'wx', 0o600);
