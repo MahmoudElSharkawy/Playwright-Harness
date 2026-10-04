@@ -229,7 +229,7 @@ test declares a `const randomEmail = …` that no call ever consumes.
 **Rule:** Every test must pass when run alone (`-g "<its title>"`), in any order, in
 parallel, and repeatedly (§4 iron law 8 — `playwright.config.ts` sets
 `fullyParallel: true` and up to 3 workers, with `retries: 2` on CI, and the
-automate-suite VERIFY phase requires two consecutive green runs). Never depend on
+automate-test VERIFY phase requires two consecutive green runs). Never depend on
 another test's side effects. A record-creating test seeds its own record at the top of
 its body from its own `tc<id>` data cluster — TC id in the base value, the module-level
 timestamp appended (2026-08-24 rulings; composition rules →

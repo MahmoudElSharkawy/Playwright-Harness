@@ -152,7 +152,7 @@ Run `npx --no pom-harness check`. Report each feature with its status:
 
 The command exits 1 only for a broken installation or invalid configuration; fix those
 first. Then continue with the user's work. For example, automate a suite through the
-`automate-suite` skill.
+`automate-test` skill.
 
 Team libraries go into `resources/Queries/` and `resources/apisCollections/` as their
 READMEs describe. They are derive-only.

@@ -1,15 +1,32 @@
 ---
-name: automate-suite
-description: Turn a local or explicitly configured ADO scenario suite into durable POM automation through observed execution, independent review and two scoped green runs.
+name: automate-test
+description: Automate test cases from a user story, an ADO suite or local scenarios into durable POM code through observed execution, independent review and two scoped green runs.
 ---
 
-# Automate a Scenario Suite
+# Automate Tests
 
 Resolve this skill to its real path and read [package and consumer boundaries](../ROOTS.md).
 Mutable state and generated code belong to the consumer; installed skills stay immutable.
 
-For local input, use `/automate-suite local <source.json> on <environment>`.
-ADO is optional and must be explicitly configured. Read the
+Choose the source explicitly:
+
+```text
+/automate-test story <id> on <environment>
+/automate-test suite <id> [plan <id>] on <environment>
+/automate-test local <source.json> on <environment>
+```
+
+ADO is optional and must be explicitly configured. For a story, use the existing
+`npx --no pom-harness fetch-story --story <id> --source-out <consumer-path.json>`
+route; no suite or plan is required. Follow Tested By links by default; select other
+link types only when requested. For a suite, use `fetch-suite --suite <id>
+--plan <id> --source-out <consumer-path.json>`, resolving the plan from the request
+or the configured ADO default. If neither supplies it, ask for the plan ID.
+Preserve fetch/refinement behavior for parameterized or incomplete cases: explicitly
+refine them into neutral input before generation. Pass the neutral source through
+the same workflow below. Local input requires no ADO configuration.
+
+Read the
 [generation procedure](../../../docs/M13-GENERATION.md) for the executable handoff,
 review and verification contracts before running the pipeline:
 

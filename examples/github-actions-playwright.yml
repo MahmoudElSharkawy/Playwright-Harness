@@ -6,7 +6,7 @@
 # SCOPE — CI validation only: the harness's delivery scripts
 # (scripts/fetch-ado-suite.mjs, scripts/ado-pr.mjs, scripts/publish-ado-results.mjs)
 # speak the Azure DevOps REST API. On a GitHub-hosted project this workflow runs
-# the specs and publishes the report artifacts; the automate-suite pipeline's
+# the specs and publishes the report artifacts; the automate-test pipeline's
 # fetch/publish legs still need an Azure DevOps test plan (they work fine from a
 # GitHub repo — only the work-item/test-point round-trip is ADO's).
 #
@@ -23,7 +23,7 @@
 #
 # Deliberately headless & non-interactive: AUTO_ALLURE_OPEN=false suppresses the
 # Allure auto-open, PW_TEST_HTML_REPORT_OPEN=never suppresses the HTML report
-# server (both would hang a CI runner — see the automate-suite playbook §5).
+# server (both would hang a CI runner — see the automate-test playbook §5).
 
 name: Playwright tests
 

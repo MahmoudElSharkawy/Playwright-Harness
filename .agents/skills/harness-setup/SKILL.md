@@ -32,4 +32,4 @@ Hard rules:
 
 - Where framework code belongs, and the layer skills → [pom-architecture](../pom-architecture/SKILL.md)
 - How `src/config` consumes the configured targets → [test-data](../test-data/SKILL.md)
-- Automating a suite once the harness is configured → [automate-suite](../automate-suite/SKILL.md)
+- Automating story-linked cases, a suite or local scenarios once the harness is configured → [automate-test](../automate-test/SKILL.md)

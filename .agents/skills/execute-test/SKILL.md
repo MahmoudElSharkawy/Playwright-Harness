@@ -6,7 +6,7 @@ description: Execute an ADO suite or story through live browser, API and databas
 # Execute manual tests
 
 Resolve [ROOTS](../ROOTS.md) first. Run the consumer's installed CLI with
-`npx --no pom-harness execute`; use [automate-suite](../automate-suite/SKILL.md)
+`npx --no pom-harness execute`; use [automate-test](../automate-test/SKILL.md)
 when the request includes durable POM code generation.
 
 Accept `/execute-test suite <id> [plan <id>] [on <environment>] [checkpoint]`

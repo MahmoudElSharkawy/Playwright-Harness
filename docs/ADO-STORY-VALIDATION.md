@@ -94,7 +94,9 @@ is unverified live (if it does not, the fetch fails rather than reading them).
 Live tenant reads, permissions, process rules, the link URL forms a real organization
 returns and ADO Server variants: **UNPERFORMED**. No tenant credentials were used and
 no ADO work item, test result or pull request was created or changed. Story-scoped
-publication, automation marking and an automate-suite story route are out of scope.
+publication, automation marking and an automate-suite story route are out of scope
+for that retrieval milestone. The current [automate-test skill](../.agents/skills/automate-test/SKILL.md)
+uses the same retrieval adapter for story input to the generation workflow.
 
 ## PR pipeline installation follow-up
 

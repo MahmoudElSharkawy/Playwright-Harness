@@ -89,13 +89,13 @@ export function assessWorkflowHost({host, roots, events, processResult, commands
     completed: host === 'codex' ? events.some(e => e.type === 'turn.completed') && !events.some(e => e.type === 'turn.failed') : events.some(e => e.type === 'result' && e.is_error === false),
     commands: commands.length > 0 && commands.every(c => observedWorkflowCommand(host, events, script, c.command, c, roots.projectRoot))};
   if (authoring) {
-    const skill = '.agents/skills/automate-suite/SKILL.md';
+    const skill = '.agents/skills/automate-test/SKILL.md';
     requirements.skillRead = observedWorkflowRead(host, events, join(roots.packageRoot, skill), roots.projectRoot, readFileSync(join(roots.packageRoot, skill), 'utf8'));
     requirements.sourceRead = observedWorkflowRead(host, events, join(roots.projectRoot, 'source.json'), roots.projectRoot, readFileSync(join(roots.projectRoot, 'source.json'), 'utf8'));
     requirements.authored = workflowAuthoredFiles.every(path => observedWorkflowAuthorship(host, events, roots.projectRoot, path));
     if (host === 'claude') {
       const init = events.find(e => e.type === 'system' && e.subtype === 'init'), plugins = init?.plugins?.filter(p => p.name === 'playwright-pom-harness') ?? [];
-      requirements.nativeSkills = plugins.length === 1 && realpathSync(plugins[0].path) === roots.packageRoot && init.skills?.includes('playwright-pom-harness:automate-suite');
+      requirements.nativeSkills = plugins.length === 1 && realpathSync(plugins[0].path) === roots.packageRoot && init.skills?.includes('playwright-pom-harness:automate-test');
     } else requirements.nativeSkills = realpathSync(join(roots.projectRoot, skill)) === realpathSync(join(roots.packageRoot, skill));
   }
   return {host, status: Object.values(requirements).every(value => value === true) ? 'PASS' : 'FAIL', requirements};

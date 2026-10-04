@@ -118,7 +118,7 @@ function main() {
         console.error(
           'BLOCKED by the harness guard: this exact `playwright test` command already failed and nothing was ' +
           'edited since. Change something (fix the script, adjust data) or classify the failure per the ' +
-          'automate-suite VERIFY table (script defect / app defect / environment) instead of rerunning unchanged. ' +
+          'automate-test VERIFY table (script defect / app defect / environment) instead of rerunning unchanged. ' +
           'To rerun deliberately (e.g. suspected flake), vary the command: add --retries=1 or -g "<title>".');
         return 2;
       }

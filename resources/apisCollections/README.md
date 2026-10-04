@@ -44,8 +44,8 @@ Consumption paths:
 
 | Consumer | When | What it derives |
 |---|---|---|
-| automate-suite REFINE / prerequisite dictionary `api` routes | converting seed/verification intents to `api:` steps | proposed `integration/*_api.json` catalog entries (user-confirmed before EXPLORE) |
-| automate-suite GENERATE / service-classes | authoring `Apis<Domain>` classes | `readonly <operation>_serviceName` fields, request payload shapes (typed parameter objects), auth flow |
+| automate-test REFINE / prerequisite dictionary `api` routes | converting seed/verification intents to `api:` steps | proposed `integration/*_api.json` catalog entries (user-confirmed before EXPLORE) |
+| automate-test GENERATE / service-classes | authoring `Apis<Domain>` classes | `readonly <operation>_serviceName` fields, request payload shapes (typed parameter objects), auth flow |
 | test-data reusability ladder (step 2) | a rerun fails on consumed/stale data | the API seed/cleanup route that makes the case re-runnable |
 | Manual execution / native API runtime | frozen operation definitions | derive collection requests into parameterized defineApiOperation definitions; source samples are never replayed |
 
@@ -80,7 +80,7 @@ Consumption paths:
    anywhere.
 6. **Internal-host requests** (ops/back-office endpoints on internal IPs) are ops
    levers, not customer-facing endpoints — treat them as seed/fixture material with
-   the same care the automate-suite triage applies to anything hard-to-reverse.
+   the same care the automate-test triage applies to anything hard-to-reverse.
 
 ## Index
 

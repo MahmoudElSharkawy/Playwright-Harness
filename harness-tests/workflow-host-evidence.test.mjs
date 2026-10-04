@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {resolve, join} from 'node:path';
 import {mkdtempSync, mkdirSync, writeFileSync, symlinkSync, rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
-import {workflowInvocation, workflowReceipt, observedWorkflowCommand, observedWorkflowRead, observedWorkflowAuthorship, assessWorkflowHost} from '../scripts/lib/workflow-host-evidence.mjs';
+import {workflowInvocation, workflowReceipt, observedWorkflowCommand, observedWorkflowRead, observedWorkflowAuthorship, assessWorkflowHost, workflowAuthoredFiles} from '../scripts/lib/workflow-host-evidence.mjs';
 const script = resolve('fixture-package/harness-tests/fixtures/workflow-command.mjs'), command = `node "${script}" complete`, sha256 = 'a'.repeat(64);
 const receipt = {receipt: 'M15_WORKFLOW_RECEIPT', stage: 'complete', sha256, scenarios: 16}, expected = {stage: 'complete', sha256, scenarios: 16};
 function events(host, text = JSON.stringify(receipt), nativeCommand = command) {
@@ -117,6 +117,32 @@ test('a foreign UNC authored-file event cannot establish local consumer authorsh
   }
 });
 for (const host of ['claude', 'codex']) {
+  test(`${host} authoring requires discovery and a read of automate-test, without an old-name alias`, t => {
+    const base = mkdtempSync(join(tmpdir(), 'm15-rename-')), root = join(base, 'consumer'), packageRoot = join(base, 'package');
+    t.after(() => {assert.ok(base.startsWith(join(tmpdir(), 'm15-rename-'))); rmSync(base, {recursive: true, force: true});});
+    const skill = '.agents/skills/automate-test/SKILL.md', skillContent = '# Canonical automate-test', sourceContent = '{"source":1}';
+    mkdirSync(join(packageRoot, '.agents/skills/automate-test'), {recursive: true}); writeFileSync(join(packageRoot, skill), skillContent);
+    mkdirSync(join(root, '.agents/skills'), {recursive: true}); writeFileSync(join(root, 'source.json'), sourceContent);
+    symlinkSync(join(packageRoot, '.agents/skills/automate-test'), join(root, '.agents/skills/automate-test'), 'junction');
+    const nativeCommand = `node "${join(packageRoot, 'harness-tests/fixtures/workflow-command.mjs')}" complete`;
+    const native = [...events(host, JSON.stringify(receipt), nativeCommand), ...events(host, skillContent, `cat "${join(packageRoot, skill)}"`), ...events(host, sourceContent, `cat "${join(root, 'source.json')}"`)];
+    if (host === 'claude') {
+      for (let i = 0; i < native.length; i++) for (const item of native[i].message?.content ?? []) {
+        if (item.id) item.id = `native-${i}`; if (item.tool_use_id) item.tool_use_id = `native-${i - 1}`;
+      }
+      native.push({type: 'system', subtype: 'init', plugins: [{name: 'playwright-pom-harness', path: packageRoot}], skills: ['playwright-pom-harness:automate-test']});
+    }
+    for (const [i, path] of workflowAuthoredFiles.entries()) {
+      if (host === 'codex') native.push({type: 'item.completed', item: {type: 'file_change', status: 'completed', changes: [{path: join(root, path)}]}});
+      else native.push({type: 'assistant', message: {content: [{type: 'tool_use', id: `write-${i}`, name: 'Write', input: {file_path: join(root, path)}}]}}, {type: 'user', message: {content: [{type: 'tool_result', tool_use_id: `write-${i}`, is_error: false}]}});
+    }
+    const assessment = () => assessWorkflowHost({host, roots: {projectRoot: root, packageRoot}, events: native, commands: [{...expected, command: 'complete'}], authoring: true,
+      processResult: {exitCode: 0, timedOut: false, ownedProcessesStopped: true, packageUnchanged: true}});
+    assert.equal(assessment().status, 'PASS');
+    if (host === 'claude') native.find(event => event.type === 'system').skills = ['playwright-pom-harness:automate-suite'];
+    else {rmSync(join(root, '.agents/skills/automate-test')); mkdirSync(join(root, '.agents/skills/automate-test')); writeFileSync(join(root, skill), skillContent);}
+    assert.equal(assessment().requirements.nativeSkills, false); assert.equal(assessment().status, 'FAIL');
+  });
   test(`${host} whole-file reads reject another consumer, shell additions and incomplete results`, () => {
     const root = resolve('fixture consumer'), path = join(root, 'source.json'), content = '{"source":[1,2]}';
     for (const body of [`cat "${path}"`, 'cat source.json', `Get-Content -Raw -LiteralPath "${path}"`, `cd "${root}" && cat "${path}"`, `"C:/Runtime/pwsh.exe" -Command ${JSON.stringify(`Get-Content -Raw -LiteralPath "${path}"`)}`]) {

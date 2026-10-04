@@ -146,7 +146,7 @@ test('S2 C8: shared parameter quotes and literal apostrophes keep their intended
 });
 
 test('U1: automation exploration and generation reference the current handoff, not removed legacy notes', () => {
-  const playbook = readFileSync(join(packageRoot, '.agents/skills/automate-suite/references/playbook.md'), 'utf8'), map = readFileSync(join(packageRoot, '.agents/skills/automate-suite/references/page-map.md'), 'utf8');
+  const playbook = readFileSync(join(packageRoot, '.agents/skills/automate-test/references/playbook.md'), 'utf8'), map = readFileSync(join(packageRoot, '.agents/skills/automate-test/references/page-map.md'), 'utf8');
   assert(!playbook.includes('codegen-notes/')); assert(!playbook.includes('preflight.js')); assert.match(playbook, /M13 generation handoff/); assert.match(map, /M13/);
 });
 

@@ -12,6 +12,7 @@ import {packageRoot} from '../lib/consumer-paths.mjs';
 import {within, realFuture} from '../lib/skill-roots.mjs';
 import {snapshotInstalledPackage} from '../lib/host-proof-files.mjs';
 import {archiveManifest} from '../lib/archive.mjs';
+import {legacyAutomationFiles} from '../../harness-tests/fixtures/legacy-automate-suite.mjs';
 
 const args = process.argv.slice(2), option = name => {const index = args.indexOf(name); return index < 0 ? undefined : args[index + 1];};
 if (!args[0] || args[0].startsWith('--')) throw new Error('Supply a new directory outside the source package: consumer-flow.mjs <workspace> [--archive <path>] [--npm-major <n>]');
@@ -198,8 +199,10 @@ flow('C7', 'A rollback across the old layout keeps project data and writes nothi
   const root = project('c7-old-layout', {'package.json': manifestText('old-layout')});
   assert.equal(run([npm, 'install'], root).status, 'PASS', 'Creating the lockfile failed.');
   // The old layout: copied .claude/skills folders (the 3.0.x redirects) holding team data.
-  const legacy = readdirSync(join(packageRoot, '.claude/skills'), {withFileTypes: true}).filter(entry => entry.isDirectory() && !['harness-setup', 'execute-test'].includes(entry.name)).map(entry => entry.name);
-  for (const skill of legacy) cpSync(join(packageRoot, '.claude/skills', skill), join(root, '.claude/skills', skill), {recursive: true});
+  const current = readdirSync(join(packageRoot, '.claude/skills'), {withFileTypes: true}).filter(entry => entry.isDirectory() && !['harness-setup', 'execute-test', 'automate-test'].includes(entry.name)).map(entry => entry.name);
+  for (const skill of current) cpSync(join(packageRoot, '.claude/skills', skill), join(root, '.claude/skills', skill), {recursive: true});
+  write(root, legacyAutomationFiles);
+  const legacy = [...current, 'automate-suite'];
   const data = {'.claude/skills/framework-review/class-ledger.md': '# Class ledger\n\n- Synthetic team finding: locator suffixes.\n',
     '.claude/skills/automate-suite/references/prerequisite-dictionary.md': '# Prerequisites\n\n- A synthetic approved customer exists before quoting.\n',
     '.claude/skills/plan-tracker/data/history.jsonl': '{"event":"synthetic","case":101}\n', '.claude/skills/plan-tracker/data/plan-77.json': '{"plan":77,"cases":[]}\n'};

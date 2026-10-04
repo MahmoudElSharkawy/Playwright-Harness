@@ -98,7 +98,16 @@ limited to three rounds per source batch. READY does not authorize delivery; PRs
 publishing are optional and need explicit authorization.
 
 See [the automation pipeline](docs/PIPELINE.md) for each phase's inputs, outputs,
-commands and contract documents. Agents run it through the `automate-suite` skill.
+commands and contract documents. Agents run it through the `automate-test` skill:
+
+```text
+/automate-test story <id> on <environment>
+/automate-test suite <id> [plan <id>] on <environment>
+/automate-test local <source.json> on <environment>
+```
+
+The suite route uses an explicitly supplied or configured plan. Story retrieval needs
+no suite or plan. All three routes use the same generation/review/verification workflow.
 
 ## Capabilities
 

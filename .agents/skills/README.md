@@ -16,7 +16,7 @@ The library preserves conventions and illustrative examples from earlier framewo
 audits. Current package boundaries are described in the [harness reference](../../docs/HARNESS.md);
 open convention decisions remain in design-conventions.
 
-For standalone ADO manual runs use [execute-test](execute-test/SKILL.md); automation generation stays with automate-suite.
+For standalone ADO manual runs use [execute-test](execute-test/SKILL.md); automation generation stays with automate-test.
 
 | # | Skill | Playbook | Use when (description) | Key checkpoints |
 |---|-------|----------|--------------------------|-----------------|
@@ -35,7 +35,7 @@ For standalone ADO manual runs use [execute-test](execute-test/SKILL.md); automa
 
 | Skill | Use when |
 |---|---|
-| [automate-suite](automate-suite/SKILL.md) | Turning a local or configured Azure DevOps suite into reviewed POM automation with two scoped green runs |
+| [automate-test](automate-test/SKILL.md) | Turning story-linked cases, ADO suites or local scenarios into reviewed POM automation with two scoped green runs |
 | [framework-review](framework-review/SKILL.md) | Reviewing a change against the conventions and producing a verdict |
 | [plan-tracker](plan-tracker/SKILL.md) | Recording a tracked plan's progress and regenerating its report |
 | [harness-setup](harness-setup/SKILL.md) | Installing, updating, configuring or rolling back the harness in a project |

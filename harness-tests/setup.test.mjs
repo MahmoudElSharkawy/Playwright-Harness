@@ -11,6 +11,7 @@ import {adoptProject} from '../scripts/lib/adoption.mjs';
 import {discoveryEntry, createSkillLink} from '../scripts/lib/skill-roots.mjs';
 import {openJournal} from '../scripts/lib/setup-journal.mjs';
 import {VERSION, POSTINSTALL, locateArchive, setupFromArchive, planInstalled, configureInstalled, restoreLastRun, verifyInstallation, restoreLinks, unlinkHarness, upgradeActions} from '../scripts/lib/setup.mjs';
+import {legacyAutomationFiles} from './fixtures/legacy-automate-suite.mjs';
 
 // Offline: npm and the stage-2 handoff are replaced, and archives are built in memory.
 function project(t) {
@@ -131,6 +132,25 @@ test('restore on a fresh project removes what setup created instead of running n
  const result=setup(root);assert.equal(result.status,'DONE');assert(result.starter.includes('playwright.config.ts'));
  const npm=npmStub();assert.equal(restoreLastRun(root,{npm,packageRoot}).status,'RESTORED');
  assert.deepEqual(npm.calls,[]);assert.deepEqual(readdirSync(root),[archiveName]);
+});
+
+test('automate-test rename rollback restores the old folder, link target and prerequisite bytes',t=>{
+ const root=project(t),old=project(t),legacy='.claude/skills/automate-suite',linked='.agents/skills/automate-suite',knowledge='# Team prerequisite\r\n\r\n- A synthetic owned resource exists.\r\n';
+ put(old,'package.json','{"name":"playwright-pom-harness","version":"3.1.0"}');put(old,'.agents/skills/automate-suite/SKILL.md','Old harness instructions\n');
+ createSkillLink(join(old,'.agents/skills/automate-suite'),join(root,linked));
+ for(const[file,content]of Object.entries(legacyAutomationFiles))put(root,file,content);
+ put(root,`${legacy}/references/prerequisite-dictionary.md`,knowledge);
+ const manifest='{"name":"app","devDependencies":{"@playwright/test":"1.63.0"}}\n';put(root,'package.json',manifest);archive(join(root,archiveName));
+ assert.equal(setup(root).status,'DONE');
+ for(const dir of ['.agents/skills','.claude/skills']) {assert.equal(discoveryEntry(join(root,dir,'automate-suite')).kind,'missing');assert.equal(discoveryEntry(join(root,dir,'automate-test')).kind,'link');}
+ assert.equal(readFileSync(join(root,'.harness/knowledge/prerequisites.md'),'utf8'),knowledge);
+ assert.equal(restoreLastRun(root,{npm:npmStub(),packageRoot}).status,'RESTORED');
+ assert.equal(discoveryEntry(join(root,legacy)).kind,'directory');assert.equal(realpathSync(join(root,linked)),realpathSync(join(old,'.agents/skills/automate-suite')));
+ for(const[file,content]of Object.entries(legacyAutomationFiles))assert.equal(readFileSync(join(root,file),'utf8'),content);
+ assert.equal(readFileSync(join(root,legacy,'references/prerequisite-dictionary.md'),'utf8'),knowledge);
+ assert.equal(readFileSync(join(root,'package.json'),'utf8'),manifest);
+ for(const dir of ['.agents/skills','.claude/skills'])assert.equal(discoveryEntry(join(root,dir,'automate-test')).kind,'missing');
+ assert(!existsSync(join(root,'.harness')));
 });
 test('commands refuse to act from a copy that is not the project installation the lockfile records',t=>{
  const root=project(t),installed=join(root,'node_modules/playwright-pom-harness');mkdirSync(installed,{recursive:true});

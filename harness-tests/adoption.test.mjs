@@ -9,6 +9,8 @@ import {adoptProject,INSTRUCTION_BLOCK} from '../scripts/lib/adoption.mjs';
 import {consumerRoots,consumerPath,packageRoot} from '../scripts/lib/consumer-paths.mjs';
 import {loadEnvironment} from '../scripts/lib/project-config.mjs';
 import {npmPath} from '../scripts/ci/process.mjs';
+import {discoveryEntry,createSkillLink,removeSkillLink} from '../scripts/lib/skill-roots.mjs';
+import {legacyAutomationFiles} from './fixtures/legacy-automate-suite.mjs';
 
 function project(t) {
  const base=realpathSync(tmpdir()),root=mkdtempSync(join(base,'pom-adopt-'));
@@ -30,6 +32,7 @@ test('fresh onboarding requires deliberate profile; preview writes nothing',t=>{
 });
 test('adoption links every canonical skill for both hosts, initializes consumer state and is idempotent',t=>{
  const root=project(t),result=adopt(root);assert.equal(result.skills,shipped.length);
+ assert(shipped.includes('automate-test'));assert(!shipped.includes('automate-suite'));
  for(const dir of ['.agents/skills','.claude/skills']) {
   for(const name of shipped)assert.equal(realpathSync(join(root,dir,name)),realpathSync(join(packageRoot,'.agents/skills',name)));
   assert.match(readFileSync(join(root,dir,'ROOTS.md'),'utf8'),/Read \[ROOTS\.md in the installed harness\]\(.+\.agents\/skills\/ROOTS\.md\)/);
@@ -312,6 +315,66 @@ test('links of skills no longer shipped are removed; non-links at those paths ar
  const result=adopt(root);
  assert.deepEqual(result.links.filter(link=>link.kind==='remove').map(link=>link.path),['.agents/skills/retired-skill']);
  assert.equal(readFileSync(join(root,'.claude/skills/retired-skill/SKILL.md'),'utf8'),'team-owned');assert(result.reports.some(report=>report.includes('.claude/skills/retired-skill')));
+});
+
+for(const state of ['live','dangling','unlisted'])test(`automate-test upgrade removes ${state} old-name managed links without an alias`,t=>{
+ const root=project(t),previous=project(t),old='.agents/skills/automate-suite';
+ put(previous,'package.json','{"name":"playwright-pom-harness","version":"3.1.0"}');put(previous,`${old}/SKILL.md`,'Previous harness skill\n');
+ adopt(root);
+ const record=JSON.parse(readFileSync(join(root,'.harness/links.json'),'utf8'));
+ for(const dir of ['.agents/skills','.claude/skills']) {
+  removeSkillLink(join(root,dir,'automate-test'));createSkillLink(join(previous,old),join(root,dir,'automate-suite'));
+ }
+ record.links=record.links.filter(path=>!path.endsWith('/automate-test'));
+ if(state!=='unlisted')record.links.push('.agents/skills/automate-suite','.claude/skills/automate-suite');
+ put(root,'.harness/links.json',JSON.stringify(record));
+ if(state==='dangling')rmSync(join(previous,old),{recursive:true});
+ const preview=adoptProject({projectRoot:root,environment:'qa',mode:'test',dryRun:true});
+ assert.equal(preview.links.filter(link=>link.kind==='remove').length,2);assert.equal(discoveryEntry(join(root,'.agents/skills/automate-suite')).kind,'link');
+ const result=adopt(root);assert.equal(result.links.filter(link=>link.kind==='remove').length,2);
+ for(const dir of ['.agents/skills','.claude/skills']) {
+  assert.equal(discoveryEntry(join(root,dir,'automate-suite')).kind,'missing');
+  assert.equal(realpathSync(join(root,dir,'automate-test')),realpathSync(join(packageRoot,'.agents/skills/automate-test')));
+ }
+ assert(JSON.parse(readFileSync(join(root,'.harness/links.json'),'utf8')).links.every(path=>!path.endsWith('/automate-suite')));
+ if(state!=='dangling')assert.equal(readFileSync(join(previous,old,'SKILL.md'),'utf8'),'Previous harness skill\n');
+ assert.deepEqual(adopt(root).changes,[]);assert.deepEqual(adopt(root).links,[]);
+});
+
+test('automate-test upgrade migrates tracked legacy prerequisite knowledge byte-for-byte',t=>{
+ const root=project(t),legacy='.claude/skills/automate-suite/references/prerequisite-dictionary.md',knowledge='# Team prerequisites\r\n\r\n- An approved synthetic customer exists.\r\n';
+ for(const [file,content]of Object.entries(legacyAutomationFiles))put(root,file,content.replaceAll('\n','\r\n'));
+ put(root,legacy,knowledge);assert.equal(git(root,'init','--initial-branch=fixture').status,0);assert.equal(git(root,'add','.claude/skills/automate-suite').status,0);
+ const result=adopt(root);assert.deepEqual(result.removedFolders,['.claude/skills/automate-suite']);
+ assert.equal(discoveryEntry(join(root,'.claude/skills/automate-suite')).kind,'missing');assert.equal(readFileSync(join(root,'.harness/knowledge/prerequisites.md'),'utf8'),knowledge);
+ assert.equal(JSON.parse(readFileSync(join(root,'.harness/installation.json'),'utf8')).migrated[legacy].destination,'.harness/knowledge/prerequisites.md');
+ put(root,'.harness/knowledge/prerequisites.md','Newer team curation\n');assert.deepEqual(adopt(root).changes,[]);assert.equal(readFileSync(join(root,'.harness/knowledge/prerequisites.md'),'utf8'),'Newer team curation\n');
+});
+
+for(const host of ['.agents','.claude'])for(const name of ['automate-suite','automate-test'])test(`automate-test upgrade preserves ${host} custom ${name} content`,t=>{
+ const root=project(t),file=`${host}/skills/${name}/SKILL.md`,content='Team-owned automation instructions\n';put(root,file,content);
+ if(host==='.agents'&&name==='automate-suite')assert(adopt(root).reports.some(message=>message.includes(file.replace('/SKILL.md',''))&&message.includes('preserved')));
+ else {assert.throws(()=>adopt(root),/manual merge/);assert(!existsSync(join(root,'AGENTS.md')));}
+ assert.equal(readFileSync(join(root,file),'utf8'),content);
+});
+
+test('automate-test upgrade preserves foreign old-name links and rejects a conflicting new-name link',t=>{
+ const root=project(t),foreign=project(t);put(foreign,'SKILL.md','Team-owned automation\n');
+ for(const dir of ['.agents/skills','.claude/skills'])createSkillLink(foreign,join(root,dir,'automate-suite'));
+ put(root,'.harness/links.json',JSON.stringify({version:1,links:['.agents/skills/automate-suite','.claude/skills/automate-suite']}));
+ const result=adopt(root);assert.equal(result.reports.filter(report=>report.includes('/automate-suite')).length,2);
+ for(const dir of ['.agents/skills','.claude/skills'])assert.equal(realpathSync(join(root,dir,'automate-suite')),realpathSync(foreign));
+ removeSkillLink(join(root,'.agents/skills/automate-test'));createSkillLink(foreign,join(root,'.agents/skills/automate-test'));
+ const before=readFileSync(join(root,'.harness/links.json'),'utf8');assert.throws(()=>adopt(root),/links to something other than this harness/);
+ assert.equal(readFileSync(join(root,'.harness/links.json'),'utf8'),before);assert.equal(readFileSync(join(foreign,'SKILL.md'),'utf8'),'Team-owned automation\n');
+});
+
+test('automate-test upgrade deduplicates matching knowledge and refuses contradictory copies before writes',t=>{
+ for(const same of [true,false]) {
+  const root=project(t);for(const name of ['automate-suite','automate-test'])put(root,`.claude/skills/${name}/references/prerequisite-dictionary.md`,name==='automate-suite'||same?'Same team knowledge\n':'Different team knowledge\n');
+  if(same) {adopt(root);assert.equal(readFileSync(join(root,'.harness/knowledge/prerequisites.md'),'utf8'),'Same team knowledge\n');assert.deepEqual(adopt(root).changes,[]);}
+  else {assert.throws(()=>adopt(root),/Conflicting legacy state needs a manual merge/);assert(!existsSync(join(root,'AGENTS.md')));assert(!existsSync(join(root,'.harness/knowledge/prerequisites.md')));}
+ }
 });
 test('a legacy folder holding tracked team data is kept and reported; untracked data folders become links',t=>{
  const root=project(t);assert.equal(git(root,'init','--initial-branch=fixture').status,0);

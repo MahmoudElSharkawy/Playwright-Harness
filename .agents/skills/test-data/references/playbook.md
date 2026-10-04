@@ -228,7 +228,7 @@ constant (per-run uniqueness). Never store a "unique" value in the JSON itself.
 **Why:** iron law 8 — tests must survive re-runs, parallel workers, AND each other.
 The TC id guarantees no two cases ever address the same record; the timestamp
 guarantees run N+1 never collides with run N's leftovers. Both dimensions are
-mandatory for record-creating data — the automate-suite VERIFY phase proves them by
+mandatory for record-creating data — the automate-test VERIFY phase proves them by
 requiring two consecutive green runs (2026-08-24 rulings).
 
 ✅ Canonical composition (per-case base from the cluster, one module timestamp):
@@ -324,7 +324,7 @@ Uniqueness (practice 7) is the safety net, not a license to leak: when a mid-tes
 failure leaves a record behind, the next run composes different values and still
 passes — the leftover is reported as debt, never load-bearing.
 
-**The reusability ladder (2026-08-24 ruling).** The automate-suite VERIFY phase passes
+**The reusability ladder (2026-08-24 ruling).** The automate-test VERIFY phase passes
 a spec only when it goes green **twice in a row** — a pass-then-fail with
 already-exists / duplicate / consumed-data symptoms is a **data-reusability defect**.
 Fix it in this order, never by weakening the test:

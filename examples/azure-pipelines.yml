@@ -23,7 +23,7 @@
 #
 # Deliberately headless & non-interactive: AUTO_ALLURE_OPEN=false suppresses the
 # Allure auto-open, PW_TEST_HTML_REPORT_OPEN=never suppresses the HTML report server
-# (both would hang a CI agent — see the automate-suite playbook §5).
+# (both would hang a CI agent — see the automate-test playbook §5).
 
 trigger: none            # PR builds come from the master Build Validation policy
 

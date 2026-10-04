@@ -26,8 +26,8 @@ values, sometimes prose-annotated. Consumption paths:
 
 | Consumer | When | What it derives |
 |---|---|---|
-| automate-suite / execute-test REFINE | converting verification/seed intents to DB operations | parameterized native operation definitions with source provenance and cleanup declarations |
-| automate-suite GENERATE / service-classes | authoring `Dbs<Domain>` classes | `readonly <operation>_query` fields (`@param`-parameterized) — service-classes practice 3 |
+| automate-test / execute-test REFINE | converting verification/seed intents to DB operations | parameterized native operation definitions with source provenance and cleanup declarations |
+| automate-test GENERATE / service-classes | authoring `Dbs<Domain>` classes | `readonly <operation>_query` fields (`@param`-parameterized) — service-classes practice 3 |
 | test-data reusability ladder (step 2) | a rerun fails on consumed/stale data | the seed/reset/cleanup SQL that makes the case re-runnable |
 | Manual execution / native DB runtime | frozen operation definitions | derive one parameterized statement into defineDatabaseOperation; source samples are never replayed |
 
@@ -49,7 +49,7 @@ values, sometimes prose-annotated. Consumption paths:
 5. **Mutating queries are seed/cleanup material, with care.** INSERT/UPDATE/DELETE
    recipes are sanctioned for API/DB data preparation through `Dbs<Domain>` classes
    when no API path exists — iron law 8's precedence still applies, and the
-   automate-suite triage still gates anything hard-to-reverse. DDL (DROP/TRUNCATE/ALTER)
+   automate-test triage still gates anything hard-to-reverse. DDL (DROP/TRUNCATE/ALTER)
    is never derived; the native runtime refuses unsupported capabilities.
 6. **Connection details are environment data, not query data.** Server/database
    coordinates appearing in snippets (e.g. `db-host\INSTANCE,1433`, database

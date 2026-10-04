@@ -1,6 +1,6 @@
 ---
 name: framework-review
-description: "Use to review framework changes against the skill-library conventions and produce a verdict — \"review this diff/MR against the conventions\", \"run framework review\", the exit gate of automate-suite GENERATE, or any pre-commit conventions check. Runs the mechanical linter, classifies the diff by layer, walks design-conventions §6 with the owning playbook checklists, and emits a findings matrix with an APPROVE / CHANGES verdict. Convention-focused — for bug-hunting use the generic code-review instead."
+description: "Use to review framework changes against the skill-library conventions and produce a verdict — \"review this diff/MR against the conventions\", \"run framework review\", the exit gate of automate-test GENERATE, or any pre-commit conventions check. Runs the mechanical linter, classifies the diff by layer, walks design-conventions §6 with the owning playbook checklists, and emits a findings matrix with an APPROVE / CHANGES verdict. Convention-focused — for bug-hunting use the generic code-review instead."
 ---
 
 # Framework Review (Conventions Verdict)

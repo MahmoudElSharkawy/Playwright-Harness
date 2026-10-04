@@ -1,7 +1,9 @@
 # Changelog
 
-## Unreleased — optional local consumer flows
+## Unreleased — skill naming and optional local consumer flows
 
+- Rename `automate-suite` to `automate-test`, with explicit story, suite and local invocation examples. The observed execution, POM generation, independent review and two-green workflow is unchanged.
+- Re-run setup to replace managed old-name links. Recognized legacy prerequisite knowledge migrates to `.harness/knowledge/prerequisites.md`; customized folders and foreign links are preserved for review. No old-name alias is installed.
 - `docs/RELEASING.md`: running the consumer flows locally is optional when the release pull request's `Harness validation` run passes, because CI runs them on Windows and Linux with npm 11 and npm 12.
 
 ## 3.2.0 — M19 manual execution

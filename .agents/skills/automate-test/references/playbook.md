@@ -15,7 +15,7 @@ implemented. M3's validated local scope is loading, configuration and refinement
 The approved plan keeps sequential execution as the default until bounded parallel
 execution is separately implemented and validated.
 
-# Automate-Suite Playbook
+# Automate-Test Playbook
 
 ## Compatibility scope
 
@@ -491,14 +491,14 @@ For long convergence (flaky app, many cases), the user can hand the verify loop 
 the loop skill:
 
 ```
-/loop /automate-suite <planId>/<suiteId> verify
+/loop /automate-test <planId>/<suiteId> verify
 ```
 
 Each iteration re-enters this pipeline at VERIFY. **In loop mode the `verify`
 keyword's continue-through-DELIVER rule is suspended: each iteration ends after
 updating `_verify-state.json`.** DELIVER runs exactly once, after
 `TERMINAL — matrix converged` (as the terminal iteration's tail, or as a fresh
-`/automate-suite <ids> deliver`); outcome publishing is once-per-pipeline opt-in,
+`/automate-test <ids> deliver`); outcome publishing is once-per-pipeline opt-in,
 never per-iteration. **At VERIFY entry read `_verify-state.json` first**: when every
 case is green with `greens ≥ 2` (the rerun-reusability gate) or terminally classified
 (fixme'd app defect, BLOCKED, or round cap reached with the case still failing),
