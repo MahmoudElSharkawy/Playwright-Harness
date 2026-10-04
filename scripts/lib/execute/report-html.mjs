@@ -147,7 +147,7 @@ function renderGallery(images) {
 }
 
 function revisions(view) {
-  return view.revisionCheck ? `<details class="panel supporting"><summary>Source revisions</summary><div class="supporting-body"><p class="scope">Last checked before delivery: ${h(view.revisionCheck.checkedAt)}</p>${view.source.cases.map(tc => {const changed = view.revisionCheck.revisions.find(item => item.caseId === tc.id); return `<div><p class="small">Case ${h(tc.id)}: executed revision ${h(tc.rev)}; current revision ${h(changed?.current ?? tc.rev)} · ${changed ? 'SOURCE CHANGED' : 'unchanged at last check'}</p>${changed ? raw(changed) : ''}</div>`;}).join('')}</div></details>` : '';
+  return view.revisionCheck ? `<details class="panel supporting"><summary>Source revisions</summary><div class="supporting-body"><p class="scope">Last checked before delivery: ${h(view.revisionCheck.checkedAt)}</p>${view.source.cases.map(tc => {const changed = view.revisionCheck.revisions.find(item => item.caseId === tc.id); return `<div><p class="small">Case ${h(tc.id)}: executed revision ${h(tc.rev)}; current revision ${h(changed?.current ?? tc.rev)} — ${changed ? 'SOURCE CHANGED' : 'unchanged at last check'}</p>${changed ? raw(changed) : ''}</div>`;}).join('')}</div></details>` : '';
 }
 
 /** Presentation only. The caller supplies assessed cases, unchanged rollups and verified images. */
