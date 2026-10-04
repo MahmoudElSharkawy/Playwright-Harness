@@ -21,6 +21,7 @@ import {delay} from '../lib/execute/mailbox.mjs';
 import {processInventory} from '../lib/browser/processes.mjs';
 import {completeExecuteChecks, retryProbeDiagnostic} from './execute-checks.mjs';
 import {proofSignal} from './cancellation.mjs';
+import {snapshotRefs} from '../lib/browser/snapshot.mjs';
 
 assert.equal(process.argv.length, 3, 'Use one new external consumer directory.');
 const projectRoot = resolve(process.argv[2]); assert(!within(packageRoot, projectRoot));
@@ -34,6 +35,7 @@ ${signed ? '' : '<label>Username<input id="user"></label><label>Password<input i
 <fieldset disabled><button id="save">Save</button></fieldset><label>Status<input id="status" value="Bad" readonly></label><button id="good">Make good</button>
 <button id="async">Start update</button><p id="async-status">Waiting</p><div role="region" aria-label="Panel" style="background:blue;color:white;padding:16px">Panel<input aria-label="Panel text"><input type="checkbox" aria-label="Panel choice"><input type="hidden" value="Ignored"></div>
 <button id="new">New record</button><div id="record"></div>
+<button>Order #1001</button><button>Status: Active</button><iframe title="Same origin" src="/frame"></iframe>
 <label>Long status<textarea readonly>${'x'.repeat(8000)}</textarea></label>
 <script>
 const login=document.querySelector('#login');if(login)login.onclick=async()=>{const response=await fetch('/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({username:document.querySelector('#user').value,password:document.querySelector('#password').value})});if(response.ok)location.href='/account';};
@@ -43,6 +45,7 @@ document.querySelector('#new').onclick=async()=>{await fetch('/record',{method:'
 console.error('Synthetic diagnostic');fetch('/diagnostic?privateQuery=omitted');
 </script></body></html>`;
 const server = createServer(async (request, response) => {
+  if (request.url === '/frame') {response.writeHead(200, {'content-type': 'text/html'}); response.end('<button>Frame action</button>'); return;}
   if (unavailable) {request.socket.destroy(); return;}
   if (request.url.startsWith('/diagnostic')) {response.writeHead(500); response.end('Synthetic failure'); return;}
   if (request.url === '/login' && request.method === 'POST') {
@@ -79,8 +82,8 @@ async function doCommand(f, ...args) {
 }
 async function look(f) {return doCommand(f, 'look');}
 const reference = (snapshot, role, name) => {
-  const line = snapshot.split('\n').find(line => line.includes(`- ${role} "${name}"`) && /\[ref=e\d+\]/.test(line));
-  assert(line, `No ${role} named ${name} in the snapshot.`); return line.match(/\[ref=(e\d+)\]/)[1];
+  const found = [...snapshotRefs(snapshot)].find(([, subject]) => subject.role === role && subject.name === name);
+  assert(found, `No ${role} named ${name} in the snapshot.`); return found[0];
 };
 async function click(f, name) {const seen = await look(f); return doCommand(f, 'native', 'click', reference(seen.snapshot, 'button', name));}
 async function checkPage(f, key, index = 1, wait) {return doCommand(f, 'check', key, '--condition', String(index), '--read', 'page', ...(wait ? ['--wait', String(wait)] : []));}
@@ -106,6 +109,18 @@ async function check(name, action) {
 }
 let login;
 try {
+  await check('snapshot-refs', async () => {
+    const f = fixture(['Execution fixture is present.'], {mutate: refinement => {const step = refinement.scenarios[0].steps[0]; step.capability = 'mutations'; delete step.readOnlyContract;}});
+    await next(f); const begun = await doCommand(f, 'begin-step', 's001');
+    for (const path of ['/', '/second']) {
+      await doCommand(f, 'native', 'goto', `${origin}${path}`);
+      for (const name of ['Order #1001', 'Status: Active', 'Frame action']) await click(f, name);
+    }
+    await doCommand(f, 'native', 'reload'); const seen = await look(f);
+    assert.match(reference(seen.snapshot, 'button', 'Save'), /^f\d+e\d+$/);
+    await checkPage(f, begun.contracts[0].key); await ending(f, 'confirmed'); await finish(f);
+    return {navigations: 2, iframe: true, reload: true};
+  });
   await check('login-reuse', async () => {
     login = fixture(['"Signed in" is present.'], {cases: 2, mutate: refinement => {for (const scenario of refinement.scenarios) {const step = scenario.steps[0]; step.capability = 'mutations'; delete step.readOnlyContract; step.login = {user: 'tester', landmark: 'Signed in'}; step.expectations[0].conditions = [condition('"Signed in" is present.', 'present', 'Signed in')];}}});
     await next(login); await doCommand(login, 'begin-step', 's001'); await doCommand(login, 'native', 'goto', origin);

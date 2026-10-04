@@ -7,6 +7,8 @@ import {VerdictLedger, matchingRead, compareRead, requireIndependent, aggregateS
 import {expectedValue, normalize} from './refinement.mjs';
 import {delay} from './mailbox.mjs';
 import {protect} from '../generation/storage.mjs';
+import {snapshotRefs, isSnapshotRef} from '../browser/snapshot.mjs';
+export {snapshotRefs} from '../browser/snapshot.mjs';
 
 const reads = new Set(['snapshot', 'find', 'tab-list']);
 const changes = new Set(['goto', 'reload', 'back', 'forward', 'tab-new', 'tab-select', 'tab-close', 'resize', 'hover', 'mousewheel', 'mousemove', 'dialog-dismiss']);
@@ -33,14 +35,6 @@ export function redact(value, privateValues = []) {
     return input;
   };
   return visit(value);
-}
-export function snapshotRefs(text) {
-  const refs = new Map();
-  for (const line of text.split('\n')) {
-    const match = line.match(/^\s*-\s+([a-z]+)(?:\s+"((?:\\.|[^"\\])*)")?.*?\[ref=(e\d+)\]/);
-    if (match) refs.set(match[3], {kind: ['region', 'main', 'navigation', 'dialog', 'form', 'group'].includes(match[1]) ? 'region' : 'element', role: match[1], name: (match[2] ?? '').replace(/\\"/g, '"')});
-  }
-  return refs;
 }
 const elementTemplates = Object.freeze({
   text: '(element) => element.innerText ?? element.textContent ?? ""',
@@ -96,7 +90,7 @@ export class BrowserCommands {
     } catch (error) {this.failure = error; this.ledger.poisoned = true; throw error;}
   }
   ref(reference) {
-    requireThat(/^e\d+$/.test(reference ?? '') && this.latestSnapshot?.stateVersion === this.ledger.stateVersion && this.latestSnapshot.refs.has(reference), 'NOT_IN_SNAPSHOT');
+    requireThat(isSnapshotRef(reference) && this.latestSnapshot?.stateVersion === this.ledger.stateVersion && this.latestSnapshot.refs.has(reference), 'NOT_IN_SNAPSHOT');
     return this.latestSnapshot.refs.get(reference);
   }
   async snapshot() {

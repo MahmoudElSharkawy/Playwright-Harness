@@ -1,0 +1,24 @@
+import {
+  snapshotRefs,
+  BrowserCommands
+} from './scripts/lib/execute/commands.mjs';
+
+for (const ref of ['e64', 'f1e64', 'f2e64']) {
+  const refs = snapshotRefs(
+    `- textbox "Password *" [ref=${ref}]`
+  );
+  const host = {
+    latestSnapshot: { stateVersion: 1, refs },
+    ledger: { stateVersion: 1 }
+  };
+
+  let validation;
+  try {
+    BrowserCommands.prototype.ref.call(host, ref);
+    validation = 'accepted';
+  } catch (error) {
+    validation = error.message;
+  }
+
+  console.log({ ref, parsedRefs: [...refs.keys()], validation });
+}

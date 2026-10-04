@@ -1,5 +1,5 @@
 // Acceptance proof names; these do not compute scenario verdicts.
-export const requiredExecuteChecks = Object.freeze(['login-reuse', 'no-secret-leaks', 'checked-observed-mixed', 'fail-finality', 'asynchronous-artifact-binding', 'integrity-stop', 'provenance-budget', 'diagnostics-modes', 'read-retry', 'mutation-reconciliation', 'cleanup-lifecycle', 'killed-host-recovery']);
+export const requiredExecuteChecks = Object.freeze(['snapshot-refs', 'login-reuse', 'no-secret-leaks', 'checked-observed-mixed', 'fail-finality', 'asynchronous-artifact-binding', 'integrity-stop', 'provenance-budget', 'diagnostics-modes', 'read-retry', 'mutation-reconciliation', 'cleanup-lifecycle', 'killed-host-recovery']);
 export const retryProbeStages = Object.freeze(['start', 'first-navigation', 'end-first-attempt', 'await-retry', 'retry-navigation', 'retry-check', 'end-retry', 'assessment', 'attempt-count']);
 export function retryProbeDiagnostic(input) {
   if (!retryProbeStages.includes(input?.stage)) return undefined;

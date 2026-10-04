@@ -16,6 +16,7 @@ Execute captured ADO manual cases interactively through the native browser, API 
 
 ### Changes
 
+- Accept plain and frame-prefixed native browser references, including quoted snapshot keys; retain snapshot membership and state-version checks.
 - Add the execute-test skill and execute CLI, captured revisions/iterations, a sequential live host, cleanup receipts, login reuse, diagnostics and dashboard/defect reporting.
 - Reassess evidence before delivery, retain historical valid FAILs and let explicit valid reruns replace integrity-invalid runs while preserving audit history.
 - Flush create identities in ADO acknowledgements and recover filings/publications through stable tags/names. No new runtime dependencies.

@@ -34,7 +34,8 @@ Native JavaScript, routing, cookies/storage, HTTP, uploads and global session
 commands are refused. Use `look` for registered snapshots and
 `evidence screenshot|snapshot` for registered observation artifacts.
 
-Refs must come from the latest snapshot after any agent-caused state change.
+Refs such as `e12` or `f2e12` must be copied exactly from the latest snapshot after
+any agent-caused state change. Quoted names and same-origin frame refs are supported.
 A dead ref is an execution error. Take a fresh look; do not turn a command error
 into an assertion failure. After poisoning, use `reconcile no-effect|effect|inconclusive
 --evidence <ids>` before retrying or making new judgments. No-effect permits an

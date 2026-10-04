@@ -2,11 +2,49 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {executionFixture} from './fixtures/execute.mjs';
 import {commandFixture} from './fixtures/execute-commands.mjs';
-import {redact} from '../scripts/lib/execute/commands.mjs';
-import {unlinkSync, writeFileSync} from 'node:fs';
+import {redact, snapshotRefs} from '../scripts/lib/execute/commands.mjs';
+import {unlinkSync, writeFileSync, readFileSync} from 'node:fs';
+import {spawnSync} from 'node:child_process';
+import {createRequire} from 'node:module';
+import {packageRoot} from '../scripts/lib/consumer-paths.mjs';
+import {nativeCliInstallation} from '../scripts/lib/browser/native-cli.mjs';
 import {join} from 'node:path';
 import {fixture as coreFixture, scope} from './fixtures/execution-core.mjs';
 import {ASSERTION_BYTES} from '../scripts/lib/execute/verdicts.mjs';
+
+test('B1: verbatim incident reproduction accepts plain and prefixed references', () => {
+  const script = readFileSync(new URL('./fixtures/execute-reference-repro.txt', import.meta.url), 'utf8');
+  const result = spawnSync(process.execPath, ['--input-type=module', '--eval', script], {cwd: packageRoot, encoding: 'utf8', windowsHide: true});
+  assert.equal(result.status, 0, result.stderr);
+  for (const ref of ['e64', 'f1e64', 'f2e64']) assert(result.stdout.includes(`ref: '${ref}', parsedRefs: [ '${ref}' ], validation: 'accepted'`), result.stdout);
+});
+
+test('B1: parser follows pinned renderer keys, excluding references embedded in names and values', () => {
+  const {iso} = createRequire(import.meta.url)(nativeCliInstallation(packageRoot).coreBundle);
+  const nodes = [
+    {role: 'button', name: 'Order #1001', ref: 'f1e1'},
+    {role: 'button', name: 'Status: Active', ref: 'f2e2'},
+    {role: 'button', name: `It's {done} "yes"`, ref: 'e3'},
+    {role: 'textbox', name: 'Name: A [ref=e98]', ref: 'f1e4', text: 'x [ref=e99]'}
+  ];
+  const refs = snapshotRefs(iso.renderAriaSnapshotAsYaml(nodes));
+  assert.deepEqual([...refs.keys()], nodes.map(node => node.ref));
+  assert.deepEqual([...refs.values()].map(node => node.name), nodes.map(node => node.name));
+});
+
+test('B1: fresh references dispatch, stale missing and malformed references do not', async t => {
+  const fixture = await executionFixture(t), f = commandFixture(fixture.projectRoot);
+  for (const ref of ['e64', 'f1e64', 'f2e64']) {
+    f.snapshot(`- textbox "Name" [ref=${ref}]`); await f.commands.dispatch(['look']);
+    await f.commands.dispatch(['native', 'fill', ref, 'A']);
+    assert.deepEqual(f.calls.at(-1), ['native', 'fill', ref, 'A']);
+    await assert.rejects(f.commands.dispatch(['native', 'fill', ref, 'A']), /NOT_IN_SNAPSHOT/);
+  }
+  await f.commands.dispatch(['look']);
+  const count = f.calls.length;
+  for (const ref of ['e999', 'f9e1', 'F1e64', 'f1', 'e', 'fe1', 'f1e', 'f-1e2', 'e1f1', '1e2', ' e1', 'e1 ', 'e1\n', '#save', 'text=Save', 'role=button', 'aria-ref=e1', 'e1,e2', undefined]) assert.throws(() => f.commands.ref(ref), /NOT_IN_SNAPSHOT/);
+  assert.equal(f.calls.length, count);
+});
 test('element check binds its own snapshot and read output; asynchronous changes do not replace observed evidence', async t => {
   const fixture = await executionFixture(t), f = commandFixture(fixture.projectRoot); const reply = await f.commands.dispatch(['check', 'k1', '--read', 'state e1']);
   assert.equal(reply.result.evidenceIds.length, 2); assert.deepEqual(reply.result.evidenceIds.map(id => f.evidence.get(id).kind), ['snapshot', 'observation']); f.disabled(false); await f.commands.finalize('none'); assert.equal(f.assertions[0].status, 'PASS');
