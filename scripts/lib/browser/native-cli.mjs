@@ -14,13 +14,19 @@ const SYSTEM_KEYS = new Set(['PATH','PATHEXT','SYSTEMROOT','WINDIR','COMSPEC','T
 const RESERVED = new Set(['open','attach','close','detach','close-all','kill-all','delete-data','install','install-browser','list','show']);
 
 export class NativeFailure extends Error {
-  constructor(classification, dispatched = false, interrupted = false) {super(`Native browser operation failed: ${classification}.`); this.classification = classification; this.dispatched = dispatched; this.interrupted = interrupted;}
+  constructor(classification, dispatched = false, interrupted = false, detail = '', reason) {super(`Native browser operation failed: ${classification}.`); this.classification = classification; this.dispatched = dispatched; this.interrupted = interrupted; this.reason = reason;
+    Object.defineProperty(this, 'detail', {value: String(detail).slice(0, 4096)});
+  }
+}
+export class NativeRefusal extends NativeFailure {
+  constructor(reason) {super('EXECUTOR', false, false, '', reason); this.refused = true;}
 }
 export function classifyNative(reply) {
-  if (reply.kind) throw new NativeFailure({TIMEOUT: 'TIMEOUT', CANCELLED: 'CANCELLED', OUTPUT_LIMIT: 'EXECUTOR', SPAWN_FAILURE: 'UNAVAILABLE'}[reply.kind], reply.dispatched, reply.dispatched && reply.kind !== 'SPAWN_FAILURE');
+  if (reply.kind) throw new NativeFailure({TIMEOUT: 'TIMEOUT', CANCELLED: 'CANCELLED', OUTPUT_LIMIT: 'EXECUTOR', SPAWN_FAILURE: 'UNAVAILABLE'}[reply.kind], reply.dispatched, reply.dispatched && reply.kind !== 'SPAWN_FAILURE', '', reply.kind);
   let payload; try {payload = JSON.parse(reply.stdout);} catch {throw new NativeFailure('EXECUTOR', reply.dispatched);}
   if (reply.exitCode !== 0 || !payload || typeof payload !== 'object' || Array.isArray(payload) || payload.isError || typeof payload.error === 'string') {
-    throw new NativeFailure(/timeout/i.test(payload?.error ?? '') ? 'TIMEOUT' : 'EXECUTOR', reply.dispatched);
+    if (/does not handle the modal state/i.test(payload?.error ?? JSON.stringify(payload))) throw new NativeRefusal('MODAL_PENDING');
+    throw new NativeFailure(/timeout/i.test(payload?.error ?? '') ? 'TIMEOUT' : 'EXECUTOR', reply.dispatched, false, payload?.error ?? JSON.stringify(payload), 'COMMAND_ERROR');
   }
   return payload;
 }
@@ -38,10 +44,11 @@ export function validateNativeArguments(args, workRoot, origins) {
   if (['state-save','state-load'].includes(args[0]) && (args.length !== 2 || !within(workRoot, resolve(workRoot, args[1])))) throw new Error('Authentication state must stay in protected session storage.');
 }
 
+export const nativeEnvironment = () => Object.freeze({...Object.fromEntries(Object.entries(process.env).filter(([name]) => SYSTEM_KEYS.has(name.toUpperCase()))), CI: '1', NO_UPDATE_NOTIFIER: '1'});
 async function neutralEnvironment() {
   if (Object.keys(process.env).some(key => /^(PLAYWRIGHT_MCP_|PLAYWRIGHT_CLI_|PWTEST_)/i.test(key))) throw new Error('Remove native Playwright overrides before this owned browser profile; values are not logged.');
   try {await lstat(join(homedir(), '.playwright', 'cli.config.json'));} catch (error) {
-    if (error.code === 'ENOENT') return Object.freeze({...Object.fromEntries(Object.entries(process.env).filter(([name]) => SYSTEM_KEYS.has(name.toUpperCase()))), CI: '1', NO_UPDATE_NOTIFIER: '1'});
+    if (error.code === 'ENOENT') return nativeEnvironment();
     throw error;
   }
   throw new Error('This browser profile requires neutral native global configuration; existing configuration is untouched.');
@@ -71,9 +78,10 @@ export function nativeCliInstallation(packageRoot) {
 }
 
 /** Create fresh consumer storage and an owned isolated session; no attachment or global cleanup. */
-export async function prepareNativeSession(roots, {origins, storageState, nativeTimeoutMs = 5000, commandTimeoutMs = 30000} = {}) {
+export async function prepareNativeSession(roots, {origins, storageState, secrets = {}, nativeTimeoutMs = 5000, commandTimeoutMs = 30000} = {}) {
   roots = resolveSkillRoots(roots);
   const env = await neutralEnvironment(), installation = nativeCliInstallation(roots.packageRoot);
+  if (!secrets || typeof secrets !== 'object' || Array.isArray(secrets) || Object.entries(secrets).some(([name, value]) => !/^HARNESS_PASSWORD_[A-Z0-9_]+$/.test(name) || typeof value !== 'string' || !value || value.length > 8192)) throw new Error('Invalid native secret bindings.');
   if (!Number.isSafeInteger(nativeTimeoutMs) || nativeTimeoutMs < 1 || nativeTimeoutMs > 60000 || !Number.isSafeInteger(commandTimeoutMs) || commandTimeoutMs < 1 || commandTimeoutMs > 120000) throw new Error('Native timeouts must be bounded.');
   const require = createRequire(import.meta.url), {tools} = require(installation.coreBundle);
   if (typeof tools?.resolveCLIConfigForCLI !== 'function') throw new Error('Native CLI integration prerequisite is unavailable.');
@@ -98,6 +106,7 @@ export async function prepareNativeSession(roots, {origins, storageState, native
     await mkdir(workRoot, {mode: 0o700}); await mkdir(evidenceRoot, {mode: 0o700});
     config = join(workRoot, 'native.json');
     const settings = {browser: {browserName: 'chromium', isolated: true, launchOptions: {headless: true, channel: 'chrome-for-testing', ...(process.platform === 'linux' && process.getuid() === 0 ? {chromiumSandbox: false} : {})}, contextOptions: {serviceWorkers: 'block'}}, network: {allowedOrigins: origins}, timeouts: {action: nativeTimeoutMs, navigation: nativeTimeoutMs}, outputDir: workRoot};
+    if (Object.keys(secrets).length) settings.secrets = secrets;
     await writeFile(config, JSON.stringify(settings), {mode: 0o600, flag: 'wx'});
     // Protected identity-only crash recovery. Register the exact session before dispatch.
     await writeFile(join(workRoot, 'native-ownership.json'), JSON.stringify({version: 1, session, stage: 'prepared', trees: []}), {mode: 0o600, flag: 'wx'});
@@ -120,6 +129,7 @@ export async function prepareNativeSession(roots, {origins, storageState, native
     await neutralEnvironment();
     const actual = await tools.resolveCLIConfigForCLI(workRoot, session, {config}, env);
     if (actual.browser?.isolated !== true || actual.browser.browserName !== 'chromium' || actual.browser.launchOptions?.headless !== true || actual.browser.launchOptions?.channel !== 'chrome-for-testing' || actual.browser.cdpEndpoint || actual.browser.remoteEndpoint || actual.browser.userDataDir || actual.browser.launchOptions.executablePath || actual.extension || actual.sharedBrowserContext || resolve(actual.outputDir) !== workRoot || JSON.stringify(actual.network.allowedOrigins) !== JSON.stringify(origins)) throw new Error('Native profile changed before launch.');
+    if (JSON.stringify(Object.keys(actual.secrets ?? {}).sort()) !== JSON.stringify(Object.keys(secrets).sort())) throw new Error('Native secret bindings changed before launch.');
   }
   let opened = false, openingUncertain = false, busy = false, closed = false, lastCleanup;
   const cleanupFailures = [];

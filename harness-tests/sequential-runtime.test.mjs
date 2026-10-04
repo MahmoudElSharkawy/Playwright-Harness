@@ -61,10 +61,12 @@ test('callback errors preserve honest missing scope and still invoke cleanup', a
   assert.equal(result.status, 'NEEDS_REVIEW'); assert.equal(f.requests.length, 1); assert.equal(result.scenarios[0].counts.notEvaluated, 1);
 });
 
-test('phase deadline ends a stalled callback and expired handles cannot dispatch', async t => {
+test('H4: phase deadline ends a stalled callback and expired handles cannot dispatch', async t => {
   const exercise = read('exercise'), clean = read('clean'); let expired;
+  // Storage setup must not consume the deadline this test assigns to the callback.
+  let now = Date.now(); t.mock.method(Date, 'now', () => now);
   const f = await fixture(t, [step(exercise, 'EXERCISE'), step(clean, 'CLEANUP')], {limits: {timeoutMs: 120, cleanupTimeoutMs: 2000}});
-  const result = await f.start({exercise: ctx => {expired = ctx; return new Promise(() => {});}, cleanup: ctx => call(ctx, clean)});
+  const result = await f.start({exercise: ctx => {expired = ctx; now += 121; return new Promise(() => {});}, cleanup: ctx => call(ctx, clean)});
   assert.equal(result.status, 'NEEDS_REVIEW'); assert.equal(f.requests.length, 1); assert.throws(() => expired.api.execute({operation: exercise, invocationId: exercise.id}), /ended/);
 });
 

@@ -152,7 +152,7 @@ Run `npx --no pom-harness check`. Report each feature with its status:
 
 The command exits 1 only for a broken installation or invalid configuration; fix those
 first. Then continue with the user's work. For example, automate a suite through the
-`automate-suite` skill.
+`automate-test` skill.
 
 Team libraries go into `resources/Queries/` and `resources/apisCollections/` as their
 READMEs describe. They are derive-only.
@@ -219,3 +219,7 @@ fail open.
 
 `npx --no` refuses to download a package. The harness commands also refuse to run unless
 they are the project's own installation, at the version its lockfile records.
+
+## Manual execution configuration (3.2.0)
+
+Browser targets may declare startUrl and users handles with usernameRef/passwordRef environment references. Add empty keys to the ignored .env; never serialize values into targets.json. Optional ado.bugs defaults configure paths, assignment, tags, extra scalar fields and attachment bounds. Upgrade every teammate before committing these new keys. API/DB-only manual runs need no browser or unrelated login credentials; next enforces scoped readiness. See [M19](../../../../docs/M19-EXECUTE.md).

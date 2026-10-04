@@ -15,11 +15,23 @@ export function validateConfiguration(project,targets) {
   object(targets.browser??{},'browser targets');
   for(const [name,target] of Object.entries(targets.browser??{})) {
     if(!identifier(name))throw new Error('Invalid browser target identifier.');
-    keys(target,['origins'],'browser target');
+    keys(target,['origins','startUrl','users'],'browser target');
     if(!Array.isArray(target.origins) || !target.origins.length || new Set(target.origins).size!==target.origins.length)throw new Error('Browser targets need explicit unique origins.');
     for(const origin of target.origins) {
       let url;try{url=new URL(origin);}catch{throw new Error('Invalid browser origin.');}
       if(!['https:','http:'].includes(url.protocol) || origin!==url.origin)throw new Error('Browser targets require HTTP(S) origins without credentials, paths or wildcards.');
+    }
+    if(target.startUrl!==undefined) {
+      let url;try{url=new URL(target.startUrl);}catch{throw new Error('Invalid browser start URL.');}
+      if(!target.origins.includes(url.origin) || url.username || url.password)throw new Error('Browser start URL must belong to an allowed origin.');
+    }
+    if(target.users!==undefined) {
+      object(target.users,'browser users');
+      for(const [handle,user] of Object.entries(target.users)) {
+        if(!identifier(handle))throw new Error('Invalid browser user handle.');
+        keys(user,['usernameRef','passwordRef'],'browser user');
+        if(!secretReference(user.usernameRef) || !secretReference(user.passwordRef))throw new Error('Browser users need environment references.');
+      }
     }
   }
   for(const [name,target] of Object.entries(targets.api)) {

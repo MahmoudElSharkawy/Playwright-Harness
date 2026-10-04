@@ -1,5 +1,10 @@
 # Playwright POM Harness reference
 
+M19 adds [standalone manual execution](M19-EXECUTE.md): one live scenario host,
+condition-bound evidence, captured ADO revisions, login reuse, diagnostics and
+recoverable preview-first bug/result delivery. Validation is recorded in
+[M19 validation](M19-VALIDATION.md).
+
 M3 provides one canonical skill library, thin native host packaging, safe consumer
 adoption, local-source loading and explicit environment-profile configuration. It
 does not implement the later browser/API/DB executors or full lifecycle parity.

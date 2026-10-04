@@ -15,7 +15,7 @@ implemented. M3's validated local scope is loading, configuration and refinement
 The approved plan keeps sequential execution as the default until bounded parallel
 execution is separately implemented and validated.
 
-# Automate-Suite Playbook
+# Automate-Test Playbook
 
 ## Compatibility scope
 
@@ -42,8 +42,8 @@ phase can be re-entered idempotently.
 
 The PAT needs **Work Items: Read & Write**, **Test Management: Read & Write** (both
 verified in this project), and **Code: Read & Write** for PR creation.
-(For EXPLORE, the browser-testing skill ships its own `preflight.js` that probes the
-whole toolchain in one call — prefer it over individual checks when that phase runs.)
+For EXPLORE, follow the configured native-runtime readiness and handoff checks in
+[M13](../../../../docs/M13-GENERATION.md).
 
 ### 0b. Triage — depth from blast radius × reversibility
 
@@ -201,103 +201,18 @@ Two refinement assists:
 
 ---
 
-## 3. EXPLORE — execute the manual cases with AgenTeX
+## 3. EXPLORE — shared native runtimes
 
-Invoke the AgenTeX browser-testing skill exactly as a user would:
+Use the current [M13 exploration and handoff](../../../../docs/M13-GENERATION.md). Browser, API and DB observations enter the execution-core evidence boundary. Preserve source-to-assertion bindings and lifecycle dispositions for generation. Do not weaken an expectation to fit an observed defect.
 
-```
-/execute-test ado-suite-<suiteId>/ [on <env>]
-```
-
-Execution remains sequential until the full sequential lifecycle and later bounded-
-parallel milestone pass. Existing authorization persists across ordinary permitted
-operations; do not request repeated mutation approval. Outputs land in
-`executions/execu_<timestamp>/` (report.md, per-session screenshots/logs, bugs/).
-Cases with `stepCount: 0` in the manifest are never dispatched — they go straight to
-the final report's "not automated" list. Login-gated suites (most of this app) run
-sequential or pre-authenticated — see below.
-
-**Codegen harvest (this pipeline's addition).** The plugin's `.playwright-cli/`
-scratch is cleaned at run end and selectors would be lost, so **the orchestrator —
-this session, never a qa-executor** (executors may only write inside their own
-`browser-sessions/<session>/` slice) — writes one note file per spec:
-
-```
-executions/execu_<ts>/codegen-notes/<spec-stem>.md
-```
-
-- **Sequential mode**: write each spec's note right after its last scenario, before
-  the run-end session close, from your own snapshot/run-code calls. Snapshots return
-  accessibility refs, NOT selectors — before filling the Elements section, dump each
-  interacted element's id/name/data-qa/css path with one `run-code` call.
-- **Parallel mode**: executors close their own sessions, so notes are written
-  immediately after MERGE, from the executor reports and their session logs. To make
-  those carry implementation data, inject harvest work as scenario-shaped steps in
-  each dispatched `TEST_SPEC` **text** (never edit the `tc-*.md` files): prepend
-  `0. run-code: attach page.on('request'/'response') logging, save to
-  {{SESSION_DIR}}/logs/network.log` and append a final step `for each element you
-  interacted with, run-code dump its tag/id/name/data-qa/css path to
-  {{SESSION_DIR}}/logs/selectors.log` — both live inside the executor's sanctioned
-  write slice. A report that comes back without implementation data means that spec
-  is treated as explore-skipped for harvest purposes (its verdict still counts).
-
-Template:
-
-```markdown
-# Codegen notes — <spec file> (TC <id>)
-## Pages visited        <!-- URL → purpose; note existing pages/<X>Page.ts overlap -->
-## Elements interacted  <!-- business name → best stable selector, per element-locators order: id → name → data-qa → relative xpath/css -->
-## Network calls        <!-- METHOD url → candidate Apis<Domain> endpoint (seed/verify) -->
-## Data & quirks        <!-- authentication challenge references only; never values, waits needed, iframes, RTL/Arabic text, dialogs -->
-## Verdicts             <!-- per scenario PASS/FAIL + defect refs from report.md -->
-```
-
-A scenario that FAILS here is an **app defect candidate**, not a reason to stop:
-record it (offer `/bug-report-azure` filing), and phase 4 still generates its test
-(marked `test.fixme` + `allure.issue` when confirmed). If the whole environment is
-unreachable, stop and report BLOCKED.
-
-**Login-gated suites.** Logging in with the configured test users in
-`environments/<env>.json` is sanctioned test-data usage — the browser-testing
-skill's environment resolution ("login as <handle>" → `users.<handle>`) exists for
-exactly this; the plugin's "no real signup/login" autonomy rule bans real personal
-accounts, not these. But a literal qa-executor may still skip login steps, so:
-
-1. REFINE must have bound every login step to a `users.<handle>` — a case whose
-   login has no matching handle is NEEDS-DATA and is not dispatched (configure the required user handles in the consumer project).
-2. Prefer sequential mode for login-gated suites, or pre-authenticate with
-   `/optimize-login` first (honor `login.mode` in `config/project.json`).
-3. Never lift credentials out of ADO step text into specs or notes.
-
-**Record the run in the manifest** when the phase ends: add to
-`test/ado-suite-<suiteId>/_suite.json`:
-
-```json
-"explore": { "run": "executions/execu_<ts>", "skipped": false }
-```
-
-That entry — never "the newest run folder" — is what later phases and resumed
-sessions read. The user may skip this phase ("generate directly"): record
-`"explore": { "skipped": true }`; phase 4 then works from the refined specs and
-manifest steps alone and expects more VERIFY iterations.
-
-**Propose reviewed knowledge.** After notes are written, place durable observations
-in `.harness/knowledge-candidates/ui/`. Review and sanitize selectors, landmarks,
-strings, endpoints and gotchas before promoting to `.harness/knowledge/ui/<page-slug>.md`.
-Start a new page from the immutable [page-map template](../assets/page-map-template.md)
-and follow [its contract](page-map.md). Run verdicts and screenshots stay in run
-artifacts. Promotion affects subsequent work; it does not silently change active-run
-inputs.
+For standalone manual execution with no code generation, route to [execute-test](../../execute-test/SKILL.md) and [M19](../../../../docs/M19-EXECUTE.md). That route produces reports and defects without changing POM code or tracker state. It is not the automation pipeline's exploration handoff.
 
 ---
 
 ## 4. GENERATE — skill-first POM automation
 
-Inputs: `_suite.json` (raw ADO steps + suggestions), the refined specs from phase 2
-(the executable expression of each case), the `codegen-notes/` of the run recorded
-in `_suite.json.explore.run` (reading them is the sanctioned exception to the "never
-read executions/" rule — nothing else under `executions/` is ever read; a run
-without notes means re-explore, not log mining), the git-tracked
+Inputs: the source cases and refinement from phase 2, the assessed exploration and
+frozen generation handoff described in [M13](../../../../docs/M13-GENERATION.md), the git-tracked
 `.harness/knowledge/ui/` (selector, landmark, and rendered-string authority proven by
 earlier runs), and the existing framework code as the living style reference.
 
@@ -576,14 +491,14 @@ For long convergence (flaky app, many cases), the user can hand the verify loop 
 the loop skill:
 
 ```
-/loop /automate-suite <planId>/<suiteId> verify
+/loop /automate-test <planId>/<suiteId> verify
 ```
 
 Each iteration re-enters this pipeline at VERIFY. **In loop mode the `verify`
 keyword's continue-through-DELIVER rule is suspended: each iteration ends after
 updating `_verify-state.json`.** DELIVER runs exactly once, after
 `TERMINAL — matrix converged` (as the terminal iteration's tail, or as a fresh
-`/automate-suite <ids> deliver`); outcome publishing is once-per-pipeline opt-in,
+`/automate-test <ids> deliver`); outcome publishing is once-per-pipeline opt-in,
 never per-iteration. **At VERIFY entry read `_verify-state.json` first**: when every
 case is green with `greens ≥ 2` (the rerun-reusability gate) or terminally classified
 (fixme'd app defect, BLOCKED, or round cap reached with the case still failing),
@@ -607,7 +522,7 @@ with no intervening edit violates the workflow; the current hook is advisory.
 | BRANCH | current branch is `automation/ado-suite-<suiteId>-*` (never master) |
 | FETCH | `test/ado-suite-<suiteId>/_suite.json` exists (with ≥1 case) |
 | REFINE | every spec in the suite folder ends with a `## Refinement log` section, and every prose precondition is resolved per [prerequisite-dictionary.md](prerequisite-dictionary.md) (seed steps, GUI-chain expansion, or NEEDS-FIXTURE) |
-| EXPLORE | `_suite.json.explore` names a run whose `codegen-notes/` has one file per dispatched spec, or `explore.skipped` is true; missing stems → re-explore only those specs |
+| EXPLORE | Assessed exploration has a verified frozen [M13 generation handoff](../../../../docs/M13-GENERATION.md), preserving each source expectation and its evidence; missing evidence requires scoped exploration before generation |
 | GENERATE | every file in `_suite.json.resolvedSpecFiles` exists and, across them, every manifest tms id appears in an `allure.tms` call (grep `tests/*.spec.ts` before declaring a partial), AND the framework-review verdict is APPROVE |
 | VERIFY | `_verify-state.json` shows every case green with `greens ≥ 2` (two consecutive passing runs — the rerun-reusability gate) or terminally classified; a fresh session with no such file runs the spec (twice when green) to establish state |
 | DELIVER | PR exists for the branch (`_suite.json.pr` records its id/url); outcomes published when the user opted in; `--mark-automated` run only after merge |

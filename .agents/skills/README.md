@@ -16,6 +16,8 @@ The library preserves conventions and illustrative examples from earlier framewo
 audits. Current package boundaries are described in the [harness reference](../../docs/HARNESS.md);
 open convention decisions remain in design-conventions.
 
+For standalone ADO manual runs use [execute-test](execute-test/SKILL.md); automation generation stays with automate-test.
+
 | # | Skill | Playbook | Use when (description) | Key checkpoints |
 |---|-------|----------|--------------------------|-----------------|
 | 1 | [pom-architecture](pom-architecture/SKILL.md) | [design-conventions](pom-architecture/references/design-conventions.md) | Entry point & router — folder layout, POM layering, naming, business-vs-technical split, where new code belongs; also the starting point for "automate / create scripts for" a test case, suite, story, or Azure DevOps id | Code sits in the correct layer, dependencies point downward only; naming table (§2) followed (top-level folders lowercase, `resources/` subfolders camelCase — never `test-data/`); class anatomy order (§3); 12 iron laws (§4) incl. prerequisites seeded through API/DB layers wherever a path exists; Java-era rules never reintroduced (§5); report output contract — path changes land in lockstep (config, lifecycle scripts, README, CI; the allure `outputFolder` key is dead in v3); run-lifecycle scripts = run hygiene only; layers created on first need |
@@ -33,7 +35,7 @@ open convention decisions remain in design-conventions.
 
 | Skill | Use when |
 |---|---|
-| [automate-suite](automate-suite/SKILL.md) | Turning a local or configured Azure DevOps suite into reviewed POM automation with two scoped green runs |
+| [automate-test](automate-test/SKILL.md) | Turning story-linked cases, ADO suites or local scenarios into reviewed POM automation with two scoped green runs |
 | [framework-review](framework-review/SKILL.md) | Reviewing a change against the conventions and producing a verdict |
 | [plan-tracker](plan-tracker/SKILL.md) | Recording a tracked plan's progress and regenerating its report |
 | [harness-setup](harness-setup/SKILL.md) | Installing, updating, configuring or rolling back the harness in a project |

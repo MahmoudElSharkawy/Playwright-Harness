@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {createServer} from 'node:http';
-import {writeFileSync} from 'node:fs';
+import {writeFileSync, readFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {defineApiOperation, createApiRuntime} from '../scripts/lib/api/index.mjs';
 import {defineOperation} from '../scripts/lib/execution-core/index.mjs';
@@ -52,6 +52,16 @@ test('required cleanup left pending prevents a clean pass', async t => {
   const f = await fixture(t, ({reply}) => reply(200, {id: 'row-1'}), [op]);
   await f.call(op, {resource: {id: 'row', output: 'recordId', ownership: 'harness', intent: 'temporary'}});
   assert.equal(f.runtime.finish().status, 'NEEDS_REVIEW');
+});
+
+test('F8: ambiguous cleanup verification cannot complete a registered resource obligation', async t => {
+  const create = operation('create', {method: 'POST', extract: [{name: 'recordId', type: 'string', sensitivity: 'public', select: {from: 'json', path: ['id']}}]});
+  const remove = operation('remove', {method: 'DELETE', path: '/items/{recordId}', checks: [statusCheck('removed', 200)]});
+  const f = await fixture(t, ({reply}) => reply(200, {id: 'row-1'}), [create, remove]);
+  const created = await f.call(create, {phase: 'SETUP', resource: {id: 'row', output: 'recordId', ownership: 'harness', intent: 'temporary'}});
+  await f.call(remove, {phase: 'CLEANUP', inputs: created.outputs, lifecycle: {resourceId: 'row'}, unresolvedChecks: ['removed']});
+  const result = f.runtime.finish(); assert.equal(result.status, 'NEEDS_REVIEW'); const resource = result.scenarios[0].resources[0]; assert.equal(resource.lifecycle.status, 'failed');
+  assert.equal(resource.lifecycle.evidenceIds.length, 1); assert.deepEqual(JSON.parse(readFileSync(join(f.roots.runRoot, result.evidence.find(item => item.id === resource.lifecycle.evidenceIds[0]).path), 'utf8')), {resourceId: 'row', complete: false});
 });
 
 test('expected non-2xx response is a reliable pass; unexpected status never retries to green', async t => {

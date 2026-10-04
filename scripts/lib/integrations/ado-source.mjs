@@ -1,7 +1,9 @@
-import {parseStepsXml, htmlToText} from './ado-steps.mjs';
+import {parseStepsXml, htmlToText, parameterNames} from './ado-steps.mjs';
 import {adoId, requireValue, workItemLinkId} from './config.mjs';
 import {validateLocalSource, loadLocalSource} from '../local-source.mjs';
 import {emptyAdoMetadata} from './ado-metadata.mjs';
+import {fingerprint} from '../execution-core/data.mjs';
+import {AdoError} from './ado-client.mjs';
 
 const fields = ['System.Id', 'System.Title', 'System.TeamProject', 'System.State', 'System.Tags', 'Microsoft.VSTS.Common.Priority', 'Microsoft.VSTS.TCM.Steps', 'Microsoft.VSTS.TCM.Parameters', 'Microsoft.VSTS.TCM.LocalDataSource'];
 // Story relation selections in canonical order; Tested By is the requirement-to-test link.
@@ -16,14 +18,15 @@ export function createAdoTestSource(client) {
       requireValue(Array.isArray(response.value) && response.value.length === scope.length, 'ADO omitted required work items.');
       for (const item of response.value) {
         const id = adoId(item.id); requireValue(scope.includes(id) && !items.has(id) && item.fields, 'ADO work-item scope mismatch.');
-        if (owned) await client.requireWorkItemProject(item);
+        if (owned) try {await client.requireWorkItemProject(item);} catch (error) {error.ownershipFatal = true; throw error;}
         items.set(id, item);
       }
     }
     return items;
   }
-  async function readCases(ids) {
+  async function readCases(ids, {tolerant = false} = {}) {
     const items = await batch(ids), shared = new Map();
+    let dependencies, sharedParameters;
     async function expand(xml, trail = []) {
       requireValue(trail.length <= 10, 'ADO shared steps exceed the nesting limit.');
       const nodes = parseStepsXml(xml), result = [];
@@ -36,39 +39,60 @@ export function createAdoTestSource(client) {
           requireValue(!trail.includes(node.ref), 'ADO shared steps contain a cycle.');
           if (!shared.has(node.ref)) shared.set(node.ref, (await batch([node.ref])).get(node.ref));
           const item = shared.get(node.ref);
-          requireValue(emptyAdoMetadata(item.fields['Microsoft.VSTS.TCM.Parameters'], 'parameters') && emptyAdoMetadata(item.fields['Microsoft.VSTS.TCM.LocalDataSource'], 'NewDataSet'), 'Parameterized shared steps require explicit refinement.');
+          if (!tolerant) requireValue(emptyAdoMetadata(item.fields['Microsoft.VSTS.TCM.Parameters'], 'parameters') && emptyAdoMetadata(item.fields['Microsoft.VSTS.TCM.LocalDataSource'], 'NewDataSet'), 'Parameterized shared steps require explicit refinement.');
+          else {
+            dependencies[node.ref] = item.rev;
+            requireValue(Number.isInteger(item.rev) && item.rev > 0, 'ADO shared-step revision is incomplete.');
+            requireValue(emptyAdoMetadata(item.fields['Microsoft.VSTS.TCM.LocalDataSource'], 'NewDataSet'), 'Shared parameter sets are unsupported.');
+            for (const name of parameterNames(item.fields['Microsoft.VSTS.TCM.Parameters'])) sharedParameters.add(name);
+          }
           result.push(...(await expand(item.fields['Microsoft.VSTS.TCM.Steps'], [...trail, node.ref])).map(step => ({...step, fromShared: node.ref})));
         }
-        requireValue(result.length <= 1000 && shared.size <= 500, 'ADO expanded steps exceed scope limits.');
+        requireValue(result.length <= 1000, 'step-limit');
+        requireValue(shared.size <= 500, 'shared-step-limit');
       }
       return result;
     }
-    const cases = [];
+    const cases = [], excluded = [];
     for (const id of ids) {
+      dependencies = {}; sharedParameters = new Set();
+      try {
       const f = items.get(id).fields;
       requireValue(typeof f['System.Title'] === 'string' && f['System.Title'].trim(), 'ADO case title is missing.');
       const dataTableXml = f['Microsoft.VSTS.TCM.LocalDataSource'] ?? null;
       const dataTable = typeof dataTableXml === 'string' && !emptyAdoMetadata(dataTableXml, 'NewDataSet') ? [...dataTableXml.matchAll(/<Table1>([\s\S]*?)<\/Table1>/g)].map(row => Object.fromEntries([...row[1].matchAll(/<([^>\/\s]+)>([\s\S]*?)<\/\1>/g)].map(cell => [cell[1], htmlToText(cell[2])]))) : null;
       cases.push({id, title: f['System.Title'], state: f['System.State'] ?? '', priority: f['Microsoft.VSTS.Common.Priority'] ?? null,
         tags: String(f['System.Tags'] ?? '').split(';').map(tag => tag.trim()).filter(Boolean), steps: await expand(f['Microsoft.VSTS.TCM.Steps']),
-        parameters: f['Microsoft.VSTS.TCM.Parameters'] ?? null, dataTable, ...(dataTableXml === null ? {} : {dataTableXml})});
+        parameters: f['Microsoft.VSTS.TCM.Parameters'] ?? null, dataTable, ...(dataTableXml === null ? {} : {dataTableXml}),
+        ...(tolerant ? {rev: items.get(id).rev, contentSha256: fingerprint({title: f['System.Title'], steps: f['Microsoft.VSTS.TCM.Steps'], parameters: f['Microsoft.VSTS.TCM.Parameters'] ?? null, dataTable: dataTableXml}), sharedRevisions: dependencies, sharedParameters: [...sharedParameters]} : {})});
+      if (tolerant) requireValue(Number.isInteger(items.get(id).rev) && items.get(id).rev > 0, 'ADO case revision is incomplete.');
+      } catch (error) {
+        if (!tolerant || error instanceof AdoError || error.ownershipFatal) throw error;
+        if (cases.at(-1)?.id === id) cases.pop();
+        const reason = /cycle/.test(error.message) ? 'shared-step-cycle' : /nesting/.test(error.message) ? 'shared-step-depth' : ['step-limit', 'shared-step-limit', 'parameters-without-data'].includes(error.message) ? error.message : /Shared parameter/.test(error.message) ? 'shared-parameter-set' : /absent/.test(error.message) ? 'no-steps' : 'unparsable-steps';
+        excluded.push({id, reason});
+      }
     }
-    return cases;
+    return tolerant ? {cases, excluded} : cases;
   }
   return Object.freeze({
     listPlans: () => client.list('testplan/plans?api-version=7.1'),
     listSuites: plan => client.list(`testplan/Plans/${adoId(plan)}/suites?api-version=7.1`),
-    async fetchSuite(plan, suite) {
+    async revisions(ids) {
+      const items = await batch([...new Set(ids)], ['System.Id', 'System.Rev', 'System.TeamProject']);
+      return new Map([...items].map(([id, item]) => {requireValue(Number.isInteger(item.rev) && item.rev > 0, 'ADO revision is incomplete.'); return [id, item.rev];}));
+    },
+    async fetchSuite(plan, suite, options = {}) {
       const planId = adoId(plan), suiteId = adoId(suite);
       const metadata = await client.read(`testplan/Plans/${planId}/suites/${suiteId}?api-version=7.1`);
       requireValue(adoId(metadata.id) === suiteId && typeof metadata.name === 'string', 'ADO suite metadata mismatch.');
       const entries = await client.list(`testplan/Plans/${planId}/Suites/${suiteId}/TestCase?api-version=7.1&excludeFlags=0`);
       const ids = [...new Set(entries.map(entry => adoId(entry.workItem?.id)))];
       requireValue(ids.length > 0 && ids.length <= 500, 'ADO suite needs 1–500 test cases.');
-      const cases = await readCases(ids);
-      return {planId, suiteId, suiteName: metadata.name, organizationUrl: client.configuration.organizationUrl, project: client.configuration.project, cases};
+      const loaded = await readCases(ids, options);
+      return {planId, suiteId, suiteName: metadata.name, organizationUrl: client.configuration.organizationUrl, project: client.configuration.project, ...(options.tolerant ? loaded : {cases: loaded})};
     },
-    async fetchStory(story, links = ['tested-by']) {
+    async fetchStory(story, links = ['tested-by'], options = {}) {
       const storyId = adoId(story);
       requireValue(Array.isArray(links) && links.length > 0 && new Set(links).size === links.length && links.every(name => Object.hasOwn(storyLinks, name)), 'Story links must be distinct tested-by, child or related selections.');
       const selected = Object.keys(storyLinks).filter(name => links.includes(name)), relations = selected.map(name => storyLinks[name]);
@@ -99,7 +123,9 @@ export function createAdoTestSource(client) {
       }
       requireValue(ids.length > 0, 'ADO story has no linked test cases for the selected link types.');
       requireValue(ids.length <= 500, 'ADO story needs 1–500 linked test cases.');
-      return {storyId, storyTitle: item.fields['System.Title'], links: selected, organizationUrl: client.configuration.organizationUrl, project: client.configuration.project, cases: await readCases(ids), excluded};
+      const loaded = await readCases(ids, options);
+      return {storyId, storyTitle: item.fields['System.Title'], links: selected, organizationUrl: client.configuration.organizationUrl, project: client.configuration.project,
+        ...(options.tolerant ? {cases: loaded.cases, excluded: [...excluded, ...loaded.excluded], storyRev: item.rev} : {cases: loaded, excluded})};
     }
   });
 }

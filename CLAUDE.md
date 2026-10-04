@@ -35,7 +35,8 @@ router) and follow its routing table.
 
 | When the user asks to… | Invoke |
 |---|---|
-| "Automate suite `<id>`" / "automate plan `<id>` suite `<id>`", "fetch the cases from Azure and automate them", "run the ADO suite and generate the scripts", or resume any phase of that pipeline (fetch / explore / generate / verify) | `automate-suite` — the end-to-end pipeline orchestrator (it routes into the layer skills below itself) |
+| "Execute / run manual tests for ADO suite or story `<id>`", `/execute-test`, with no code generation | `execute-test` — live execution, verified reports and optional ADO delivery |
+| "Automate story `<id>`", "automate suite `<id>`" / "automate plan `<id>` suite `<id>`", "automate local scenarios", `/automate-test`, or resume that code-generation pipeline (fetch / explore / generate / verify) | `automate-test` — the end-to-end pipeline orchestrator (it routes into the layer skills below itself) |
 | "Automate this test case / test suite", "create scripts for Azure (DevOps) suite `<id>` / test case `<id>`", "write automation for this story / scenario" | `pom-architecture` first, then the per-layer skills below as the work touches each layer |
 | Create or restructure a spec file — naming, `test.describe`, hooks, setup/teardown | `test-classes` |
 | Write, review, or refactor an individual test — title, Allure metadata, tags, body flow | `test-methods` |
@@ -53,6 +54,6 @@ router) and follow its routing table.
 
 ## Automation workflow
 
-Use the canonical automate-suite skill and [M13 generation procedure](docs/M13-GENERATION.md): load a neutral local source or explicitly configured ADO source, preserve its assertions, explore through shared runtimes, generate/reuse POM code, obtain an independent review, and earn two independent scoped green runs. Three cumulative repair rounds are available. Catalogs, helpers and fixed inline definitions are peers. Cleanup follows intent and ownership. AgenTeX is not a runtime prerequisite. External delivery uses optional M12 adapters only when authorized.
+Use the canonical automate-test skill and [M13 generation procedure](docs/M13-GENERATION.md): load a neutral local source or explicitly configured ADO source, preserve its assertions, explore through shared runtimes, generate/reuse POM code, obtain an independent review, and earn two independent scoped green runs. Three cumulative repair rounds are available. Catalogs, helpers and fixed inline definitions are peers. Cleanup follows intent and ownership. AgenTeX is not a runtime prerequisite. External delivery uses optional M12 adapters only when authorized.
 
 Read only the specific current run's registered evidence when preparing its generation handoff. Do not mine unrelated run artifacts for context.

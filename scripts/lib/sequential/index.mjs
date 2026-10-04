@@ -4,7 +4,7 @@ import {createDatabaseRuntime, databaseCapabilities} from '../database/index.mjs
 import {runBrowserScenario, browserCapabilities} from '../browser/index.mjs';
 import {authorizeOperation, checkExecutionWindow, attemptRecord, registerEvidence} from '../execution-core/index.mjs';
 import {data, frozen, requireThat} from '../execution-core/data.mjs';
-import {createScenarioState, initializeStorage, writeScenario, finishScenario, phaseOrder} from './state.mjs';
+import {createScenarioState, initializeStorage, writeScenario, finishScenario, phaseOrder, checkWorkWindow, observationBudgetReached} from './state.mjs';
 import {prepareSequential, stages} from './preflight.mjs';
 
 const capabilities = {api: apiCapabilities, database: databaseCapabilities, browser: browserCapabilities};
@@ -13,6 +13,8 @@ const capabilities = {api: apiCapabilities, database: databaseCapabilities, brow
 export async function runSequentialScenario(run, roots, options = {}, callbacks = {}) {
   ({options, callbacks} = prepareSequential(run, options, callbacks));
   const state = createScenarioState(run, roots), controller = new AbortController();
+  state.cleanupReserveMs = options.cleanupReserveMs ?? 0;
+  state.boundedObservations = options.boundedObservations ?? false;
   state.observations.operations.push(...options.explorations);
   const operationFor = id => [...run.inputs.operations, ...state.observations.operations].find(item => item.id === id);
   const abort = () => controller.abort(); options.signal?.addEventListener('abort', abort, {once: true});
@@ -68,6 +70,7 @@ export async function runSequentialScenario(run, roots, options = {}, callbacks 
         pending.add(tracked); tracked.catch(() => {}); return tracked;
       };
       const context = Object.freeze({
+        observationBudgetReached: () => observationBudgetReached(state),
         api: Object.freeze({execute: input => track(() => api.execute(invocation(input)))}),
         database: Object.freeze({execute: input => track(() => database.execute(invocation(input)))}),
         ...(browser ? {browser: Object.freeze({attempt: (input, action) => track(() => browser.attempt(invocation(input), action))})} : {}),
@@ -77,7 +80,7 @@ export async function runSequentialScenario(run, roots, options = {}, callbacks 
         selectOutput: (attempt, name) => {requireActive(); api.selectOutput(attempt, name);}
       });
       try {
-        const window = checkExecutionWindow(run, {phase, signal: controller.signal, cleanupStartedAt: state.cleanupStartedAt});
+        const window = checkWorkWindow(state, {phase, signal: controller.signal});
         if ((!stopped || phase === 'CLEANUP') && window.allowed && callbacks[name]) {
           await Promise.race([Promise.resolve().then(() => callbacks[name](context)), new Promise((_, reject) => {
             onCancel = () => reject(new Error('Phase was cancelled.'));

@@ -11,7 +11,8 @@ const digest=bytes=>createHash('sha256').update(bytes.toString('utf8').replaceAl
 const posix=path=>path.replaceAll('\\','/');
 const mutable=[
   ['.claude/skills/framework-review/class-ledger.md','.harness/state/review/class-ledger.md','.agents/skills/framework-review/assets/class-ledger-template.md'],
-  ['.claude/skills/automate-suite/references/prerequisite-dictionary.md','.harness/knowledge/prerequisites.md','.agents/skills/automate-suite/assets/prerequisite-dictionary-template.md'],
+  ['.claude/skills/automate-test/references/prerequisite-dictionary.md','.harness/knowledge/prerequisites.md','.agents/skills/automate-test/assets/prerequisite-dictionary-template.md',
+    ['.claude/skills/automate-suite/references/prerequisite-dictionary.md']],
   ['.claude/skills/plan-tracker/data/history.jsonl','.harness/state/tracker/history.jsonl','.agents/skills/plan-tracker/assets/history-template.jsonl'],
 ];
 /** Each host discovers project skills in its own folder; both link to the same installed copy. */
@@ -74,7 +75,7 @@ export function adoptProject({projectRoot,installedRoot=packageRoot,environment,
   const redirectHashes=readJson(join(roots.packageRoot,'scripts/redirect-skill-hashes.json'));
   const isRedirect=(file,hash)=>(redirectHashes[file]??[]).includes(hash) || (file.endsWith('.md') && digest(redirectText(file))===hash);
   const knownInstruction=(file,hash)=>legacyHashes[file]===hash || isRedirect(file,hash);
-  const destinations=new Map(mutable.map(([legacy,destination])=>[legacy,destination]));
+  const destinations=new Map(mutable.flatMap(([legacy,destination,,aliases=[]])=>[legacy,...aliases].map(file=>[file,destination])));
   const dataDestination=file=>destinations.get(file) ?? (/^\.claude\/skills\/plan-tracker\/data\/plan-\d+\.json$/.test(file)?`.harness/state/tracker/${file.split('/').pop()}`:undefined);
   // Without a readable git index every path counts as tracked, so nothing shared is dropped.
   const tracked=paths=>{
@@ -100,7 +101,7 @@ export function adoptProject({projectRoot,installedRoot=packageRoot,environment,
       const hash=digest(readFileSync(join(roots.projectRoot,file)));
       if(dataDestination(file) && !isRedirect(file,hash))data.push(file);
       else if(knownInstruction(file,hash))instructions.push({file,hash});
-      else return conflict(`Customized legacy skill needs a manual merge: ${file}`);
+      else return conflict(rel.endsWith('/execute-test')?`Consumer-owned ${rel} is preserved. Rename that skill and its frontmatter name (for example execute-test-team), then rerun setup to install the harness /execute-test.`:`Customized legacy skill needs a manual merge: ${file}`);
     }
     // Data is copied by the migration below. A folder whose tracked team data would only
     // survive as an untracked copy under .harness/state stays, and the user decides.
@@ -111,7 +112,7 @@ export function adoptProject({projectRoot,installedRoot=packageRoot,environment,
       for(const {file,hash} of instructions)if(file.endsWith('.md') && !isRedirect(file,hash))planFile(file,redirectText(file),{merge:true});
       return;
     }
-    folders.push({rel,path,files});links.push({kind:'create',rel,path,source});
+    folders.push({rel,path,files});if(source)links.push({kind:'create',rel,path,source});
   };
   for(const dir of DISCOVERY_DIRS) {
     const parent=consumerPath(roots,dir); // A discovery folder resolving outside the project or into the package is refused.
@@ -129,11 +130,24 @@ export function adoptProject({projectRoot,installedRoot=packageRoot,environment,
       if(entry.kind==='file') {conflict(`${rel} is a file where the harness links a skill; review it.`);continue;}
       if(dir==='.claude/skills') {planLegacyFolder(rel,path,source);continue;}
       const copy=existsSync(join(path,'SKILL.md')) && digest(readFileSync(join(path,'SKILL.md')))===digest(readFileSync(join(source,'SKILL.md')));
-      conflict(copy?`${rel} is a committed copy of the harness skill; run "git rm -r --cached ${rel}", delete the folder, then rerun setup.`:`Customized skill needs a manual merge: ${rel}`);
+      conflict(copy?`${rel} is a committed copy of the harness skill; run "git rm -r --cached ${rel}", delete the folder, then rerun setup.`:name==='execute-test'?`Consumer-owned ${rel} is preserved. Rename that skill and its frontmatter name (for example execute-test-team), then rerun setup to install the harness /execute-test.`:`Customized skill needs a manual merge: ${rel}`);
     }
+  }
+  // The renamed skill has no alias. Migrate only recognized legacy Claude files;
+  // real Codex folders and foreign links stay consumer-owned.
+  const renamedPaths=DISCOVERY_DIRS.map(dir=>`${dir}/automate-suite`);
+  for(const rel of renamedPaths) {
+    const path=join(roots.projectRoot,rel),entry=discoveryEntry(path);
+    if(entry.kind==='missing')continue;
+    if(entry.kind==='directory' && rel.startsWith('.claude/')) {
+      legacySkills.add('automate-suite');planLegacyFolder(rel,path);continue;
+    }
+    if(entry.kind==='link' && (harnessSkillTarget(entry,'automate-suite') || (!entry.live && listed.includes(rel))))links.push({kind:'remove',rel,path,previous:entry.target});
+    else reports.push(`Kept ${rel}: consumer-owned content is preserved. Review its instructions and rename it if needed; the harness now uses /automate-test.`);
   }
   for(const rel of listed) {
     const name=rel.split('/').pop();if(skills.includes(name))continue;
+    if(renamedPaths.includes(rel))continue;
     const path=join(roots.projectRoot,rel),entry=discoveryEntry(path);
     if(entry.kind==='missing')continue;
     if(entry.kind==='link' && (!entry.live || harnessSkillTarget(entry,name)))links.push({kind:'remove',rel,path,previous:entry.target});
@@ -165,9 +179,14 @@ export function adoptProject({projectRoot,installedRoot=packageRoot,environment,
     if(!existsSync(targetPath))planFile('.harness/targets.json',JSON.stringify(targets,null,2)+'\n');
   } else if(mode!==undefined)throw new Error('Choose an environment identifier.');
 
-  for(const [legacy,destination,template] of mutable) {
-    const target=consumerPath(roots,destination),source=legacySkills.has(legacy.split('/')[2])?consumerPath(roots,legacy):undefined;
-    if(source && existsSync(source) && !isRedirect(legacy,digest(readFileSync(source))))migrateState(legacy,destination,readFileSync(source));
+  for(const [legacy,destination,template,aliases=[]] of mutable) {
+    const target=consumerPath(roots,destination),sources=[legacy,...aliases].filter(file=>legacySkills.has(file.split('/')[2]) && existsSync(consumerPath(roots,file)) && !isRedirect(file,digest(readFileSync(consumerPath(roots,file)))));
+    if(sources.length) {
+      const content=readFileSync(consumerPath(roots,sources[0])),sha256=digest(content);
+      if(sources.some(file=>digest(readFileSync(consumerPath(roots,file)))!==sha256)) {conflict(`Conflicting legacy state needs a manual merge: ${sources.join(', ')}`);continue;}
+      migrateState(sources[0],destination,content);
+      for(const file of sources.slice(1))migrated[file]={sha256,destination};
+    }
     else if(!existsSync(target))planFile(destination,readFileSync(join(roots.packageRoot,template)));
   }
   const legacyTracker=legacySkills.has('plan-tracker')?consumerPath(roots,'.claude/skills/plan-tracker/data'):undefined;

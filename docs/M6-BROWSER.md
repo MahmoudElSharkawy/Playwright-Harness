@@ -182,3 +182,7 @@ Chromium sandbox inside that container.
 See [M6 validation](M6-VALIDATION.md) for actual counts, failures and review status.
 API/DB executors, combined execution, full host parity, reporting integration, visual
 testing and concurrency remain later milestones.
+
+## M19 live host extension
+
+The execute-test host relays bounded, redacted private replies to the agent; these are never evidence. NativeFailure.detail is a non-enumerable bounded diagnostic for this channel. Selected login secrets are passed by name through protected native configuration, compared by name at preflight, remembered for evidence redaction and deleted during cleanup. context.diagnostic accepts console/requests only: command errors and OUTPUT_LIMIT are notices, while TIMEOUT/CANCELLED/UNAVAILABLE retain execution-failure semantics. See [M19](M19-EXECUTE.md).

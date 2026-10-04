@@ -7,8 +7,15 @@ this guide summarizes them and links to the detail. The phase names are labels f
 this guide; the milestone documents number their steps instead.
 
 Agents run the pipeline through the
-[automate-suite skill](../.agents/skills/automate-suite/SKILL.md), for example
-`/automate-suite local <source.json> on <environment>`. [M15](M15-WORKFLOW-PARITY.md)
+[automate-test skill](../.agents/skills/automate-test/SKILL.md):
+
+```text
+/automate-test story <id> on <environment>
+/automate-test suite <id> [plan <id>] on <environment>
+/automate-test local <source.json> on <environment>
+```
+
+All sources follow the same pipeline below. [M15](M15-WORKFLOW-PARITY.md)
 proves the complete sequential route through both native hosts; see its
 [validation status](M15-VALIDATION.md).
 
@@ -94,7 +101,7 @@ scenario covers or proves.
 
 - **Inputs:** the loaded source and reviewed consumer knowledge under
   `.harness/knowledge/`, including `prerequisites.md` for recurring setup states
-  ([prerequisite knowledge](../.agents/skills/automate-suite/references/prerequisite-dictionary.md)).
+  ([prerequisite knowledge](../.agents/skills/automate-test/references/prerequisite-dictionary.md)).
 - **Outputs:** a separate refinement artifact in consumer run storage, bound to the
   source and frozen before exploration. Facts that cannot be resolved, such as missing
   data or unknown setup states, are reported rather than guessed.
@@ -108,7 +115,7 @@ scenario covers or proves.
   Report a broken source case so it is fixed at the source.
 
 There is no command; the agent refines with native file tools. Section 2 of the
-[compatibility playbook](../.agents/skills/automate-suite/references/playbook.md) has
+[compatibility playbook](../.agents/skills/automate-test/references/playbook.md) has
 the detailed allowed and forbidden list. Its file layout (a `## Refinement log` in each
 fetched spec) is the legacy ADO one.
 
@@ -132,7 +139,9 @@ and record what actually happens before any code is written.
   cleaned up, required restorations are explicit, and intentionally persistent outcomes
   may remain. Knowledge candidates need review before promotion.
 
-Exploration uses library interfaces rather than a single command:
+Standalone manual execution uses the [execute-test skill](../.agents/skills/execute-test/SKILL.md)
+and [M19 host](M19-EXECUTE.md), with no code generation. Automation exploration
+continues to use these library interfaces:
 
 | Need | Interface | Contract |
 |---|---|---|
@@ -367,7 +376,7 @@ All of this belongs to the consumer; the installed package stays unchanged. See
 
 ## Legacy ADO phase names
 
-The [compatibility playbook](../.agents/skills/automate-suite/references/playbook.md)
+The [compatibility playbook](../.agents/skills/automate-test/references/playbook.md)
 keeps the older ADO workflow and its resume rules (`_suite.json`,
 `_verify-state.json`). Its historical host, catalog, parallelism and cleanup
 assumptions do not override this procedure. Its phase names map to this guide as

@@ -127,5 +127,17 @@
   ".claude/skills/validation-methods/references/playbook.md": [
     "1a5e1167c33de82ca11673710a1b251885d994b46f5d7adce97e327be3d444ee",
     "58cf28efbf4c599e73b2958cab5b1fc9ed3d610a6e2c92a88a65a7404bff6328"
+  ],
+  ".claude/skills/execute-test/SKILL.md": [
+    "839abbf42f3fe623a3857120d920f9708908596f212e92375efa05e10295285b"
+  ],
+  ".claude/skills/automate-test/SKILL.md": [
+    "c36a0609a18c8084cd6b7ab4819da17ec780229806baa6582de79bcdbaf7133b"
+  ],
+  ".claude/skills/automate-test/references/playbook.md": [
+    "1ed0326ccb12e39a5e822e20f8a2da28749200ffcac91679a92f199221835a5f"
+  ],
+  ".claude/skills/automate-test/references/prerequisite-dictionary.md": [
+    "1990ead0687993e2c63f3d57f081995c9441f88c7911db518be3c50d7fcb8136"
   ]
 }

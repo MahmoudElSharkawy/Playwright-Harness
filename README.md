@@ -4,6 +4,11 @@ Conventions, skills and tools that let Claude Code and Codex write and maintain
 Playwright/TypeScript Page Object Model test automation in your project, with
 reviewed code and verified runs. Version: see [VERSION](VERSION) and [CHANGELOG.md](CHANGELOG.md).
 
+For live manual execution, ask `/execute-test suite <id> [plan <id>] [on qa]`
+or `/execute-test story <id>`. The agent runs browser/API/DB cases, produces a
+verified dashboard and defect list, and can preview ADO bug filing and suite
+outcomes. See [manual execution](docs/M19-EXECUTE.md). No POM code is generated.
+
 ## Get started
 
 You need Node 24, git, and Claude Code or Codex. Open your project folder and ask the AI:
@@ -93,7 +98,16 @@ limited to three rounds per source batch. READY does not authorize delivery; PRs
 publishing are optional and need explicit authorization.
 
 See [the automation pipeline](docs/PIPELINE.md) for each phase's inputs, outputs,
-commands and contract documents. Agents run it through the `automate-suite` skill.
+commands and contract documents. Agents run it through the `automate-test` skill:
+
+```text
+/automate-test story <id> on <environment>
+/automate-test suite <id> [plan <id>] on <environment>
+/automate-test local <source.json> on <environment>
+```
+
+The suite route uses an explicitly supplied or configured plan. Story retrieval needs
+no suite or plan. All three routes use the same generation/review/verification workflow.
 
 ## Capabilities
 

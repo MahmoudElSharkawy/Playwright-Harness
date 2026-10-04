@@ -1,5 +1,5 @@
 import {createHash} from 'node:crypto';
-import {assessRun} from '../execution-core/index.mjs';
+import {assessRun, requireAssessedResult} from '../execution-core/index.mjs';
 import {adoId, requireValue} from './config.mjs';
 
 const publications = new WeakMap();
@@ -7,7 +7,7 @@ const outcomes = Object.freeze({PASS: 'Passed', FAIL: 'Failed', BLOCKED: 'Blocke
 const unique = values => new Set(values).size === values.length;
 function seal(rows, provenance) {
   requireValue(rows.length > 0 && rows.length <= 500 && unique(rows.map(row => row.caseId)), 'Publication needs unique, nonempty bounded case scope.');
-  const publication = Object.freeze(rows.map(row => Object.freeze({...row, outcome: outcomes[row.status], comment: `Harness status=${row.status}; stability=${row.stability}; classification=${row.classification}`})));
+  const publication = Object.freeze(rows.map(row => Object.freeze({...row, outcome: outcomes[row.status], comment: row.comment ?? `Harness status=${row.status}; stability=${row.stability}; classification=${row.classification}`})));
   publications.set(publication, createHash('sha256').update(JSON.stringify(provenance)).digest('hex')); return publication;
 }
 /** The execution core validates evidence and decides verdicts; the adapter only maps them. */
@@ -15,6 +15,22 @@ export function prepareRunPublication(run, roots, observations, mapping) {
   const result = assessRun(run, roots, observations);
   requireValue(mapping && Object.keys(mapping).length === result.scenarios.length && result.scenarios.every(scenario => Object.hasOwn(mapping, scenario.id)), 'Publication mapping must cover exactly the validated scenario scope.');
   return seal(result.scenarios.map(scenario => ({caseId: adoId(mapping[scenario.id]), status: scenario.status, stability: scenario.stability, classification: 'validated-execution'})), {kind: 'execution-core', result, mapping});
+}
+/** Manual execution keeps iteration scope and every earlier validated FAIL. */
+export function prepareExecutionPublication(results, scope, comments = {}) {
+  results.forEach(requireAssessedResult);
+  requireValue(Array.isArray(scope) && scope.length > 0 && scope.length <= 500 && unique(scope.map(item => item.id)), 'Execution publication needs unique frozen iteration scope.');
+  requireValue(results.every(result => result.scenarios.every(scenario => scope.some(item => item.id === scenario.id))), 'Assessed result is outside publication scope.');
+  const cases = [...new Set(scope.map(item => adoId(item.caseId)))], rows = [];
+  for (const caseId of cases) {
+    const iterations = scope.filter(item => adoId(item.caseId) === caseId), relevant = results.flatMap(result => result.scenarios).filter(scenario => iterations.some(item => item.id === scenario.id));
+    if (!relevant.length) continue;
+    const statuses = iterations.map(item => {const history = relevant.filter(scenario => scenario.id === item.id); return history.some(scenario => scenario.status === 'FAIL') ? 'FAIL' : history.at(-1)?.status ?? 'BLOCKED';});
+    const status = ['FAIL', 'NEEDS_REVIEW', 'BLOCKED'].find(value => statuses.includes(value)) ?? (statuses.every(value => value === 'SKIPPED') ? 'SKIPPED' : 'PASS');
+    const comment = comments[caseId]; if (comment !== undefined) requireValue(typeof comment === 'string' && comment.length <= 400 && /^[\x20-\x7e]*$/.test(comment), 'Execution comments must be at most 400 ASCII characters.');
+    rows.push({caseId, status, stability: relevant.some(item => item.stability === 'unstable') ? 'unstable' : 'stable', classification: 'manual-execution', ...(comment === undefined ? {} : {comment})});
+  }
+  return seal(rows, {kind: 'manual-execution', results, scope, comments});
 }
 /** Compatibility input is explicitly a legacy verification record, not M5 evidence proof. */
 export function prepareLegacyPublication(manifest, state) {
@@ -59,10 +75,10 @@ export function createAdoTestManagement(client) {
     } catch { throw delivery.incomplete(); }
   }
   return Object.freeze({
-    async publish({publication, planId, suiteId, pointIds = {}, execute = false}) {
+    async publish({publication, planId, suiteId, pointIds = {}, execute = false, name, resumeRunId, onIdentity, onReceipt, points: providedPoints}) {
       requireValue(publications.has(publication), 'Use a validated publication input.'); planId = adoId(planId); suiteId = adoId(suiteId);
       requireValue(Object.keys(pointIds).every(id => publication.some(row => row.caseId === adoId(id))), 'Point selections contain cases outside publication scope.');
-      const points = await client.list(`test/Plans/${planId}/Suites/${suiteId}/points?api-version=7.1`, 'offset');
+      const points = providedPoints ?? await client.list(`test/Plans/${planId}/Suites/${suiteId}/points?api-version=7.1`, 'offset');
       requireValue(unique(points.map(point => adoId(point.id))), 'ADO returned duplicate points.');
       const rows = publication.map(row => {
         const candidates = points.filter(point => adoId(point.testCase?.id) === row.caseId);
@@ -70,8 +86,10 @@ export function createAdoTestManagement(client) {
         requireValue(selected.length === 1, 'Missing or ambiguous ADO test point; configure an explicit point ID per case.');
         return {...row, pointId: adoId(selected[0].id)};
       });
+      requireValue(name === undefined || typeof name === 'string' && name.trim() && name.length <= 256 && !/[\r\n\0]/.test(name), 'Invalid ADO run name.');
       if (!execute) return {mode: 'dry-run', cases: rows.map(({caseId, pointId, outcome}) => ({caseId, pointId, outcome}))};
-      const delivery = client.delivery('outcomes', execute, publications.get(publication)); let runId;
+      const delivery = client.delivery('outcomes', execute, publications.get(publication)); let runId, adoptedCompleted = false;
+      await onReceipt?.(delivery.receipt);
       delivery.identified({planId, suiteId});
       async function results() {
         const values = await client.list(`test/runs/${runId}/results?api-version=7.1`, 'offset');
@@ -82,14 +100,22 @@ export function createAdoTestManagement(client) {
         return values;
       }
       try {
-        const run = await delivery.write('create-run', 'test/runs?api-version=7.1', {name: `Harness delivery ${delivery.id}`, plan: {id: String(planId)}, pointIds: rows.map(row => row.pointId), automated: false}, {method: 'POST'});
-        runId = adoId(run.id); delivery.identified({runId});
+        if (resumeRunId !== undefined) {
+          runId = adoId(resumeRunId); const adopted = await client.read(`test/runs/${runId}?api-version=7.1`);
+          requireValue(adoId(adopted.id) === runId && adoId(adopted.plan?.id) === planId && adopted.name === name && adopted.isAutomated !== true && adopted.automated !== true, 'Adopted ADO run does not match the frozen publication identity.');
+          adoptedCompleted = adopted.state === 'Completed';
+        } else {
+          const run = await delivery.write('create-run', 'test/runs?api-version=7.1', {name: name ?? `Harness delivery ${delivery.id}`, plan: {id: String(planId)}, pointIds: rows.map(row => row.pointId), automated: false}, {method: 'POST', onIdentity});
+          runId = adoId(run.id);
+        }
+        delivery.identified({runId}); await onIdentity?.({runId});
         const before = await results();
         const body = rows.map(row => ({id: adoId(before.find(value => adoId(value.testPoint.id) === row.pointId).id), outcome: row.outcome, state: 'Completed', comment: row.comment}));
         const pointByResult = new Map(before.map(value => [adoId(value.id), adoId(value.testPoint.id)]));
         function verifyResults(after) {
           requireValue(body.every(expected => after.some(actual => adoId(actual.id) === expected.id && adoId(actual.testPoint.id) === pointByResult.get(expected.id) && actual.outcome === expected.outcome && actual.state === expected.state && actual.comment === expected.comment)), 'Published result readback or identity association mismatch.');
         }
+        if (adoptedCompleted) {verifyResults(before); delivery.verified({runId, resultCount: body.length}); return {...delivery.finish(), runId, count: rows.length};}
         await delivery.write('update-results', `test/runs/${runId}/results?api-version=7.1`, body);
         verifyResults(await results());
         delivery.verified({runId, resultCount: body.length});

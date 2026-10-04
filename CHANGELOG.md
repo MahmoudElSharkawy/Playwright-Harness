@@ -1,8 +1,32 @@
 # Changelog
 
-## Unreleased — optional local consumer flows
+## Unreleased — skill naming and optional local consumer flows
 
+- Rename `automate-suite` to `automate-test`, with explicit story, suite and local invocation examples. The observed execution, POM generation, independent review and two-green workflow is unchanged.
+- Re-run setup to replace managed old-name links. Recognized legacy prerequisite knowledge migrates to `.harness/knowledge/prerequisites.md`; customized folders and foreign links are preserved for review. No old-name alias is installed.
 - `docs/RELEASING.md`: running the consumer flows locally is optional when the release pull request's `Harness validation` run passes, because CI runs them on Windows and Linux with npm 11 and npm 12.
+
+## 3.2.0 — M19 manual execution
+
+Execute captured ADO manual cases interactively through the native browser, API and DB runtimes, with condition-bound verdicts, verified reports and recoverable ADO delivery.
+
+### Upgrade actions
+
+- Re-run setup from the 3.2.0 archive in each project.
+- Upgrade teammates before adding browser startUrl/users or ado.bugs configuration keys; earlier validators reject them.
+- For optional bug/result delivery, configure a PAT with Work Items and Test Management read/write scopes. Previews remain the default.
+
+### Changes
+
+- Accept plain and frame-prefixed native browser references, including quoted snapshot keys; retain snapshot membership and state-version checks.
+- Settle browser attempts atomically across completion, interruption and deadlines; retain earlier failures and incomplete cleanup obligations.
+- Verify rendered DOM reads with explicit frame coverage and compact, rechecked assertion provenance. Legacy browser evidence remains readable with restricted delivery eligibility.
+- Recover bounded command receipts, owned sessions and ADO delivery without replaying uncertain mutations; default Bug candidates to reliable matching failures.
+- Support 500 ten-step scenarios within bounded aggregate documents, scoped readiness and host-bound command guards.
+- Add the execute-test skill and execute CLI, captured revisions/iterations, a sequential live host, cleanup receipts, login reuse, diagnostics and dashboard/defect reporting.
+- Reassess evidence before delivery, retain historical valid FAILs and let explicit valid reruns replace integrity-invalid runs while preserving audit history.
+- Flush create identities in ADO acknowledgements and recover filings/publications through stable tags/names. No new runtime dependencies.
+- Enforce exact subject identity, visual evidence, end-step artifact integrity and bounded provenance; reserve cleanup time across browser/API/DB work. Normalize ADO classification paths, filter point maps after omissions, retain revision flags and stabilize parameterized diagnostic fingerprints.
 
 ## 3.1.2 — Upgrade actions only on update
 

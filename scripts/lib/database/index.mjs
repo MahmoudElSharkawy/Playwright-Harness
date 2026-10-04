@@ -1,9 +1,9 @@
 import {randomUUID} from 'node:crypto';
 import {isDeepStrictEqual} from 'node:util';
-import {authorizeOperation, checkExecutionWindow, attemptRecord, decideRecovery, registerEvidence} from '../execution-core/index.mjs';
+import {authorizeOperation, attemptRecord, decideRecovery, registerEvidence} from '../execution-core/index.mjs';
 import {requireRun} from '../execution-core/inputs.mjs';
 import {data, fingerprint, id, keys, oneOf, requireThat, typedValue, protectedReference} from '../execution-core/data.mjs';
-import {createScenarioState, requireScenarioState, initializeStorage, writeScenario, finishScenario, rememberSensitive, publicValue as checkedPublicValue} from '../sequential/state.mjs';
+import {createScenarioState, requireScenarioState, initializeStorage, writeScenario, finishScenario, rememberSensitive, publicValue as checkedPublicValue, checkWorkWindow, requireObservationCapacity} from '../sequential/state.mjs';
 import {databaseCapabilities, validateDatabaseOperation, bindDatabase, select, expected} from './definition.mjs';
 import {DatabaseFailure, bounded, credentials} from './shared.mjs';
 import * as sqlserver from './sqlserver-driver.mjs';
@@ -59,12 +59,14 @@ export function createDatabaseRuntime(run, inputRoots, {signal, resolveCredentia
   }
   async function execute(options) {
     requireThat(!busy && !finished && !state.busy && !state.finished, 'Database execution must be sequential inside its active runtime.');
-    keys(options, ['operation','invocationId','phase','inputs','retry','resource','lifecycle'], 'database invocation');
+    keys(options, ['operation','invocationId','phase','inputs','retry','resource','lifecycle','unresolvedChecks'], 'database invocation');
     const operation = validateDatabaseOperation(options.operation), d = operation.definition, invocationId = options.invocationId, phase = options.phase ?? 'EXERCISE';
     id(invocationId); oneOf(phase, Object.keys(phases));
     const inputs = getBindings(options.inputs ?? []), retry = options.retry ?? true;
     requireThat(typeof retry === 'boolean' && !histories.has(invocationId) && phases[phase] >= state.phaseNumber, 'Invalid sequential database invocation.');
     const expectations = scope.expectations.filter(e => e.operationId === operation.id && e.invocationId === invocationId);
+    const unresolved = new Set(options.unresolvedChecks ?? []);
+    requireThat(Array.isArray(options.unresolvedChecks ?? []) && unresolved.size === (options.unresolvedChecks ?? []).length && [...unresolved].every(check => expectations.some(item => item.id === check)), 'Unresolved checks must belong to the frozen invocation.');
     requireThat(expectations.every(item => item.phase === undefined || item.phase === phase), 'Database invocation differs from its frozen phase.');
     requireThat(expectations.length === d.checks.length && d.checks.every(c => expectations.some(e => e.id === c.id)) && expectations.every(e => e.requiredEvidence.every(kind => ['response','assertion','observation'].includes(kind))), 'Database checks must match frozen expectations and supported evidence.');
     for (const p of d.parameters ?? []) if (sensitiveKey(p.name)) requireThat(inputs.some(v => v.name === p.input && v.sensitivity === 'sensitive'), 'Sensitive SQL parameters need protected bindings.');
@@ -90,10 +92,12 @@ export function createDatabaseRuntime(run, inputRoots, {signal, resolveCredentia
       const previous = observations.operations.find(item => item.id === operation.id); requireThat(!previous || previous.fingerprint === operation.fingerprint, 'Run-local database definition changed.'); if (!previous) observations.operations.push(operation);
     }
     phaseNumber = state.phaseNumber = phases[phase]; if (phaseNumber === 3) state.cleanupStartedAt ??= Date.now(); cleanupStartedAt = state.cleanupStartedAt;
+    requireObservationCapacity(state, record(operation, invocationId, phase, 1, inputs));
     busy = state.busy = true; const history = []; histories.set(invocationId, history); let resolvedBindings;
     try {
       for (let number = 1; number <= run.inputs.limits.maxAttempts; number++) {
-        const current = record(operation, invocationId, phase, number, inputs), controller = new AbortController(), window = checkExecutionWindow(run, {phase, signal, cleanupStartedAt});
+        const current = record(operation, invocationId, phase, number, inputs), controller = new AbortController(), window = checkWorkWindow(state, {phase, signal});
+        requireObservationCapacity(state, current);
         const cancel = () => controller.abort('CANCELLED'), budget = Math.min(window.remainingMs, d.timeoutMs ?? 10000);
         if (phaseNumber !== 3) signal?.addEventListener('abort', cancel, {once: true});
         let timer, response, failure;
@@ -137,7 +141,7 @@ export function createDatabaseRuntime(run, inputRoots, {signal, resolveCredentia
               const actual = select(response, check.select), wanted = expected(check, resolvedBindings), passed = actual !== undefined && isDeepStrictEqual(actual, wanted);
               const sensitive = check.select.path.some(part => sensitiveKey(String(part))) || sensitiveSelectors.some(selector => overlaps(selector, check.select));
               const proof = evidence(current, 'assertion', {check: check.id, passed, actual: sensitive ? '[REDACTED]' : comparison(actual), expected: sensitive ? '[REDACTED]' : comparison(wanted)});
-              Object.assign(current.assertions.find(a => a.id === check.id), {status: passed ? 'PASS' : 'FAIL', reliable: true, evidenceIds: [responseId, observationId, proof]});
+              Object.assign(current.assertions.find(a => a.id === check.id), {status: unresolved.has(check.id) ? 'INDETERMINATE' : passed ? 'PASS' : 'FAIL', reliable: !unresolved.has(check.id), evidenceIds: [responseId, observationId, proof]});
             }
             for (const extraction of d.extract ?? []) {
               const value = select(response, extraction.select), type = value === null ? 'null' : Array.isArray(value) ? 'array' : typeof value;
@@ -145,7 +149,8 @@ export function createDatabaseRuntime(run, inputRoots, {signal, resolveCredentia
               const output = {name: extraction.name, type, sensitivity: extraction.sensitivity, producer: {runId: run.id, scenarioId: scope.id, attemptId: current.identity.attemptId, name: extraction.name}};
               if (extraction.sensitivity === 'sensitive') {requireThat(storeSensitive, 'Sensitive extraction needs protected storage.'); remember(value); output.protectedRef = await bounded(() => storeSensitive(value, {identity: current.identity, name: extraction.name, signal: controller.signal}), controller.signal);}
               else {requireThat(!extraction.select.path.some(part => sensitiveKey(String(part))) && !sensitiveSelectors.some(selector => overlaps(selector, extraction.select)), 'Sensitive selections cannot produce public outputs.'); output.value = publicValue(value);}
-              current.outputs.push(typedValue(output, run.inputs.limits.maxValueBytes));
+              const retained = typedValue(output, run.inputs.limits.maxValueBytes);
+              requireObservationCapacity(state, {...current, outputs: [...current.outputs, retained]}); current.outputs.push(retained);
             }
           }
         } catch (error) {
@@ -165,14 +170,17 @@ export function createDatabaseRuntime(run, inputRoots, {signal, resolveCredentia
           } else if (!scenario.issues.includes('indeterminate-outcome')) scenario.issues.push('indeterminate-outcome');
         }
         if (lifecycle) {
-          const existing = scenario.resources.find(r => r.id === lifecycle.resourceId), complete = current.outcome === 'SUCCESS' && current.effect.certainty === 'confirmed' && (phase !== 'RESTORE' || response?.restorationGuardVerified);
+          const existing = scenario.resources.find(r => r.id === lifecycle.resourceId), complete = current.outcome === 'SUCCESS' && current.assertions.every(item => item.status === 'PASS' && item.reliable) && current.effect.certainty === 'confirmed' && (phase !== 'RESTORE' || response?.restorationGuardVerified);
           const proof = evidence(current, 'lifecycle', {resourceId: existing.id, complete, ...(phase === 'RESTORE' ? {guard: 'version', verified: response?.restorationGuardVerified === true} : {})});
           if (current.effect.certainty === 'confirmed') current.effect.resourceIds.push(existing.id);
           existing.lifecycle = {...existing.lifecycle, status: complete ? 'completed' : phase === 'RESTORE' && response?.affectedRows === 0 ? 'conflict' : 'failed', attemptId: current.identity.attemptId, evidenceIds: [proof], ...(phase === 'RESTORE' ? {guard: {kind: 'version', evidenceIds: [proof]}} : {})};
         }
         evidence(current, 'observation', {target: operation.target, dispatched: current.effect.certainty !== 'not-executed', effect: current.effect.certainty, ...(failure ? {reason: failure.reason} : {})});
         current.endedAt = Date.now();
-        if (current.outcome === 'SUCCESS' && current.endedAt > (phaseNumber === 3 ? cleanupStartedAt + run.inputs.limits.cleanupTimeoutMs : run.deadlineAt)) {current.outcome = 'INFRASTRUCTURE_FAILURE'; current.failureClass = 'TIMEOUT';}
+        if (current.outcome === 'SUCCESS' && current.endedAt > (phaseNumber === 3 ? cleanupStartedAt + run.inputs.limits.cleanupTimeoutMs : run.deadlineAt)) {
+          current.outcome = 'INFRASTRUCTURE_FAILURE'; current.failureClass = 'TIMEOUT';
+          if (lifecycle) scenario.resources.find(item => item.id === lifecycle.resourceId).lifecycle.status = 'failed';
+        }
         const completed = attemptRecord(run, current); history.push(completed); scenario.attempts.push(completed);
         if (!retry || !failure || !['TRANSPORT','TIMEOUT'].includes(failure.reason) || signal?.aborted && phaseNumber !== 3 || decideRecovery(run, history, {evidence: observations.evidence, roots, cleanupStartedAt}).action !== 'RETRY') return completed;
       }

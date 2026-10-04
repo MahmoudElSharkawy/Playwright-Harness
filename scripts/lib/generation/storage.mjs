@@ -49,7 +49,7 @@ export function snapshot(roots) {
 }
 
 const protectedDirectories = new Set();
-function protect(directory) {
+export function protect(directory) {
   if (protectedDirectories.has(directory)) return;
   if (process.platform === 'win32') {
     const owner = execFileSync('whoami', [], {encoding: 'utf8', windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], timeout: 10000}).trim();

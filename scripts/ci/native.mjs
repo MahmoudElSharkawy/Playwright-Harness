@@ -6,13 +6,13 @@ import {join, resolve} from 'node:path';
 import {command, hash} from './process.mjs';
 import {within} from '../lib/skill-roots.mjs';
 import {snapshotInstalledPackage} from '../lib/host-proof-files.mjs';
-import {completeChecks, completeNativeProof, browserDiagnostics} from './results.mjs';
+import {completeChecks, completeNativeProof, browserDiagnostics, executeDiagnostics, nativeSummaryFields} from './results.mjs';
 import {nativeProcess} from './native-process.mjs';
 import {recoverNativeProof} from './recovery.mjs';
 import {nativeCliInstallation} from '../lib/browser/native-cli.mjs';
 
 const [directory, kind] = process.argv.slice(2);
-assert(process.argv.length === 4 && ['browser', 'parallel'].includes(kind), 'Use <installed-workspace> browser|parallel.');
+assert(process.argv.length === 4 && ['browser', 'parallel', 'execute'].includes(kind), 'Use <installed-workspace> browser|parallel|execute.');
 const workspace = realpathSync(resolve(directory)), paths = JSON.parse(readFileSync(join(workspace, 'paths.json'), 'utf8'));
 const root = realpathSync(paths.installedRoot), installation = realpathSync(join(workspace, 'installation'));
 assert(within(installation, root) && within(workspace, installation));
@@ -26,7 +26,7 @@ if (browser.status === 'PASS') {
   proof = await nativeProcess(join(root, `scripts/probes/${kind}.mjs`), consumer, {cwd: workspace, log: join(workspace, `${kind}-native.log`)});
   recovery = await recoverNativeProof(root, consumer);
   try {
-    assessment = JSON.parse(readFileSync(join(consumer, kind === 'browser' ? 'browser-proof.json' : 'assessment.json'), 'utf8'));
+    assessment = JSON.parse(readFileSync(join(consumer, kind === 'browser' ? 'browser-proof.json' : kind === 'execute' ? 'execute-proof.json' : 'assessment.json'), 'utf8'));
     if (kind === 'parallel') cleanup = JSON.parse(readFileSync(join(consumer, 'cleanup.json'), 'utf8'));
   } catch {
     // Missing/invalid assessment remains incomplete; private logs are never published.
@@ -37,8 +37,8 @@ const complete = completeNativeProof(kind, proof, recovery, assessment, cleanup)
 const summary = {version: 1, kind, status: complete && packageUnchanged ? 'PASS' : 'INCOMPLETE', platform: process.platform, node: process.version,
   archive: installed.archive, packageUnchanged, browserInstallation: browser.status, ...(recovery ? {recovery} : {}),
   process: proof ? {status: proof.status, exitCode: proof.exitCode, diagnostic: proof.diagnostic, log: `${kind}-native.log`, sha256: proof.sha256} : {status: 'UNPERFORMED'},
-  ...(kind === 'browser' ? {checks: browserDiagnostics(assessment)} : {}),
-  ...(complete ? {...(kind === 'parallel' ? {checks: assessment.counts} : {}),
-    assessmentSha256: hash(readFileSync(join(consumer, kind === 'browser' ? 'browser-proof.json' : 'assessment.json'))), ...(cleanup ? {cleanup, databases: assessment.databases} : {})} : {})};
+  ...(kind === 'browser' ? {checks: browserDiagnostics(assessment)} : kind === 'execute' ? {checks: executeDiagnostics(assessment)} : {}),
+  ...nativeSummaryFields(kind, assessment, cleanup),
+  ...(complete ? {assessmentSha256: hash(readFileSync(join(consumer, kind === 'browser' ? 'browser-proof.json' : kind === 'execute' ? 'execute-proof.json' : 'assessment.json')))} : {})};
 writeFileSync(join(workspace, `native-${kind}.json`), JSON.stringify(summary, null, 2), {flag: 'wx', mode: 0o600});
 console.log(JSON.stringify({kind, status: summary.status, packageUnchanged})); if (summary.status !== 'PASS') process.exitCode = 1;

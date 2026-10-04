@@ -1,9 +1,9 @@
 import {randomUUID} from 'node:crypto';
 import {isDeepStrictEqual} from 'node:util';
-import {authorizeOperation, checkExecutionWindow, attemptRecord, decideRecovery, registerEvidence} from '../execution-core/index.mjs';
+import {authorizeOperation, attemptRecord, decideRecovery, registerEvidence} from '../execution-core/index.mjs';
 import {requireRun} from '../execution-core/inputs.mjs';
 import {data, fingerprint, id, keys, oneOf, requireThat, typedValue, protectedReference} from '../execution-core/data.mjs';
-import {createScenarioState, requireScenarioState, initializeStorage, writeScenario, finishScenario, rememberSensitive, publicValue as checkedPublicValue} from '../sequential/state.mjs';
+import {createScenarioState, requireScenarioState, initializeStorage, writeScenario, finishScenario, rememberSensitive, publicValue as checkedPublicValue, checkWorkWindow, requireObservationCapacity} from '../sequential/state.mjs';
 import {apiCapabilities, validateApiOperation, buildRequest, bind, select} from './definition.mjs';
 import {ApiFailure, send, bounded} from './transport.mjs';
 import {consumerEnvironment} from '../consumer-env.mjs';
@@ -118,7 +118,7 @@ export function createApiRuntime(run, inputRoots, {signal, resolveCredential, re
   /** Execute one definition with typed bindings. Retry is finite and enabled only by established effect facts. */
   async function execute(options) {
     requireThat(!busy && !finished && !state.busy && !state.finished, 'API execution must be sequential and inside the active runtime.');
-    keys(options, ['operation', 'invocationId', 'phase', 'inputs', 'retry', 'resource', 'lifecycle'], 'API invocation');
+    keys(options, ['operation', 'invocationId', 'phase', 'inputs', 'retry', 'resource', 'lifecycle', 'unresolvedChecks'], 'API invocation');
     const operation = validateApiOperation(options.operation), definition = operation.definition;
     const invocationId = options.invocationId, phase = options.phase ?? 'EXERCISE'; id(invocationId); oneOf(phase, Object.keys(phases));
     const inputs = getBindings(options.inputs ?? []), retry = options.retry ?? true;
@@ -132,6 +132,8 @@ export function createApiRuntime(run, inputRoots, {signal, resolveCredential, re
     if (definition.recovery?.reconcile) checkPrivateBinding(definition.recovery.reconcile.request);
     requireThat(typeof retry === 'boolean' && !histories.has(invocationId) && phases[phase] >= state.phaseNumber, 'Invalid sequential API invocation.');
     const expected = scope.expectations.filter(item => item.operationId === operation.id && item.invocationId === invocationId);
+    const unresolved = new Set(options.unresolvedChecks ?? []);
+    requireThat(Array.isArray(options.unresolvedChecks ?? []) && unresolved.size === (options.unresolvedChecks ?? []).length && [...unresolved].every(check => expected.some(item => item.id === check)), 'Unresolved checks must belong to the frozen invocation.');
     requireThat(expected.every(item => item.phase === undefined || item.phase === phase), 'API invocation differs from its frozen phase.');
     requireThat(expected.length === definition.checks.length && definition.checks.every(check => expected.some(item => item.id === check.id)), 'API checks must match the frozen invocation expectations.');
     requireThat(expected.every(item => item.requiredEvidence.every(kind => ['response', 'assertion', 'observation'].includes(kind))), 'API assertions require supported evidence kinds.');
@@ -157,12 +159,14 @@ export function createApiRuntime(run, inputRoots, {signal, resolveCredential, re
       if (!previous) observations.operations.push(operation);
     }
     phaseNumber = state.phaseNumber = phases[phase]; if (phaseNumber === 3) state.cleanupStartedAt ??= Date.now(); cleanupStartedAt = state.cleanupStartedAt;
+    requireObservationCapacity(state, record(operation, invocationId, phase, 1, inputs));
     busy = state.busy = true; const history = []; histories.set(invocationId, history); let refresh = false, resolvedBindings;
     try {
       for (let number = 1; number <= run.inputs.limits.maxAttempts; number++) {
         const current = record(operation, invocationId, phase, number, inputs), controller = new AbortController();
+        requireObservationCapacity(state, current);
         const cancel = () => controller.abort('CANCELLED');
-        const window = checkExecutionWindow(run, {phase, signal, cleanupStartedAt});
+        const window = checkWorkWindow(state, {phase, signal});
         const budget = Math.min(window.remainingMs, definition.timeoutMs ?? 10000);
         let timer, response, dispatched = false, failure, bindings;
         if (phaseNumber !== 3) signal?.addEventListener('abort', cancel, {once: true});
@@ -215,8 +219,8 @@ export function createApiRuntime(run, inputRoots, {signal, resolveCredential, re
               let observed = '[REDACTED]';
               if (!sensitive) {try {observed = publicSelection(response, check.select);} catch {observed = '[REDACTED OR UNAVAILABLE]';}}
               const assertionId = evidence(current, 'assertion', {check: check.id, passed, actual: observed, expected: sensitive ? '[REDACTED]' : comparison(expectedValue)});
-              current.assertions.find(item => item.id === check.id).status = passed ? 'PASS' : 'FAIL';
-              Object.assign(current.assertions.find(item => item.id === check.id), {reliable: true, evidenceIds: [responseId, observationId, assertionId]});
+              current.assertions.find(item => item.id === check.id).status = unresolved.has(check.id) ? 'INDETERMINATE' : passed ? 'PASS' : 'FAIL';
+              Object.assign(current.assertions.find(item => item.id === check.id), {reliable: !unresolved.has(check.id), evidenceIds: [responseId, observationId, assertionId]});
             }
             for (const extraction of definition.extract ?? []) {
               const value = select(response, extraction.select), actual = value === null ? 'null' : Array.isArray(value) ? 'array' : typeof value;
@@ -231,7 +235,8 @@ export function createApiRuntime(run, inputRoots, {signal, resolveCredential, re
                 requireThat(!(extraction.select.from === 'header' && sensitiveKey(extraction.select.path[0])) && !extraction.select.path.some(part => sensitiveKey(String(part))), 'Sensitive selectors cannot produce public outputs.');
                 output.value = publicSelection(response, extraction.select);
               }
-              current.outputs.push(typedValue(output, run.inputs.limits.maxValueBytes));
+              const retained = typedValue(output, run.inputs.limits.maxValueBytes);
+              requireObservationCapacity(state, {...current, outputs: [...current.outputs, retained]}); current.outputs.push(retained);
             }
             if (controller.signal.aborted) throw new ApiFailure(controller.signal.reason === 'TIMEOUT' ? 'TIMEOUT' : 'CANCELLED', true);
           }
@@ -272,7 +277,7 @@ export function createApiRuntime(run, inputRoots, {signal, resolveCredential, re
         }
         if (lifecycle) {
           const existing = scenario.resources.find(item => item.id === lifecycle.resourceId);
-          const complete = current.outcome === 'SUCCESS' && current.effect.certainty === 'confirmed' && response?.status !== 412;
+          const complete = current.outcome === 'SUCCESS' && current.assertions.every(item => item.status === 'PASS' && item.reliable) && current.effect.certainty === 'confirmed' && response?.status !== 412;
           const proof = evidence(current, 'lifecycle', {resourceId: existing.id, complete, ...(lifecycle.guard ? {guard: lifecycle.guard} : {})});
           if (current.effect.certainty === 'confirmed') current.effect.resourceIds.push(existing.id);
           existing.lifecycle = {...existing.lifecycle, status: complete ? 'completed' : response?.status === 412 ? 'conflict' : 'failed', attemptId: current.identity.attemptId, evidenceIds: [proof],
@@ -281,7 +286,10 @@ export function createApiRuntime(run, inputRoots, {signal, resolveCredential, re
         evidence(current, 'observation', {target: operation.target, method: definition.request.method, dispatched, ...(failure ? {reason: failure.reason} : {}), effect: current.effect.certainty});
         current.endedAt = Date.now();
         // Synchronous evidence/serialization can cross the wall clock limit too.
-        if (current.outcome === 'SUCCESS' && current.endedAt > (phaseNumber === 3 ? cleanupStartedAt + run.inputs.limits.cleanupTimeoutMs : run.deadlineAt)) {current.outcome = 'INFRASTRUCTURE_FAILURE'; current.failureClass = 'TIMEOUT';}
+        if (current.outcome === 'SUCCESS' && current.endedAt > (phaseNumber === 3 ? cleanupStartedAt + run.inputs.limits.cleanupTimeoutMs : run.deadlineAt)) {
+          current.outcome = 'INFRASTRUCTURE_FAILURE'; current.failureClass = 'TIMEOUT';
+          if (lifecycle) scenario.resources.find(item => item.id === lifecycle.resourceId).lifecycle.status = 'failed';
+        }
         const completed = attemptRecord(run, current); history.push(completed); scenario.attempts.push(completed);
         const transient = failure && ['TRANSPORT', 'TIMEOUT', 'AUTHENTICATION_REJECTED'].includes(failure.reason);
         if (!retry || !transient || signal?.aborted && phaseNumber !== 3 || decideRecovery(run, history, {evidence: observations.evidence, roots, cleanupStartedAt}).action !== 'RETRY') return completed;

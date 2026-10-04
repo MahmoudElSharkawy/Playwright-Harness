@@ -8,8 +8,9 @@ every suite run makes the next one cheaper.
 
 - **Who writes**: the orchestrator only, by promoting reviewed observations. EXPLORE end
   and every VERIFY locator repair place them in `.harness/knowledge-candidates/ui/`;
-  review and sanitize before promoting ([playbook](playbook.md) §3 and §5). qa-executor
-  subagents never write here.
+  review and sanitize before promoting through the current
+  [M13 exploration and generation handoff](../../../../docs/M13-GENERATION.md).
+  Execution workers never write here.
 - **Who reads**: REFINE (step concretization), GENERATE (selector + rendered-string
   authority, after the run's own codegen-notes), and any session doing manual POM work.
 - **Merge rule**: update in place — newer verified facts replace older ones, but a

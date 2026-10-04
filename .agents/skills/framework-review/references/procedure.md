@@ -46,7 +46,7 @@ Also check, from the harness's own rules (not in §6):
   A missing, stale, method-inventing, or reason-less table is a finding
   (class: `traceability-table-stale`).
 - No secrets in code, step titles, or test data (values, not handle names).
-- Page-map edits honor [its contract](../../automate-suite/references/page-map.md)
+- Page-map edits honor [its contract](../../automate-test/references/page-map.md)
   (orchestrator-written, drift ledger append-only), and any element with **three or
   more drift-ledger entries** becomes a finding — its selector strategy is wrong, not
   unlucky.
@@ -105,7 +105,7 @@ VERDICT: APPROVE | CHANGES-REQUIRED (any blocking finding ⇒ CHANGES-REQUIRED)
   class, file). **Three entries for one class** ⇒ add a proposal line to the ledger:
   either a concrete new rule for `scripts/check-conventions.mjs` or "cannot mechanise
   because <reason>". Implementing the rule is a normal reviewed change.
-- When the review gates the automate-suite pipeline: CHANGES-REQUIRED loops back to
+- When the review gates the automate-test pipeline: CHANGES-REQUIRED loops back to
   GENERATE (fix via the owning skills, re-review); APPROVE releases VERIFY/commit.
 - Never fix and approve in the same breath as the reviewer — findings go back to the
   author (or the session acting as author), the fix lands, the re-review is scoped to

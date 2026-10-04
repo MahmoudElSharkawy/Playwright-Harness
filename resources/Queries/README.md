@@ -26,10 +26,10 @@ values, sometimes prose-annotated. Consumption paths:
 
 | Consumer | When | What it derives |
 |---|---|---|
-| automate-suite REFINE | converting verification/seed intents to `db:` steps | proposed `integration/*_db.json` catalog entries (user-confirmed before EXPLORE) |
-| automate-suite GENERATE / service-classes | authoring `Dbs<Domain>` classes | `readonly <operation>_query` fields (`@param`-parameterized) — service-classes practice 3 |
+| automate-test / execute-test REFINE | converting verification/seed intents to DB operations | parameterized native operation definitions with source provenance and cleanup declarations |
+| automate-test GENERATE / service-classes | authoring `Dbs<Domain>` classes | `readonly <operation>_query` fields (`@param`-parameterized) — service-classes practice 3 |
 | test-data reusability ladder (step 2) | a rerun fails on consumed/stale data | the seed/reset/cleanup SQL that makes the case re-runnable |
-| AgenTeX execution (`db:` steps) | running refined specs | only ever cataloged `integration/*_db.json` entries — the executor never reads this folder or runs its own SQL |
+| Manual execution / native DB runtime | frozen operation definitions | derive one parameterized statement into defineDatabaseOperation; source samples are never replayed |
 
 ## Adaptation rules (library snippet → executable query)
 
@@ -38,7 +38,7 @@ values, sometimes prose-annotated. Consumption paths:
    let the test pass values between them.
 2. **Parameterize every value.** Hardcoded sample values become parameters: `@param`
    placeholders for `Dbs<Domain>` `_query` fields (bound via `DBActions.query`),
-   `{param}` placeholders for `integration/*_db.json` catalog entries (sqlcmd).
+   typed named parameters for native `defineDatabaseOperation` definitions.
 3. **Sample literals never leave the library.** Identity numbers, record ids, reference
    numbers, IBANs, and GUIDs in the snippets are point-in-time examples from someone's
    debugging session — never test data, never expected values, never defaults.
@@ -49,13 +49,14 @@ values, sometimes prose-annotated. Consumption paths:
 5. **Mutating queries are seed/cleanup material, with care.** INSERT/UPDATE/DELETE
    recipes are sanctioned for API/DB data preparation through `Dbs<Domain>` classes
    when no API path exists — iron law 8's precedence still applies, and the
-   automate-suite triage still gates anything hard-to-reverse. DDL (DROP/TRUNCATE/ALTER)
-   is never derived; the AgenTeX executor refuses it even if cataloged.
+   automate-test triage still gates anything hard-to-reverse. DDL (DROP/TRUNCATE/ALTER)
+   is never derived; the native runtime refuses unsupported capabilities.
 6. **Connection details are environment data, not query data.** Server/database
    coordinates appearing in snippets (e.g. `db-host\INSTANCE,1433`, database
    `AppDbQC`) belong in the named catalog `src/config/databases.ts` —
-   the single connection-coordinate truth (2026-08-26 ruling); passwords only ever
-   via `process.env` / `.env`.
+   the POM connection-coordinate source. Native execution uses the selected
+   `.harness/targets.json` target and its environment connection reference;
+   passwords only ever via `process.env` / `.env`.
 
 ## Index
 
