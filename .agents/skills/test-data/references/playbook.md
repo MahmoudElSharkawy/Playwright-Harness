@@ -43,33 +43,30 @@ Per-spec pairing deliberately duplicates app-universal expected values across da
 files (the illustrative counterexample carries the home-page title in nine JSONs) — that is the
 intended cost; do NOT deduplicate into a shared `CommonTestData.json`.
 
-## 2. Load the JSON once, in `beforeAll`, via `fs.readFileSync`
+## 2. Load once in `beforeAll`; keep the complete schema local
 
-**Rule:** declare module-level `let testData: any;` and parse the paired file once in
-`beforeAll`. Do not re-read it per test and do not `import` the JSON.
-
-**Why:** one synchronous read per spec file is cheap, keeps the data a plain runtime
-object, and matches the project canon.
-
-✅ Verbatim from `tests/LoginTests.spec.ts`:
+Parse the paired file once in `beforeAll` using `fs.readFileSync`. Do not re-read
+it per test or import it at runtime. Keep any existing explicit complete schema
+local; do not introduce a named interface just to repeat the JSON's fields.
+With `resolveJsonModule: true`, infer the shape directly from the paired file:
 
 ```ts
-let testData: any;
-// ...
+let testData: typeof import('../resources/testData/LoginTestJsonFile.json');
 test.beforeAll(async () => {
   testData = JSON.parse(fs.readFileSync('./resources/testData/LoginTestJsonFile.json', 'utf8'));
 });
 ```
 
-The path is relative to the repo root (Playwright's working directory), with `import *
-as fs from 'fs';` at the top of the spec. Hook ordering and the rest of the spec
-skeleton belong to [test-classes](../../test-classes/SKILL.md).
+The type reference is erased and reads no runtime data. Its path is relative to
+the spec; the `readFileSync` path is relative to the repo root. Inferred typing
+does not validate JSON at runtime. No shared aggregate/case-data bases or
+spec-schema imports into business classes; operation inputs still follow §4a.
 
 ## 3. Zero hardcoded inputs or expected values in code
 
 **Rule:** no test input, expected value, or assertion message is a string literal in a
 spec, page, or service class (iron law 5). Specs read from `testData`; business methods
-receive values as parameters.
+receive operation inputs under [design-conventions §4a](../../pom-architecture/references/design-conventions.md#4a-test-data-ownership-method-contracts-and-disposable-inputs).
 
 **Why:** data changes must never require touching code, and reviewers can audit all
 expectations in one small file.
@@ -159,20 +156,24 @@ enum UserTitle { Mr = 'mr', Mrs = 'mrs' }
 practice 3). JSON stays for values that vary per test; enums cover values fixed by the
 application.
 
-## 6. Environment data in `src/config/*.ts` + `process.env`; secrets ONLY via `process.env`
+## 6. Environment access, synthetic inputs and disposable credentials
 
 **Rule:** URLs, hosts, ports, and database names never enter a test-data JSON.
 Environment data lives in `playwright.config.ts` (`baseURL`, projects) and typed
-config modules under `src/config/`; every secret is read exclusively from
-`process.env` and never committed as a literal.
+config modules under `src/config/`; externally provisioned access comes from ignored
+`.env` files or CI secret stores, read through `process.env`, never committed literals.
 
-Credentials come in two kinds. A password the test INVENTS for an account it creates
-itself is a business input and lives in the paired JSON like any other value (✅
-`"password": "<password-placeholder>"` in `resources/testData/LoginTestJsonFile.json`). A
-credential that unlocks anything PRE-EXISTING — a DB user, a pre-provisioned account,
-an API key — is a secret and comes only from `process.env` (✅ the `databases.ts`
-pattern below). No credential of either kind ever appears in a step title (iron law 7
-— [action-methods](../../action-methods/SKILL.md)).
+Classify credentials by provenance, never merely by field/property names:
+
+| Kind | Home |
+|---|---|
+| Existing/provisioned account, admin, application, DB or integration access | Ignored environment files or CI secrets, exposed through config/`process.env` |
+| Fixed synthetic password, including an intentionally invalid password | The owning paired JSON |
+| Disposable account created/owned by the current test | Generate once per account per attempt; retain in a local variable/test-scoped fixture |
+
+Generation, reuse, cleanup and report protection follow [§4a](../../pom-architecture/references/design-conventions.md#4a-test-data-ownership-method-contracts-and-disposable-inputs).
+Harness source examples use placeholders; publication scanning alone cannot establish
+consumer synthetic provenance or evaluate arbitrary generation expressions.
 
 **Why:** the same JSON must be valid against any environment (design-conventions §5:
 Java properties files → config TS + `process.env`), and committed secrets are
@@ -350,7 +351,7 @@ database and eventually collides with practice 7's uniqueness.
 **Rule:** never write back to a `*TestJsonFile.json` at runtime, and never let two
 specs depend on the same mutable record. `testData` is frozen at the moment of parsing
 — never assign keys to it at runtime, not even in `beforeAll`. Values produced during a
-run (a created email, an API response) live in local `const`s, not in the data file.
+run (created emails, passwords, IDs and responses) stay test-local under §4a.
 
 **Why:** `playwright.config.ts` sets `fullyParallel: true` with `workers: process.env.CI
 ? 1 : 3` — spec files execute concurrently, so any shared mutable data is a race.
@@ -366,7 +367,30 @@ a created id — the file is shared by every worker and by version control.
 input becomes invisible in the JSON. A static value is a real JSON key (practice 11); a
 run-produced value is a local `const`.
 
-## 10. Per-environment strategy: sort every value into one of three homes
+Optional native fixture pattern for **one** owned record when existing cleanup
+plumbing cannot retain its test-local values. This is a recipe, not a required
+shared helper or generated file; technical fixture plumbing owns the `try/finally`:
+
+```ts
+import {test as base} from '@playwright/test';
+
+const test = base.extend<{cleanup: (action: () => Promise<unknown>) => () => void}>({
+  cleanup: async ({}, use) => {
+    let dispose: (() => Promise<unknown>) | undefined;
+    try {
+      await use(action => {dispose = action; return () => {dispose = undefined;};});
+    } finally {
+      await dispose?.();
+    }
+  },
+});
+// In the test body, after confirmed creation:
+const cancelCleanup = cleanup(() => apisCustomers.deleteCustomer(email, password));
+await apisCustomers.deleteCustomer(email, password);
+cancelCleanup();
+```
+
+## 10. Classify static, environment and runtime values
 
 **Rule:** before adding any value, classify it:
 
@@ -374,7 +398,8 @@ run-produced value is a local `const`.
 |---|---|---|
 | Business input / expected value (environment-agnostic) | paired `*TestJsonFile.json` | `"invalidEmail"`, `errorMessages.*` |
 | Environment data (varies per env, not secret) | `playwright.config.ts` / `src/config/*.ts` | `baseURL`, `databases.applicationDb.server` |
-| Secret | `process.env` (dotenv wiring available in `playwright.config.ts`) | `DB_USER`, `DB_PASSWORD` |
+| Externally provisioned access | `process.env`/CI secrets | `DB_USER`, `DB_PASSWORD` |
+| Disposable generated input | Owning test-local variable/test-scoped fixture | Generated account password, email, returned ID |
 
 **Why:** a value in the wrong home either leaks (secret in JSON), breaks environment
 portability (URL in JSON), or hides from data review (expected message in config).
@@ -442,7 +467,7 @@ This skill does NOT cover:
   stem identical to the spec's, no legacy aliases (`TestData`/`TestsFile`/`JsonFile`),
   folder never `test-data/`
 - [ ] App-universal expected values duplicated per spec — no shared `CommonTestData.json`
-- [ ] JSON parsed once in `beforeAll` via `fs.readFileSync`, into module-level `testData`
+- [ ] JSON parsed once in `beforeAll` via `fs.readFileSync`; preserve/infer useful typing without adding named schema interfaces; no aggregate schemas/cross-spec bases
 - [ ] No string-literal inputs, expected values, or assertion messages in specs or business classes
 - [ ] Related values clustered into nested objects (e.g. `errorMessages`, `paymentCard`);
   each tracked case's mutable inputs in their own `tc<id>` cluster (id = the test's
@@ -450,7 +475,8 @@ This skill does NOT cover:
 - [ ] Fixed option lists modeled as enums, not free strings
 - [ ] No URLs, hosts, or environment data in test JSON; pre-existing credentials
   (DB users, provisioned accounts, API keys) read only from `process.env`;
-  invented-account passwords live in the paired JSON
+  fixed synthetic/invalid passwords live in paired JSON; disposable generated passwords
+  need no per-case env keys and are reused once per owned account per attempt
 - [ ] Uploaded/attached files live in `resources/testData/fixtures/<Feature>/`,
   descriptively named, their paths stored as keys in the paired JSON
 - [ ] Payment card data synthetic and clustered under `paymentCard`; no real PAN anywhere
@@ -468,4 +494,5 @@ This skill does NOT cover:
   `resources/apisCollections/` into test data (they are point-in-time examples, not
   fixtures)
 - [ ] Data files never written at runtime; `testData` never assigned after parsing (not
-  even in `beforeAll`); run-produced values held in local `const`s
+  even in `beforeAll`); run-produced values held in local `const`s/test-scoped fixtures
+- [ ] Generation, failure cleanup, invalid-input relationships and redaction follow design-conventions §4a

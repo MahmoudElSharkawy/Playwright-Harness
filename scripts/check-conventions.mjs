@@ -19,10 +19,11 @@
  */
 
 import { readFileSync, writeFileSync, existsSync, readdirSync, statSync, realpathSync } from 'node:fs';
-import { resolve, join, relative, basename, isAbsolute } from 'node:path';
+import { resolve, join, relative, basename, dirname, isAbsolute } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { secretFindings } from './lib/package-validation.mjs';
+import { sourceReferences } from './lib/convention-source.mjs';
 
 const CLI_ARGS = process.argv.slice(2);
 const rootIndex = CLI_ARGS.indexOf('--root');
@@ -35,6 +36,14 @@ const LAYERS = { tests: 'tests', pages: 'src/pages', apis: 'src/apis', dbs: 'src
 const FRAMEWORK_DIRS = Object.values(LAYERS);
 const layerOf = (rel) => Object.keys(LAYERS).find((k) => rel.startsWith(LAYERS[k] + '/'));
 // (Single-family POM framework — every rule applies uniformly to every spec and class.)
+
+const jsonPath = path => /\.json$/i.test(path);
+const modulePath = (file, path) => path.startsWith('.') || isAbsolute(path) ? resolve(dirname(join(ROOT, file)), path) : null;
+const inFolder = (path, folder) => {
+  const rel = relative(join(ROOT, folder), path);
+  return rel === '' || (!isAbsolute(rel) && rel !== '..' && !rel.startsWith('..' + (process.platform === 'win32' ? '\\' : '/')));
+};
+const referenceHit = (text, reference) => ({line: text.slice(0, reference.start).split('\n').length, excerpt: 'literal test-data dependency'});
 
 /** Each rule: id, dirs it applies to, severity, matcher over (file, text) -> array of {line, excerpt}. */
 const grepRule = (re) => (file, text) => {
@@ -105,7 +114,7 @@ const RULES = [
       return hits;
     } },
   { id: 'secret-literal', dirs: Object.keys(LAYERS), severity: 'fail',
-    why: 'secrets come only from process.env — a secret-shaped literal never lands in a committed file (test-data §6)',
+    why: 'credential literals and obvious literal fallbacks are rejected in code; arbitrary expressions require review (test-data §6)',
     check: (file, text) => [...new Set(secretFindings(file, text).map(hit => hit.line))]
       .map(line => ({ line, excerpt: '[redacted]' })) },
   { id: 'spec-data-pairing', dirs: ['tests'], severity: 'fail',
@@ -115,6 +124,31 @@ const RULES = [
       if (!m) return [];
       const pair = join(ROOT, 'resources', 'testData', `${m[1]}TestJsonFile.json`);
       return existsSync(pair) ? [] : [{ line: 1, excerpt: `missing resources/testData/${m[1]}TestJsonFile.json` }];
+    } },
+  { id: 'spec-data-source', dirs: ['tests'], severity: 'fail',
+    why: 'a spec reads only its paired JSON, once in beforeAll; runtime JSON imports are prohibited, while erased type references to that pair are allowed (test-data §1–2). Dynamic/helper-mediated sources require independent review.',
+    check: (file, text) => {
+      const match = basename(file).match(/^(.*)Tests\.spec\.ts$/);
+      if (!match) return [];
+      const expected = resolve(ROOT, 'resources/testData', `${match[1]}TestJsonFile.json`);
+      const references = sourceReferences(text);
+      return [...references.modules.filter(module => jsonPath(module.path) && (!module.typeOnly || modulePath(file, module.path) !== expected)),
+        ...references.reads.filter(read => jsonPath(read.path) && resolve(ROOT, read.path) !== expected)]
+        .map(reference => referenceHit(text, reference));
+    } },
+  { id: 'business-test-data-dependency', dirs: ['pages', 'apis', 'dbs'], severity: 'fail',
+    why: 'business classes must not import specs/spec-owned data or load test-data JSON; operation-specific types and technical helpers remain valid (design-conventions §1, test-data §2–3). Semantic schema ownership requires independent review.',
+    check: (file, text) => {
+      const references = sourceReferences(text);
+      const modules = references.modules.filter(module => {
+        const path = modulePath(file, module.path);
+        return path && (inFolder(path, 'tests') || inFolder(path, 'resources/testData'));
+      });
+      const reads = references.reads.filter(read => {
+        const path = resolve(ROOT, read.path);
+        return jsonPath(read.path) && (inFolder(path, 'resources/testData') || inFolder(path, 'tests'));
+      });
+      return [...modules, ...reads].map(reference => referenceHit(text, reference));
     } },
   { id: 'spec-naming', dirs: ['tests'], severity: 'warn',
     why: 'spec files are <Feature>Tests.spec.ts (test-classes §1)',

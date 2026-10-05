@@ -91,7 +91,7 @@ let homePage: HomePage;
 let headerPage: HeaderPage;
 let apisUserManagement: ApisUserManagement;
 
-let testData: any;
+let testData: typeof import('../resources/testData/LoginTestJsonFile.json');
 ```
 
 ❌ Instantiating page objects inside a test body, or passing `page` around as a test
@@ -106,6 +106,8 @@ When a spec holds many page objects, keep the module-level declaration list and 
 `beforeEach` instantiation list in the same order — user-journey order preferred — so
 the two lists diff cleanly. ✅ (illustrative counterexample) `PlaceOrderRegisterWhileCheckoutTests.spec.ts`
 declares and instantiates its ten page objects in matching order.
+
+Local schemas and test-scoped runtime state follow [design-conventions §4a](../../pom-architecture/references/design-conventions.md#4a-test-data-ownership-method-contracts-and-disposable-inputs).
 
 ## 4. Compute the uniqueness discriminator ONCE, at module level
 
@@ -272,6 +274,9 @@ test.afterEach(async () => {
 A mid-test failure makes teardown click a broken page, masking the real failure — and
 because `context.close()` sits last, the context leaks too.
 
+For disposable inputs, reuse existing test-scoped cleanup plumbing; the optional pattern in
+[design-conventions §4a](../../pom-architecture/references/design-conventions.md#4a-test-data-ownership-method-contracts-and-disposable-inputs); keep scenario deletion in the test body.
+
 ## 9. `afterAll` — close what `beforeAll` opened
 
 Symmetric teardown: a DB service constructed in `beforeAll` is closed in `afterAll`,
@@ -362,6 +367,7 @@ This playbook covers the spec file's skeleton only. It does NOT cover:
 - [ ] File is `tests/<Feature>Tests.spec.ts`, one folder deep under a suite/initiative folder when one applies (feature name, plural `Tests` — not a scenario, page, or singular name) with exactly one `test.describe`; title is the business feature name and no other spec shares it
 - [ ] Imports minimal and ordered (Playwright → allure → business classes → Node); no `expect` imported
 - [ ] Shared state is module-level `let` in layer order; unique-data `const` (timestamp) computed once at module level; record-creating tests compose from their own `tc<id>` cluster in the paired JSON (per-case base + the one timestamp; format-constrained fields get distinct valid per-case values, no suffix — test-data practice 7); no test body assigns state a hook consumes
+- [ ] Schema and generated-state ownership follow design-conventions §4a
 - [ ] Tests first, hooks grouped at the bottom in lifecycle order
 - [ ] `beforeAll` only loads the paired JSON and/or inits connection-holding services
 - [ ] `beforeEach` seeds only case-agnostic state via API/DB business methods (case-specific records seed at the top of the owning test body from that case's cluster), then opens a fresh context/page, then constructs ALL page and service objects (none in test bodies); declaration and instantiation lists in matching order; GUI-only preconditions (no lower-layer path exists) follow construction as assertion-free business calls — one composed intent-named method when the calls live within one page and run longer than a couple of calls; a multi-page precondition stays as the plain sequence, never fused across pages

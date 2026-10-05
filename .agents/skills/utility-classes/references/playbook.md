@@ -419,7 +419,7 @@ Contract:
 Not every technical concern needs the full `<Noun>Actions` contract (practice 13) —
 `Expects.ts`'s plain-function-export style (practice 18) is also canon for a narrower
 class of facade: a handful of independent helpers with no shared connection/lifecycle
-state, each JSDoc'd with its technical contract. Three shipped examples, each a
+state, each JSDoc'd with its technical contract. Shipped examples, each a
 distinct shape worth pattern-matching:
 
 - **`UiControls.ts`** — async-widget-race helpers. A third-party or framework-hydrated

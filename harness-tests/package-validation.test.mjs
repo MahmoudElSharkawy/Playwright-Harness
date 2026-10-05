@@ -25,6 +25,46 @@ test('known token and connection shapes are detected without echoing values',()=
 test('a package name ending in token is not a credential field',()=>{
  assert.deepEqual(secretFindings('package-lock.json','{"jsonwebtoken":"^9.0.0"}'),[]);
 });
+
+test('runtime credential expressions are code, independent of identifier spelling or line endings',()=>{
+ const field=['pass','word'].join('');
+ for(const name of [field,'account'+field[0].toUpperCase()+field.slice(1),'pwd']) for(const newline of ['\n','\r\n']) {
+  for(const expression of ["randomBytes(24).toString('hex')",'generateDisposableCredential(rules)','account.credential','process.env.TEST_PASSWORD']) {
+   assert.deepEqual(secretFindings('fixture.ts',`export {};${newline}const ${name} = ${expression};`),[]);
+  }
+ }
+ assert.deepEqual(secretFindings('fixture.ts',`this.${field} = generateDisposableCredential(rules);`),[]);
+ assert.deepEqual(secretFindings('fixture.ts',`const email = makeEmail(), ${field} = makeCredential();`),[]);
+});
+
+test('hardcoded primitive credential assignments remain protected while wrapped placeholders pass',()=>{
+ const field=['pass','word'].join('');
+ for (const value of ['12345678', '12345678n', '(12345678)']) {
+  const hits=secretFindings('fixture.ts',`const ${field} = ${value};`);
+  assert(hits.length>0, `Literal kind ${value} cannot become a runtime expression.`);
+  assert(!JSON.stringify(hits).includes(value));
+ }
+ assert.deepEqual(secretFindings('fixture.ts',`const ${field} = ("<secret-ref>");`), []);
+});
+
+test('obvious literal fallbacks, comparisons and decoding are not generation exemptions',()=>{
+ const field=['pass','word'].join('');
+ for (const expression of ["(value || 'fixture-control')", "value ?? 'fixture-control'", "atob('fixture-control')", "value === 'fixture-control'"]) {
+  const hits=secretFindings('fixture.ts',`const ${field} = ${expression};`);
+  assert(hits.length>0);assert(!JSON.stringify(hits).includes('fixture-control'));
+ }
+ assert.deepEqual(secretFindings('fixture.ts', `assert(body.${field} === '***');`), []);
+});
+
+test('Markdown code generators pass while literal and raw connection credentials still fail',()=>{
+ const field=['pass','word'].join('');
+ assert.deepEqual(secretFindings('guide.md',`Example:\n\n\`\`\`ts\nconst ${field} = generateDisposableCredential(rules);\n\`\`\`\n`),[]);
+ for(const source of [`const ${field} = ('synthetic-control-value');`, `const ${field} = \`synthetic-control-value\`;`, ['Pwd','synthetic-control-value'].join('='), `const connection = '${['Server=example.test',['Pwd','synthetic-control-value'].join('=')].join(';')}';`]) {
+  const hits=secretFindings('fixture.ts',source);assert(hits.length>0);assert(!JSON.stringify(hits).includes('synthetic-control-value'));
+ }
+ const mixed=`const ${field} = makeCredential(); const connection = '${['Server=example.test',['Pwd','synthetic-control-value'].join('=')].join(';')}';`;
+ assert(secretFindings('fixture.ts',mixed).some(hit=>hit.rule==='connection-credential'));
+});
 test('privacy distinguishes public references from private coordinates',()=>{
  assert.equal(privacyFindings('guide.md','https://playwright.dev/docs/intro https://example.test/demo').length,0);
  for(const text of [['https:','','dev.azure.com','private-organization','project'].join('/'),'10.'+'25.30.40','C:'+'\\Users\\LocalOwner\\project']) assert(privacyFindings('guide.md',text).length>0);

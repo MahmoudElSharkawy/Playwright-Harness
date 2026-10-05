@@ -198,11 +198,10 @@ current names; rename to `verify*` only when already touching that class, per
 
 ## 6. Consume return values only when a later call needs them
 
-**Rule:** Declare a `const` in the test body only to pass a value from one business
-call into another (an `APIResponse`, a composed unique email). Business methods return
-`void` unless the value is genuinely consumed (§5) — so a test never holds a value it
-doesn't use. Glue passes values, it never invents or transforms them — the only
-sanctioned composition is the unique-suffix idiom of practice 7.
+**Rule:** Declare a `const` only when a later call or required cleanup consumes it:
+business return values, unique inputs composed under practice 7, or disposable values
+generated under design-conventions §4a. Business methods return `void` unless the
+value is genuinely consumed (§5); generation and cleanup follow §4a.
 
 ✅ `tests/LoginTests.spec.ts` — both constants are consumed downstream:
 
@@ -255,9 +254,11 @@ parallel worker is mutating.
 
 ## 8. No hardcoded inputs or expected values in the body
 
-**Rule:** Every input and every expected value the test passes into an action or
-validation comes from the paired JSON test-data object (loaded in `beforeAll`),
-`src/config/`, or an enum — never a string literal in the test (§4 iron law 5).
+**Rule:** Static scenario inputs and expected values come from the paired JSON
+(loaded in `beforeAll`), `src/config/` under its environment exception, or fixed
+option enums — never scenario literals in the test (§4 iron law 5). Disposable
+inputs may instead be generated under §4a using constraints from that JSON and kept
+in the owning test attempt. External access still uses env/CI references.
 
 ✅ `tests/LoginTests.spec.ts` feeds even the expected error text from data:
 
@@ -365,11 +366,11 @@ This skill does NOT cover:
 - [ ] One behavior per test (or one explicit E2E journey), never bundled scenarios
 - [ ] Title is a descriptive sentence; `Test Case N:` prefix where the catalog applies; no channel/layer markers (`(Ui & Api)`)
 - [ ] `allure.feature(…)` + `allure.tms('<id>')` are the first lines of the body; feature matches the `describe` title; tms id(s) are the test's own — one per test, or one per covered case in an E2E journey; never shared across tests (data rows of one parameterized case share theirs by design)
-- [ ] Body contains only business-method calls — no locators, `expect`, loops, `if`, or `try`/`catch`
+- [ ] Body orchestrates business-method calls, owned runtime generation and cleanup registration — no locators, `expect`, loops, `if`, or `try`/`catch`
 - [ ] Every GUI step of the verified journey is in the test body — hooks prepare only invisible state via API/DB (GUI only when no lower-layer path exists — test-classes playbook practice 7)
 - [ ] At least one validation call, positioned to close the scenario's arc
-- [ ] Local `const`s exist only to pass values between business calls — never invented or transformed; no `console.log`
-- [ ] Inputs and expected values all come from `testData` / config / enums — zero literals, numbers included
+- [ ] Local `const`s are consumed downstream or by cleanup; owned disposable generation follows §4a and unique composition follows practice 7; no arbitrary transformations or `console.log`
+- [ ] Static inputs/expectations come from `testData` / config exception / enums; disposable generation follows §4a — zero hardcoded scenario literals
 - [ ] Test passes alone (`-g` its title), in parallel, on CI retry, and twice in a row: per-case data from its own `tc<id>` cluster (TC id in the base value + module timestamp), cleans up what it creates, never touches a sibling case's data
 - [ ] Variants of one behavior are sibling tests in one `describe` with one data file — no forked near-identical specs
 - [ ] Group membership expressed via `{ tag: [...] }`, not the title

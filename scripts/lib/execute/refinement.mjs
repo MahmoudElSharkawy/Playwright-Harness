@@ -9,6 +9,7 @@ import {browserLifecycleOperations} from '../browser/index.mjs';
 import {loadEnvironment} from '../project-config.mjs';
 import {consumerEnvironment} from '../consumer-env.mjs';
 import {consumerPath} from '../consumer-paths.mjs';
+import {validateGeneration, protectedInputReference} from '../protected-inputs.mjs';
 import {readExecution, readBounded, writeJson, saveExecution, EXECUTION_DOCUMENT} from './storage.mjs';
 
 export const normalize = value => String(value).replace(/\s+/g, ' ').trim().toLowerCase();
@@ -110,7 +111,7 @@ export function freezeExecution(roots, executionId) {
   for (const source of loaded.source.scenarios) {
     const refined = refinement.scenarios.find(item => item.id === source.id); requireThat(refined, 'Missing refined scenario.'); keys(refined, ['id', 'steps'], 'refined scenario');
     requireThat(Array.isArray(refined.steps) && refined.steps.length > 0 && refined.steps.length <= 1000, 'Refined steps must be bounded and nonempty.');
-    const covered = new Set(), bound = new Set(), steps = [], expectations = [], ids = new Set(); let previous = -1;
+    const covered = new Set(), bound = new Set(), steps = [], expectations = [], ids = new Set(), generationRules = new Map(); let previous = -1;
     for (const step of refined.steps) {
       keys(step, ['id', 'phase', 'family', 'target', 'capability', 'sourceSteps', 'expectations', 'inputs', 'readOnlyContract', 'login', 'operation', 'checkProvenance', 'creates', 'cleanupResource', 'optional'], 'refined step');
       id(step.id); requireThat(!ids.has(step.id), 'Duplicate step id.'); ids.add(step.id);
@@ -123,8 +124,19 @@ export function freezeExecution(roots, executionId) {
       requireThat(step.optional === undefined || typeof step.optional === 'boolean', 'Optional must be a boolean.');
       requireThat(Array.isArray(step.creates ?? []), 'Created resources must be an array.');
       for (const binding of step.inputs ?? []) {
-        keys(binding, ['name', 'source'], 'step input'); id(binding.name);
-        requireThat(typeof binding.source === 'string' && /^(parameter|reference|output|env):.+$/.test(binding.source), 'Input needs a parameter, reference, output or protected environment source.');
+        keys(binding, ['name', 'source', 'generation'], 'step input'); id(binding.name);
+        requireThat(typeof binding.source === 'string' && /^(parameter|reference|output|env|generated|synthetic):.+$/.test(binding.source), 'Input needs a parameter, reference, output, env, generated or synthetic source.');
+        if (/^(env|generated|synthetic):/.test(binding.source)) protectedInputReference(binding.source);
+        if (binding.source.startsWith('generated:')) {
+          const rules = fingerprint(validateGeneration(binding.generation));
+          requireThat(!generationRules.has(binding.source) || generationRules.get(binding.source) === rules, 'Protected input generation rules conflict.');
+          generationRules.set(binding.source, rules);
+        }
+        else requireThat(binding.generation === undefined, 'Only generated inputs declare generation rules.');
+        if (binding.source.startsWith('synthetic:')) {
+          const name = binding.source.slice(10);
+          requireThat(refinement.references[name]?.file && referenceValues[name] && !referenceValues[name].assumed && typeof referenceValues[name].value === 'string' && referenceValues[name].value.length > 0, 'Synthetic input needs a selected value from an approved JSON file.');
+        }
         if (binding.source.startsWith('env:')) requireThat(/^[A-Z][A-Z0-9_]{0,79}$/.test(binding.source.slice(4)), 'Invalid protected environment reference.');
         if (binding.source.startsWith('parameter:')) requireThat(Object.hasOwn(source.bindings, binding.source.slice(10)) && !source.needsBinding.includes(binding.source.slice(10)), 'Input parameter needs a protected environment binding.');
         if (binding.source.startsWith('reference:')) requireThat(referenceValues[binding.source.slice(10)] && !referenceValues[binding.source.slice(10)].assumed, 'Input reference is unavailable or assumed.');

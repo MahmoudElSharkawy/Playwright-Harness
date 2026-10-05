@@ -12,7 +12,7 @@ import * as fs from 'fs';
 let apisUserManagement: ApisUserManagement;
 let dbsUserManagement: DbsUserManagement;
 
-let testData: any;
+let testData: typeof import('../../resources/testData/DbUserManagementTestJsonFile.json');
 
 const timestamp = new Date().toISOString().replace(/[-T:.]/g, "").slice(0, 17);
 

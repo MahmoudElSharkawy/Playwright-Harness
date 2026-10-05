@@ -11,7 +11,7 @@ let page: Page;
 let loginPage: LoginPage;
 let apisUserManagement: ApisUserManagement;
 
-let testData: any;
+let testData: typeof import('../resources/testData/LoginTestJsonFile.json');
 
 const timestamp = new Date().toISOString().replace(/[-T:.]/g, "").slice(0, 17);
 

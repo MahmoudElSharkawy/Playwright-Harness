@@ -185,7 +185,9 @@ test('development output requires an actual checkout and an effective ignore rul
 test('full package snapshot detects sibling source changes and excludes private run storage',async t=>{
   const fixture=installedFixture(t),root=fixture.packageRoot;
   mkdirSync(join(root,'scripts/lib'));
-  copyFileSync(fileURLToPath(new URL('../scripts/lib/package-validation.mjs',import.meta.url)),join(root,'scripts/lib/package-validation.mjs'));
+  for (const file of ['package-validation.mjs', 'convention-source.mjs']) {
+    copyFileSync(fileURLToPath(new URL('../scripts/lib/' + file, import.meta.url)), join(root, 'scripts/lib', file));
+  }
   const before=await snapshotPackage(root,fixture.spikeRoot);
   mkdirSync(join(root,'.validation'));writeFileSync(join(root,'.validation','run.txt'),'ignored synthetic evidence');
   assert.deepEqual(await snapshotPackage(root,fixture.spikeRoot),before);

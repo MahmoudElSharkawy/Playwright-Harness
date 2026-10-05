@@ -1,5 +1,6 @@
 import { readdirSync, readFileSync, lstatSync, existsSync, realpathSync } from 'node:fs';
 import { join, relative, resolve, isAbsolute } from 'node:path';
+import { codeTokens } from './convention-source.mjs';
 
 const OMIT_DIRS = new Set(['.git', 'node_modules', '.m1-private', '.validation', 'test-results', 'playwright-report', 'blob-report', 'allure-results', 'allure-report', 'reports', 'ctrf', 'executions', '.playwright-cli']);
 const ROOT_FILES = new Set(['README.md', 'AGENTS.md', 'CHANGELOG.md', 'VERSION', '.env.example', '.gitignore', '.npmignore', 'package.json', 'package-lock.json', 'npm-shrinkwrap.json', 'SECURITY.md', 'LICENSE', 'THIRD_PARTY_NOTICES.md']);
@@ -40,15 +41,56 @@ export function secretFindings(file, text) {
   const credentialName = name => /^(?:password|passwd|pwd|api[_-]?key|access[_-]?token|refresh[_-]?token|token|secret|pat)$/i.test(name)
     || /(?:Password|Passwd|ApiKey|Token|Secret|[_-](?:password|token|secret|api_key|PASSWORD|TOKEN|SECRET|API_KEY))$/.test(name);
   const connection = /\b(?:Password|Pwd)\s*=\s*([^;\s'"`]+)/gi;
+  // A connection-string credential is data; a declared/member assignment to a
+  // runtime expression is code. Do not classify a generator call by its variable name.
+  const tokens = codeTokens(file, text), expressions = new Set(), wrappedLiterals = new Set();
+  for (let index = 0; index < tokens.length; index++) {
+    const token = tokens[index];
+    if (token.kind !== 'identifier' || !/^(?:password|pwd)$/i.test(token.value) || tokens[index + 1]?.value !== '=') continue;
+    // Comparing a field (e.g. a report redaction check) is not assigning it.
+    if (tokens[index + 2]?.value === '=') {expressions.add(token.start); continue;}
+    let declaration = ['const', 'let', 'var', '.'].includes(tokens[index - 1]?.value);
+    if (tokens[index - 1]?.value === ',') {
+      for (let cursor = index - 2; cursor >= 0 && ![';', '{', '}'].includes(tokens[cursor].value); cursor--) {
+        if (['const', 'let', 'var'].includes(tokens[cursor].value)) { declaration = true; break; }
+      }
+    }
+    if (!declaration) continue;
+    let embeddedLiteral = false, depth = 0;
+    for (let cursor = index + 2; cursor < tokens.length; cursor++) {
+      const current = tokens[cursor];
+      if (depth === 0 && [';', ',', '}'].includes(current.value)) break;
+      if (current.kind === 'string' && !placeholder(current.value)) {
+        const previous = tokens[cursor - 1]?.value;
+        embeddedLiteral ||= ['|', '&', '?', '=', '+'].includes(previous)
+          || previous === '(' && ['atob', 'String'].includes(tokens[cursor - 2]?.value);
+      }
+      if (current.value === '(' || current.value === '[') depth++;
+      if (current.value === ')' || current.value === ']') {if (!depth) break; depth--;}
+    }
+    if (embeddedLiteral) {wrappedLiterals.add(text.slice(0, token.start).split('\n').length); continue;}
+    let value = index + 2;
+    while (tokens[value]?.value === '(') value++;
+    if (tokens[value]?.kind === 'string') {
+      if (!placeholder(tokens[value].value)) wrappedLiterals.add(text.slice(0, token.start).split('\n').length);
+      else expressions.add(token.start);
+    } else if (tokens[value] && (/^(?:true|false|null|undefined|NaN|Infinity)$/.test(tokens[value].value)
+      || /^(?:[+-]\s*)?(?:\d|\.\d)/.test(text.slice(tokens[value].start)))) {
+      wrappedLiterals.add(text.slice(0, token.start).split('\n').length);
+    } else expressions.add(token.start);
+  }
+  let offset = 0;
   text.split(/\r?\n/).forEach((line, index) => {
     const categories = new Set();
     if (/-----BEGIN (?:[A-Z]+ )?PRIVATE KEY-----/.test(line)) categories.add('private-key');
     if (/\beyJ[A-Za-z0-9_-]{15,}\.[A-Za-z0-9_-]{10,}(?:\.[A-Za-z0-9_-]+)?/.test(line)) categories.add('jwt');
     if (/\b(?:gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,}|AKIA[A-Z0-9]{16})\b/.test(line)) categories.add('access-key');
     for (const match of line.matchAll(assignment)) if (credentialName(match[1]) && !placeholder(match[3])) categories.add('credential-assignment');
-    for (const match of line.matchAll(connection)) if (!placeholder(match[1]) && !/^(?:process\.env|\$\{|@|<|\{)/.test(match[1])) categories.add('connection-credential');
+    if (wrappedLiterals.has(index + 1)) categories.add('credential-assignment');
+    for (const match of line.matchAll(connection)) if (!expressions.has(offset + match.index) && !placeholder(match[1]) && !/^(?:process\.env|\$\{|@|<|\{)/.test(match[1])) categories.add('connection-credential');
     // Neither a convention suppression nor an unrelated env reference exempts a secret.
     for (const rule of categories) findings.push({ file, line: index + 1, rule });
+    offset += line.length + (text.slice(offset + line.length, offset + line.length + 2) === '\r\n' ? 2 : 1);
   });
   return findings;
 }

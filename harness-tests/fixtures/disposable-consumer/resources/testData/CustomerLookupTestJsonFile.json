@@ -1,0 +1,8 @@
+{
+  "deletedCustomer": {
+    "email": "qa.deletedCustomer.",
+    "domain": "@example.test",
+    "credentialBytes": 24,
+    "expected": { "registrationHttp": 201, "registrationCode": 201, "httpStatus": 404, "absentApi": 404 }
+  }
+}

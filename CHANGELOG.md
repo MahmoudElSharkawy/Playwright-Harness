@@ -1,10 +1,13 @@
 # Changelog
 
-## Unreleased — skill naming and optional local consumer flows
+## Unreleased — skill naming, test-data ownership and local consumer flows
 
 - Rename `automate-suite` to `automate-test`, with explicit story, suite and local invocation examples. The observed execution, POM generation, independent review and two-green workflow is unchanged.
 - Re-run setup to replace managed old-name links. Recognized legacy prerequisite knowledge migrates to `.harness/knowledge/prerequisites.md`; customized folders and foreign links are preserved for review. No old-name alias is installed.
 - `docs/RELEASING.md`: running the consumer flows locally is optional when the release pull request's `Harness validation` run passes, because CI runs them on Windows and Linux with npm 11 and npm 12.
+- Add fail-level convention rules `spec-data-source` (literal spec JSON imports/reads must use the paired JSON) and `business-test-data-dependency` (business classes must not load test data or import spec code). Shipped CI templates run these as blocking checks; consumers must correct newly reported dependencies before merging. Semantic schema ownership remains an independent-review check.
+- Clarify spec-local data typing, operation-sized method parameters and disposable credential ownership. Infer spec data shapes from their paired JSON without introducing named schema interfaces; document an optional native cleanup pattern with cancellation after successful in-test disposal.
+- Native execution accepts explicit generated and approved synthetic protected inputs alongside externally provisioned env inputs. Credentials remain reference-only in frozen operations and protected in reports; disposable passwords need no per-case env keys.
 
 ## 3.2.1 — Clearer final execution reports
 

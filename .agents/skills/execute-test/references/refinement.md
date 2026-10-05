@@ -45,10 +45,27 @@ Condition indexes start at 1. The host gives them distinct core assertion IDs wh
 retaining their source key. Ambiguous and synthetic conditions are capped at review.
 API reads additionally declare the runtime's read-only contract; DB reads use SELECT.
 
-Inputs are `{name,source}` with parameter/reference/output/env sources. Names are
-execution identifiers; aliases allow source parameter names with spaces. `env:`
-inputs carry opaque protected references. Sensitive source parameter values are
-withheld; bind them through protected environment references.
+## Inputs
+
+Inputs are `{name,source,generation?}`; names are execution identifiers. Public
+sources are `parameter:<name>`, `reference:<name>` and `output:<name>`.
+Credential-bearing operation fields remain reference-only, e.g.
+`password: {"$input":"account"}`. Explicit protected sources are:
+
+| Source | Meaning |
+|---|---|
+| `env:KEY` | Externally provisioned access from consumer environment/CI |
+| `generated:account` | One fresh value per scenario run, with `generation:{bytes:24}` (16–256 bytes; optional bounded `prefix`/`suffix`) |
+| `synthetic:wrong` | Selected fixed string from `references.wrong:{file,path?}`, an approved clean tracked JSON file |
+
+Repeated generated source names reuse the same value and must have identical rules;
+a rerun generates a fresh value. Frozen inputs store opaque protected references.
+Sensitive source parameters remain withheld; choose a protected source by provenance.
+For browser fills, STEP_ACTIVE returns `inputAliases`; pass its alias as the value
+of `native fill <ref> <alias>`. Only aliases bound to that step are accepted.
+API/DB exploration can use `scripts/lib/protected-inputs.mjs`'s
+`createProtectedInputs` resolver and `protectedInputReference` without env keys;
+clear its execution-owned store on completion. These sources preserve redaction.
 
 Login: `login:{user,landmark}` names a configured browser-target user and the
 observable post-login landmark. It never embeds credentials.

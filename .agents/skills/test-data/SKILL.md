@@ -8,12 +8,8 @@ description: "Use when creating or editing a test data JSON file, deciding where
 Resolve this skill to its real path before following references. Read the
 [package and consumer boundaries](../ROOTS.md); mutable state belongs to the consumer.
 
-Every input and expected value in this framework is externalized (iron law: no hardcoded
-data anywhere — not even assertion messages). Data has exactly three homes: business
-inputs and expected values in one JSON per spec under `resources/testData/` (binary
-upload fixtures beside them in `resources/testData/fixtures/<Feature>/`, their paths
-stored as JSON keys); environment data in `src/config/*.ts` and
-`playwright.config.ts`; secrets in `process.env` only. This skill owns what goes where,
+Scenario values belong in paired JSON; environment coordinates belong in config.
+Credential provenance and disposable runtime inputs follow [design-conventions §4a](../pom-architecture/references/design-conventions.md#4a-test-data-ownership-method-contracts-and-disposable-inputs). This skill owns
 how the JSON is shaped and loaded (including the per-case `tc<id>` clusters), and how
 data stays unique and clean across cases, parallel workers, and repeated runs.
 

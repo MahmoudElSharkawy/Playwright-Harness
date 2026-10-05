@@ -45,6 +45,7 @@ Source → refinement → observed execution → durable POM generation
 - Determine cleanup/restoration from scenario intent and ownership. Intentionally persistent
   outcomes may remain; required lifecycle failures prevent a clean pass. Do not add a
   universal before-image or restoration step.
+- Generation follows [test-data ownership and disposable inputs (§4a)](../pom-architecture/references/design-conventions.md#4a-test-data-ownership-method-contracts-and-disposable-inputs).
 - Route generation through [pom-architecture](../pom-architecture/SKILL.md), then only the
   specialist skills needed by the changed layers. Reuse existing business methods first.
   Generated services can call shared API/DB library interfaces without loading an AI host.

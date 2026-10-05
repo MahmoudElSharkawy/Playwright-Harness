@@ -49,6 +49,13 @@ references. Source keys and executed assertion counts are traceability checks;
 they do **not** prove semantic equivalence by themselves. Reviewer IDs are auditable
 attestations, not authentication or a substitute for an actual independent review.
 
+Generation follows [design-conventions §4a](../.agents/skills/pom-architecture/references/design-conventions.md#4a-test-data-ownership-method-contracts-and-disposable-inputs):
+spec-local JSON schemas, operation-sized business inputs and credential provenance.
+Reuse existing cleanup hooks or fixtures; the [optional native pattern](../.agents/skills/test-data/references/playbook.md#9-parallel-isolation-data-files-are-read-only-inputs)
+registers after creation and cancels only after successful in-test disposal.
+Native input sources follow the [refinement contract](../.agents/skills/execute-test/references/refinement.md#inputs).
+Independent review covers semantic ownership and protection beyond literal checks.
+
 ## Shared deterministic operations and assertion coverage
 
 Catalogs, deterministic service/helper operations and fixed inline parameterized

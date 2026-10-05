@@ -1,0 +1,15 @@
+{
+  "validLogin": {
+    "email": "qa.validLogin.",
+    "domain": "@example.test",
+    "credentialBytes": 24,
+    "expected": { "registrationHttp": 201, "registrationCode": 201, "loginHttp": 200, "loginCode": 200 }
+  },
+  "wrongLogin": {
+    "email": "qa.wrongLogin.",
+    "domain": "@example.test",
+    "credentialBytes": 24,
+    "wrongPassword": "<different-invalid-password>",
+    "expected": { "registrationHttp": 201, "registrationCode": 201, "loginHttp": 401, "loginCode": 401 }
+  }
+}

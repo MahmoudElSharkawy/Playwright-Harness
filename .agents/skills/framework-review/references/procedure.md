@@ -35,7 +35,7 @@ the diff against the box; on doubt, open the owning playbook section (the box �
 mapping is in the §6 text itself) and judge by ITS checklist, not memory. Record per
 box: PASS / FAIL / N-A, with `file:line` evidence for every FAIL.
 
-Also check, from the harness's own rules (not in §6):
+Apply §6, with these review procedures and additional harness checks:
 - Generated tests carry the right `allure.tms` ids (diff vs `_suite.json` when
   reviewing pipeline output).
 - **Traceability table** (pipeline output, 2026-08-27 ruling): the diff carries
@@ -45,7 +45,10 @@ Also check, from the harness's own rules (not in §6):
   `cross-check`/`reroute`), and every `reroute` names the observable it replaced.
   A missing, stale, method-inventing, or reason-less table is a finding
   (class: `traceability-table-stale`).
-- No secrets in code, step titles, or test data (values, not handle names).
+- Apply [§4a](../../pom-architecture/references/design-conventions.md#4a-test-data-ownership-method-contracts-and-disposable-inputs) to actual JSON loading, schema dependencies and credential provenance. Reject aggregate schemas, cross-spec bases and indexed/aliased/`Pick` slices of complete spec schemas; genuine business-response slices remain valid.
+- Shared operation types need demonstrated reuse; reject generic API classes introduced merely to collect types/constants, and expected outcomes hidden in defaults.
+- Check cleanup after confirmed creation, failure-path execution and cancellation after successful in-test disposal (or verified absence); inspect negative-input relationships and report redaction.
+- Literal dependency checks do not prove ownership: independently inspect dynamic/helper-mediated loads, indirect type dependencies and the provenance of generated/synthetic inputs.
 - Page-map edits honor [its contract](../../automate-test/references/page-map.md)
   (orchestrator-written, drift ledger append-only), and any element with **three or
   more drift-ledger entries** becomes a finding — its selector strategy is wrong, not

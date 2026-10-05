@@ -208,6 +208,21 @@ second intent-named method for negative scenarios, per the design-conventions §
 method-variant row — never a branch inside the method); tighten the inline `200` when
 you next touch the file.
 
+Pass the condition's explicit inputs/expectations under [§4a](../../pom-architecture/references/design-conventions.md#4a-test-data-ownership-method-contracts-and-disposable-inputs):
+
+```ts
+async verifyCustomerAbsent(response: APIResponse, expectedHttpStatus: number, expectedResponseCode: number) {
+  await allure.step(`Verify customer absence with status: ${expectedHttpStatus} and code: ${expectedResponseCode}`, async () => {
+    expectToBe('the customer lookup HTTP status', response.status(), expectedHttpStatus);
+    expectToBe('the customer lookup response code', (await response.json()).responseCode, expectedResponseCode);
+  });
+}
+// spec: values come from this spec's own paired JSON
+await apisCustomers.verifyCustomerAbsent(response, testData.tc98.expected.httpStatus, testData.tc98.expected.absentApi);
+```
+
+`CaseData['expected']` couples the class upward; business-response indexed access remains valid (§4a).
+
 ## 8. API validation shape: status + body, typed `APIResponse` parameter
 
 The action returns the `APIResponse`; the spec passes it to the validation. This keeps
@@ -439,7 +454,7 @@ This skill does NOT cover:
 - [ ] GUI checks use awaited web-first assertions (`toBeVisible`, `toHaveText`, `toHaveTitle`, `toHaveURL`, `toHaveCount`) — no `textContent()` + generic expect, no `waitForTimeout`
 - [ ] Arrival checks assert `toHaveURL(this.url)` against the page's own `url` field — never a string literal or a test-data URL (the recorded iron-law-5 exception); RegExp when query params vary
 - [ ] Text matcher chosen deliberately: `toHaveText` with the full expected string by default; `toContainText` only when the element renders more than the tested value
-- [ ] Expected values arrive as parameters (fed from the paired JSON) — nothing business-facing hardcoded
+- [ ] Expected values arrive as explicit operation-sized parameters from the paired JSON/config exception; no defaults/shared constants hiding scenario outcomes and no complete spec-schema dependencies
 - [ ] API validations take a typed `APIResponse` (never `any`) and check status + body in one step — including any body-embedded status code, consistently across the class
 - [ ] DB validations use the class's `_query` constant with `@param` binding and assert row counts
 - [ ] No loops, conditionals, `try`/`catch`, actions, or returned values inside the validation

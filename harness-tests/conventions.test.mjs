@@ -42,6 +42,8 @@ const cases=[
  ['timeout-below-default',page,'expectToBeVisible(item, "item", {timeout: 1000});','expectToBeVisible(item, "item");'],
  ['secret-literal','src/config/example.ts','const pass'+'word = "'+'synthetic-fixture-value'+'"; // conventions-ok; process.env.OTHER','const pass'+'word = process.env.TEST_PASSWORD;'],
  ['spec-data-pairing',spec,'export {};','export {};'],
+ ['spec-data-source',spec,"import {readFileSync as read} from 'node:fs';\nread('./resources/testData/Common.json', 'utf8');","import {readFileSync as read} from 'node:fs';\nread('./resources/testData/ExampleTestJsonFile.json', 'utf8');"],
+ ['business-test-data-dependency','src/apis/ApisExample.ts',"import type {Schema} from '../../tests/ExampleTests.spec';","import type {OperationInput} from './OperationInput';"],
  ['spec-naming','tests/wrong.spec.ts','export {};','export {};'],
  ['tms-per-test',spec,'test("case",()=>{});','test("case",()=>{allure.tms("1001");});'],
  ['feature-per-test',spec,'test("case",()=>{});','test("case",()=>{allure.feature("Example");});'],
@@ -59,7 +61,7 @@ const cases=[
 
 test('fixtures cover every registered rule exactly once',()=>{
  const r=spawnSync(process.execPath,[checker,'--list-rules'],{encoding:'utf8'});assert.equal(r.status,0);
- assert.deepEqual(cases.map(c=>c[0]).sort(),Object.values(JSON.parse(r.stdout)).flat().sort());assert.equal(cases.length,26);
+ assert.deepEqual(cases.map(c=>c[0]).sort(),Object.values(JSON.parse(r.stdout)).flat().sort());assert.equal(cases.length,28);
 });
 for(const [rule,file,bad,good] of cases) for(const violating of [true,false]) test(`${rule}: ${violating?'detect':'accept'}`,t=>{
  const f=fixture(t);
@@ -135,4 +137,88 @@ test('changed scope includes touched story verification folders and skips untouc
 });
 test('Git failure never becomes successful empty scope',t=>{
  const f=fixture(t);assert.equal(f.run('--changed').status,2);assert.equal(f.run('--changed','--base-ref','main').status,2);
+});
+
+test('actual data reads must use the owning pair even when both pairs and shared JSON exist', t => {
+ const f=fixture(t);
+ for(const feature of ['Example','Other']) {
+  f.put(`resources/testData/${feature}TestJsonFile.json`,'{}');
+  f.put(`tests/${feature}Tests.spec.ts`,"import * as files from 'node:fs';\nfiles.readFileSync('./resources/testData/Common.json', 'utf8');");
+ }
+ f.put('resources/testData/Common.json','{}');
+ assert.deepEqual(findings(f.run()).filter(hit=>hit.rule==='spec-data-source').map(hit=>hit.file).sort(),['tests/ExampleTests.spec.ts','tests/OtherTests.spec.ts']);
+});
+
+test('multiline filesystem aliases are checked, normalized paired reads and binary fixtures are allowed', t => {
+ const f=fixture(t);f.put('resources/testData/ExampleTestJsonFile.json','{}');
+ f.put(spec,"import {\n readFileSync as load\n} from 'node:fs';\nload('resources/testData/../testData/Other.json', 'utf8');");
+ assert(findings(f.run()).some(hit=>hit.rule==='spec-data-source' && hit.line===4));
+ f.put(spec,"import files from 'fs';\nfiles.readFileSync('./resources/testData/ExampleTestJsonFile.json', 'utf8');\nfiles.readFileSync('./resources/testData/fixtures/Example/upload.pdf');");
+ assert(!findings(f.run()).some(hit=>hit.rule==='spec-data-source'));
+});
+
+test('runtime static, dynamic and CommonJS JSON imports violate the spec loading contract', t => {
+ const f=fixture(t);f.put('resources/testData/ExampleTestJsonFile.json','{}');
+ for(const source of ["import data from '../resources/testData/ExampleTestJsonFile.json';", "await import('../resources/testData/ExampleTestJsonFile.json');", "await import('../resources/testData/ExampleTestJsonFile.json', {with: {type: 'json'}});", "const data = require('../resources/testData/ExampleTestJsonFile.json');", "const shape = typeof import('../resources/testData/ExampleTestJsonFile.json');"]) {
+  f.put(spec,source);assert(findings(f.run()).some(hit=>hit.rule==='spec-data-source'));
+ }
+});
+
+test('spec JSON types can be inferred from their own pair without named interfaces or runtime imports', t => {
+ const f=fixture(t);f.put('resources/testData/ExampleTestJsonFile.json','{}');
+ for(const source of ["let testData: typeof import('../resources/testData/ExampleTestJsonFile.json');", "import type Data from '../resources/testData/ExampleTestJsonFile.json';"]) {
+  f.put(spec,source);assert(!findings(f.run()).some(hit=>hit.rule==='spec-data-source'));
+ }
+ f.put(spec,"let testData: typeof import('../resources/testData/OtherTestJsonFile.json');");
+ assert(findings(f.run()).some(hit=>hit.rule==='spec-data-source'));
+ f.put('src/apis/ApisExample.ts',"let testData: typeof import('../../resources/testData/ExampleTestJsonFile.json');");
+ assert(findings(f.run()).some(hit=>hit.rule==='business-test-data-dependency'));
+});
+
+test('business imports, re-exports and loads cannot reach specs or canonical test-data sources', t => {
+ const f=fixture(t);
+ f.put(spec,"import * as fs from 'node:fs';\nfs.readFileSync('./resources/private-inputs.json', 'utf8');");
+ f.put('resources/testData/ExampleTestJsonFile.json','{}');
+ const business='src/apis/ApisExample.ts';
+ for(const source of [
+  "import type {\n Schema as Input\n} from '../../tests/ExampleTests.spec';",
+  "export {Input} from '../../resources/testData/Shapes';",
+  "import {readFileSync as load} from 'fs';\nload('./resources/testData/ExampleTestJsonFile.json', 'utf8');",
+  "const fs = require('node:fs');\nfs.readFileSync('./resources/testData/ExampleTestJsonFile.json', 'utf8');"
+ ]) {f.put(business,source);assert(findings(f.run()).some(hit=>hit.rule==='business-test-data-dependency'));}
+ f.put(business,"const input = await import('../../resources/testData/ExampleTestJsonFile.json', {with: {type: 'json'}});");
+ assert(findings(f.run()).some(hit=>hit.rule==='business-test-data-dependency'));
+});
+
+test('operation types, small parameters, indexed business types and technical sources remain allowed', t => {
+ const f=fixture(t);
+ f.put('src/apis/ApisExample.ts',"import type {CustomerResponse} from './CustomerResponse';\nimport {ApiActions} from '../utils/ApiActions';\nexport interface RegistrationInput { email: string; credential: string; }\nexport class ApisExample {\n  verifyAbsent(response: APIResponse, expectedHttpStatus: number, expectedResponseCode: number) {}\n  register(input: RegistrationInput) {}\n  verifyCode(expected: CustomerResponse['responseCode']) {}\n}\n");
+ assert.deepEqual(findings(f.run()),[]);
+});
+
+test('source checks ignore comments, quoted examples, regexes and unresolved dynamic paths', t => {
+ const f=fixture(t);f.put('resources/testData/ExampleTestJsonFile.json','{}');
+ f.put(spec,"import * as fs from 'node:fs';\n// fs.readFileSync('./resources/testData/Common.json');\nconst example = \"import data from '../resources/testData/Common.json';\";\nconst pattern = /import data from 'Common.json'/;\nfs.readFileSync(testDataPath, 'utf8');");
+ assert(!findings(f.run()).some(hit=>hit.rule==='spec-data-source'));
+});
+
+test('a business-file hook does not scan unrelated or symlinked specs', t => {
+ const f=fixture(t), outside=fixture(t);outside.put('UnrelatedTests.spec.ts','not a dependency');
+ mkdirSync(join(f.root,'tests'),{recursive:true});symlinkSync(outside.root,join(f.root,'tests/linked'),'junction');
+ f.put('src/dbs/DbsExample.ts',"import * as fs from 'fs';\nfs.readFileSync('./resources/testData/ExampleTestJsonFile.json', 'utf8');");
+ const result=f.run('--files','src/dbs/DbsExample.ts');
+ assert.equal(result.status,1);assert(findings(result).some(hit=>hit.rule==='business-test-data-dependency'));
+ rmSync(join(f.root,'tests/linked'));
+});
+
+test('partial dynamic paths and similarly named member methods do not invent literal dependencies', t => {
+ const f=fixture(t);f.put('resources/testData/ExampleTestJsonFile.json','{}');
+ f.put(spec,"import * as fs from 'node:fs';\nfs.readFileSync('./resources/testData/Common.json' + suffix);\nclient.import('../resources/testData/Common.json');\nclient.require('../resources/testData/Common.json');\nclient.fs.readFileSync('./resources/testData/Common.json');");
+ assert(!findings(f.run()).some(hit=>hit.rule==='spec-data-source'));
+});
+
+test('arrow-returned regex bodies cannot invent imports or filesystem reads', t => {
+ const f=fixture(t);f.put('resources/testData/ExampleTestJsonFile.json','{}');
+ f.put(spec,"import * as fs from 'node:fs';\nconst modulePattern = () => /import('Common.json')/;\nconst readPattern = () => /fs.readFileSync('Common.json')/;");
+ assert(!findings(f.run()).some(hit=>hit.rule==='spec-data-source'));
 });

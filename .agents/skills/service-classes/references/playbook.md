@@ -273,6 +273,8 @@ Hardcoding payload fields violates iron law §4.5. Known legacy violation:
 parameter object that the spec fills from `resources/testData/*.json`, with fixed
 option lists (like the `title: 'mr'` field) modeled as enums.
 
+Parameter/response ownership follows [design-conventions §4a](../../pom-architecture/references/design-conventions.md#4a-test-data-ownership-method-contracts-and-disposable-inputs).
+
 ## 11. No exception handling, no loops, no branching
 
 `try`/`catch` is forbidden in `apis/` and `dbs/` — it exists only in `utils/`, where it
@@ -313,4 +315,5 @@ This skill does NOT cover:
 - [ ] All SQL parameterized via `@param` + params object — zero string-interpolated values
 - [ ] Validations `verify*`-prefixed, step-wrapped, last in the class; expected values arrive as parameters
 - [ ] No `try`/`catch`, loops, or branching; no hardcoded payload data or base URLs
+- [ ] Parameter/response types and dependencies follow design-conventions §4a
 - [ ] `Dbs` class exposes `close()` and the spec's `afterAll` calls it

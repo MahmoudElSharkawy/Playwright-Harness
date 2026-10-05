@@ -111,8 +111,10 @@ under `///// Validations` when you next touch the file.
    prefer splitting into smaller intent-named methods (or optional parameters) over
    branching. Complexity belongs in `utils/`.
 5. **Externalized data:** no hardcoded test inputs or expected values in specs or
-   classes — including assertion messages. JSON test data files, `process.env` (via
-   `src/config/`), or enums for fixed option lists. Recorded exception (see
+   classes — including assertion messages. Scenario values come from the paired JSON;
+   environment access comes from config/secret references; fixed option definitions may
+   use enums. Disposable inputs may be generated under §4a, with constraints from the
+   owning JSON. Expected outcomes never hide in shared constants or default arguments. Recorded exception (see
    Decision records): a page class's own `url` field is structural identity, and
    validations may assert it via `toHaveURL(this.url)`.
 6. **Every action and validation method is one Allure step** (`step()` /
@@ -142,6 +144,56 @@ under `///// Validations` when you next touch the file.
     merge request; self-describing code over comments — document a method only when the
     name genuinely cannot carry the meaning (utils are the exception: technical
     contracts there deserve JSDoc).
+
+## 4a. Test-data ownership, method contracts and disposable inputs
+
+- Each spec loads exactly its own paired JSON. Keep any explicit complete schema local;
+  do not add a named interface merely to annotate parsed JSON. Preserve existing typing
+  or infer the shape from the paired JSON with an erased type reference.
+  No shared fixture JSON, common test-value container, aggregate spec schema, common
+  cross-spec case-data base, or inheritance combining unrelated specs' inputs,
+  expectations or metadata. Same-spec immutable expectation clusters remain allowed.
+  Interfaces describe shapes; sharing them does not itself share runtime state.
+- Business classes receive only operation inputs/expectations as parameters. They never
+  load test-data JSON or depend on complete spec schemas, including indexed access,
+  aliases or `Pick` derived from them. A local spec schema may reference a
+  business-owned operation type: dependencies still point downward.
+- Prefer small explicitly named parameter lists (approximately four positional inputs,
+  per action-methods §11). Use a typed object when size/readability warrants it; do not
+  introduce an interface for every small argument group. Operation-specific types live
+  beside the owning business class by default; a shared type module requires demonstrated
+  reuse. Never replace useful typing with `any` or duplicate business behavior.
+- Generic technical behavior stays in existing utilities such as `ApiActions`;
+  domain API operations and response validations stay in `src/apis/`. A generic API
+  class is not a container for types, parameters or constants. Fixed technical constants
+  and option definitions remain allowed; scenario inputs and expected outcomes remain
+  explicit values from the paired JSON (environment-specific expectations retain the
+  existing config exception).
+- Externally provisioned account/admin/application/DB/integration credentials use
+  ignored environment files or CI secret stores. Fixed synthetic passwords, including
+  deliberately invalid inputs, belong in the paired JSON. A disposable account created
+  and owned by the current test may instead receive a runtime-generated password.
+  Never infer an environment key solely from a field being named `password`.
+- Generate disposable credentials once per owned account per test attempt. Reuse those
+  exact values for registration, login and cleanup; keep generated emails, credentials
+  and returned IDs in test-local variables or test-scoped fixture state. Never persist
+  them in JSON, `.env`, shared fixtures or mutable globals. Preserve explicit case
+  values, format/generation rules and invalid-input relationships; an intentionally
+  wrong password must differ from the account's actual password.
+- Required cleanup means disposing of temporary records/accounts owned by the test,
+  or restoring borrowed state when the scenario requires it. An explicitly persistent
+  outcome has no disposal obligation. Cleanup must run after failure using the same
+  values through existing test-scoped lifecycle plumbing and assertion-free business calls. Register it
+  after confirmed creation; cancel it only after a successful in-test delete, or have
+  cleanup accept a verified already-absent result. An uncertain create needs identity
+  reconciliation before deciding its obligation. Cleanup failures prevent a clean pass.
+  Reuse existing test-scoped hooks/fixtures; an [optional native pattern](../../test-data/references/playbook.md#9-parallel-isolation-data-files-are-read-only-inputs)
+  illustrates cancellation without requiring a new lifecycle utility.
+- Storage and report redaction are separate: runtime credentials remain protected by
+  the existing utilities and confidential assertion variants. Environment references
+  are not a prerequisite for redaction. The lightweight checker covers direct literal
+  dependencies; semantic schema ownership, dynamic sources and credential provenance
+  require independent review, never filename/property-name guesses.
 
 ## 5. Java → Playwright/TS adaptation decisions
 
@@ -197,6 +249,7 @@ Rulings recorded by the team; specialists implement them — a future change her
 | Baseline | Mechanical rule coverage | Enforce locator suffixes, class spacing, value-free credential titles and named timeout tiers. Artifact checks enforce UI/API/DB layer tokens, traceability references and consistency between verification records and specs. Semantic correctness, source intent and call-site provenance remain independent-review responsibilities. Baselines identify individual reviewed legacy findings and must never conceal new violations. | scripts/check-conventions.mjs, framework-review |
 | 2026-09-14 | Spec folders per ADO plan branch + Allure epic | Specs live one folder deep under `tests/`, the folder named EXACTLY like the in-scope ADO plan's branch (e.g. a branch called "Customer Portal" → `tests/Customer Portal/` — spaces kept, quote the path in shell commands), and every test carries `allure.epic('<folder>')` directly above its `allure.feature` so the Behaviors tab nests Epic > Feature > tests. New suites scaffold into their branch folder (the fetch-suite script's suggestion + automate-test GENERATE). `testMatch` and the linter's tms-index walk are one-folder-deep aware (Playwright's default `testMatch` already recurses; the linter's own directory walk needed the same). Fixme'd tests never execute body metadata, so they render without epic/feature — pre-existing behavior, accepted | test-classes, pom-architecture, scripts/check-conventions.mjs, scripts/fetch-ado-suite.mjs |
 | Baseline | Local traceability artifacts | Keep manual sources and run-specific traceability/verification artifacts in gitignored `test/`. Reviewers inspect them locally. Any authorized delivery summary must omit private source content and secret-bearing artifacts. | automate-test, framework-review |
+| 2026-10-05 | Spec-schema ownership and disposable credentials | Each spec owns its JSON and complete local schema; business contracts describe operations, with small explicit parameters preferred. Externally provisioned access uses env/CI secrets; disposable credentials may be generated once per account per attempt and retained in test scope, with failure cleanup and report protection. Fixed synthetic/invalid values remain in paired JSON. Mechanical checks use dependency evidence; semantic ownership remains independently reviewed. | test-data, action-methods, validation-methods, service-classes, test-classes, test-methods, automate-test, framework-review, convention checker |
 
 **Doctrine-ownership map (2026-09-01)** — the canonical homes of the big cross-cutting rules; consult the home before editing any citer:
 
@@ -250,7 +303,11 @@ For the sequential shared-runtime and generation workflow, follow [M14 reporting
 - [ ] Every action/validation wrapped in a business-titled Allure step; no secrets in titles
 - [ ] Every assertion goes through the `src/utils/Expects.ts` wrappers with a business subject phrase (`Expect <subject> to <verb>[ <value>]` step titles); business classes carry no direct expect() — secret values use the facade's secret variants (validation-methods §13)
 - [ ] No `try`/`catch`, loops, or conditionals outside `utils/`
-- [ ] No hardcoded data — inputs and expected values come from the paired JSON / config / enums
+- [ ] No hardcoded scenario data — paired JSON/config supplies inputs and explicit expectations; disposable generation follows §4a
+- [ ] Each spec owns its paired JSON; any explicit complete schema stays local, with no unnecessary named interfaces, shared aggregate schemas, case-data bases or common value containers
+- [ ] Business methods receive operation-sized inputs, never complete spec-schema dependencies; necessary shared operation types have demonstrated reuse; useful typing is preserved, never replaced with `any`
+- [ ] Credentials classified by provenance: external access via env/CI, fixed synthetic inputs in paired JSON, disposable generated values retained/reused in test scope
+- [ ] Required cleanup follows §4a, survives failures and is registered after creation; successful in-test disposal cancels cleanup or cleanup verifies absence; generated values remain local and protected, and wrong passwords differ
 - [ ] Each test: independent, parallel-safe, re-runnable, ≥1 validation, `allure.feature` + `allure.tms` set
 - [ ] Setup seeds via API, teardown cleans up; fresh context per test
 - [ ] Prerequisites seeded through API/DB layers wherever a lower-layer path exists

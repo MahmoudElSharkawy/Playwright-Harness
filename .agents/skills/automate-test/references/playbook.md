@@ -232,7 +232,9 @@ independent framework-review re-checks every new method against the inventory.
 2. `test-data` — `resources/testData/<Feature>TestJsonFile.json`: inputs and expected
    values from the ADO steps (copy expected strings EXACTLY as the app renders them,
    not as ADO paraphrases them — the harvest notes are the authority, and the string
-   must match the locale the environment actually renders: source wording may differ from the configured application locale), secrets to `process.env`. Mutable
+   must match the locale the environment actually renders: source wording may differ from the configured application locale). Externally provisioned access goes to
+   `process.env`; fixed synthetic/invalid inputs stay in paired JSON; disposable
+   generation and local schema ownership follow [§4a](../../pom-architecture/references/design-conventions.md#4a-test-data-ownership-method-contracts-and-disposable-inputs). Mutable
    inputs land in per-case `tc<id>` clusters (id = the case's tms id from the
    manifest); record-creating bases carry the TC id inside the value where the field
    tolerates a suffix — format-constrained fields get distinct valid per-case values

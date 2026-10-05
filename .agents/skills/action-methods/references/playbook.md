@@ -274,7 +274,9 @@ individual parameters) fed from `resources/testData/`, with fixed option lists
 
 ## 11. Cap positional parameters at ~4 — a bigger form takes one typed object
 
-Positional strings past a handful are swap bugs waiting to compile. An action
+Small inputs prefer explicitly named positional parameters; no named interface is
+required for every small argument group. Positional strings past a handful are swap
+bugs waiting to compile. An action
 with more than ~4 inputs takes ONE typed object (an `interface`, fixed option
 lists as enums per design-conventions §2), destructured in the body — call
 sites read as named fields, and a field swap becomes a compile error.
@@ -288,7 +290,9 @@ async createNewAccount(password: string, day: string, month: string, year: strin
 
 ✅ Canonical shape: `async createNewAccount(details: AccountDetails)` with
 `const { firstName, lastName, city, ... } = details;` opening the step body,
-fed from the paired JSON (practice 10).
+fed from the paired JSON or test-owned disposable runtime values (practice 10).
+
+Ownership and defaults follow [design-conventions §4a](../../pom-architecture/references/design-conventions.md#4a-test-data-ownership-method-contracts-and-disposable-inputs).
 
 ## 12. Use the verb the control is built for
 
@@ -399,8 +403,7 @@ This skill does NOT cover:
       `apis/`, `dbs/` done before creating (case/suffix-tolerant, legacy names
       included); no loops/conditionals/try-catch
 - [ ] All business data arrives as parameters — nothing hardcoded in the body
-- [ ] At most ~4 positional parameters — a bigger form takes one typed object
-      (enums for fixed option lists)
+- [ ] At most ~4 explicit positional parameters; a bigger form takes one typed object (enums for fixed option lists), owned under design-conventions §4a
 - [ ] Right verb per control: `selectOption`, `check()`/`uncheck()` — never
       click-toggling a checkbox; scrolls prefer `scrollIntoViewIfNeeded()` on a
       real locator; no inline locators in action bodies
