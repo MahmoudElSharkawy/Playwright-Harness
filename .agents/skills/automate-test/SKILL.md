@@ -52,11 +52,15 @@ Source → refinement → observed execution → durable POM generation
 - Freeze the candidate and dispatch a fresh independent reviewer following
   [framework-review](../framework-review/SKILL.md), prompted to REFUTE. Resolve findings or
   record the user's explicit acceptance. A self-review cannot release verification.
-- Preserve source-to-assertion bindings. Source IDs and native assertion execution are
-  mechanical gates; the independent reviewer must verify semantic equivalence.
+- Preserve source-to-observation bindings and supply the candidate step/expectation
+  mapping. Generate ordinary validations without marker wrappers, source-key parameters
+  or tracing-only JSON. The case-assertions gate uses completed native assertions;
+  independent review establishes full scenario coverage and semantic equivalence.
 - Allow three cumulative repair rounds per source batch. Repairs reset review/greens;
   they never reset history. Require two new, independent scoped green processes after
-  the last repair. No skipped, flaky, empty or unscoped run earns a green.
+  the last repair. The explicit one-time legacy migration preserves the repair count
+  but still requires fresh review and two v2 runs; unrelated repairs consume a round.
+  No skipped, flaky, empty or unscoped run earns a green.
 - Preserve existing application code and consumer customizations. Use the user's ongoing
   branch/delivery instructions; do not infer authorization for external writes from READY.
 

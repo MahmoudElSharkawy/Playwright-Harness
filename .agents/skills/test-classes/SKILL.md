@@ -11,9 +11,11 @@ Resolve this skill to its real path before following references. Read the
 A spec file is pure orchestration: one `test.describe` per feature, tests written
 first, hooks grouped at the bottom, and every hook doing exactly one kind of wiring
 (data load, service init, seeding, context lifecycle, connection close). Hooks
-establish state, tests prove it — no validations in hooks, and teardown never drives
-the GUI. Nothing in a spec implements anything — no locators, no requests, no loops,
-no `try`/`catch`.
+establish state; test bodies prove scenarios. Cleanup postconditions may run in teardown
+under [design-conventions §4a](../pom-architecture/references/design-conventions.md#4a-test-data-ownership-method-contracts-and-disposable-inputs).
+Use the standard Playwright import and built-in isolated page by default. Specs have
+no raw locators/requests or general control flow; small teardown guards cover partial
+setup, and justified public fixtures remain valid.
 
 1. Read the shared law first: [design-conventions](../pom-architecture/references/design-conventions.md)
    — especially §1 (specs orchestrate, never implement), §4 iron laws 3–5 and 8, and

@@ -78,36 +78,24 @@ filterable channel is a tag (practice 9), never title punctuation.
 
 ## 3. Allure metadata opens the body
 
-**Rule:** The first lines inside every test body are the Allure metadata calls, in
-this order: `allure.feature(…)` (matching the `test.describe` title), `allure.tms('<id>')`
-for the tracked test-case id, and `allure.issue('<id>')` only when a real bug link
-exists (keep the commented placeholder otherwise, as the project does). Add
-`allure.epic()` / `allure.story()` only when the tracking hierarchy actually uses them
-(§5). Import as `import * as allure from 'allure-js-commons';`.
-
-**Why:** Metadata placed first is never skipped by an early failure, and the tms ids
-resolve into links via the `nameTemplate`/`urlTemplate` configured under the
-`allure-playwright` reporter in `playwright.config.ts`; the `issue` template is a
-commented-out placeholder there — uncomment and fill it the first time a real
-`allure.issue()` link is added:
+Open each test with relevant awaited metadata from `allure-js-commons`. Use literal
+known case/bug IDs, exempt from business-data externalization. Await APIs returning
+Promise/PromiseLike; truly synchronous APIs, including `/sync`, need no await.
 
 ```ts
-links: {
-  tms: {
-    nameTemplate: 'Test: #%s',
-    urlTemplate: 'https://dev.azure.com/your-org/your-project/_workitems/edit/%s'
-  },
-  // ...
-},
+await allure.feature('Customer authentication');
+await allure.tms('12345');
+// Add await allure.issue('124') only for a real associated bug.
 ```
 
-✅ `tests/LoginTests.spec.ts`:
-
-```ts
-allure.feature('Automation Exercise Login Test Cases');
-allure.tms('137183022');
-// allure.issue('#link');
-```
+Local sources use `await allure.testCaseId('local-scenario')`. Do not invent external
+IDs or leave issue placeholders. Add epic/story only for a real hierarchy.
+Resolve IDs through existing reporter `links.tms`/`links.issue` templates. Configure
+actual destinations through [harness-setup](../../harness-setup/SKILL.md), preserving
+customizations and separate destinations. Never create a URL helper solely for links.
+Remove the starter's example-only warning exemption when real linking is configured.
+Scoped capture supports literal templates; dynamic templates remain valid for normal
+runs but are reported unresolved by the harness's static reader.
 
 **One `tms` id per test**, pointing at that test's own tracked case — never copy a
 `tms` line from another test without replacing the id. ❌ (illustrative counterexample) all three
@@ -137,14 +125,14 @@ whichever side is wrong:
   `'Test Case 2:API Create user account'` in `tests/SignupTests.spec.ts`.
 
 **Legacy note:** `tests/User Management/DbUserManagementTests.spec.ts` sets `allure.feature` but no
-`allure.tms` — it is a marked example spec (`test.describe.skip`). New tests set both
-`feature` and `tms` (§6 checklist).
+`allure.tms` — it is a marked example spec (`test.describe.skip`). New tests await `feature` and either the real `tms` ID or local `testCaseId` (§6 checklist).
 
 ## 4. The body is business-method calls only
 
 **Rule:** Every statement after the metadata is an `await` on an intent-named method
 of a page class (`pages/`), `Apis<Domain>` (`apis/`), or `Dbs<Domain>` (`dbs/`) —
-plus the minimal `const` glue of practice 6. No `page.locator()`, no `page.goto()`
+plus the minimal `const` glue of practice 6 and assignment of a fresh cleanup candidate
+before creation under §4a. No `page.locator()`, no `page.goto()`
 with raw URLs, no `request.fetch()`, no `expect()` calls, no loops, no `if`, no
 `try`/`catch` (§1 "Specs orchestrate, never implement"; §4 iron laws 3 and 4).
 
@@ -208,7 +196,7 @@ value is genuinely consumed (§5); generation and cleanup follow §4a.
 ```ts
 const email = testData.emailAddress + timestamp + '@example.test';
 …
-const deleteResponse = await apisUserManagement.deleteUser(email, testData.password);
+const deleteResponse = await apisUserManagement.deleteUser(email);
 await apisUserManagement.assertDeleteUserSuccess(deleteResponse, testData.deletedAccountExpectedMessage);
 ```
 
@@ -230,27 +218,26 @@ parallel, and repeatedly (§4 iron law 8 — `playwright.config.ts` sets
 `fullyParallel: true` and up to 3 workers, with `retries: 2` on CI, and the
 automate-test VERIFY phase requires two consecutive green runs). Never depend on
 another test's side effects. A record-creating test seeds its own record at the top of
-its body from its own `tc<id>` data cluster — TC id in the base value, the module-level
-timestamp appended (2026-08-24 rulings; composition rules →
+its body from its own `tc<id>` data cluster — TC id in the base value, a
+module timestamp appended by default (§4a; composition rules →
 [test-data](../../test-data/SKILL.md)) — and cleans up what it creates. No test ever
 reads a sibling case's cluster or record.
 
-✅ Per-case composition — the case's own base plus the shared timestamp:
+✅ Per-case composition before a create attempt:
 
 ```ts
-const timestamp = new Date().toISOString().replace(/[-T:.]/g, "").slice(0, 17);
-…
 const email = testData.tc1001.email + timestamp + '@example.test';
-…
-const deleteResponse = await apisUserManagement.deleteUser(email, testData.tc1001.password);
+userToClean = email;
+const response = await apisUserManagement.createUser(testData.tc1001.username, email, testData.tc1001.password);
+await apisUserManagement.verifyUserCreatedSuccessfully(response, testData.created.status, testData.created.message);
 ```
 
-(`tests/LoginTests.spec.ts` still composes from a shared file-level base seeded in
-`beforeEach` — pre-ruling legacy; migrate to per-case clusters when next touching it.)
+The ordinary teardown calls the service's ownership-checked cleanup method using
+`userToClean`; reset it before fixture-dependent setup. Include credentials in that
+candidate only if the observed cleanup contract needs them. Keep intentionally
+invalid inputs distinct from actual credentials; runtime password generation is optional.
+Format-constrained values follow [test-data practice 7](../../test-data/references/playbook.md#7-unique-per-case-and-per-attempt).
 
-❌ Anti-pattern: `Test Case 3` assuming the account from `Test Case 2` still exists,
-two tests composing from the same base key, or asserting on a fixed email that a
-parallel worker is mutating.
 
 ## 8. No hardcoded inputs or expected values in the body
 
@@ -366,11 +353,11 @@ This skill does NOT cover:
 - [ ] One behavior per test (or one explicit E2E journey), never bundled scenarios
 - [ ] Title is a descriptive sentence; `Test Case N:` prefix where the catalog applies; no channel/layer markers (`(Ui & Api)`)
 - [ ] `allure.feature(…)` + `allure.tms('<id>')` are the first lines of the body; feature matches the `describe` title; tms id(s) are the test's own — one per test, or one per covered case in an E2E journey; never shared across tests (data rows of one parameterized case share theirs by design)
-- [ ] Body orchestrates business-method calls, owned runtime generation and cleanup registration — no locators, `expect`, loops, `if`, or `try`/`catch`
+- [ ] Body orchestrates business-method calls, owned runtime generation and retention of attempted cleanup identity — no locators, `expect`, loops, `if`, or `try`/`catch`
 - [ ] Every GUI step of the verified journey is in the test body — hooks prepare only invisible state via API/DB (GUI only when no lower-layer path exists — test-classes playbook practice 7)
 - [ ] At least one validation call, positioned to close the scenario's arc
 - [ ] Local `const`s are consumed downstream or by cleanup; owned disposable generation follows §4a and unique composition follows practice 7; no arbitrary transformations or `console.log`
 - [ ] Static inputs/expectations come from `testData` / config exception / enums; disposable generation follows §4a — zero hardcoded scenario literals
-- [ ] Test passes alone (`-g` its title), in parallel, on CI retry, and twice in a row: per-case data from its own `tc<id>` cluster (TC id in the base value + module timestamp), cleans up what it creates, never touches a sibling case's data
+- [ ] Test passes alone (`-g` its title), in parallel, on CI retry, and twice in a row: per-case data from its own `tc<id>` cluster (TC id in the base value + module timestamp by default, with extra discrimination only when needed), cleans up what it creates, never touches a sibling case's data
 - [ ] Variants of one behavior are sibling tests in one `describe` with one data file — no forked near-identical specs
 - [ ] Group membership expressed via `{ tag: [...] }`, not the title

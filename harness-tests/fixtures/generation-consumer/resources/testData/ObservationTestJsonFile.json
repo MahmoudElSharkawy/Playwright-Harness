@@ -3,8 +3,7 @@
     "id": "ui",
     "title": "The page displays the expected observation",
     "description": "The heading says Observed fixture",
-    "expected": "Observed fixture",
-    "key": "expect-227422ea6b3243cb438b12a9"
+    "expected": "Observed fixture"
   },
   "apiCatalog": {
     "id": "apiCatalog",
@@ -50,8 +49,7 @@
         }
       },
       "values": []
-    },
-    "key": "expect-7017339bdc62c82c4e4453a9"
+    }
   },
   "apiHelper": {
     "id": "apiHelper",
@@ -97,8 +95,7 @@
         }
       },
       "values": []
-    },
-    "key": "expect-3bc43cf015e68e70b12f451b"
+    }
   },
   "apiInline": {
     "id": "apiInline",
@@ -144,8 +141,7 @@
         }
       },
       "values": []
-    },
-    "key": "expect-0866b8f723ddf25130a5646b"
+    }
   },
   "sqlserverCatalog": {
     "id": "sqlserverCatalog",
@@ -202,8 +198,7 @@
           "value": 42
         }
       ]
-    },
-    "key": "expect-f562a9b0dbff5b69db220264"
+    }
   },
   "sqlserverHelper": {
     "id": "sqlserverHelper",
@@ -260,8 +255,7 @@
           "value": 42
         }
       ]
-    },
-    "key": "expect-0b007fd87f5c439054f82ed9"
+    }
   },
   "sqlserverInline": {
     "id": "sqlserverInline",
@@ -318,8 +312,7 @@
           "value": 42
         }
       ]
-    },
-    "key": "expect-33ae0f6a6c0d97a6e5a7a74c"
+    }
   },
   "postgresqlCatalog": {
     "id": "postgresqlCatalog",
@@ -377,8 +370,7 @@
           "value": 42
         }
       ]
-    },
-    "key": "expect-572101fb6365c3014265e601"
+    }
   },
   "postgresqlHelper": {
     "id": "postgresqlHelper",
@@ -436,8 +428,7 @@
           "value": 42
         }
       ]
-    },
-    "key": "expect-035ace11329bfe91e8cea4ec"
+    }
   },
   "postgresqlInline": {
     "id": "postgresqlInline",
@@ -495,7 +486,6 @@
           "value": 42
         }
       ]
-    },
-    "key": "expect-40e5ee07a106959532a64809"
+    }
   }
 }

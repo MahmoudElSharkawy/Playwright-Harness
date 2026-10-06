@@ -27,7 +27,7 @@ parallel execution, or automatic delivery.
    Search for reusable business methods before adding code. Consult the POM, locator,
    action, validation, service, test-class, test-method and test-data skills as needed.
 5. `registerCandidate(roots, sourceId, {config, tests})` binds each source scenario to
-   one explicit `{scenarioId, spec, project, titlePath}`. The complete nested describe
+   one explicit `{scenarioId, spec, project, titlePath, mapping}` (mapping below). The complete nested describe
    and test titles select a native test; project is explicit, including an empty name
    for an unnamed project. Tests must be independent. Native Playwright's per-test
    `page` fixture or explicit fresh contexts are both valid.
@@ -45,14 +45,22 @@ parallel execution, or automatic delivery.
 The review must compare the source's meaning with executable assertions, including
 the selected observation layer. It checks reuse, selector quality, expected values,
 operation scope, cleanup/retention, imported dependency closure and external environment
-references. Source keys and executed assertion counts are traceability checks;
-they do **not** prove semantic equivalence by themselves. Reviewer IDs are auditable
+references. The mapping provides review traceability; assertion counts provide case-level runtime
+evidence. Neither proves semantic equivalence or execution of every source expectation. Reviewer IDs are auditable
 attestations, not authentication or a substitute for an actual independent review.
 
 Generation follows [design-conventions §4a](../.agents/skills/pom-architecture/references/design-conventions.md#4a-test-data-ownership-method-contracts-and-disposable-inputs):
 spec-local JSON schemas, operation-sized business inputs and credential provenance.
-Reuse existing cleanup hooks or fixtures; the [optional native pattern](../.agents/skills/test-data/references/playbook.md#9-parallel-isolation-data-files-are-read-only-inputs)
-registers after creation and cancels only after successful in-test disposal.
+Use the built-in isolated `page` by default. Keep one optional attempted identity per
+owned resource, reset before fixture-dependent setup and assigned before creation.
+Keep the simple case-base plus timestamp pattern and paired-JSON synthetic passwords;
+generation beyond that needs a scenario or observed-contract reason. Preserve existing
+sound explicit context setup and application deletion/authentication contracts.
+Ordinary teardown calls a focused domain cleanup method that proves ownership or
+absence before deletion, including when a create response was lost. Preserve justified
+public fixtures; do not generate callback registries or replacement test wrappers.
+Report a missing ownership/absence contract rather than inventing one; the starter
+cleanup method deliberately requires application-specific adaptation.
 Native input sources follow the [refinement contract](../.agents/skills/execute-test/references/refinement.md#inputs).
 Independent review covers semantic ownership and protection beyond literal checks.
 
@@ -66,22 +74,47 @@ delegate a versioned operation record instead of repeating its endpoint/SQL fiel
 Review that definition together with the service, bindings and expected values.
 Imported team libraries remain immutable, derive-only inputs.
 
-Inside each generated validation method, enclose the original assertion(s) in:
+Write ordinary business validations with existing assertion facades:
 
 ```ts
-await sourceExpectation(test, sourceKey, async () => {
-  await expectToHaveText('the confirmation message', this.confirmation_msg, expected);
-});
+await expectToHaveText('the confirmation message', this.confirmation_msg, expected);
 ```
 
-Import `sourceExpectation` from the installed package's
-`scripts/lib/generation/assertion.mjs`, and pass the consumer's Playwright `test`.
-The callback must await its real assertions. Keep its source key in versioned test
-data/traceability. The helper adds a native step marker; it does not catch failures,
-decide expected values, drive a browser, or authorize mutations. Existing `Expects`
-wrappers and Allure business steps remain usable. Use `allure.testCaseId(localScenarioId)`
-for a local source, or the real `allure.tms` reference when supplied; do not invent
-an ADO ID or external link. M14 adds report integration later.
+Keep business parameters limited to application inputs and expected values. Source
+keys live in the existing candidate/review workflow, not in generated method
+parameters or tracing-only JSON. Each candidate test supplies:
+
+```json
+{
+  "scenarioId": "scenario-1",
+  "spec": "tests/ConfirmationTests.spec.ts",
+  "project": "",
+  "titlePath": ["Confirmation", "confirms the request"],
+  "mapping": [
+    {
+      "step": 1,
+      "actions": ["ConfirmationPage.submitRequest"],
+      "expectations": [
+        {"key": "<source expectation key>", "validations": ["ConfirmationPage.verifyConfirmation"]}
+      ]
+    }
+  ]
+}
+```
+
+Use the source's one-based step numbers and actual expectation keys. Every source step and its
+expectations must appear exactly once. Each expectation needs a nonempty validation
+reference; each step needs at least one action or validation reference. Action-only
+and verification-only steps, composed methods and one method covering several
+expectations are valid. These are review references, not a lexical method resolver
+or direct-call requirement. Review must detect dummy assertions and missing coverage.
+
+Await asynchronous public metadata calls: use `await allure.testCaseId('scenario-1')`
+for local identity, or `await allure.tms('12345')` for a real supplied case ID. Use
+literal IDs directly and issue links only for associated bugs. Configure reporter
+link templates as described in [M14](M14-REPORTING.md#generated-playwright-tests-and-allure).
+The old three-argument `sourceExpectation(test, key, callback)` remains a deprecated
+callback pass-through for compatibility; new code must not use it.
 
 Cleanup follows scenario intent and ownership. Required cleanup/restoration must finish;
 intentional persistence is valid. Generated tests must use unique owned resources and
@@ -117,12 +150,22 @@ The verification receipt replaces the configured reporter for these scoped check
 With `verify --allure`, [M14 reporting](M14-REPORTING.md) composes that required
 receipt with optional Allure capture. It does not change scope, assertions or readiness.
 
-Every selected test must run once with normal expected status, pass, and execute every
-mapped expectation marker with at least one native assertion. Missing/extra tests,
-duplicate markers, empty callbacks, caught descendant assertion failures, skips, expected failures, soft failures, flaky
-retries and nonzero exits never earn a green. Two fresh processes with distinct
-invocation IDs must pass the **same reviewed candidate**. Native retry/polling inside
-a web-first assertion is still ordinary waiting.
+New candidates and verification records use the harness-derived
+`gate: 'case-assertions'`. Both collection and execution receipts must use
+`version: 2`; each result carries `assertions: {passed, failed}` and `skippedSteps`.
+Every selected test must run once with normal expected status, pass, have at least
+one credited passing assertion, no failed assertions and no skipped steps.
+
+The reporter counts completed outermost native expectations. It does not descend into
+polling/retry attempts: the enclosing expectation's final outcome wins. It traverses
+ordinary helper/step containers so caught failures remain visible. Hook/fixture
+assertions earn no passing credit, but genuine failures still fail verification.
+Only existing documented nonasserting `Probe` expectations originating in utility
+code are exempt. Missing/extra tests, skips, expected failures, soft failures, flaky
+retries and nonzero exits cannot earn a green. Two fresh processes with distinct
+invocation IDs must pass the **same reviewed candidate**. These receipts do not claim
+per-source-expectation execution. Historical v1 receipts retain their original
+interpretation; live case-level candidates cannot use them.
 
 File or shared-runtime changes invalidate the candidate. The snapshot covers consumer
 files, additions/deletions, configured targets/knowledge, dependency declarations and
@@ -148,6 +191,37 @@ greens and intact review/receipts, not delivery authorization. The hash-linked a
 history detects accidental edits and gaps; it is not tamper-proof against its filesystem
 owner. Generated tests and their reviewers remain trusted automation code.
 
+## One-time migration from the legacy gate
+
+Use the existing registration command with a candidate input containing
+`migration: 'case-assertions'`, the existing `config` and native test identities,
+and the new `mapping` for each test:
+
+```text
+npx --no pom-harness generate candidate --id <source-id> --input .harness/state/migration.json
+```
+
+Eligibility requires a legacy candidate and no case-level candidate anywhere in
+that source's history. Preserve the handoff, source, config path and scenario-to-test
+identities. Release-related consumer edits and mapping additions are permitted.
+A successful migration appends a revision without charging a repair round, even
+when all three rounds are used. It permanently consumes the exception; invalid
+input consumes nothing. No old candidate, review, failure, run or receipt is removed.
+
+The new revision needs fresh independent review and two fresh scoped green v2
+processes. Old approvals and greens do not count. Review must establish migration
+scope and reconcile prior failed or interrupted execution before replay; there is
+no automated migration-diff analyzer. If the candidate also fixes unrelated defects,
+include the existing `repair` classification: the normal round is charged and
+registration fails when the budget is exhausted. Later revisions use normal repair
+accounting.
+
+Existing consumers should update the harness, review their custom lifecycle and
+reporter configuration, remove marker-only business parameters/wrappers, and register
+this explicit migration when continuing legacy generation. Setup does not silently
+rewrite custom test code. The adapter's Playwright version pin is a verifier
+compatibility requirement, not a telemetry protection feature.
+
 ## Local command interfaces
 
 Run every command from the consumer folder (or pass `--project-root <consumer>`); it
@@ -168,7 +242,8 @@ Preparation JSON contains `source` (neutral source file), `author`, `executions`
 `createRun` result) and `runRoot` with `observations.json` and evidence. Preparation
 reconstructs/fingerprints inputs and reassesses evidence; it never trusts result JSON.
 Bindings are `{key, runId, scenarioId, expectationId}`. Candidate JSON has `config`,
-`tests` as above, and `repair` only after the first candidate. Store command/review
+`tests` as above, optional `migration` for the one-time legacy transition, and
+`repair` for ordinary repairs. `gate` is derived by the harness, never supplied. Store command/review
 inputs under `.harness/state/` to avoid changing the behavior snapshot while recording
 review. Failed preconditions return exit 2; an unsuccessful verification returns exit 1.
 

@@ -21,5 +21,5 @@ export function generationCases() {
   const source = {version: 1, id: 'observations', title: 'Observations', scenarios: cases.map(c => ({id: c.id, title: c.title, steps: [{action: c.title, expected: [c.description]}]}))};
   const keys = sourceExpectations(source);
   return {source, cases: cases.map(c => ({...c, key: keys.find(e => e.scenarioId === c.id).key})),
-    testData: Object.fromEntries(cases.map(c => [c.id, {...c, key: keys.find(e => e.scenarioId === c.id).key}]))};
+    testData: Object.fromEntries(cases.map(c => [c.id, c]))};
 }

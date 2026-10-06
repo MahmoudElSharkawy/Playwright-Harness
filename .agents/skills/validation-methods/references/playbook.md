@@ -203,7 +203,8 @@ unusable across environments.
 
 Legacy-to-parameterize: the inline `expect(response.status()).toBe(200)` in
 `src/apis/ApisUserManagement.ts` is a hardcoded expected value too — iron law 5 records no
-exception for status codes. New code takes the expected status as a parameter (or a
+exception for scenario status codes. Stable lifecycle cleanup postconditions follow
+§4a and may be defined beside the domain cleanup method. New code takes the expected status as a parameter (or a
 second intent-named method for negative scenarios, per the design-conventions §5
 method-variant row — never a branch inside the method); tighten the inline `200` when
 you next touch the file.
@@ -328,13 +329,11 @@ step title tell the story. Return `Promise<void>`; a method that returns data fo
 test to use is an action (compare `getUserByEmail` — an action returning a row — with
 `verifyUserExistsInDb` in `src/dbs/DbsUserManagement.ts`). No `return this` (§5).
 
-Validations are also never invoked from `afterEach`/`afterAll` — hooks contain no
-assertions at all ([test-classes](../../test-classes/references/playbook.md) practice 10).
-A throwing `expect` aborts the rest of the hook and fails a test whose body already
-passed. ❌ (illustrative counterexample) `tests/AddressDetailsInCheckoutPage.spec.ts` calls
-`deleteAccountPage.assertSuccessDeleteMessage(…)` in `afterEach` before
-`context.close()` — when it throws, the close is skipped and the context leaks.
-Teardown cleans up; only the test body judges.
+Scenario validations belong in test bodies. Teardown may invoke domain lifecycle
+cleanup postconditions under [§4a](../../pom-architecture/references/design-conventions.md#4a-test-data-ownership-method-contracts-and-disposable-inputs);
+these checks earn no scenario assertion credit. Required cleanup failures must fail
+the run while retaining an earlier body failure. Keep independent cleanup/closure
+operations in separate hooks when a prior error could otherwise prevent later work.
 
 ## 12. Choose the validation layer before writing the method
 
@@ -375,8 +374,8 @@ moves proofs off the GUI only where the GUI was merely a window onto them.
 The 2026-09-08 "Assertion-message facade" ruling (design-conventions, Decision
 records): Playwright auto-generates an Allure sub-step per `expect()`, but its default
 title is just the matcher name — a value assertion renders as a bare `Expect "toBe"`
-with no subject and no expected value (expected values exist only in the trace; the
-step title string is the only channel reporters see). The fix is Playwright's custom
+with no business subject. Native parameters, errors and artifacts can carry expected
+values independently of that title (utility-classes §20). The fix is Playwright's custom
 message (2nd `expect` argument), which **replaces** the step title — and the grammar
 for it is implemented ONCE, in the generic wrappers of `src/utils/Expects.ts`
 (utility-classes §18 owns the facade contract; the package ships it as
@@ -417,8 +416,8 @@ expect((await createResponse.json()).message).toBe(confirmationMessage);
 Subject-phrase rules: a business noun, never the code expression; the expected value
 is interpolated by the wrapper from the same argument the matcher receives (iron
 law 5 — so it can never be a smuggled literal), and subjects/values must never carry
-secrets (iron law 7 — a secret-valued expectation bypasses the wrappers with a
-value-free native-expect message, utility-classes §18). Locator wrappers pass the
+secrets (iron law 7 — use the facade's confidential-value variants, which protect the
+authored title only; utility-classes §18/§20). Locator wrappers pass the
 `Locator` straight through — web-first auto-retry and `{ timeout }` options are
 untouched, and Playwright still appends the ` locator('…')` suffix after the message.
 Hand-rolled `expect(x, 'msg')` messages are not a substitute — one grammar source, no
@@ -461,4 +460,4 @@ This skill does NOT cover:
 - [ ] No boolean-collapsed expects or untyped `(p: any)` pre-queries — collection checks use the length / `toContain` / typed-object shapes
 - [ ] One business condition per method; related expects grouped, unrelated ones split
 - [ ] Every assertion uses an `src/utils/Expects.ts` wrapper with a business subject phrase (`Expect <subject> to <verb>[ <value>]` step title) — state checks included (2026-09-08 grammar-completion ruling); direct `expect()` only for secret-value bypasses with `// conventions-ok`; `expect.poll` carries its failure-sentence `message` option
-- [ ] No validation calls in `afterEach`/`afterAll` — hooks stay assertion-free
+- [ ] Scenario validations stay in the body; required domain cleanup postconditions may run in teardown and earn no scenario coverage

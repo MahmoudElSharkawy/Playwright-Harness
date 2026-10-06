@@ -12,73 +12,73 @@ let testData: any;
 
 test.describe('Observations', () => {
   test('The page displays the expected observation', async () => {
-    allure.feature('Observations');
-    allure.testCaseId('ui');
+    await allure.feature('Observations');
+    await allure.testCaseId('ui');
     await observationPage.navigate();
-    await observationPage.verifyObservation(testData.ui.key, testData.ui.expected);
+    await observationPage.verifyObservation(testData.ui.expected);
   });
 
   test('A catalog request returns the expected observation', async () => {
-    allure.feature('Observations');
-    allure.testCaseId('apiCatalog');
+    await allure.feature('Observations');
+    await allure.testCaseId('apiCatalog');
     await apisObservations.observe(testData.apiCatalog.definition, testData.apiCatalog.description);
-    await apisObservations.verifyObservation(testData.apiCatalog.key, testData.apiCatalog.expected);
+    await apisObservations.verifyObservation(testData.apiCatalog.expected);
   });
 
   test('A helper request returns the expected observation', async () => {
-    allure.feature('Observations');
-    allure.testCaseId('apiHelper');
+    await allure.feature('Observations');
+    await allure.testCaseId('apiHelper');
     await apisObservations.observe(testData.apiHelper.definition, testData.apiHelper.description);
-    await apisObservations.verifyObservation(testData.apiHelper.key, testData.apiHelper.expected);
+    await apisObservations.verifyObservation(testData.apiHelper.expected);
   });
 
   test('An inline request returns the expected observation', async () => {
-    allure.feature('Observations');
-    allure.testCaseId('apiInline');
+    await allure.feature('Observations');
+    await allure.testCaseId('apiInline');
     await apisObservations.observe(testData.apiInline.definition, testData.apiInline.description);
-    await apisObservations.verifyObservation(testData.apiInline.key, testData.apiInline.expected);
+    await apisObservations.verifyObservation(testData.apiInline.expected);
   });
 
   test('A catalog SQL Server query returns the bound observation', async () => {
-    allure.feature('Observations');
-    allure.testCaseId('sqlserverCatalog');
+    await allure.feature('Observations');
+    await allure.testCaseId('sqlserverCatalog');
     await dbsObservations.observe(testData.sqlserverCatalog.definition, testData.sqlserverCatalog.description);
-    await dbsObservations.verifyObservation(testData.sqlserverCatalog.key, testData.sqlserverCatalog.expected);
+    await dbsObservations.verifyObservation(testData.sqlserverCatalog.expected);
   });
 
   test('A helper SQL Server query returns the bound observation', async () => {
-    allure.feature('Observations');
-    allure.testCaseId('sqlserverHelper');
+    await allure.feature('Observations');
+    await allure.testCaseId('sqlserverHelper');
     await dbsObservations.observe(testData.sqlserverHelper.definition, testData.sqlserverHelper.description);
-    await dbsObservations.verifyObservation(testData.sqlserverHelper.key, testData.sqlserverHelper.expected);
+    await dbsObservations.verifyObservation(testData.sqlserverHelper.expected);
   });
 
   test('An inline SQL Server query returns the bound observation', async () => {
-    allure.feature('Observations');
-    allure.testCaseId('sqlserverInline');
+    await allure.feature('Observations');
+    await allure.testCaseId('sqlserverInline');
     await dbsObservations.observe(testData.sqlserverInline.definition, testData.sqlserverInline.description);
-    await dbsObservations.verifyObservation(testData.sqlserverInline.key, testData.sqlserverInline.expected);
+    await dbsObservations.verifyObservation(testData.sqlserverInline.expected);
   });
 
   test('A catalog PostgreSQL query returns the bound observation', async () => {
-    allure.feature('Observations');
-    allure.testCaseId('postgresqlCatalog');
+    await allure.feature('Observations');
+    await allure.testCaseId('postgresqlCatalog');
     await dbsObservations.observe(testData.postgresqlCatalog.definition, testData.postgresqlCatalog.description);
-    await dbsObservations.verifyObservation(testData.postgresqlCatalog.key, testData.postgresqlCatalog.expected);
+    await dbsObservations.verifyObservation(testData.postgresqlCatalog.expected);
   });
 
   test('A helper PostgreSQL query returns the bound observation', async () => {
-    allure.feature('Observations');
-    allure.testCaseId('postgresqlHelper');
+    await allure.feature('Observations');
+    await allure.testCaseId('postgresqlHelper');
     await dbsObservations.observe(testData.postgresqlHelper.definition, testData.postgresqlHelper.description);
-    await dbsObservations.verifyObservation(testData.postgresqlHelper.key, testData.postgresqlHelper.expected);
+    await dbsObservations.verifyObservation(testData.postgresqlHelper.expected);
   });
 
   test('An inline PostgreSQL query returns the bound observation', async () => {
-    allure.feature('Observations');
-    allure.testCaseId('postgresqlInline');
+    await allure.feature('Observations');
+    await allure.testCaseId('postgresqlInline');
     await dbsObservations.observe(testData.postgresqlInline.definition, testData.postgresqlInline.description);
-    await dbsObservations.verifyObservation(testData.postgresqlInline.key, testData.postgresqlInline.expected);
+    await dbsObservations.verifyObservation(testData.postgresqlInline.expected);
   });
 
   test.beforeAll(async () => {

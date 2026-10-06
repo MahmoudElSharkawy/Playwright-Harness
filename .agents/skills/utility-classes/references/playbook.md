@@ -123,13 +123,13 @@ Practice 15 extends this contract to process level in the lifecycle scripts.
 
 ## 6. Redact secrets before anything leaves the facade
 
-**Rule:** mask credential-shaped headers, body keys, and query params with `***` by
-default, recursively (`redactDeep`, depth-capped), before attaching, console-logging,
-or titling. `redact: false` is an explicit opt-out. Connection passwords never appear
-anywhere (`DBConnectionConfig`: "The password never appears in any log or attachment.").
+**Rule:** reuse the facade's selected credential-header and structured-key redaction
+before attaching or console-logging. It is depth-capped and does not sanitize arbitrary
+strings, URL/query values, errors or native artifacts. `redact: false` is an explicit
+opt-out. The complete protection boundary is practice 20.
 
-**Why:** iron law 7 — no secrets in step titles, logs, or attachments; utils is the
-single enforcement point, so upstream layers can trust what they receive.
+**Why:** iron law 7 requires careful authored reporting; facade redaction covers only
+its documented fields and never licenses credentials in titles.
 
 ✅ The deny-lists, verbatim from `src/utils/ApiActions.ts`:
 
@@ -194,9 +194,10 @@ don't invent a third convention. True module constants in utils are `UPPER_SNAKE
 ## 9. Complexity is allowed here — and only here
 
 **Rule:** loops, conditionals, `try`/`catch`, recursion, and type gymnastics are
-legitimate inside `utils/` — and forbidden in specs, pages, apis, and dbs (iron laws
-3–4). When a business class needs a branch or a loop, the answer is a new/extended
-utils capability or a second intent-named business method.
+legitimate inside `utils/`. Ordinary business flows stay straight-line. Small domain
+lifecycle guards and cleanup postconditions follow design-conventions §4a; do not
+create a generic utility just to relocate those few decisions. Reviewed public
+fixtures may own technical lifecycle handling through existing exceptions.
 
 **Why:** concentrating complexity in one reviewed, JSDoc'd layer keeps every other file
 readable as plain business prose. ✅ `DBActions.redactDeep()` (recursion, depth cap),
@@ -369,8 +370,8 @@ reporter ignored the dead key and defaulted to `allure-results/`.
 
 The one sanctioned `expect` home in utils (2026-09-08 ruling — the practice-1 ban
 narrows to *business* assertions). Playwright renders a value assertion's Allure step
-as a bare `Expect "toBe"` — expected values reach only the trace, never reporters; the
-custom-message 2nd argument is the sole channel, and it replaces the title verbatim
+as a bare `Expect "toBe"`. A custom-message 2nd argument supplies a business-readable
+title; native parameters/errors/artifacts may still carry values. It replaces the title verbatim
 (discarding the `not`/`soft` markers). `Expects.ts` (shipped as
 `examples/src/utils/Expects.ts`) implements the canonical grammar ONCE as generic
 wrappers:
@@ -439,6 +440,27 @@ distinct shape worth pattern-matching:
   generating a fresh valid value each run instead of drawing from a reused pool
   (test-data practice 7).
 
+
+## 20. Report protection boundaries
+
+Existing facades mask selected credential headers and structured body/parameter keys.
+They do not sanitize every payload: arbitrary strings, nested values beyond the depth
+limit, URLs/query strings and copied errors may remain visible. Secret assertion
+variants omit a value from the custom title only; the native matcher still receives it.
+
+Native Playwright action titles/parameters, assertion expected values and call logs,
+`failOnStatusCode` errors, `error-context.md`, traces, screenshots, videos and Allure
+results can contain credentials. Scoped `verify --allure` also captures native detail.
+Treat these artifacts as potentially credential-bearing; restrict access/retention,
+keep them out of public delivery, and prefer disposable generated credentials. Never
+put credentials in URLs. Artifact masking in a viewer does not remove underlying data.
+
+Consumer code must not patch/listen to private Playwright instrumentation, rewrite
+reporter objects, keep credential-value registries, or require an exact version solely
+for telemetry. Raise missing framework-wide protection as a maintained harness change
+using supported integration points. The harness verification adapter's validated
+version is a separate tool prerequisite, not a generated test wrapper requirement.
+
 ## Boundaries
 
 This skill does NOT cover: `Apis<Domain>` / `Dbs<Domain>` business wrappers and query
@@ -458,7 +480,7 @@ sourcing of env config, secrets, and JSON test data →
 - [ ] Every operation routed through a named `test.step` via `dispatch` with the in-test guard
 - [ ] Attachments via `test.info().attach()` inside the step body — never `step.attach()`; established attachment names preserved
 - [ ] Reporting try/catch only `console.warn`s; original failure rethrown after reporting (capture → report → rethrow)
-- [ ] Secrets redacted by default (headers, body keys, params, connection password); `redact: false` is an explicit opt-out
+- [ ] Selected headers/structured keys redacted by default; practice 20's native artifact, URL and error limitations accurately documented; no private telemetry interception
 - [ ] Works (minus attachments) outside a running test — `test.info()` probed in try/catch, never assumed
 - [ ] Options resolve constructor → env var → project metadata, every knob defaulted; payloads clipped at `maxBodyLength`
 - [ ] Stateful resources: lazy single-flight open, idempotent `close()`, lifecycle steps reported

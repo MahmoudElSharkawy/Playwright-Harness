@@ -128,6 +128,22 @@ Write `.harness/integrations.json` only when the user wants Azure DevOps:
 Here `credentialRef` is a bare variable name. Optional fields: `repository` and
 `automationField` (`Custom.<Field>`). Local sources never need Azure DevOps.
 
+When report linking is requested, populate existing Allure `links.tms` and
+`links.issue` templates from configured coordinates or explicit destinations. Test
+and bug destinations may differ. Formatting a work-item URL requires neither a PAT
+nor a network call; destination validation is separate from authentication readiness.
+Use the existing destination formatter, including encoded project names, modern and
+legacy ADO hosts and on-premises collection paths. Preserve unrelated reporter options
+and intentional custom templates. Remove the starter's example-only adjacent warning
+exemption when configuring real links; do not activate placeholder URLs.
+
+Await asynchronous public metadata APIs and pass known IDs directly. The scoped
+verifier reads literal string templates with the existing tokenizer. Dynamic templates
+remain valid consumer configuration, but scoped capture reports them unresolved and
+uses raw IDs without changing the test verdict. Do not rewrite dynamic consumer
+configuration just to satisfy static extraction; explicit reporter options take
+precedence over internal environment transport.
+
 ### 2.4 Secrets
 
 If the project has `.env.example` and no `.env`, copy it to `.env`; it holds only empty

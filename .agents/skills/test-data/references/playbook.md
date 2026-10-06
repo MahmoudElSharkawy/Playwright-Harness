@@ -169,7 +169,7 @@ Classify credentials by provenance, never merely by field/property names:
 |---|---|
 | Existing/provisioned account, admin, application, DB or integration access | Ignored environment files or CI secrets, exposed through config/`process.env` |
 | Fixed synthetic password, including an intentionally invalid password | The owning paired JSON |
-| Disposable account created/owned by the current test | Generate once per account per attempt; retain in a local variable/test-scoped fixture |
+| Disposable account created/owned by the current test | Fixed synthetic password in the paired JSON by default; if a fresh credential is needed, generate once and retain it for the attempt |
 
 Generation, reuse, cleanup and report protection follow [§4a](../../pom-architecture/references/design-conventions.md#4a-test-data-ownership-method-contracts-and-disposable-inputs).
 Harness source examples use placeholders; publication scanning alone cannot establish
@@ -201,7 +201,8 @@ against the facade contract in `src/utils/DBActions.ts` — keep it when adding 
 The file's comment is explicit: credentials come only from environment variables (the
 gitignored `.env`, documented by `.env.example`, loaded by dotenv in
 `playwright.config.ts`) — never commit a literal credential. Secrets must also
-never surface in step titles or attachments (iron law 7; `utils/` redacts them).
+stay out of authored titles and unnecessary attachments. Existing redaction is
+limited; see [utility-classes §20](../../utility-classes/references/playbook.md#20-report-protection-boundaries).
 
 ✅ The shipped starter enters destinations once: `src/config/targets.ts` reads the
 coordinates from `.harness/targets.json` (written when the harness is configured and
@@ -219,29 +220,24 @@ so environment switching happens via env vars/`.env`, never by editing test JSON
 `*TestJsonFile.json` — the same string that is fine as an invented signup password
 becomes a secret the moment it unlocks a pre-existing database.
 
-## 7. Unique per case AND per run: TC-id in the JSON base, timestamp suffix in code
+## 7. Unique per case AND per attempt
 
-**Rule:** the JSON stores a stable, human-readable base value that carries the owning
-case's TC id (per-case uniqueness, visible in data review, from the case's `tc<id>`
-cluster — practice 4); the spec makes it unique per run with a module-level timestamp
-constant (per-run uniqueness). Never store a "unique" value in the JSON itself.
-
-**Why:** iron law 8 — tests must survive re-runs, parallel workers, AND each other.
-The TC id guarantees no two cases ever address the same record; the timestamp
-guarantees run N+1 never collides with run N's leftovers. Both dimensions are
-mandatory for record-creating data — the automate-test VERIFY phase proves them by
-requiring two consecutive green runs (2026-08-24 rulings).
-
-✅ Canonical composition (per-case base from the cluster, one module timestamp):
+The paired JSON stores a stable base carrying the owning TC ID (or local case slug).
+Compose it with a module timestamp by default, as in the reference project. Keep
+distinct case bases. Add another discriminator only for a concrete collision or
+multi-resource need; do not require UUIDs for ordinary data.
 
 ```ts
-const timestamp = new Date().toISOString().replace(/[-T:.]/g, "").slice(0, 17);
-// ...
+const timestamp = new Date().toISOString().replace(/[-T:.]/g, '').slice(0, 17);
+// In the owning test:
 const email = testData.tc1001.email + timestamp + '@example.test';
 ```
 
-backed by `"tc1001": { "email": "qa.tc1001" }` — the TC id keys the cluster AND
-lives inside the base value, so the created record itself names its owning case.
+Keep generated values in local variables or reset per-attempt spec state under §4a.
+Retain the attempted identity before creation. Read fixed synthetic passwords from
+the paired JSON. Generate a credential only when the scenario or observed ownership
+contract needs it, and reuse it for creation, authentication and any cleanup that
+actually requires it. Never write generated values back to JSON.
 
 **Format-constrained fields never take a postfix.** The compose-a-suffix pattern
 applies only to fields the application treats as free text (names, emails, invented
@@ -259,8 +255,7 @@ be made INVALID by a TC-id or timestamp suffix, not unique. For those fields:
 A rerun collision on a format-constrained value is ladder-step-2 territory — never a
 reason to bend the value's format or weaken the test.
 
-One timestamp, one case, one record (2026-08-24 ruling, extending the 2026-08-19
-timestamp ruling — the module-level `const` stays canon, computed once):
+Separate case bases remain required alongside §4a's ownership and isolation rules:
 
 - Every record-creating case composes from its OWN `tc<id>` base — never from a
   sibling's cluster, never from a shared file-level base.
@@ -300,30 +295,11 @@ branches on which test is running.
 **Why:** iron law 8 ("seed via API/DB, clean up what you create") — leaked
 records break independence and poison later runs.
 
-✅ Seeding, from `tests/LoginTests.spec.ts` (**legacy note:** the call itself is the
-canonical business-method shape, but it seeds one shared record for every test from a
-shared base — under the per-case ruling this seeding moves to the top of each test
-body, composed from that case's own cluster; migrate when next touching the file):
-
-```ts
-test.beforeEach(async ({ request, browser }) => {
-  apisUserManagement = new ApisUserManagement(request);
-  await apisUserManagement.createUser(testData.username, testData.emailAddress + timestamp + '@example.test', testData.password)
-  // ...
-});
-```
-
-✅ Cleanup folded into the flow when deletion IS the scenario — Test Case 2 in the same
-file deletes the seeded user via `apisUserManagement.deleteUser(...)` and validates the
-`testData.deletedAccountExpectedMessage`. `tests/User Management/DbUserManagementTests.spec.ts` shows
-the DB cleanup half only: `verifyUserExistsInDb` → `getUserByEmail` →
-`deleteUserByEmail` → `verifyUserNotInDb` in one test — note the example spec assumes a
-pre-existing user rather than seeding one (it is `.skip`-gated example scaffolding); a
-canonical spec would first seed via the API layer.
-
-Uniqueness (practice 7) is the safety net, not a license to leak: when a mid-test
-failure leaves a record behind, the next run composes different values and still
-passes — the leftover is reported as debt, never load-bearing.
+Use the shipped Login and DB-user specs as the current model: retain a fresh
+attempted identity before creation, validate the scenario in the body, and invoke
+focused domain cleanup in `afterEach`. An in-test delete may be part of the scenario;
+teardown still confirms absence. Unique identities do not excuse residue after failures.
+Intentionally persistent outcomes and restoration follow §4a.
 
 **The reusability ladder (2026-08-24 ruling).** The automate-test VERIFY phase passes
 a spec only when it goes green **twice in a row** — a pass-then-fail with
@@ -339,9 +315,9 @@ Fix it in this order, never by weakening the test:
    before authoring new endpoints — derive-only, per the contract in
    `resources/apisCollections/README.md` ([service-classes](../../service-classes/SKILL.md)).
 3. ONLY when no lower-layer path exists and the value cannot be made unique (e.g. the
-   app allows one entity per account): an assertion-free GUI cleanup/reset step is the
-   sanctioned last resort — record it in the spec and flag it in the PR so the team
-   can provide a backend path later.
+   app allows one entity per account): GUI lifecycle cleanup/reset is the documented
+   last resort. Run required cleanup in teardown before page disposal, check its
+   postcondition, and flag the missing backend path and remaining limitations.
 
 ❌ Creating a user in `beforeEach` and never deleting it — every run grows the
 database and eventually collides with practice 7's uniqueness.
@@ -356,8 +332,8 @@ run (created emails, passwords, IDs and responses) stay test-local under §4a.
 **Why:** `playwright.config.ts` sets `fullyParallel: true` with `workers: process.env.CI
 ? 1 : 3` — spec files execute concurrently, so any shared mutable data is a race.
 
-✅ `const deleteResponse = await apisUserManagement.deleteUser(email, testData.password);`
-(`tests/LoginTests.spec.ts`) — run-produced state stays in a local constant.
+✅ `const deleteResponse = await apisUserManagement.deleteUser(email);`
+(`tests/LoginTests.spec.ts`) — retain run-produced state locally or in reset per-attempt spec state.
 
 ❌ `fs.writeFileSync('./resources/testData/LoginTestJsonFile.json', ...)` to "remember"
 a created id — the file is shared by every worker and by version control.
@@ -367,28 +343,11 @@ a created id — the file is shared by every worker and by version control.
 input becomes invisible in the JSON. A static value is a real JSON key (practice 11); a
 run-produced value is a local `const`.
 
-Optional native fixture pattern for **one** owned record when existing cleanup
-plumbing cannot retain its test-local values. This is a recipe, not a required
-shared helper or generated file; technical fixture plumbing owns the `try/finally`:
-
-```ts
-import {test as base} from '@playwright/test';
-
-const test = base.extend<{cleanup: (action: () => Promise<unknown>) => () => void}>({
-  cleanup: async ({}, use) => {
-    let dispose: (() => Promise<unknown>) | undefined;
-    try {
-      await use(action => {dispose = action; return () => {dispose = undefined;};});
-    } finally {
-      await dispose?.();
-    }
-  },
-});
-// In the test body, after confirmed creation:
-const cancelCleanup = cleanup(() => apisCustomers.deleteCustomer(email, password));
-await apisCustomers.deleteCustomer(email, password);
-cancelCleanup();
-```
+Use one optional cleanup candidate per independently owned resource and an ordinary
+hook calling the existing domain service; see [test-classes §8](../../test-classes/references/playbook.md#8-aftereach--clean-application-data-before-disposing-resources).
+Retain the fresh attempted identity before creation; the service reconciles ownership,
+including uncertain create outcomes, and verifies absence. Do not add callback
+registration/cancellation plumbing. A justified public lifecycle fixture remains valid.
 
 ## 10. Classify static, environment and runtime values
 
@@ -399,7 +358,9 @@ cancelCleanup();
 | Business input / expected value (environment-agnostic) | paired `*TestJsonFile.json` | `"invalidEmail"`, `errorMessages.*` |
 | Environment data (varies per env, not secret) | `playwright.config.ts` / `src/config/*.ts` | `baseURL`, `databases.applicationDb.server` |
 | Externally provisioned access | `process.env`/CI secrets | `DB_USER`, `DB_PASSWORD` |
-| Disposable generated input | Owning test-local variable/test-scoped fixture | Generated account password, email, returned ID |
+| Disposable generated input | Owning per-attempt variable/test-scoped fixture | Generated account password, email, returned ID |
+| Reporting metadata ID | Literal Allure call in the spec | Known case ID or real associated bug ID |
+| Stable cleanup contract | Owning domain cleanup method | Observed ownership and absence criteria |
 
 **Why:** a value in the wrong home either leaks (secret in JSON), breaks environment
 portability (URL in JSON), or hides from data review (expected message in config).
@@ -468,20 +429,20 @@ This skill does NOT cover:
   folder never `test-data/`
 - [ ] App-universal expected values duplicated per spec — no shared `CommonTestData.json`
 - [ ] JSON parsed once in `beforeAll` via `fs.readFileSync`; preserve/infer useful typing without adding named schema interfaces; no aggregate schemas/cross-spec bases
-- [ ] No string-literal inputs, expected values, or assertion messages in specs or business classes
+- [ ] No string-literal inputs, expected values, or assertion messages in specs or business classes Literal metadata IDs and stable domain cleanup contract checks follow the exceptions in §4a; value-free lifecycle titles are allowed.
 - [ ] Related values clustered into nested objects (e.g. `errorMessages`, `paymentCard`);
   each tracked case's mutable inputs in their own `tc<id>` cluster (id = the test's
   `allure.tms`); no test reads a sibling case's cluster
 - [ ] Fixed option lists modeled as enums, not free strings
 - [ ] No URLs, hosts, or environment data in test JSON; pre-existing credentials
   (DB users, provisioned accounts, API keys) read only from `process.env`;
-  fixed synthetic/invalid passwords live in paired JSON; disposable generated passwords
-  need no per-case env keys and are reused once per owned account per attempt
+  fixed synthetic/invalid passwords live in paired JSON by default; generate only
+  when needed and reuse that credential throughout the owned account's attempt
 - [ ] Uploaded/attached files live in `resources/testData/fixtures/<Feature>/`,
   descriptively named, their paths stored as keys in the paired JSON
 - [ ] Payment card data synthetic and clustered under `paymentCard`; no real PAN anywhere
 - [ ] Record-creating values compose per-case base (TC id inside the value, from the
-  case's `tc<id>` cluster) + the one module-level timestamp — unique per case AND per
+  case's `tc<id>` cluster) + a module timestamp by default — unique per case AND per
   run (format-constrained fields instead get distinct valid per-case values, no
   suffix — practice 7); no two tests share a mutable record or key
 - [ ] Everything seeded (API/DB — case-agnostic in `beforeEach`, case-specific at the
@@ -494,5 +455,5 @@ This skill does NOT cover:
   `resources/apisCollections/` into test data (they are point-in-time examples, not
   fixtures)
 - [ ] Data files never written at runtime; `testData` never assigned after parsing (not
-  even in `beforeAll`); run-produced values held in local `const`s/test-scoped fixtures
+  even in `beforeAll`); run-produced values held in local `const`s, reset per-attempt spec state or justified test-scoped fixtures
 - [ ] Generation, failure cleanup, invalid-input relationships and redaction follow design-conventions §4a

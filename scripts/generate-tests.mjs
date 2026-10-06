@@ -46,4 +46,7 @@ try {
     }
   }
   console.log(JSON.stringify(result)); if (result.status !== 'PASS' && command === 'verify') process.exitCode = 1;
-} catch {console.error(JSON.stringify({status: 'BLOCKED', reason: 'Generation input, review, scope, integrity or repair-budget gate failed; no source content emitted.'})); process.exitCode = 2;}
+} catch (error) {
+  const code = ['MAPPING_STEPS', 'MAPPING_KEYS', 'MAPPING_REFERENCES'].includes(error.code) ? error.code : undefined;
+  console.error(JSON.stringify({status: 'BLOCKED', ...(code ? {code} : {}), reason: 'Generation input, review, scope, integrity or repair-budget gate failed; no source content emitted.'})); process.exitCode = 2;
+}

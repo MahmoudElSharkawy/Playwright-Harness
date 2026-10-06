@@ -22,13 +22,13 @@ observes and judges — it never acts, never loops, never swallows failures.
 
 - Where expected values are stored and loaded (JSON files, env config, enums) →
   [test-data](../test-data/SKILL.md). This skill only requires they arrive as parameters.
-- Action method internals (no assertions inside actions, step titles for actions) →
+- Action method internals (scenario actions separate from validations; cleanup exception under §4a) →
   [action-methods](../action-methods/SKILL.md).
 - Which locator a page validation asserts against → [element-locators](../element-locators/SKILL.md);
   where the locator field lives → [page-classes](../page-classes/SKILL.md).
 - Service class anatomy (query/endpoint constants, facades, `close()`) →
   [service-classes](../service-classes/SKILL.md).
 - "Every test needs ≥1 validation" and test flow/scope → [test-methods](../test-methods/SKILL.md).
-- Hook wiring and the no-assertions-in-hooks rule (hooks — before and after — contain
-  no assertions at all) → [test-classes](../test-classes/SKILL.md).
+- Hook wiring and lifecycle cleanup postconditions (which earn no scenario assertion
+  credit) → [test-classes](../test-classes/SKILL.md), following design-conventions §4a.
 - Step/attachment plumbing and never-throw reporting → [utility-classes](../utility-classes/SKILL.md).

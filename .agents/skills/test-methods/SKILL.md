@@ -10,7 +10,7 @@ Resolve this skill to its real path before following references. Read the
 
 An individual `test(...)` block is pure orchestration: a descriptive title, Allure
 metadata on the first lines, a short sequence of business-method calls on page/service
-objects, and at least one validation. Nothing else — no locators, no logic, no raw
+objects, and at least one validation. Small assignments retaining a fresh cleanup candidate before creation are allowed under design-conventions §4a. Nothing else — no locators, no logic, no raw
 API/DB calls, no hardcoded data.
 
 1. Read the shared law first: [design-conventions](../pom-architecture/references/design-conventions.md)

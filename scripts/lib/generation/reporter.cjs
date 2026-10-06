@@ -1,9 +1,29 @@
 // Verification receipt only: no HTML, Allure or verdict recomputation.
 const {writeFileSync} = require('node:fs');
 const {relative} = require('node:path');
-const PREFIX = 'harness:expectation:';
+// Public reporter steps prove case-level assertion execution, not source coverage.
+function assertionEvidence(steps) {
+  const assertions = {passed: 0, failed: 0};
+  let skippedSteps = 0;
+  const skips = nodes => {for (const step of nodes) {
+    skippedSteps += (step.annotations ?? []).filter(annotation => annotation.type === 'skip').length;
+    skips(step.steps ?? []);
+  }};
+  const visit = (nodes, lifecycle = false) => {for (const step of nodes) {
+    const inLifecycle = lifecycle || ['hook', 'fixture'].includes(step.category);
+    if (step.category !== 'expect') {visit(step.steps ?? [], inLifecycle); continue;}
+    // An outer expect owns polling/toPass attempts: only its final outcome counts.
+    // Ordinary helper containers do not hide caught assertion failures.
+    const probe = /^Probe(?:\s|$)/.test(step.title) && /(?:^|\/)utils\//.test((step.location?.file ?? '').replaceAll('\\', '/'));
+    if (step.duration < 0 || !Number.isFinite(step.duration) || probe) continue;
+    if (step.error) assertions.failed++;
+    else if (!inLifecycle) assertions.passed++;
+  }};
+  skips(steps); visit(steps);
+  return {assertions, skippedSteps};
+}
 class GenerationReporter {
-  constructor() {this.report = {version: 1, invocation: process.env.HARNESS_GENERATION_INVOCATION, tests: [], errors: 0}; this.results = new WeakMap();}
+  constructor() {this.report = {version: 2, invocation: process.env.HARNESS_GENERATION_INVOCATION, tests: [], errors: 0};}
   onBegin(config, suite) {
     this.report.workers = config.workers;
     this.report.forbidOnly = config.forbidOnly;
@@ -16,20 +36,11 @@ class GenerationReporter {
         titlePath, expectedStatus: test.expectedStatus, retries: test.retries, repeatEachIndex: test.repeatEachIndex, results: []};
     });
   }
-  onStepEnd(test, result, step) {
-    if (!step.title.startsWith(PREFIX)) return;
-    // A native expect.poll/web-first expectation owns its internal observations;
-    // its terminal outcome decides that assertion. User helper/step boundaries do
-    // not: recurse through them so catching a failed assertion cannot erase it.
-    const count = node => node.category === 'expect' ? 1 : node.steps.reduce((total, child) => total + count(child), 0);
-    const assertionFailed = node => node.category === 'expect' ? !!node.error : node.steps.some(assertionFailed);
-    const rows = this.results.get(result) ?? []; rows.push({key: step.title.slice(PREFIX.length), assertions: count(step), failed: !!step.error || assertionFailed(step)}); this.results.set(result, rows);
-  }
   onTestEnd(test, result) {
     const record = this.report.tests.find(item => item.id === test.id);
     if (!record) {this.report.errors++; return;}
     record.expectedStatus = test.expectedStatus;
-    record.results.push({status: result.status, retry: result.retry, errors: result.errors.length, expectations: this.results.get(result) ?? []});
+    record.results.push({status: result.status, retry: result.retry, errors: result.errors.length, ...assertionEvidence(result.steps)});
   }
   onError() {this.report.errors++;}
   onEnd(result) {

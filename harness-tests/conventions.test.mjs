@@ -32,6 +32,12 @@ const cases=[
  ['no-test-only',spec,'test.only("case", () => {});','test("case", () => {});'],
  ['no-wait-timeout',page,'page.waitForTimeout(500);','page.waitForLoadState();'],
  ['no-try-outside-utils',page,'try { doThing(); } catch {}','doThing();'],
+ ['playwright-private-api','src/utils/Telemetry.ts','testInfo._addStep({});',"import type { Reporter } from '@playwright/test/reporter';"],
+ ['test-import-source',spec,"import { test } from '../src/utils/Fixture';","import { test } from '@playwright/test';"],
+ ['source-expectation-plumbing',page,'async verifyPage(sourceExpectationKey: string) {}','async verifyPage(expected: string) {}'],
+ ['allure-metadata-await',spec,"allure.tms('101');","await allure.tms('101');"],
+ ['allure-link-id',spec,"await allure.tms(adoUrl('101'), 'Case 101');","await allure.tms('101');"],
+ ['allure-link-templates',null,'',''],
  ['no-expect-in-spec',spec,'import { test, expect } from "@playwright/test";','import { test } from "@playwright/test";'],
  ['no-locator-in-spec',spec,'page.getByRole("button");','await examplePage.submit();'],
  ['no-raw-request-in-spec',spec,'request.patch("/record");','await api.updateRecord();'],
@@ -61,13 +67,17 @@ const cases=[
 
 test('fixtures cover every registered rule exactly once',()=>{
  const r=spawnSync(process.execPath,[checker,'--list-rules'],{encoding:'utf8'});assert.equal(r.status,0);
- assert.deepEqual(cases.map(c=>c[0]).sort(),Object.values(JSON.parse(r.stdout)).flat().sort());assert.equal(cases.length,28);
+ assert.deepEqual(cases.map(c=>c[0]).sort(),Object.values(JSON.parse(r.stdout)).flat().sort());assert.equal(cases.length,34);
 });
 for(const [rule,file,bad,good] of cases) for(const violating of [true,false]) test(`${rule}: ${violating?'detect':'accept'}`,t=>{
  const f=fixture(t);
  if(file) f.put(rule==='spec-naming' && !violating ? spec:file,violating?bad:good);
  if(rule!=='spec-data-pairing' || !violating) f.put('resources/testData/ExampleTestJsonFile.json','{}');
  if(rule==='no-kebab-test-data') f.put(violating?'resources/test-data/example.json':'resources/testData/example.json','{}');
+ if(rule==='allure-link-templates') {
+   f.put(spec,"await allure.tms('101');");
+   f.put('playwright.config.ts',`export default {reporter:[['allure-playwright', {${violating ? '' : "links:{tms:{urlTemplate:'https://dev.azure.com/example-org/Project/_workitems/edit/%s'}}"}}]]};`);
+ }
  if(rule.startsWith('traceability-')) {
    f.put(page,'export class ExamplePage { submit() {} }');
    const layer=violating && rule==='traceability-format-drift'?'pages':'UI';
@@ -137,6 +147,51 @@ test('changed scope includes touched story verification folders and skips untouc
 });
 test('Git failure never becomes successful empty scope',t=>{
  const f=fixture(t);assert.equal(f.run('--changed').status,2);assert.equal(f.run('--changed','--base-ref','main').status,2);
+});
+
+test('private Playwright checks cover root lifecycle files and imports but accept public exports and version reads', t => {
+ const f=fixture(t), privateRule=result=>findings(result).some(hit=>hit.rule==='playwright-private-api');
+ for(const source of [
+   "import {thing} from 'playwright/lib/internal';",
+   "await import('playwright-core/lib/server');",
+   "import {createRequire as factory} from 'node:module'; const load=factory(import.meta.url); load('playwright/lib/internal');",
+   'testInfo._addStep({}); // conventions-ok', 'runner._instrumentation.addListener(listener);',
+ ]) {
+   f.put('playwright.config.ts',source);assert(privateRule(f.run()));assert.equal(f.run().status,1);
+   assert.equal(f.run('--files','playwright.config.ts').status,1);assert.equal(f.run('--write-baseline').status,2);
+ }
+ f.put('playwright.config.ts',"import type {Reporter} from '@playwright/test/reporter';\nconst version=require('@playwright/test/package.json').version;\nimport {test as base} from '@playwright/test';\n// testInfo._addStep({});\nconst documentation='playwright/lib/internal';");
+ assert.equal(privateRule(f.run()),false);
+ f.put('global-setup.ts','runner._instrumentation.addListener(listener);');assert(privateRule(f.run()));
+});
+
+test('legitimate public fixture imports and exports can carry a reviewed warning exemption', t => {
+ const f=fixture(t); f.put('resources/testData/ExampleTestJsonFile.json','{}');
+ f.put(spec,"import {test} from './fixtures'; // conventions-ok: shared database transaction lifecycle\n");
+ f.put('src/utils/Fixture.ts',"export const test = base.extend({}); // conventions-ok: shared database transaction lifecycle\n");
+ assert.equal(findings(f.run()).some(hit=>hit.rule==='test-import-source'),false);
+ f.put('src/utils/Fixture.ts','export const test = base.extend({});');
+ assert(findings(f.run()).some(hit=>hit.rule==='test-import-source'));
+ f.put('src/utils/Fixture.ts',"export const test = base.extend({}); const text='// conventions-ok';");
+ assert(findings(f.run()).some(hit=>hit.rule==='test-import-source'));
+});
+
+test('metadata rules ignore comments, respect aliases and allow synchronous public metadata calls', t => {
+ const f=fixture(t);f.put(spec,"import * as a from 'allure-js-commons';\nimport {issue as bug} from 'allure-js-commons';\na.tms('101');\nawait bug('202');\n// allure.tms(url);\nconst example='sourceExpectationKey';");
+ const hits=findings(f.run());assert.equal(hits.filter(hit=>hit.rule==='allure-metadata-await').length,1);
+ assert.equal(hits.some(hit=>['allure-link-id','source-expectation-plumbing'].includes(hit.rule)),false);
+ f.put(spec,"import * as allure from 'allure-js-commons/sync';\nallure.tms('101');");
+ assert.equal(findings(f.run()).some(hit=>hit.rule==='allure-metadata-await'),false);
+});
+
+test('link-template warning only applies to used metadata and an adjacent reporter exemption', t => {
+ const f=fixture(t), warned=()=>findings(f.run()).some(hit=>hit.rule==='allure-link-templates');
+ f.put('resources/testData/ExampleTestJsonFile.json','{}');
+ f.put(spec,"await allure.testCaseId('local-case');");assert.equal(warned(),false);
+ f.put(spec,"await allure.tms('101');");assert.equal(warned(),true);
+ f.put('playwright.config.ts',"// conventions-ok: unrelated\nexport default {reporter:[['allure-playwright',{}]]};");assert.equal(warned(),true);
+ f.put('playwright.config.ts',"export default {reporter:[['allure-playwright',{}]]}; // conventions-ok: illustrative IDs, no destination");assert.equal(warned(),false);
+ f.put('playwright.config.ts',"export default {reporter:[['allure-playwright',{links:configuredLinks}]]};");assert.equal(warned(),true);assert.equal(f.run().status,0);
 });
 
 test('actual data reads must use the owning pair even when both pairs and shared JSON exist', t => {

@@ -10,7 +10,7 @@ Resolve this skill to its real path before following references. Read the
 
 `utils/` is the framework's only technically complex layer. It hosts facades
 (`ApiActions`, `DBActions`) that make every external interaction visible in the Allure
-report, redact secrets, and guarantee that reporting failures never alter a test's
+report, redact selected credential headers/structured keys, and guarantee that reporting failures never alter a test's
 outcome. Business meaning never enters this layer. The root-level `global-setup.ts` /
 `global-teardown.ts` lifecycle scripts are honorary members — run hygiene only
 (playbook practices 14–17).

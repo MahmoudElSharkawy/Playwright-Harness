@@ -230,8 +230,9 @@ The service-specific delta:
   `assert*` methods (`assertCreateUserSuccess` / `assertLoginUserSuccess` /
   `assertDeleteUserSuccess`) — fold them under `///// Validations` and rename to
   `verify*` when you next touch the file. Its inline `expect(response.status()).toBe(200)`
-  is likewise legacy-to-parameterize (iron law §4.5 records no status-code exception).
-- Keep actions assertion-free: an action that also asserts belongs split in two.
+  is likewise legacy-to-parameterize (scenario status expectations stay explicit; §4a permits stable cleanup contract checks).
+- Keep scenario create actions and validations separate. Focused cleanup methods may
+  contain lifecycle postcondition assertions and small guards under §4a and practice 12.
 
 ## 9. `Dbs` classes expose `close()`; specs call it in `afterAll`
 
@@ -281,7 +282,26 @@ Parameter/response ownership follows [design-conventions §4a](../../pom-archite
 implements the never-throw reporting contract (design-conventions §4.3–4.4). Let a
 failed request or query fail the test; the facade's step and attachments already tell
 the story. Keep logic minimal (`rowsAffected[0] ?? 0` is fine); anything needing a loop
-or conditional belongs in `utils/` or split into intent-named methods.
+or general branching belongs in technical code or smaller intent-named methods.
+Small domain lifecycle cleanup guards are the exception in practice 12.
+
+## 12. Domain lifecycle cleanup
+
+Follow [design-conventions §4a](../../pom-architecture/references/design-conventions.md#4a-test-data-ownership-method-contracts-and-disposable-inputs).
+A focused cleanup action takes an optional test-owned candidate, uses the observed
+ownership/absence contract, preserves foreign records, deletes attributable records,
+and verifies the required final state. It may use small guards and existing assertion
+facades. Stable cleanup contract values belong beside the method, not in scenario JSON.
+No registry, callback protocol, stored ownership collection or test-data loader is
+needed. Bound requests/checks, preserve errors and avoid creating a shared type merely
+for a small identity/credential argument. A create response's HTTP success alone is
+not proof of business success or ownership.
+
+Preserve the application's existing deletion parameters and authentication. The
+starter's `deleteUser(email)` does not establish an ownership or absence contract;
+its cleanup method reports this adoption requirement until observed checks are added.
+The fake account server's credential-authenticated lookup is a test-fixture contract,
+not an API to impose on generated projects.
 
 ## Boundaries
 
@@ -314,6 +334,6 @@ This skill does NOT cover:
 - [ ] Actions return `APIResponse` / rows / affected count as consumed; honest types, no `any`
 - [ ] All SQL parameterized via `@param` + params object — zero string-interpolated values
 - [ ] Validations `verify*`-prefixed, step-wrapped, last in the class; expected values arrive as parameters
-- [ ] No `try`/`catch`, loops, or branching; no hardcoded payload data or base URLs
+- [ ] No business exception handling or general branching; lifecycle cleanup guards/postconditions follow practice 12; no hardcoded scenario payloads or base URLs
 - [ ] Parameter/response types and dependencies follow design-conventions §4a
 - [ ] `Dbs` class exposes `close()` and the spec's `afterAll` calls it

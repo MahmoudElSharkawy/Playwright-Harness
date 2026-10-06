@@ -37,6 +37,16 @@ export class ApisUserManagement {
     });
   }
 
+  async cleanupUserIfOwned(email: string | undefined): Promise<void> {
+    if (email === undefined) return;
+    await allure.step('Clean up the owned user account', async () => {
+      // Adoption point: the supplied create/delete examples do not define an
+      // ownership or absence lookup. Implement the application's observed checks
+      // here, then call deleteUser(email) and verify absence. Keep its existing auth.
+      throw new Error('User cleanup needs an observed ownership and absence contract; adapt cleanupUserIfOwned before running this example.');
+    });
+  }
+
   ///// Validations
 
   async verifyUserCreatedSuccessfully(createResponse: APIResponse, expectedStatus: number, expectedMessage: string) {

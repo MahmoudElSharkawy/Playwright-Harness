@@ -23,7 +23,7 @@ import { resolve, join, relative, basename, dirname, isAbsolute } from 'node:pat
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { secretFindings } from './lib/package-validation.mjs';
-import { sourceReferences } from './lib/convention-source.mjs';
+import { sourceReferences, sourceTokens, consumerConventionFindings, allureLinkTemplates, allureLinkUsage } from './lib/convention-source.mjs';
 
 const CLI_ARGS = process.argv.slice(2);
 const rootIndex = CLI_ARGS.indexOf('--root');
@@ -34,7 +34,8 @@ const BASELINE_PATH = join(ROOT, 'scripts', 'conventions-baseline.json');
  *  Rules reference layers by short name; paths resolve through this map. */
 const LAYERS = { tests: 'tests', pages: 'src/pages', apis: 'src/apis', dbs: 'src/dbs', utils: 'src/utils', config: 'src/config' };
 const FRAMEWORK_DIRS = Object.values(LAYERS);
-const layerOf = (rel) => Object.keys(LAYERS).find((k) => rel.startsWith(LAYERS[k] + '/'));
+const ROOT_FILES = ['playwright.config', 'global-setup', 'global-teardown'].flatMap(stem => ['ts', 'mts', 'cts', 'js', 'mjs', 'cjs'].map(extension => `${stem}.${extension}`));
+const layerOf = (rel) => ROOT_FILES.includes(rel) ? 'root' : Object.keys(LAYERS).find((k) => rel.startsWith(LAYERS[k] + '/'));
 // (Single-family POM framework — every rule applies uniformly to every spec and class.)
 
 const jsonPath = path => /\.json$/i.test(path);
@@ -54,6 +55,23 @@ const grepRule = (re) => (file, text) => {
   return hits;
 };
 
+function exemptionAt(text, line) {
+  let cursor = 0, comments = '';
+  for (const token of sourceTokens(text)) {
+    comments += text.slice(cursor, token.start) + text.slice(token.start, token.end).replace(/[^\r\n]/g, ' ');
+    cursor = token.end;
+  }
+  comments += text.slice(cursor);
+  return /\/\/\s*conventions-ok/.test(comments.split(/\r?\n/)[line - 1] ?? '');
+}
+
+const sourceRule = rule => (file, text) => {
+  if (!/\.[cm]?[jt]sx?$/.test(file)) return [];
+  return consumerConventionFindings(text, {business: ['pages', 'apis', 'dbs', 'utils'].includes(layerOf(file))})
+    .filter(hit => hit.rule === rule).map(hit => ({line: text.slice(0, hit.start).split('\n').length, excerpt: rule}))
+    .filter(hit => rule === 'playwright-private-api' || !exemptionAt(text, hit.line));
+};
+
 const RULES = [
   { id: 'no-test-only', dirs: ['tests'], severity: 'fail',
     why: 'test.only silently skips the suite (test-classes §12)',
@@ -62,8 +80,23 @@ const RULES = [
     why: 'hard waits banned — web-first assertions auto-wait (validation-methods §4)',
     check: grepRule(/waitForTimeout\s*\(/) },
   { id: 'no-try-outside-utils', dirs: ['tests', 'pages', 'apis', 'dbs'], severity: 'fail',
-    why: 'try/catch, loops, conditionals live in utils/ only (iron law 3)',
+    why: 'try/catch belongs in technical utilities; narrow domain cleanup guards do not require a new utility (iron law 3)',
     check: grepRule(/\btry\s*\{/) },
+  { id: 'playwright-private-api', dirs: [...Object.keys(LAYERS), 'root'], severity: 'fail',
+    why: 'consumer reporting must use public Playwright APIs; private instrumentation and internal modules are unsupported',
+    check: sourceRule('playwright-private-api') },
+  { id: 'test-import-source', dirs: Object.keys(LAYERS), severity: 'warn',
+    why: 'default to @playwright/test; a public project fixture needs a concrete reviewed benefit, not custom telemetry',
+    check: sourceRule('test-import-source') },
+  { id: 'source-expectation-plumbing', dirs: Object.keys(LAYERS), severity: 'warn',
+    why: 'keep source expectation mapping in harness artifacts, not business parameters, wrappers or marker steps',
+    check: sourceRule('source-expectation-plumbing') },
+  { id: 'allure-metadata-await', dirs: [...Object.keys(LAYERS), 'root'], severity: 'warn',
+    why: 'await asynchronous Allure metadata calls; the explicit allure-js-commons/sync API remains synchronous',
+    check: sourceRule('allure-metadata-await') },
+  { id: 'allure-link-id', dirs: ['tests'], severity: 'warn',
+    why: 'pass one literal case or associated bug ID; reporter templates own link URLs and names',
+    check: sourceRule('allure-link-id') },
   { id: 'no-expect-in-spec', dirs: ['tests'], severity: 'fail',
     why: 'specs never import expect — validations are verify* business methods (test-classes §2)',
     check: grepRule(/import\s*\{[^}]*\bexpect\b[^}]*\}\s*from\s*['"]@playwright\/test/) },
@@ -271,6 +304,24 @@ function repoRules() {
     findings.push({ rule: 'no-kebab-test-data', severity: 'fail', file: 'resources/test-data', line: 1,
       why: 'the data folder is resources/testData (camelCase), never test-data (test-data §1)', excerpt: 'folder exists' });
   }
+  const kinds = new Set();
+  for (const file of listFrameworkFiles().filter(file => /[\\/]tests[\\/].*\.spec\.[cm]?[jt]s$/.test(file))) {
+    const text = readFileSync(file, 'utf8');
+    for (const usage of allureLinkUsage(text)) kinds.add(usage.kind);
+  }
+  if (kinds.size) {
+    const config = ROOT_FILES.find(file => file.startsWith('playwright.config.') && existsSync(join(ROOT, file)));
+    const text = config ? readFileSync(join(ROOT, config), 'utf8') : '';
+    const templates = allureLinkTemplates(text);
+    const reporter = sourceTokens(text).find(token => token.kind === 'string' && token.value === 'allure-playwright');
+    const line = reporter ? text.slice(0, reporter.start).split('\n').length : 1;
+    const suppressed = exemptionAt(text, line);
+    if (!suppressed && (templates.state !== 'CONFIGURED' || [...kinds].some(kind => !templates.links[kind]))) findings.push({
+      rule: 'allure-link-templates', severity: 'warn', file: config ?? 'playwright.config.ts', line,
+      why: 'specs use TMS/issue metadata; configure the corresponding reporter templates when linking is requested. Dynamic templates remain valid for normal runs but cannot be copied into scoped capture.',
+      excerpt: templates.state === 'CONFIGURED' ? 'missing used link kind' : templates.state,
+    });
+  }
   return findings;
 }
 
@@ -398,13 +449,13 @@ function suiteDirsInScope(mode) {
 // ---------- file selection ----------
 
 function listFrameworkFiles() {
-  const files = [];
+  const files = ROOT_FILES.filter(file => existsSync(join(ROOT, file))).map(file => join(ROOT, file));
   for (const dir of FRAMEWORK_DIRS) {
     const abs = join(ROOT, dir);
     if (!existsSync(abs)) continue;
     for (const f of readdirSync(abs, { recursive: true })) {
       const candidate = join(abs, String(f));
-      if (/\.(ts|js|mjs|json)$/.test(String(f)) && statSync(candidate).isFile()) files.push(candidate);
+      if (/\.(?:[cm]?[jt]s|json)$/.test(String(f)) && statSync(candidate).isFile()) files.push(candidate);
     }
   }
   return files;
@@ -430,7 +481,7 @@ function changedPaths() {
 }
 function changedFiles() {
   return changedPaths().filter((f) => layerOf(f)).map((f) => join(ROOT, f))
-    .filter((f) => existsSync(f) && statSync(f).isFile() && /\.(ts|js|mjs|json)$/.test(f));
+    .filter((f) => existsSync(f) && statSync(f).isFile() && /\.(?:[cm]?[jt]s|json)$/.test(f));
 }
 
 // ---------- main ----------
@@ -455,7 +506,7 @@ function main() {
   if (has('--changed') && has('--files')) throw new Error('--changed and --files are mutually exclusive');
   if (has('--base-ref') && !has('--changed')) throw new Error('--base-ref requires --changed');
   if (has('--list-rules')) {
-    console.log(JSON.stringify({layer: RULES.map(r=>r.id), repository:['no-kebab-test-data'],
+    console.log(JSON.stringify({layer: RULES.map(r=>r.id), repository:['no-kebab-test-data', 'allure-link-templates'],
       artifact:['traceability-format-drift','traceability-table-stale','verify-state-contract-drift']},null,2));
     return 0;
   }
@@ -471,7 +522,7 @@ function main() {
     files = args.slice(fileArgIdx + 1, end < 0 ? undefined : end).map((f) => resolve(ROOT, f));
     for (const file of files) {
       const rel = relative(ROOT, file).replaceAll('\\', '/');
-      if (isAbsolute(rel) || rel.startsWith('../') || !layerOf(rel) || !/\.(ts|js|mjs|json)$/.test(file) || !existsSync(file) || !statSync(file).isFile()) {
+      if (isAbsolute(rel) || rel.startsWith('../') || !layerOf(rel) || !/\.(?:[cm]?[jt]s|json)$/.test(file) || !existsSync(file) || !statSync(file).isFile()) {
         throw new Error('--files requires existing files in recognized layers under --root');
       }
     }
@@ -514,7 +565,7 @@ function main() {
   }
   for (const f of findings) {
     f.fingerprint=createHash('sha256').update(`${f.rule}|${f.file}|${f.line}|${f.excerpt}`).digest('hex');
-    f.legacy = f.rule !== 'secret-literal' && baseline.some(b=>b.rule===f.rule && b.file===f.file && b.line===f.line && b.fingerprint===f.fingerprint);
+    f.legacy = !['secret-literal', 'playwright-private-api'].includes(f.rule) && baseline.some(b=>b.rule===f.rule && b.file===f.file && b.line===f.line && b.fingerprint===f.fingerprint);
     f.excerpt='[source omitted; inspect the location locally]';
   }
 
@@ -523,7 +574,7 @@ function main() {
       console.error('[check-conventions] --write-baseline requires a FULL scan — a partial scan would silently drop existing legacy entries.');
       return 2;
     }
-    if (findings.some(f=>f.rule==='secret-literal')) throw new Error('secrets cannot be baselined');
+    if (findings.some(f=>['secret-literal', 'playwright-private-api'].includes(f.rule))) throw new Error('secrets and private Playwright API usage cannot be baselined');
     const entries = findings.map(({rule,file,line,fingerprint})=>({rule,file,line,fingerprint}));
     writeFileSync(BASELINE_PATH, JSON.stringify({
       comment: 'Known legacy violations — fix-when-touched (design-conventions policy). New entries require a team decision; never add one to silence a new violation.',

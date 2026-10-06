@@ -33,6 +33,25 @@ test('an unadopted project reports what is missing without failing',t=>{
  assert.equal(status(result,'skills').status,UNAVAILABLE);assert.equal(status(result,'API and database').status,WAITING);
  assert.equal(status(result,'Azure DevOps').status,OPTIONAL);assert.equal(status(result,'CI pipeline').status,OPTIONAL);
  assert.match(result.notes.join(' '),/does not install the harness from \.harness\/vendor/);
+ assert.equal(status(result,'Work-item links'),undefined);
+});
+
+test('work-item link readiness reuses coordinates without requiring credentials or changing Azure DevOps readiness', t => {
+ const root=project(t);
+ put(root,'.harness/integrations.json',JSON.stringify({version:1,ado:{organizationUrl:'https://dev.azure.com/example-org',project:'Example Project',credentialRef:'SYN_LINK_PAT'}}));
+ const ado=status(check(root),'Azure DevOps');
+ assert.equal(status(check(root),'Work-item links').status,WAITING);
+ assert.match(status(check(root),'Work-item links').detail,/Example%20Project/);
+ const config=links=>`export default {reporter:[['allure-playwright',{links:${links}}]]};`;
+ put(root,'playwright.config.ts',config("{tms:{urlTemplate:'https://dev.azure.com/your-org/your-project/_workitems/edit/%s'}}"));
+ assert.equal(status(check(root),'Work-item links').status,WAITING);
+ put(root,'playwright.config.ts',config("{tms:{urlTemplate:'https://dev.azure.com/example-org/Example%20Project/_workitems/edit/%s'}}"));
+ assert.deepEqual(status(check(root),'Work-item links'),{name:'Work-item links',status:READY,detail:'literal reporter templates configured'});
+ put(root,'playwright.config.ts',config("{issue:{urlTemplate:'https://bugs.example.com/items/%s'}}"));
+ assert.match(status(check(root),'Work-item links').detail,/customized/);
+ put(root,'playwright.config.ts',config('teamTemplates'));
+ assert.equal(status(check(root),'Work-item links').status,'unresolved');assert.deepEqual(check(root).errors,[]);
+ assert.deepEqual(status(check(root),'Azure DevOps'),ado);
 });
 test('linked skills are ready until a link goes missing',t=>{
  const root=project(t);adoptProject({projectRoot:root});

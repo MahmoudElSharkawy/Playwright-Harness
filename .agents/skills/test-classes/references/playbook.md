@@ -53,87 +53,31 @@ content rules → [test-data](../../test-data/SKILL.md).
 
 ## 2. Import in a fixed, minimal order
 
-Playwright first, then Allure, then business classes (pages → apis → dbs → config),
-then Node built-ins. Import only what this spec uses.
+Playwright first, then Allure, business classes, and Node built-ins. Default to
+`import { test } from '@playwright/test'`; import only the types actually used.
+Built-in `page`/`context` fixtures provide per-test isolation. Preserve justified
+public fixtures for concrete lifecycle/reuse benefits. Never generate a replacement
+`test` solely for telemetry, private instrumentation or an exact-version gate.
+Reviewed technical fixture exceptions use the existing `conventions-ok` annotation;
+utils are not a home for a test wrapper. Specs call business `verify*` methods.
 
-✅ `tests/LoginTests.spec.ts` (verbatim):
+## 3. Declare per-attempt state in layer order
 
-```ts
-import { test, Page, BrowserContext } from '@playwright/test';
-import * as allure from 'allure-js-commons';
-import { LoginPage } from '../src/pages/LoginPage'
-import { HeaderPage } from '../src/pages/HeaderPage';
-import { HomePage } from '../src/pages/HomePage';
-import { ApisUserManagement } from '../src/apis/ApisUserManagement';
-import * as fs from 'fs';
-```
+Declare page objects, services, test data and optional cleanup candidates near the
+imports. Hooks construct business objects; test bodies may assign their cleanup
+candidates before creation. The first, dependency-free `beforeEach` resets candidates
+before fixture setup can fail. Initialize services before application mutations and
+use optional teardown calls for partial setup. Never retain a previous test's resource
+or write generated values into JSON. Follow [design-conventions §4a](../../pom-architecture/references/design-conventions.md#4a-test-data-ownership-method-contracts-and-disposable-inputs).
 
-A DB-only spec is smaller — `tests/User Management/DbUserManagementTests.spec.ts` imports just `test`,
-`allure`, `DbsUserManagement`, and `databases` from `src/config/databases.ts`.
+## 4. Compose unique identities once per attempt
 
-❌ Importing `expect` into a spec. Assertions live in validation methods on
-page/service classes ([validation-methods](../../validation-methods/SKILL.md)); a spec
-calls `verify*` methods, it never asserts directly.
-
-## 3. Declare shared state as module-level `let`, in layer order
-
-Between the imports and the describe block: browser plumbing first, then page objects,
-then service objects, then `testData`. Hooks assign; tests only read.
-
-✅ `tests/LoginTests.spec.ts` (verbatim):
-
-```ts
-let context: BrowserContext;
-let page: Page;
-
-let loginPage: LoginPage;
-let homePage: HomePage;
-let headerPage: HeaderPage;
-let apisUserManagement: ApisUserManagement;
-
-let testData: typeof import('../resources/testData/LoginTestJsonFile.json');
-```
-
-❌ Instantiating page objects inside a test body, or passing `page` around as a test
-parameter — the hooks own construction so every test starts from identical state.
-Service objects are no exception: ❌ (illustrative counterexample)
-`const apisUserManagement = new ApisUserManagement(request)` inside a test body
-(`LogoutTest.spec.ts`; `SignupTests.spec.ts` does the same as `apiUserManagement`) —
-`beforeEach` receives the same `{ request }` fixture a test would, so hooks own ALL
-construction.
-
-When a spec holds many page objects, keep the module-level declaration list and the
-`beforeEach` instantiation list in the same order — user-journey order preferred — so
-the two lists diff cleanly. ✅ (illustrative counterexample) `PlaceOrderRegisterWhileCheckoutTests.spec.ts`
-declares and instantiates its ten page objects in matching order.
-
-Local schemas and test-scoped runtime state follow [design-conventions §4a](../../pom-architecture/references/design-conventions.md#4a-test-data-ownership-method-contracts-and-disposable-inputs).
-
-## 4. Compute the uniqueness discriminator ONCE, at module level
-
-The per-run uniqueness discriminator (the `timestamp` const in `tests/LoginTests.spec.ts`)
-is computed a single time as a module-level `const` so that every consumer in the file
-shares one discriminator and composes reproducible values. Per-case uniqueness is the
-JSON's job, not the timestamp's (2026-08-24 ruling): each record-creating test composes
-from its OWN `tc<id>` cluster base (TC id inside the value) plus the one shared
-timestamp — no two tests ever compose the same value, and a re-run never collides with
-a previous run's leftovers. The pre-ruling form — per-test flat base keys (illustrative counterexample
-`SignupTests.spec.ts`: `emailAddress`, `emailAddressAPI`, `emailAddressForLogin`, each
-composed with the one shared timestamp) — migrates to `tc<id>` clusters when touched.
-Why and how the uniqueness pattern works → [test-data](../../test-data/SKILL.md).
-
-❌ Generating the timestamp inside `beforeEach` or inside a test — seeder and consumer
-would disagree and the test becomes order-dependent.
-
-❌ (illustrative counterexample) Varying the constant part instead: `SubscriptionTests.spec.ts` keeps one
-base key and splits its two tests via `+ '@example.test'` / `+ '@test2.com'` — per-test
-variation belongs in the JSON base keys, not in string literals across test bodies.
-
-❌ (illustrative counterexample) A test body assigning module state a hook later consumes:
-`PlaceOrderRegisterBeforeCheckout.spec.ts` declares `let email`, assigns it inside the
-test, and `afterEach` calls `deleteUser(email, ...)` — failing before the assignment
-leaves teardown deleting stale or `undefined` data. Hooks assign, tests only read
-(practice 3).
+Use each case's JSON base and the module timestamp by default. Fixed synthetic
+passwords stay in the paired JSON. Generate a credential only when the scenario or
+observed ownership contract needs one, and reuse it in the operations that need it. Retain each fresh
+attempted identity before creation, including negative-create attempts. It is not
+ownership proof; borrowed identities must never become deletion candidates. Never
+recompute credentials independently in teardown.
 
 ## 5. Tests first, hooks grouped at the bottom — project canon
 
@@ -153,9 +97,9 @@ test.describe('Automation Exercise Login Test Cases', () => {
 
   test.beforeAll(async () => { /* data load */ });
 
-  test.beforeEach(async ({ request, browser }) => { /* seed + fresh context + POs */ });
+  test.beforeEach(async ({ request, page }) => { /* services + page objects */ });
 
-  test.afterEach(async () => { /* context.close() */ });
+  test.afterEach('Clean up owned data', async () => { /* domain cleanup */ });
 
 });
 ```
@@ -190,92 +134,59 @@ test.beforeAll(async () => {
 ```
 
 ❌ Creating browser contexts, seeding data, or instantiating page objects in
-`beforeAll` — anything per-test belongs in `beforeEach` (practice 7). Validations and
-Allure metadata are banned in every hook → practice 10.
+`beforeAll` — anything per-test belongs in `beforeEach` (practice 7). Scenario validations and
+Allure metadata belong in bodies; cleanup postconditions are allowed → practice 10.
 
-## 7. `beforeEach` — seed case-agnostic state via API, then fresh context/page, then page objects
+## 7. `beforeEach` — reset state, initialize services and page objects
 
-Three responsibilities, in this order: (1) seed **case-agnostic** prerequisite data
-through a business API method — a precondition every test in the file needs
-identically; (2) open a **fresh** `BrowserContext` and `Page`; (3) instantiate the page
-objects on that page. Services wrapping the per-test `request` fixture are also
-constructed here (unlike DB services — see practice 6). A **case-specific** record
-(composed from that case's `tc<id>` cluster) is seeded at the top of the owning test
-body instead, with the same API/DB business methods — hooks never branch on which test
-is running (2026-08-24 per-case ruling; data ownership →
-[test-data](../../test-data/SKILL.md)).
-
-✅ `tests/LoginTests.spec.ts` (verbatim; **legacy note:** this hook seeds one shared
-record for every test from a shared base — pre-ruling canon. The wiring order and the
-business-method call are still the model; migrate the seeding itself to per-case
-test-body calls when next touching the file):
+Reset per-attempt cleanup state in a dependency-free hook before fixture-dependent
+setup. Construct services from `request` and page objects from the built-in isolated
+`page`. A service that did not initialize must remain safely absent at teardown.
 
 ```ts
-test.beforeEach(async ({ request, browser }) => {
+test.beforeEach('Reset per-test state', () => {
+  userToClean = undefined;
+  apisUserManagement = undefined;
+});
+
+test.beforeEach('Initialize services and page objects', async ({ request, page }) => {
   apisUserManagement = new ApisUserManagement(request);
-  await apisUserManagement.createUser(testData.username, testData.emailAddress + timestamp + '@example.test', testData.password)
-
-  context = await browser.newContext();
-  page = await context.newPage();
   loginPage = new LoginPage(page);
-  homePage = new HomePage(page);
-  headerPage = new HeaderPage(page);
 });
 ```
 
-Note the seeding goes through `ApisUserManagement.createUser(...)` — a business method.
-❌ Raw `request.post('/api/createAccount', ...)` in a hook: specs never touch the HTTP
-layer (design-conventions §1). Prerequisites and data preparation run through the
-API/DB layers whenever a path exists (iron law 8). Settled (design-conventions,
-Decision records): when NO lower-layer path exists (e.g. a cart only fillable through
-the UI), `beforeEach` may establish the shared precondition as assertion-free
-business-method calls after the page objects are constructed — compressed into ONE
-composed intent-named method on the owning page class when the calls live within one
-page and run longer than a couple of calls; a precondition spanning several pages
-stays as the plain sequence of business calls in `beforeEach` — never fused across
-pages ([action-methods](../../action-methods/SKILL.md) practice 7). Anything the test
-itself verifies still belongs in the test body, never the
-hook. Who seeds vs. who cleans up → [test-data](../../test-data/SKILL.md).
+Create case-specific records in their test body from that case's JSON cluster; retain
+the fresh attempted identity before the create call. Shared prerequisites may use
+domain methods in setup, with the same ownership and teardown rules. Never branch on
+which test is running or issue raw requests in a hook. Explicit fresh contexts remain
+valid when needed; preserve existing explicit context setup when changing data cleanup,
+and close contexts in a separate teardown hook after application cleanup.
 
-❌ Reusing Playwright's default `page` fixture or sharing one context across tests. The
-fresh context per test is iron law 8: isolation and parallel safety.
+Prefer API/DB preconditions. When no lower-layer path exists, a page method may
+establish a prerequisite after page objects are constructed; scenario verification
+still belongs in the test body. Follow the canonical lifecycle rules in
+[§4a](../../pom-architecture/references/design-conventions.md#4a-test-data-ownership-method-contracts-and-disposable-inputs).
 
-## 8. `afterEach` — close the context first; never drive the GUI
+## 8. `afterEach` — clean application data before disposing resources
 
-✅ `tests/LoginTests.spec.ts` (verbatim):
+Call the owning API/DB service's focused cleanup method from an ordinary named hook.
+Use the independent `request` fixture or a DB connection available during teardown.
+Ownership reconciliation and cleanup postconditions follow [§4a](../../pom-architecture/references/design-conventions.md#4a-test-data-ownership-method-contracts-and-disposable-inputs).
 
 ```ts
-test.afterEach(async () => {
-  await context.close();
+test.afterEach('Clean up the owned user', async () => {
+  await apisUserManagement?.cleanupUserIfOwned(userToClean);
 });
 ```
 
-`afterEach` never drives the GUI. Cleanup of records a test created goes through API/DB
-business methods — they use the `request` fixture, not the possibly-broken page — or
-lives in the test flow itself: canon `tests/LoginTests.spec.ts` TC2 deletes its user via
-`apisUserManagement.deleteUser(...)` inside the test. If cleanup must sit in `afterEach`,
-`await context.close()` comes FIRST so it is unconditionally reachable, then the API
-cleanup — never inline SQL or raw requests (use the services already wired). If the
-spec opened nothing per-test (pure DB spec), omit `afterEach` entirely; don't add empty
-hooks.
+Playwright disposes built-in pages/contexts after the hook. Manual contexts use a
+separate close hook with an optional call for partial setup. Hooks continue after
+ordinary failures but share a teardown budget: bound cleanup and avoid spending that
+budget on context closure first. Report cleanup errors alongside the original error.
 
-❌ (illustrative counterexample) The GUI delete-account cascade in
-`PlaceOrderRegisterWhileCheckoutTests.spec.ts`:
-
-```ts
-test.afterEach(async () => {
-  await headerPage.clickOnDeleteAccountLink();
-  await deleteAccountPage.assertSuccessDeleteMessage(testData.accountDeletedMessage);
-  await deleteAccountPage.clickOnContinue();
-  await context.close();
-});
-```
-
-A mid-test failure makes teardown click a broken page, masking the real failure — and
-because `context.close()` sits last, the context leaks too.
-
-For disposable inputs, reuse existing test-scoped cleanup plumbing; the optional pattern in
-[design-conventions §4a](../../pom-architecture/references/design-conventions.md#4a-test-data-ownership-method-contracts-and-disposable-inputs); keep scenario deletion in the test body.
+Closing a browser or pool is not application cleanup. Body-only cleanup can be skipped
+by an earlier failure. GUI-only cleanup may run before page disposal when no API/DB
+route exists; document its limitations. Omit empty hooks.
 
 ## 9. `afterAll` — close what `beforeAll` opened
 
@@ -286,33 +197,24 @@ or the worker leaks the pool.
 
 ```ts
 test.afterAll(async () => {
-  await dbsUserManagement.close();
+  await dbsUserManagement?.close();
 });
 ```
 
 ❌ Closing the pool in `afterEach` (reopens per test, defeats pooling) or never closing
 it (worker hangs on open handles).
 
-## 10. No validations in hooks — hooks establish state, tests prove it
+## 10. Keep scenario assertions in the body; verify cleanup in teardown
 
-`verify*`/`assert*` calls belong in test bodies only; a hook that validates smuggles
-part of the test into plumbing shared by every test. If setup must fail fast, let the
-action's auto-waiting locator throw — that failure is already loud, located, and
-reported. Allure metadata (`allure.feature`/`tms`/`issue`) likewise belongs in test
-bodies, never in hooks.
-
-Considered and rejected (team ruling — design-conventions, Decision records):
-readiness-gate validations in `beforeEach` — fail-fast comes from the actions'
-auto-waiting locators, not assertions.
-
-❌ (illustrative counterexample) `PlaceOrderRegisterWhileCheckoutTests.spec.ts`: `assertCartPageLoaded`
-in `beforeEach` and `assertSuccessDeleteMessage` in `afterEach` — both are test
-evidence hiding in plumbing.
+Scenario `verify*` calls and Allure metadata belong in test bodies. Hooks may invoke
+lifecycle cleanup postconditions under [§4a](../../pom-architecture/references/design-conventions.md#4a-test-data-ownership-method-contracts-and-disposable-inputs).
+These checks prevent a false clean result but earn no scenario assertion credit.
+Do not add business readiness assertions to setup or hide scenario checks in fixtures.
 
 ## 11. Zero logic, zero exception handling, zero Playwright plumbing in the spec
 
-No `if`, no loops, no `try`/`catch`, no `page.locator()`, no `request.fetch()` —
-anywhere in the file, hooks included (iron laws 3–4). A spec is a straight-line
+No scenario branching, loops, `try`/`catch`, raw `page.locator()` or `request.fetch()`
+in specs (iron laws 3–4). Small lifecycle guards for partial initialization are allowed. A spec is a straight-line
 sequence of business calls. If you feel the need to branch or retry, push it down:
 business variation → an intent-named method on the page/service class; technical
 complexity → `utils/` ([utility-classes](../../utility-classes/SKILL.md)).
@@ -366,12 +268,12 @@ This playbook covers the spec file's skeleton only. It does NOT cover:
 
 - [ ] File is `tests/<Feature>Tests.spec.ts`, one folder deep under a suite/initiative folder when one applies (feature name, plural `Tests` — not a scenario, page, or singular name) with exactly one `test.describe`; title is the business feature name and no other spec shares it
 - [ ] Imports minimal and ordered (Playwright → allure → business classes → Node); no `expect` imported
-- [ ] Shared state is module-level `let` in layer order; unique-data `const` (timestamp) computed once at module level; record-creating tests compose from their own `tc<id>` cluster in the paired JSON (per-case base + the one timestamp; format-constrained fields get distinct valid per-case values, no suffix — test-data practice 7); no test body assigns state a hook consumes
+- [ ] Per-attempt cleanup candidates reset before fixture setup; test bodies may retain fresh attempted identities before creation; paired JSON stays immutable
 - [ ] Schema and generated-state ownership follow design-conventions §4a
 - [ ] Tests first, hooks grouped at the bottom in lifecycle order
 - [ ] `beforeAll` only loads the paired JSON and/or inits connection-holding services
-- [ ] `beforeEach` seeds only case-agnostic state via API/DB business methods (case-specific records seed at the top of the owning test body from that case's cluster), then opens a fresh context/page, then constructs ALL page and service objects (none in test bodies); declaration and instantiation lists in matching order; GUI-only preconditions (no lower-layer path exists) follow construction as assertion-free business calls — one composed intent-named method when the calls live within one page and run longer than a couple of calls; a multi-page precondition stays as the plain sequence, never fused across pages
-- [ ] `afterEach` never drives the GUI; if cleanup follows, `context.close()` comes first; `afterAll` closes every service `beforeAll` opened
-- [ ] No logic, `try`/`catch`, raw `page.locator()`/`request.fetch()`, `console.log`, or hardcoded data anywhere in the file
-- [ ] No validations (`verify*`/`assert*`) or Allure metadata inside hooks — hooks establish state, tests prove it
+- [ ] Setup initializes services before application mutations and constructs page objects from the built-in page by default; case-specific records are created in the owning test
+- [ ] Required application cleanup runs before context disposal, guards partial setup and follows §4a; `afterAll` closes every pool it opened
+- [ ] No scenario logic, `try`/`catch`, raw `page.locator()`/`request.fetch()` or debugging; small partial-setup guards and direct literal metadata IDs are allowed
+- [ ] Scenario validations and Allure metadata stay in bodies; lifecycle cleanup postconditions are permitted in hooks
 - [ ] Unrunnable suites gated with `.skip` + reason comment; single tests declared via `test.fixme` (defect) or `test.skip` (environment); no `test.only`, no commented-out tests

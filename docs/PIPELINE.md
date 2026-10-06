@@ -195,18 +195,17 @@ adding new ones.
 - **How:** start with the [pom-architecture skill](../.agents/skills/pom-architecture/SKILL.md)
   and use only the layer skills the change touches (locators, actions, validations,
   services, test classes, test methods, test data).
-- **Rules:** wrap each source expectation's original assertions in `sourceExpectation`,
-  imported from the installed package's `scripts/lib/generation/assertion.mjs`, and
-  keep its source key in versioned test data. Use `allure.testCaseId(<scenario id>)`
-  for a local source, or the real `allure.tms` reference when one is supplied; never
-  invent an ADO ID. Tests must be independent and use unique owned resources.
-  Catalogs, deterministic helpers and fixed inline definitions are equally valid;
+- **Rules:** use ordinary business validations and standard Playwright imports.
+  Default GUI tests to the built-in isolated `page`. Keep source keys in the
+  candidate mapping, never in business parameters or tracing-only JSON. Await
+  asynchronous Allure calls with literal real IDs; local scenarios retain their
+  `testCaseId`. Tests use unique resources and domain cleanup from ordinary hooks,
+  retaining a fresh attempted identity before creation and proving ownership before
+  deletion. Catalogs, deterministic helpers and fixed inline definitions remain peers;
   imported team libraries are derive-only.
 
 ```ts
-await sourceExpectation(test, sourceKey, async () => {
-  await expectToHaveText('the confirmation message', this.confirmation_msg, expected);
-});
+await expectToHaveText('the confirmation message', this.confirmation_msg, expected);
 ```
 
 Run the consumer's TypeScript check and the convention checker; the checker's file and
@@ -226,9 +225,12 @@ Register the code as a candidate and map each source scenario to exactly one nat
 Playwright test.
 
 - **Inputs:** a candidate JSON file with `config`, and `tests` entries of
-  `{scenarioId, spec, project, titlePath}`. `titlePath` is the complete chain of
+  `{scenarioId, spec, project, titlePath, mapping}`. `titlePath` is the complete chain of
   describe and test titles. `project` is explicit, with an empty name for an unnamed
-  project. Add `repair` only on later candidates (see [Repairs](#repairs)).
+  project. Map every source step and expectation exactly once to action/validation
+  references using the [M13 mapping shape](M13-GENERATION.md#shared-deterministic-operations-and-assertion-coverage).
+  Add `repair` for repairs or `migration: 'case-assertions'` for the one-time legacy
+  transition (see [Repairs](#repairs)).
 - **Outputs:** a frozen candidate revision covering consumer files, configured targets
   and knowledge, dependency declarations and the shared library version. The command
   prints `NEEDS_REVIEW` with the revision.
@@ -250,8 +252,8 @@ their own work, and a self-review cannot release verification.
 - **The reviewer checks** that the executable assertions keep the source's meaning,
   including the chosen observation layer, plus reuse, selector quality, expected
   values, operation scope, cleanup and retention, imported dependencies and external
-  environment references. Source keys and assertion counts prove traceability, not
-  semantic equivalence.
+  environment references. Mapping completeness and assertion counts do not prove
+  semantic equivalence or that every source expectation executed.
 - **Outputs:** a consumer-relative Markdown review artifact and a review JSON file with
   the revision, a reviewer identity different from the author's, the verdict
   (`APPROVE` or `CHANGES-REQUIRED`) and findings. Each finding has an ID, a blocking
@@ -279,10 +281,13 @@ pass the same reviewed candidate.
   also run an unselected test. It forces one worker, zero retries and one repetition,
   forbids `only`, disables project dependencies and bounds time and output. Put
   required prerequisites in reviewed per-test fixtures or hooks.
-- **What counts as green:** every selected test runs once, passes, and runs every
-  mapped `sourceExpectation` with at least one native assertion. Missing or extra
-  tests, duplicate markers, empty callbacks, caught assertion failures, skips,
-  expected failures, soft failures, flaky retries and nonzero exits never count.
+- **What counts as green:** v2 receipts show every selected test ran once and passed,
+  with at least one completed passing assertion outside hooks/fixtures, no failed
+  assertions and no skipped steps. Count outermost native expectations by their final
+  outcome, including successful polling. Traverse ordinary step containers to detect
+  caught failures. Utility-origin nonasserting `Probe` expectations are the sole
+  exemption. Scope, expected-status, worker, retry and repetition rules still apply.
+  The gate is `case-assertions`; independent review assesses full scenario coverage.
 
 ```text
 npx --no pom-harness generate verify --id <source-id>
@@ -317,6 +322,11 @@ checks and register a new candidate with `repair` set to `script-defect`,
   replaying, and include that evidence in the new review. An abandoned process leaves
   its `STARTED` record, reported as `NEEDS_REVIEW`. A stale writer lock needs an
   operator to inspect it; there is no automatic takeover.
+
+A legacy candidate may use the [one-time migration](M13-GENERATION.md#one-time-migration-from-the-legacy-gate)
+without charging a repair round, including at round three. It preserves scope and
+history, requires fresh review and two v2 greens, and cannot be reused. Unrelated
+repairs still need a classification and available repair budget.
 
 Details: [M13 verification](M13-GENERATION.md#two-independent-scoped-green-runs).
 

@@ -10,6 +10,10 @@
     "password": "<password-placeholder>",
     "wrongPassword": "<different-invalid-password>"
   },
+  "userCreatedResponse": {
+    "status": 201,
+    "message": "User created successfully"
+  },
   "confirmationMessages": {
     "welcomeMsg": "Welcome back!"
   },
