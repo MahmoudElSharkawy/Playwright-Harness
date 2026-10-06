@@ -1,6 +1,15 @@
 # Changelog
 
-## Unreleased — skill naming, test-data ownership and local consumer flows
+## 3.2.2 — Simpler generated consumer projects
+
+### Upgrade actions
+
+- Run setup from the 3.2.2 archive in each project, then reload the agent's skills. Setup replaces managed `automate-suite` links with `automate-test`; customized skills and consumer code remain subject to review.
+- Review existing specs against the updated lifecycle and reporting guidance. Remove unnecessary tracing-only wrappers and parameters, retain safe domain cleanup, and preserve justified fixtures, application contracts and reporter customizations. Setup does not refactor consumer code automatically.
+- When continuing an eligible legacy generation source, register its explicit one-time `migration: 'case-assertions'` transition through the existing candidate command. Preserve history and the repair count; obtain fresh independent review and two fresh scoped v2 green runs. Unrelated repairs still consume a round. See [migration instructions](docs/M13-GENERATION.md#one-time-migration-from-the-legacy-gate).
+- Correct newly reported paired-JSON and business test-data dependency violations. Review warnings about imports, metadata and link templates; warnings alone do not block ordinary consumer CI. Observe the documented reporting redaction limits and artifact access/retention requirements.
+
+### Changes
 
 - Rename `automate-suite` to `automate-test`, with explicit story, suite and local invocation examples. The observed execution, POM generation, independent review and two-green workflow is unchanged.
 - Re-run setup to replace managed old-name links. Recognized legacy prerequisite knowledge migrates to `.harness/knowledge/prerequisites.md`; customized folders and foreign links are preserved for review. No old-name alias is installed.
