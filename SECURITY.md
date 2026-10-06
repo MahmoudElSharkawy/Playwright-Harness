@@ -24,3 +24,11 @@ include values that are not present in step titles.
 Use environment references for credentials. Keep private manual sources, populated
 consumer knowledge and all runtime evidence out of the public package. Public research
 uses repository-relative paths, never local account, machine or temporary paths.
+
+The example API/DB utilities redact selected credential headers and structured keys.
+They do not comprehensively sanitize URLs, arbitrary strings, copied errors, native
+action/assertion data, traces, screenshots, videos or underlying Allure artifacts.
+Value-free assertion titles protect titles only. Prefer disposable test credentials
+and restrict artifact access and retention; do not publish raw reports by default.
+Do not add consumer-side private Playwright interception or credential registries to
+imply stronger protection. See the [reporting boundaries](docs/M14-REPORTING.md#links-and-protection-boundaries).

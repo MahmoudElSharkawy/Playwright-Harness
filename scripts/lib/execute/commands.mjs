@@ -84,10 +84,10 @@ export function diagnosticDelta(kind, reply, state) {
 
 /** Thin live command adapter. The agent cannot supply JavaScript or core assertion records. */
 export class BrowserCommands {
-  constructor({context, step, sourceScenario, references, outputs, roots, executionId, runId, usernames = {}, cancelled = () => false, privateValues = [], diagnostics = 'end', diagnosticsState = {console: 0, requests: new Set()}, lastBrowserStep = false}) {
+  constructor({context, step, sourceScenario, references, outputs, roots, executionId, runId, usernames = {}, inputAliases = {}, cancelled = () => false, privateValues = [], diagnostics = 'end', diagnosticsState = {console: 0, requests: new Set()}, lastBrowserStep = false}) {
     Object.assign(this, {context, step, sourceScenario, references, outputs, roots, executionId, runId, privateValues, diagnostics, diagnosticsState, lastBrowserStep});
     this.outputs = new Map(outputs); this.captures = new Map();
-    this.usernames = usernames; this.cancelled = cancelled;
+    this.usernames = usernames; this.inputAliases = inputAliases; this.cancelled = cancelled;
     this.ledger = new VerdictLedger(step.contracts, {verificationOnly: step.verificationOnly || step.capability === 'reads', bindings: sourceScenario.bindings});
     this.artifacts = new Map(); this.latestSnapshot = null; this.typedSubjects = new Set(); this.failure = null; this.requiredFailure = false; this.uncertainMutation = null; this.manualRetry = false; this.reconciled = null;
     context.onBeforeExpire?.(settlement => {this.settlementContext = settlement; this.interrupted = true; return this.finalize('uncertain', {interrupted: true});});
@@ -102,6 +102,7 @@ export class BrowserCommands {
     requireThat(!this.ledger.poisoned || reads.has(command) || command.startsWith('dialog-'), 'ATTEMPT_POISONED');
     requireThat(!this.reconciled || reads.has(command), 'Reconciled attempts permit observations and settlement only.');
     requireThat(!args.some(arg => /^HARNESS_(PASSWORD|USERNAME)_/.test(arg)) || this.step.login, 'Login secret names are restricted to login steps.');
+    requireThat(!args.some(arg => /^HARNESS_INPUT_/.test(arg)) || command === 'fill' && (this.step.inputs ?? []).some(binding => this.inputAliases[binding.name] === positional[1]), 'Use only a protected input bound to this fill step.');
     if (command === 'type') {
       requireThat(!args.some(arg => /^HARNESS_/.test(arg)), 'Type cannot resolve login aliases. Use fill.');
       requireThat(this.latestSnapshot?.stateVersion === this.ledger.stateVersion, 'NOT_IN_SNAPSHOT');

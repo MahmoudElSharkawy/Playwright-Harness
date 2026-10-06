@@ -4,6 +4,7 @@ import {spawn} from 'node:child_process';
 import {randomUUID} from 'node:crypto';
 import {createRun} from '../execution-core/index.mjs';
 import {data, fingerprint, requireThat, id} from '../execution-core/data.mjs';
+import {createProtectedInputs, protectedInputReference} from '../protected-inputs.mjs';
 import {runSequentialScenario} from '../sequential/index.mjs';
 import {consumerEnvironment} from '../consumer-env.mjs';
 import {protect} from '../generation/storage.mjs';
@@ -44,7 +45,7 @@ export function runInput(freeze, sourceScenario, scenario, runId, startedAt = Da
     if (kind === 'parameter') {requireThat(Object.hasOwn(sourceScenario.bindings, name) && !sourceScenario.needsBinding.includes(name), 'Parameter needs a protected environment binding.'); value = sourceScenario.bindings[name];}
     else if (kind === 'reference') {requireThat(freeze.referenceValues[name] && !freeze.referenceValues[name].assumed, 'Input reference is unavailable or assumed.'); value = freeze.referenceValues[name].value;}
     const producer = {runId, scenarioId: scenario.id, name: binding.name};
-    values.set(binding.name, kind === 'env' ? {name: binding.name, type: 'string', sensitivity: 'sensitive', protectedRef: `protected:${name}`, producer}
+    values.set(binding.name, ['env', 'generated', 'synthetic'].includes(kind) ? {name: binding.name, type: 'string', sensitivity: 'sensitive', protectedRef: protectedInputReference(binding.source), producer}
       : {name: binding.name, type: typeOf(value), sensitivity: 'public', value, producer});
   }
   return data({id: runId, startedAt, environment: freeze.environment, operations: scenario.operations, scenarios: [{id: scenario.id, expectations: scenario.expectations}], values: [...values.values()], limits: scenario.limits});
@@ -92,14 +93,18 @@ async function hostedScenario(roots, executionId, runId, nonce, {runtime = runSe
   requireThat(!loaded.execution.guardRefs || fingerprint(guardRefs) === fingerprint(loaded.execution.guardRefs), 'Frozen password guard references changed.');
   box.save({pid: process.pid, freezeFingerprint: loaded.execution.freezeFingerprint, guardRefsFingerprint: fingerprint(guardRefs), checkpoint: loaded.execution.checkpoint,
     startUrl: scenario.browserTarget ? loaded.freeze.environment.targets.browser[scenario.browserTarget].startUrl ?? null : null});
-  const controller = new AbortController(), privateEnvironment = consumerEnvironment(roots), protectedValues = new Map(), outputs = new Map(), diagnosticsState = {console: 0, requests: new Set()};
+  const controller = new AbortController(), privateEnvironment = consumerEnvironment(roots), outputs = new Map(), diagnosticsState = {console: 0, requests: new Set()};
   const cleanupReserveMs = Math.min(5 * 60 * 1000, Math.floor(run.inputs.limits.cleanupTimeoutMs / 2));
-  const {secrets, usernames} = loginBindings(scenario, loaded.freeze.environment, privateEnvironment), privateValues = Object.values(secrets);
+  const {secrets, usernames} = loginBindings(scenario, loaded.freeze.environment, privateEnvironment);
+  const protectedInputs = createProtectedInputs(scenario.steps.flatMap(step => step.inputs ?? []), {environment: privateEnvironment, references: loaded.freeze.referenceValues});
+  const privateValues = [...Object.values(secrets), ...protectedInputs.privateValues];
+  const resolver = {resolveSensitive: protectedInputs.resolveSensitive, storeSensitive: value => {const reference = protectedInputs.storeSensitive(value); privateValues.push(protectedInputs.privateValues.at(-1)); return reference;}};
+  const inputAliases = Object.create(null);
   for (const input of run.inputs.values.filter(item => item.sensitivity === 'sensitive')) {
-    const value = privateEnvironment[input.protectedRef.slice(10)]; requireThat(value !== undefined && value !== '', 'Protected input is unavailable.'); protectedValues.set(input.protectedRef, value); privateValues.push(value);
+    const alias = `HARNESS_INPUT_${input.name.toUpperCase().replaceAll('-', '_')}`;
+    requireThat(!Object.values(inputAliases).includes(alias), 'Protected input aliases collide.');
+    inputAliases[input.name] = alias; secrets[alias] = resolver.resolveSensitive(input.protectedRef);
   }
-  const resolver = {resolveSensitive: reference => {requireThat(protectedValues.has(reference), 'Protected input is unavailable.'); return protectedValues.get(reference);},
-    storeSensitive: value => {const reference = `protected:${randomUUID()}`; protectedValues.set(reference, value); privateValues.push(typeof value === 'string' ? value : JSON.stringify(value)); return reference;}};
   let phaseFrame = null, active = null, complete = false, stopped = false, stopRequested = false, commands = 0, lastCommand = performance.now(), finalState, loopFailure;
   const stopFile = join(directory, 'stop.request');
   const stopWatcher = setInterval(() => {if (existsSync(stopFile)) stopRequested = true;}, 50);
@@ -175,7 +180,7 @@ async function hostedScenario(roots, executionId, runId, nonce, {runtime = runSe
     const started = deferred(), frame = {step, started}; active = frame;
     try {frame.execution = phaseFrame.context.browser.attempt(input, async context => {
       frame.context = context; frame.done = deferred(); frame.closing = false;
-      frame.commands = new BrowserCommands({context, step, sourceScenario: source, references: loaded.freeze.referenceValues, outputs, roots: runRoots, executionId, runId, privateValues, usernames, cancelled: () => stopRequested,
+      frame.commands = new BrowserCommands({context, step, sourceScenario: source, references: loaded.freeze.referenceValues, outputs, roots: runRoots, executionId, runId, privateValues, usernames, inputAliases, cancelled: () => stopRequested,
         diagnostics: loaded.execution.diagnostics, diagnosticsState, lastBrowserStep: step.id === scenario.steps.filter(item => item.family === 'browser').at(-1).id});
       saveStatus(); started.resolve(); if (stopRequested) await interrupt('USER_STOP'); await frame.done.promise;
     }).then(attempt => {finishStep(frame, attempt); started.resolve({status: 'STEP_COMPLETE', step: step.id, outcome: attempt.outcome, assertions: attempt.assertions});}, error => {active = null; phaseFrame.done.reject(error); started.reject(error);});}
@@ -184,6 +189,7 @@ async function hostedScenario(roots, executionId, runId, nonce, {runtime = runSe
     const settled = await started.promise; if (settled) return settled;
     const handle = step.login?.user.toUpperCase().replaceAll('-', '_');
     return {status: 'STEP_ACTIVE', step: step.id, attempt: frame.context.identity.number, contracts: step.contracts,
+      inputAliases: Object.fromEntries((step.inputs ?? []).filter(binding => inputAliases[binding.name]).map(binding => [binding.name, inputAliases[binding.name]])),
       ...(step.login ? {login: {user: step.login.user, username: usernames[`HARNESS_USERNAME_${handle}`], secretNames: [`HARNESS_PASSWORD_${handle}`], reuseLandmark: step.login.landmark ?? null}} : {})};
   };
   const dispatch = async args => {
@@ -240,7 +246,9 @@ async function hostedScenario(roots, executionId, runId, nonce, {runtime = runSe
     throw error;
   } finally {
     clearInterval(stopWatcher);
-    protectedValues.clear();
+    protectedInputs.clear();
+    privateValues.length = 0;
+    for (const name of Object.keys(secrets)) delete secrets[name];
     // Native cleanup removes protected storage only after proving owned process
     // absence. Keep the creation-identity lock if that proof is incomplete.
     if (!existsSync(join(runRoots.runRoot, 'protected'))) try {await releaseHost(roots, nonce, ownership);} catch {finalState = 'INTERRUPTED'; stopReason = 'OWNERSHIP_RELEASE_FAILED';}

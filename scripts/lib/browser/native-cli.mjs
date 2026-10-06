@@ -81,7 +81,7 @@ export function nativeCliInstallation(packageRoot) {
 export async function prepareNativeSession(roots, {origins, storageState, secrets = {}, nativeTimeoutMs = 5000, commandTimeoutMs = 30000} = {}) {
   roots = resolveSkillRoots(roots);
   const env = await neutralEnvironment(), installation = nativeCliInstallation(roots.packageRoot);
-  if (!secrets || typeof secrets !== 'object' || Array.isArray(secrets) || Object.entries(secrets).some(([name, value]) => !/^HARNESS_PASSWORD_[A-Z0-9_]+$/.test(name) || typeof value !== 'string' || !value || value.length > 8192)) throw new Error('Invalid native secret bindings.');
+  if (!secrets || typeof secrets !== 'object' || Array.isArray(secrets) || Object.entries(secrets).some(([name, value]) => !/^HARNESS_(?:PASSWORD|INPUT)_[A-Z0-9_]+$/.test(name) || typeof value !== 'string' || !value || value.length > 8192)) throw new Error('Invalid native secret bindings.');
   if (!Number.isSafeInteger(nativeTimeoutMs) || nativeTimeoutMs < 1 || nativeTimeoutMs > 60000 || !Number.isSafeInteger(commandTimeoutMs) || commandTimeoutMs < 1 || commandTimeoutMs > 120000) throw new Error('Native timeouts must be bounded.');
   const require = createRequire(import.meta.url), {tools} = require(installation.coreBundle);
   if (typeof tools?.resolveCLIConfigForCLI !== 'function') throw new Error('Native CLI integration prerequisite is unavailable.');

@@ -4,11 +4,11 @@ import { expect, type Locator, type Page } from '@playwright/test';
  * Assertion-message facade (2026-09-08 "Assertion-message facade" ruling — the one
  * sanctioned `expect` home in utils; utility-classes playbook §18).
  *
- * Playwright renders a value assertion's Allure step as a bare `Expect "toBe"`:
- * expected values reach only the trace viewer, never reporters — the custom-message
- * 2nd argument of `expect()` is the sole reporter-visible channel, and it replaces
- * the step title verbatim (discarding the default `not`/`soft` markers, which is why
- * every negated wrapper states `not` in its own message).
+ * The custom-message argument of expect controls the authored assertion title.
+ * Native assertion data, errors and attachments may still contain expected/actual
+ * values. Value-free secret variants protect titles only; traces, screenshots,
+ * videos and Allure artifacts require appropriate access and retention.
+ * Custom messages replace default not/soft markers, so negation is stated here.
  *
  * These generic wrappers implement the canonical grammar ONCE:
  * `Expect <subject> to <verb phrase> <formatted expected>`. Business layers pass a
@@ -17,7 +17,8 @@ import { expect, type Locator, type Page } from '@playwright/test';
  * Locator-backed wrappers end the message with " →", so titles read
  * `<business clause> → <selector tail>`; value/page receivers get no Playwright
  * tail, hence no delimiter.
- * Callers must not pass secrets in subjects or values (iron law 7); expected values
+ * Callers must keep secrets out of subjects/titles and use secret variants as needed;
+ * expected values
  * arrive as the caller's parameters, so a message can never smuggle a literal the
  * matcher doesn't assert (iron law 5).
  *

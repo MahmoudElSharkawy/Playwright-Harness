@@ -11,28 +11,27 @@ import * as fs from 'fs';
 
 let apisUserManagement: ApisUserManagement;
 let dbsUserManagement: DbsUserManagement;
+let userToClean: string | undefined;
 
-let testData: any;
+const timestamp = new Date().toISOString().replace(/[-T:.]/g, '').slice(0, 17);
 
-const timestamp = new Date().toISOString().replace(/[-T:.]/g, "").slice(0, 17);
+let testData: typeof import('../../resources/testData/DbUserManagementTestJsonFile.json');
 
 // EXAMPLE: remove `.skip` once src/config/databases.ts points at a real,
 // reachable SQL Server — until then the queries would fail to connect.
 test.describe.skip('User Management DB Test Cases', () => {
 
   test('Test Case 12347: User created through the API is persisted in the database', { tag: ['@regression'] }, async () => {
-    allure.epic('User Management');
-    allure.feature('User Management DB Test Cases');
-    allure.tms('12347');
-    // allure.issue('#link');
+    await allure.epic('User Management');
+    await allure.feature('User Management DB Test Cases');
+    await allure.tms('12347');
 
     const email = testData.tc12347.email + timestamp + '@example.test';
+    userToClean = email;
     const createResponse = await apisUserManagement.createUser(testData.tc12347.username, email, testData.tc12347.password);
     await apisUserManagement.verifyUserCreatedSuccessfully(createResponse, testData.userCreatedResponse.status, testData.userCreatedResponse.message);
 
     await dbsUserManagement.verifyUserExistsInDb(email);
-
-    await apisUserManagement.deleteUser(email);
   });
 
   test.beforeAll(async () => {
@@ -40,12 +39,20 @@ test.describe.skip('User Management DB Test Cases', () => {
     dbsUserManagement = new DbsUserManagement(databases.appDb);
   });
 
-  test.beforeEach(async ({ request }) => {
+  test.beforeEach(() => {
+    userToClean = undefined;
+  });
+
+  test.beforeEach(({ request }) => {
     apisUserManagement = new ApisUserManagement(request);
   });
 
+  test.afterEach('Clean up the test user', async () => {
+    await apisUserManagement?.cleanupUserIfOwned(userToClean);
+  });
+
   test.afterAll(async () => {
-    await dbsUserManagement.close();
+    await dbsUserManagement?.close();
   });
 
 });

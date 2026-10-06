@@ -1,0 +1,25 @@
+{
+  "validLogin": {
+    "email": "qa.validLogin.",
+    "domain": "@example.test",
+    "password": "<generated-validLogin-password>",
+    "expected": { "registrationHttp": 201, "registrationCode": 201, "loginHttp": 200, "loginCode": 200 }
+  },
+  "wrongLogin": {
+    "email": "qa.wrongLogin.",
+    "domain": "@example.test",
+    "password": "<generated-wrongLogin-password>",
+    "wrongPassword": "<different-invalid-password>",
+    "expected": { "registrationHttp": 201, "registrationCode": 201, "loginHttp": 401, "loginCode": 401 }
+  },
+  "invalidRegistration": {
+    "email": "invalidRegistration.",
+    "password": "<generated-invalidRegistration-password>",
+    "expected": { "registrationHttp": 400, "registrationCode": 400 }
+  },
+  "borrowedRegistration": {
+    "email": "qa.borrowedRegistration@example.test",
+    "password": "<different-invalid-password>",
+    "expected": { "registrationHttp": 409, "registrationCode": 409 }
+  }
+}

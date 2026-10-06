@@ -1,5 +1,11 @@
 # M15 validation
 
+This milestone records historical evidence under its original verification contract.
+New candidates use [case-level assertions and review mappings](M13-GENERATION.md),
+with explicit one-time legacy migration. Historical marker results below are preserved;
+they do not describe the runtime proof provided by new v2 receipts.
+
+
 Both native lifecycles and the final semantic comparison passed on 2026-10-01.
 Implementation corrections, both generated candidates and the final evidence review
 are independently approved with no open findings. M15 is accepted within the

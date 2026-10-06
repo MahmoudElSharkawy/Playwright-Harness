@@ -27,7 +27,7 @@ export function workflowCases() {
   const expectations = sourceExpectations(source);
   const complete = cases.map(c => ({...c, key: expectations.find(e => e.scenarioId === c.id).key,
     ...(c.definition ? {definition: {...c.definition, caseId: c.id}} : {})}));
-  return {source, cases: complete, testData: Object.fromEntries(complete.map(c => [c.id, c]))};
+  return {source, cases: complete, testData: Object.fromEntries(complete.map(({key, ...c}) => [c.id, c]))};
 }
 
 export const workflowExecutionIds = Object.freeze([...generationCases().cases.map(c => c.id), ...hostCaseIds.map(id => `control-${id}`)]);

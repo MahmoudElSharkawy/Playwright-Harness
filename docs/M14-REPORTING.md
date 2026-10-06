@@ -127,7 +127,7 @@ changed or incomplete capture, and rereads the hash-linked verification history 
 review artifact for generation captures. A missing verification reference fails
 closed. The generation landing page shows that recorded verifier outcome above
 native details. For example, a helper may catch a failed assertion so native
-Playwright reports passed while the source-coverage verifier records FAIL. The
+Playwright reports passed while the case-assertion verifier records FAIL. The
 landing page preserves FAIL; it never promotes native status to readiness. Each
 embedded harness execution report similarly retains its own core verdict.
 
@@ -149,6 +149,36 @@ Playwright/Allure also records consumer test titles, logs, errors and attachment
 the harness does not promise a general sanitizer for arbitrary third-party test
 code. Keep secrets out of those sources, use existing redacting utilities and review
 artifacts before sharing. Nothing here publishes or automatically exports artifacts.
+
+## Links and protection boundaries
+
+Write known case/bug IDs directly in metadata calls and await asynchronous public
+APIs. Local scenarios retain their local case identity; include issue links only for
+associated real bugs. Configure existing reporter `links.tms` and `links.issue`
+templates from real coordinates or explicit destinations, preserving unrelated options.
+No PAT or network request is needed to format a destination. Separate case/bug
+destinations, encoded project names, modern/legacy ADO and on-prem collections are
+supported. The starter has no active placeholder destinations.
+
+Scoped capture reads literal string templates from the candidate configuration with
+the existing tokenizer and validates them before internal transport. Explicit adapter
+reporter options take precedence. The verification reporting record distinguishes
+configured, absent, placeholder and unresolved links. Dynamic templates stay valid in
+normal Allure configuration but cannot be statically extracted: scoped capture reports
+a clear diagnostic and retains raw IDs without changing the verdict or rewriting config.
+
+Existing API/DB utilities redact selected credential headers and structured keys.
+URLs, arbitrary strings, copied errors, native action/assertion data, traces,
+screenshots, videos and underlying Allure artifacts are not comprehensively sanitized.
+Value-free assertion titles protect titles only. Prefer disposable credentials, keep
+unnecessary sensitive attachments out of tests, and restrict artifact access and
+retention. No consumer telemetry interceptor, credential registry, private Playwright
+patch or telemetry-driven version pin is introduced. Broader redaction is outside
+this change.
+
+New generation receipts use the case-assertions gate. Reports never claim every source
+expectation executed; independent review assesses semantic coverage. Historical v1
+receipts retain their original interpretation.
 
 ## Validation and limits
 

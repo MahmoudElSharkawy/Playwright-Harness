@@ -3,27 +3,30 @@ import assert from 'node:assert/strict';
 import {mkdirSync, writeFileSync, symlinkSync, readFileSync, existsSync, readdirSync} from 'node:fs';
 import {join, dirname} from 'node:path';
 import {pathToFileURL} from 'node:url';
+import {spawnSync} from 'node:child_process';
 import {fixture} from './fixtures/execution-core.mjs';
 import {sourceExpectations, createGenerationHandoff, beginGeneration, registerCandidate, recordGenerationReview, generationStatus} from '../scripts/lib/generation/index.mjs';
 import {verifyGeneration} from '../scripts/lib/generation/verify.mjs';
 import {packageRoot} from '../scripts/lib/consumer-paths.mjs';
 import {generateAllure} from '../scripts/lib/reporting/allure.mjs';
+import {transaction} from '../scripts/lib/generation/storage.mjs';
 const put = (root, path, content) => {mkdirSync(dirname(join(root, path)), {recursive: true}); writeFileSync(join(root, path), content);};
 
 // Real native runner contract tests; generated text here is deliberately a small runner fixture,
 // not evidence of independent POM review or live browser/database integration.
-async function nativeFixture(t, body = 'await expect(2 + 2).toBe(4);', extra = '', withoutAllure = false) {
+async function nativeFixture(t, body = 'await expect(2 + 2).toBe(4);', extra = '', withoutAllure = false, options = {}) {
   const f = fixture(t), source = {version: 1, id: 'native-suite', title: 'Native verification', scenarios: [{id: 'case-1', title: 'Arithmetic', steps: [{action: 'Add', expected: ['The result is four']}]}]};
   const key = sourceExpectations(source)[0].key, bindings = [{key, runId: f.run.id, scenarioId: 'case-1', expectationId: 'visible'}];
   if (withoutAllure) {
     for (const name of ['@playwright/test', 'playwright', 'playwright-core']) {const target = join(f.roots.projectRoot, 'node_modules', name); mkdirSync(dirname(target), {recursive: true}); symlinkSync(join(f.roots.packageRoot, 'examples/node_modules', name), target, process.platform === 'win32' ? 'junction' : 'dir');}
   } else symlinkSync(join(f.roots.packageRoot, 'examples/node_modules'), join(f.roots.projectRoot, 'node_modules'), process.platform === 'win32' ? 'junction' : 'dir');
   put(f.roots.projectRoot, 'package.json', '{"type":"module"}');
-  put(f.roots.projectRoot, 'playwright.config.mjs', "export default {testDir:'./tests', projects:[{name:'native'}]};");
-  const helper = pathToFileURL(join(f.roots.packageRoot, 'scripts/lib/generation/assertion.mjs')).href;
-  put(f.roots.projectRoot, 'tests/ArithmeticTests.spec.ts', `import {test, expect} from '@playwright/test';\nimport {sourceExpectation} from ${JSON.stringify(helper)};\ntest.describe('Arithmetic',()=>{test('adds',async()=>{await sourceExpectation(test,${JSON.stringify(key)},async()=>{${body}});});test('unselected',async()=>{throw new Error('must never execute');});${extra}});`);
+  put(f.roots.projectRoot, 'playwright.config.mjs', options.config ?? "export default {testDir:'./tests', projects:[{name:'native'}]};");
+  for (const [file, contents] of Object.entries(options.files ?? {})) put(f.roots.projectRoot, file, contents);
+  put(f.roots.projectRoot, 'tests/ArithmeticTests.spec.ts', `import {test, expect} from '@playwright/test';\n${options.imports ?? ''}\ntest.describe('Arithmetic',()=>{test('adds',async()=>{${body}});test('unselected',async()=>{throw new Error('must never execute');});${extra}});`);
   await beginGeneration(f.roots, createGenerationHandoff(source, [{run: f.run, roots: f.roots, observations: f.report}], bindings), 'contract-author');
-  const input = {config: 'playwright.config.mjs', tests: [{scenarioId: 'case-1', spec: 'tests/ArithmeticTests.spec.ts', project: 'native', titlePath: ['Arithmetic', 'adds']}]};
+  const input = {config: 'playwright.config.mjs', tests: [{scenarioId: 'case-1', spec: 'tests/ArithmeticTests.spec.ts', project: 'native', titlePath: ['Arithmetic', 'adds'],
+    mapping: [{step: 1, actions: [], expectations: [{key, validations: ['ArithmeticFixture.verifySum']}]}]}]};
   f.candidate = await registerCandidate(f.roots, source.id, input);
   put(f.roots.projectRoot, '.harness/state/review.md', 'Synthetic gate approval; no independent review claimed.');
   await recordGenerationReview(f.roots, source.id, {revision: f.candidate.revision, reviewer: 'contract-reviewer', verdict: 'APPROVE', findings: [], artifact: '.harness/state/review.md'});
@@ -51,7 +54,7 @@ test('a helper cannot swallow a failed native assertion and earn a green', async
   const result = await verifyGeneration(f.roots, f.source.id);
   assert.equal(result.status, 'FAIL'); assert.equal(result.failureClass, 'ASSERTION_COVERAGE');
   const report = JSON.parse(readFileSync(join(f.roots.projectRoot, '.harness/state/generation', f.source.id, result.id, 'execution.json'), 'utf8'));
-  assert.equal(report.status, 'passed'); assert.equal(report.tests[0].results[0].expectations[0].failed, true);
+  assert.equal(report.status, 'passed'); assert.equal(report.version, 2); assert.equal(report.tests[0].results[0].assertions.failed, 1);
   assert.equal((await generationStatus(f.roots, f.source.id)).greens, 0);
   await assert.rejects(verifyGeneration(f.roots, f.source.id), /retry-to-green/);
 });
@@ -93,7 +96,7 @@ test('a repaired native candidate requires new review and two new green processe
   assert.equal((await verifyGeneration(f.roots, f.source.id)).status, 'PASS'); assert.equal((await generationStatus(f.roots, f.source.id)).greens, 1);
   assert.equal((await verifyGeneration(f.roots, f.source.id)).status, 'PASS'); assert.equal((await generationStatus(f.roots, f.source.id)).status, 'READY');
 });
-for (const [name, body] of [['actual failure', 'await expect(2).toBe(3);'], ['empty assertion callback', ''], ['runtime skip', 'test.skip();'], ['expected failure', 'test.fail(); await expect(2).toBe(3);']]) {
+for (const [name, body] of [['actual failure', 'await expect(2).toBe(3);'], ['empty test', ''], ['runtime skip', 'test.skip();'], ['expected failure', 'test.fail(); await expect(2).toBe(3);']]) {
   test(`native ${name} cannot produce a green`, async t => {const f = await nativeFixture(t, body); const result = await verifyGeneration(f.roots, f.source.id); assert.notEqual(result.status, 'PASS'); assert.notEqual(result.failureClass, 'PREPARATION'); assert.notEqual(result.failureClass, 'COLLECTION'); await assert.rejects(verifyGeneration(f.roots, f.source.id), /retry-to-green/);});
 }
 
@@ -122,4 +125,79 @@ test('Allure captures nested core attachments in two isolated native verificatio
 for (const [status, body] of [['PASS', 'await expect(2).toBe(2);'], ['FAIL', 'await expect(2).toBe(3);']]) test(`missing optional Allure leaves native verification ${status} unchanged`, async t => {
   const f = await nativeFixture(t, body, '', true), result = await verifyGeneration(f.roots, f.source.id, {allure: true});
   assert.equal(result.status, status, JSON.stringify(result)); assert.equal(result.reporting.status, 'FAILED');
+});
+
+test('only hook assertions cannot satisfy case coverage', async t => {
+  const f = await nativeFixture(t, '', "test.beforeEach(async()=>{await expect(2).toBe(2);});test.afterEach(async()=>{await expect(3).toBe(3);});");
+  const result = await verifyGeneration(f.roots, f.source.id); assert.equal(result.status, 'NEEDS_REVIEW'); assert.equal(result.failureClass, 'ASSERTION_COVERAGE');
+});
+for (const body of ["await test.step.skip('Skipped check', async()=>{await expect(2).toBe(3);});await expect(2).toBe(2);",
+  "await test.step('Skipped check', async step=>{step.skip();await expect(2).toBe(3);});await expect(2).toBe(2);"]) test('native step skips cannot earn a scoped green', async t => {
+  const f = await nativeFixture(t, body), result = await verifyGeneration(f.roots, f.source.id);
+  assert.equal(result.status, 'NEEDS_REVIEW'); assert.equal(result.failureClass, 'ASSERTION_COVERAGE');
+});
+const probeOptions = {imports: "import {probe} from '../src/utils/UiControls';", files: {'src/utils/UiControls.ts':
+  "import {expect} from '@playwright/test';export async function probe(){try{await expect(2,'Probe whether a transient gate is ready').toBe(3);}catch{}}"}};
+test('a utility probe alone is not a business assertion', async t => {
+  const f = await nativeFixture(t, 'await probe();', '', false, probeOptions), result = await verifyGeneration(f.roots, f.source.id);
+  assert.equal(result.status, 'NEEDS_REVIEW');
+});
+test('a utility probe plus a real assertion can pass', async t => {
+  const f = await nativeFixture(t, 'await probe();await expect(2).toBe(2);', '', false, probeOptions);
+  assert.equal((await verifyGeneration(f.roots, f.source.id)).status, 'PASS');
+});
+test('toPass uses its terminal result after failing attempts', async t => {
+  const f = await nativeFixture(t, 'let attempt=0;await expect(async()=>{await expect(++attempt).toBeGreaterThan(2);}).toPass({intervals:[1],timeout:5000});');
+  assert.equal((await verifyGeneration(f.roots, f.source.id)).status, 'PASS');
+});
+test('deprecated source helper executes assertions without emitting marker steps', async t => {
+  const helper = pathToFileURL(join(packageRoot, 'scripts/lib/generation/assertion.mjs')).href;
+  const f = await nativeFixture(t, "await sourceExpectation(test,'expect-000000000000000000000000',async()=>{await expect(2).toBe(2);});", '', false,
+    {imports: `import {sourceExpectation} from ${JSON.stringify(helper)};`});
+  const result = await verifyGeneration(f.roots, f.source.id, {allure: true}); assert.equal(result.status, 'PASS');
+  const directory = join(f.roots.projectRoot, result.reporting.directory, 'allure-results');
+  for (const file of readdirSync(directory)) assert(!readFileSync(join(directory, file), 'utf8').includes('harness:expectation:'));
+});
+test('a legacy candidate at its repair limit migrates to a new review and two fresh native greens', async t => {
+  const f = await nativeFixture(t);
+  await transaction(f.roots, f.source.id, (state, save) => {
+    // Synthetic historical state: existing production records are never rewritten.
+    delete state.candidates[0].gate; delete state.candidates[0].tests[0].mapping; state.candidates[0].round = 3; state.rounds = 3;
+    state.runs.push({id: 'historical-green', revision: f.candidate.revision, status: 'PASS'}); save(state);
+  });
+  f.candidate = await registerCandidate(f.roots, f.source.id, {...f.input, migration: 'case-assertions'});
+  assert.equal(f.candidate.round, 3); await assert.rejects(verifyGeneration(f.roots, f.source.id), /approval/);
+  put(f.roots.projectRoot, '.harness/state/migration-review.md', 'Synthetic migration review: original scenario preserved; no interrupted effects.');
+  await recordGenerationReview(f.roots, f.source.id, {revision: f.candidate.revision, reviewer: 'migration-reviewer', verdict: 'APPROVE', findings: [], artifact: '.harness/state/migration-review.md'});
+  assert.equal((await generationStatus(f.roots, f.source.id)).greens, 0);
+  const first = await verifyGeneration(f.roots, f.source.id); assert.equal(first.status, 'PASS'); assert.equal(first.gate, 'case-assertions');
+  assert.equal((await generationStatus(f.roots, f.source.id)).greens, 1);
+  const second = await verifyGeneration(f.roots, f.source.id); assert.equal(second.status, 'PASS'); assert.notEqual(first.id, second.id);
+  assert.equal((await generationStatus(f.roots, f.source.id)).status, 'READY');
+});
+
+const linkTemplates = {tms: {nameTemplate: 'Test: #%s', urlTemplate: 'https://dev.azure.com/example-org/Example%20Project/_workitems/edit/%s'},
+  issue: {nameTemplate: 'Bug: #%s', urlTemplate: 'https://bugs.example.test/other/%s'}};
+const allureResults = directory => readdirSync(directory).filter(name => name.endsWith('-result.json')).map(name => JSON.parse(readFileSync(join(directory, name), 'utf8')));
+test('normal and scoped Allure both resolve IDs through the configured templates', async t => {
+  const f = await nativeFixture(t, "await allure.tms('101');await allure.issue('202');await expect(2).toBe(2);", '', false, {
+    imports: "import * as allure from 'allure-js-commons';",
+    config: `export default {testDir:'./tests',projects:[{name:'native'}],reporter:[['allure-playwright',{resultsDir:'reports/normal/allure-results',links:${JSON.stringify(linkTemplates)}}]]};`,
+  });
+  const native = spawnSync(process.execPath, [join(packageRoot, 'examples/node_modules/playwright/cli.js'), 'test', '--config', f.input.config, '--grep', 'adds', '--workers', '1', '--retries', '0'],
+    {cwd: f.roots.projectRoot, encoding: 'utf8', windowsHide: true, timeout: 60000});
+  assert.equal(native.status, 0, native.stderr);
+  const scoped = await verifyGeneration(f.roots, f.source.id, {allure: true}); assert.equal(scoped.status, 'PASS'); assert.equal(scoped.reporting.links, 'CONFIGURED');
+  const normal = allureResults(join(f.roots.projectRoot, 'reports/normal/allure-results'))[0];
+  const captured = allureResults(join(f.roots.projectRoot, scoped.reporting.directory, 'allure-results'))[0];
+  const expected = [{type: 'tms', url: linkTemplates.tms.urlTemplate.replace('%s', '101'), name: 'Test: #101'}, {type: 'issue', url: linkTemplates.issue.urlTemplate.replace('%s', '202'), name: 'Bug: #202'}];
+  assert.deepEqual(normal.links, expected); assert.deepEqual(captured.links, expected);
+});
+test('dynamic Allure templates are reported as unresolved without changing the verifier outcome', async t => {
+  const f = await nativeFixture(t, "await allure.tms('101');await expect(2).toBe(2);", '', false, {
+    imports: "import * as allure from 'allure-js-commons';",
+    config: `const destination=${JSON.stringify(linkTemplates.tms.urlTemplate)};export default {testDir:'./tests',projects:[{name:'native'}],reporter:[['allure-playwright',{links:{tms:{urlTemplate:destination}}}]]};`,
+  });
+  const result = await verifyGeneration(f.roots, f.source.id, {allure: true}); assert.equal(result.status, 'PASS'); assert.equal(result.reporting.links, 'UNRESOLVED');
+  const captured = allureResults(join(f.roots.projectRoot, result.reporting.directory, 'allure-results'))[0]; assert.equal(captured.links[0].url, '101');
 });

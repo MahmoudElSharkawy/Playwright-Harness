@@ -22,7 +22,7 @@ function notes(handoff) {
 function handoff(f) {return createGenerationHandoff(source, [{run: f.run, roots: f.roots, observations: f.report}], [{key, runId: f.run.id, scenarioId: 'case-1', expectationId: 'visible'}]);}
 
 // Synthetic protocol records exercise the assessor, not actual host/browser/report-generator integration.
-async function completed(t, {businessValue = 'row-1', duration = 10} = {}) {
+async function completed(t, {businessValue = 'row-1', duration = 10, assertionCount = 1} = {}) {
   const f = fixture(t), root = f.roots.projectRoot; f.current.outputs[0].value = businessValue; f.current.endedAt = f.current.startedAt + duration;
   const h = handoff(f), n = notes(h), result = f.assess();
   put(root, 'source.json', source); put(root, 'refinement.json', n.refinement); put(root, '.harness/knowledge-candidates/workflow.json', n.knowledge);
@@ -31,14 +31,15 @@ async function completed(t, {businessValue = 'row-1', duration = 10} = {}) {
   put(root, '.harness/workflow/exploration.json', [{id: 'observe', run: f.run, roots: f.roots, observations: f.report, result}]);
   assert.equal(writeReports(f.roots, result, {directory: 'reports/exploration/observe'}).status, 'WRITTEN');
   await beginGeneration(f.roots, h, 'fixture-author');
-  const selected = {scenarioId: 'case-1', spec: 'tests/ObservationTests.spec.ts', project: 'proof', titlePath: ['Fixture', 'Observe']};
+  const selected = {scenarioId: 'case-1', spec: 'tests/ObservationTests.spec.ts', project: 'proof', titlePath: ['Fixture', 'Observe'],
+    mapping: [{step: 1, actions: ['ObservationPage.observe'], expectations: [{key, validations: ['ObservationPage.verifyObservation']}]}]};
   const candidate = await registerCandidate(f.roots, source.id, {config: 'playwright.config.mjs', tests: [selected]});
   put(root, '.harness/state/review.md', 'Synthetic approval for contract tests only; not an independent review.');
   await recordGenerationReview(f.roots, source.id, {revision: candidate.revision, reviewer: 'fixture-reviewer', verdict: 'APPROVE', findings: [], artifact: '.harness/state/review.md'});
   for (let number = 0; number < 2; number++) {
     const invocation = `verify-${number}`, recordPath = `.harness/state/generation/${source.id}/${invocation}`;
-    const native = {version: 1, invocation, status: 'passed', errors: 0, workers: 1, forbidOnly: true, tests: [{...selected, id: 'native', nativeFile: 'ObservationTests.spec.ts', expectedStatus: 'passed', retries: 0, repeatEachIndex: 0,
-      results: [{status: 'passed', retry: 0, errors: 0, expectations: [{key, assertions: 1, failed: false}]}]}]};
+    const native = {version: 2, invocation, status: 'passed', errors: 0, workers: 1, forbidOnly: true, tests: [{...selected, id: 'native', nativeFile: 'ObservationTests.spec.ts', expectedStatus: 'passed', retries: 0, repeatEachIndex: 0,
+      results: [{status: 'passed', retry: 0, errors: 0, assertions: {passed: assertionCount, failed: 0}, skippedSteps: 0}]}]};
     put(root, `${recordPath}/collection.json`, native); put(root, `${recordPath}/execution.json`, native);
     const run = createRun({id: `generated-${number}`, startedAt: f.run.startedAt, ...f.run.inputs});
     const observations = JSON.parse(JSON.stringify(f.report).replaceAll('"run-1"', JSON.stringify(run.id)));
@@ -59,13 +60,17 @@ async function completed(t, {businessValue = 'row-1', duration = 10} = {}) {
     put(root, `${directory}/generation.json`, {status: 'GENERATED', generator: 'allure', commandline: '3.19.1', reporter: '3.13.0', tests: 1,
       configuration: digest(readFileSync(join(f.roots.packageRoot, 'scripts/lib/reporting/allurerc.json'))), verification: {id: invocation, revision: candidate.revision, status: 'PASS'},
       artifact: artifact(`${directory}/index.html`, landing), nativeArtifact: artifact(`${directory}/allure-report/index.html`, nativeHtml)});
-    await transaction(f.roots, source.id, (state, save) => {state.runs.push({id: invocation, revision: candidate.revision, status: 'PASS', receipt: {path: `${recordPath}/execution.json`, fingerprint: fingerprint(native)}, reporting: {status: 'CAPTURED', directory}}); save(state);});
+    await transaction(f.roots, source.id, (state, save) => {state.runs.push({id: invocation, revision: candidate.revision, gate: 'case-assertions', status: 'PASS', receipt: {path: `${recordPath}/execution.json`, fingerprint: fingerprint(native)}, reporting: {status: 'CAPTURED', directory}}); save(state);});
   }
   return {...f, h, n};
 }
 
 test('complete protocol validates its own artifacts while ignoring execution timing and report hashes for parity', async t => {
   const a = await completed(t), b = await completed(t, {duration: 77});
+  assert.equal((await compareWorkflows(a.roots, b.roots, expected)).status, 'PASS');
+});
+test('case-level parity compares evaluated outcomes rather than raw assertion counts', async t => {
+  const a = await completed(t), b = await completed(t, {assertionCount: 4});
   assert.equal((await compareWorkflows(a.roots, b.roots, expected)).status, 'PASS');
 });
 test('meaningful business outputs remain semantic differences', async t => {

@@ -1,0 +1,8 @@
+{
+  "preparedSession": {
+    "email": "qa.preparedSession.",
+    "domain": "@example.test",
+    "password": "<generated-preparedSession-password>",
+    "expected": { "httpStatus": 200, "responseCode": 200 }
+  }
+}

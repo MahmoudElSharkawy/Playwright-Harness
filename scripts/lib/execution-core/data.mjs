@@ -36,7 +36,8 @@ export function data(value, maxBytes = 1024 * 1024, {maxNodes = 20000} = {}) {
       const property = Object.getOwnPropertyDescriptor(item, name);
       requireThat(property.enumerable && Object.hasOwn(property, 'value'), 'Accessors are not execution data.');
       // A definition may name a sensitive wire field without containing its value.
-      // Only one plain, accessor-free binding reference is serializable there.
+      // Only one plain binding reference is serializable there; its runtime source
+      // may be external access, a generated input or explicit synthetic JSON data.
       const candidate = property.value;
       const bindingSlot = candidate && typeof candidate === 'object' && Object.getPrototypeOf(candidate) === Object.prototype
         && Reflect.ownKeys(candidate).length === 1 && Object.hasOwn(candidate, '$input')

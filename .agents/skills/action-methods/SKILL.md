@@ -10,7 +10,9 @@ Resolve this skill to its real path before following references. Read the
 
 Action methods are the verbs of the business layer: intent-named operations on
 `pages/`, `apis/`, and `dbs/` classes that hide mechanics behind one
-business-readable Allure step. They perform; they never assert, branch, or catch.
+business-readable Allure step. Ordinary actions do not assert, branch, or catch.
+Domain lifecycle cleanup may use small ownership guards and cleanup postconditions
+under [design-conventions §4a](../pom-architecture/references/design-conventions.md#4a-test-data-ownership-method-contracts-and-disposable-inputs).
 
 1. Read the shared law first: [design-conventions](../pom-architecture/references/design-conventions.md)
    — especially §2 (method naming), §4.6 (one Allure step per method), §4.7 (no

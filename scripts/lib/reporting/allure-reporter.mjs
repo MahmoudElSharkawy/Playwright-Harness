@@ -4,6 +4,7 @@ import {join} from 'node:path';
 import {consumerRoots} from '../consumer-paths.mjs';
 import {reportDirectory} from './index.mjs';
 import {installedAllure, allureInventory} from './allure.mjs';
+import {validateAllureLinks} from '../convention-source.mjs';
 
 /** Concrete optional adapter for the installed official Allure reporter, not a verdict engine. */
 export default class HarnessAllureReporter {
@@ -16,7 +17,10 @@ export default class HarnessAllureReporter {
       if (installed.version !== '3.13.0') throw new Error('Unsupported Allure reporter.');
       this.reporter = installed.version;
       const Reporter = installed.require(installed.entry).default;
+      const linkInput = options.links ?? (process.env.HARNESS_ALLURE_LINKS ? JSON.parse(process.env.HARNESS_ALLURE_LINKS) : undefined);
+      const links = linkInput === undefined ? undefined : validateAllureLinks(linkInput);
       this.delegate = new Reporter({resultsDir: join(this.path, 'allure-results'), detail: true, suiteTitle: true,
+        ...(links === undefined ? {} : {links}),
         environmentInfo: {node_version: process.version, result_source: 'Native Playwright Test; harness execution verdicts are attached separately'}});
       if (this.delegate.version() !== 'v2') throw new Error('Unsupported native reporter interface.');
     } catch {this.failed = true;}

@@ -117,7 +117,11 @@ try {
     bindings.push({key: item.key, runId: run.id, scenarioId: item.id, expectationId: 'expected'});
   }
   if (!repairRoot) {const handoff = createGenerationHandoff(fixture.source, executions, bindings); await beginGeneration(roots, handoff, 'm13-author');}
-  const candidate = await registerCandidate(roots, fixture.source.id, {config: 'playwright.config.ts', tests: fixture.cases.map(c => ({scenarioId: c.id, spec: 'tests/ObservationTests.spec.ts', project: 'proof', titlePath: ['Observations', c.title]})), ...(repairRoot ? {repair: 'review-findings'} : {})});
+  const candidate = await registerCandidate(roots, fixture.source.id, {config: 'playwright.config.ts', tests: fixture.cases.map(c => {
+    const owner = c.id === 'ui' ? 'ObservationPage' : c.definition.family === 'api' ? 'ApisObservations' : 'DbsObservations';
+    return {scenarioId: c.id, spec: 'tests/ObservationTests.spec.ts', project: 'proof', titlePath: ['Observations', c.title],
+      mapping: [{step: 1, actions: [`${owner}.${c.id === 'ui' ? 'navigate' : 'observe'}`], expectations: [{key: c.key, validations: [`${owner}.verifyObservation`]}]}]};
+  }), ...(repairRoot ? {repair: 'review-findings'} : {})});
   check('conventions', [join(packageRoot, 'scripts/check-conventions.mjs'), '--root', projectRoot, '--fail-on-warn']);
   check('typecheck', [join(packageRoot, 'examples/node_modules/typescript/bin/tsc'), '--project', join(projectRoot, 'tsconfig.json'), '--noEmit']);
   const descriptor = {status: 'AWAITING_INDEPENDENT_REVIEW', projectRoot, revision: candidate.revision, fingerprint: candidate.snapshot.fingerprint, round: candidate.round, sourceId: fixture.source.id, cases: fixture.cases.length, audit,
@@ -142,7 +146,7 @@ try {
         const matching = tests.filter(test => test.name === item.title); assert.equal(matching.length, 1);
         const steps = (matching[0].steps ?? []).flatMap(descendants), family = item.definition.family === 'api' ? 'API' : 'database';
         const action = steps.filter(step => step.name === `Read ${family} observation: ${item.description}`);
-        const validation = steps.filter(step => step.name === `Verify ${family} observation ${item.key} has assessed status ${item.expected}`);
+        const validation = steps.filter(step => step.name === `Verify ${family} observation has assessed status ${item.expected}`);
         assert.equal(action.length, 1); assert.equal(validation.length, 1); assert.equal(action[0].status, 'passed'); assert.equal(validation[0].status, 'passed');
         const files = descendants(action[0]).flatMap(step => step.attachments ?? []);
         for (const name of ['Harness execution result', 'Harness execution report']) {

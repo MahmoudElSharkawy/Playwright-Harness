@@ -5,14 +5,16 @@ import {dirname, join} from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {fixture, retry, resource} from './fixtures/execution-core.mjs';
 import {fingerprint} from '../scripts/lib/execution-core/data.mjs';
-import {createGenerationHandoff, sourceExpectations, beginGeneration, registerCandidate, recordGenerationReview, generationStatus} from '../scripts/lib/generation/index.mjs';
-import {snapshot, transaction} from '../scripts/lib/generation/storage.mjs';
+import {createGenerationHandoff, sourceExpectations, beginGeneration, registerCandidate, recordGenerationReview, generationStatus, verificationRecord} from '../scripts/lib/generation/index.mjs';
+import {snapshot, transaction, reviewArtifact} from '../scripts/lib/generation/storage.mjs';
 import {selectTests, assessVerification, verifyGeneration} from '../scripts/lib/generation/verify.mjs';
+import GenerationReporter from '../scripts/lib/generation/reporter.cjs';
 
 const source = () => ({version: 1, id: 'suite', title: 'Synthetic source', scenarios: [{id: 'case-1', title: 'Observe', steps: [{action: 'Observe the fixture', expected: ['The synthetic observation matches']}]}]});
 const put = (root, path, content) => {mkdirSync(dirname(join(root, path)), {recursive: true}); writeFileSync(join(root, path), typeof content === 'string' ? content : JSON.stringify(content));};
 const handoff = (f, input = source()) => createGenerationHandoff(input, [{run: f.run, roots: f.roots, observations: f.report}], sourceExpectations(input).map(e => ({key: e.key, runId: f.run.id, scenarioId: 'case-1', expectationId: 'visible'})));
-const candidate = () => ({config: 'playwright.config.mjs', tests: [{scenarioId: 'case-1', spec: 'tests/ObservationTests.spec.ts', project: 'native', titlePath: ['Observation', 'matches']} ]});
+const candidate = (input = source()) => ({config: 'playwright.config.mjs', tests: [{scenarioId: 'case-1', spec: 'tests/ObservationTests.spec.ts', project: 'native', titlePath: ['Observation', 'matches'],
+  mapping: input.scenarios[0].steps.map((step, index) => ({step: index + 1, actions: ['ObservationPage.observe'], expectations: sourceExpectations(input).filter(e => e.step === index + 1).map(e => ({key: e.key, validations: ['ObservationPage.verifyObservation']}))}))} ]});
 async function prepared(t) {
   const f = fixture(t); put(f.roots.projectRoot, 'playwright.config.mjs', 'export default {};'); put(f.roots.projectRoot, 'tests/ObservationTests.spec.ts', '// synthetic contract fixture');
   await beginGeneration(f.roots, handoff(f), 'author'); f.candidate = await registerCandidate(f.roots, 'suite', candidate());
@@ -85,4 +87,134 @@ test('CLI rejects fabricated input fingerprints and withholds diagnostic payload
   put(f.roots.projectRoot, '.harness/state/prepare.json', {source: 'source.json', author: 'cli-author', executions: [{snapshot: '.harness/runs/run-1/inputs.json', runRoot: '.harness/runs/run-1'}], bindings: []});
   const result = spawnSync(process.execPath, [join(f.roots.packageRoot, 'scripts/generate-tests.mjs'), 'prepare', '--project-root', f.roots.projectRoot, '--input', '.harness/state/prepare.json'], {encoding: 'utf8', windowsHide: true});
   assert.equal(result.status, 2); assert(!result.stderr.includes('forged')); assert.equal(JSON.parse(result.stderr).status, 'BLOCKED');
+});
+
+function caseReport() {
+  const report = nativeReport(); report.version = 2;
+  report.tests[0].results[0] = {status: 'passed', retry: 0, errors: 0, assertions: {passed: 1, failed: 0}, skippedSteps: 0};
+  return report;
+}
+test('v2 verifies case assertion evidence without runtime source markers', t => {
+  const f = fixture(t), report = caseReport();
+  assert.deepEqual(assessVerification(handoff(f), selectTests(candidate(), report), report, 'verify-one', 0), {status: 'PASS', tests: 1, gate: 'case-assertions'});
+});
+for (const [name, mutate] of Object.entries({
+  'zero assertions': r => r.assertions.passed = 0,
+  'caught failure': r => r.assertions.failed = 1,
+  'step skip': r => r.skippedSteps = 1,
+  'negative count': r => r.assertions.failed = -1,
+  'fractional count': r => r.assertions.passed = 0.5,
+  'string count': r => r.assertions.passed = '1',
+  'missing count': r => delete r.skippedSteps,
+  'mixed evidence': r => r.expectations = [],
+})) test(`v2 refuses ${name}`, t => {
+  const f = fixture(t), report = caseReport(); mutate(report.tests[0].results[0]);
+  assert.throws(() => assessVerification(handoff(f), selectTests(candidate(), report), report, 'verify-one', 0));
+});
+test('v1 receipts cannot carry v2 evidence', t => {
+  const f = fixture(t), report = nativeReport(); report.tests[0].results[0].assertions = {passed: 1, failed: 0};
+  assert.throws(() => assessVerification(handoff(f), selectTests(candidate(), report), report, 'verify-one', 0));
+});
+
+const expectStep = (patch = {}) => ({category: 'expect', title: 'Expect the observed value', duration: 1, steps: [], annotations: [], ...patch});
+function reporterResult(steps) {
+  const reporter = new GenerationReporter(); reporter.report.tests = [{id: 'native', results: []}];
+  reporter.onTestEnd({id: 'native', expectedStatus: 'passed'}, {status: 'passed', retry: 0, errors: [], steps});
+  assert.equal(reporter.report.version, 2); return reporter.report.tests[0].results[0];
+}
+test('reporter excludes lifecycle checks and incomplete assertions from passing evidence', () => {
+  const result = reporterResult([{category: 'hook', steps: [expectStep()]}, {category: 'fixture', steps: [{category: 'test.step', steps: [expectStep()]}]}, expectStep({duration: -1})]);
+  assert.deepEqual(result.assertions, {passed: 0, failed: 0});
+});
+test('reporter uses the terminal polling outcome but finds ordinary swallowed assertion failures', () => {
+  const result = reporterResult([expectStep({steps: [expectStep({error: {message: 'retry'}}), expectStep()]}), {category: 'test.step', steps: [expectStep({error: {message: 'caught'}})]}]);
+  assert.deepEqual(result.assertions, {passed: 1, failed: 1});
+});
+test('reporter excludes only explicitly titled utility probes', () => {
+  const result = reporterResult([expectStep({title: 'Probe gate', location: {file: 'C:\\consumer\\src\\utils\\UiControls.ts'}, error: {message: 'probe'}}),
+    expectStep({title: 'Probe gate', location: {file: '/consumer/src/pages/GatePage.ts'}}), expectStep({title: 'Probe gate'})]);
+  assert.deepEqual(result.assertions, {passed: 2, failed: 0});
+});
+test('reporter retains lifecycle failures and counts step skips even within expect containers', () => {
+  const result = reporterResult([{category: 'hook', steps: [expectStep({error: {message: 'cleanup'}})]},
+    {category: 'test.step', annotations: [{type: 'skip'}], steps: []}, expectStep({steps: [{category: 'test.step', annotations: [{type: 'skip'}], steps: []}]})]);
+  assert.deepEqual(result.assertions, {passed: 1, failed: 1}); assert.equal(result.skippedSteps, 2);
+});
+
+for (const [name, change, code] of [
+  ['missing rows', c => delete c.tests[0].mapping, 'MAPPING_STEPS'],
+  ['duplicate rows', c => c.tests[0].mapping.push(c.tests[0].mapping[0]), 'MAPPING_STEPS'],
+  ['foreign step', c => c.tests[0].mapping[0].step = 2, 'MAPPING_STEPS'],
+  ['missing expectation', c => c.tests[0].mapping[0].expectations = [], 'MAPPING_KEYS'],
+  ['duplicate expectation', c => c.tests[0].mapping[0].expectations.push(c.tests[0].mapping[0].expectations[0]), 'MAPPING_KEYS'],
+  ['foreign expectation', c => c.tests[0].mapping[0].expectations[0].key = 'unknown', 'MAPPING_KEYS'],
+  ['empty validations', c => c.tests[0].mapping[0].expectations[0].validations = [], 'MAPPING_REFERENCES'],
+  ['malformed reference', c => c.tests[0].mapping[0].actions = ['arbitrary code()'], 'MAPPING_REFERENCES'],
+]) test(`candidate rejects ${name} without consuming a repair`, async t => {
+  const f = await prepared(t), input = {...candidate(), repair: 'script-defect'}; change(input);
+  await assert.rejects(registerCandidate(f.roots, 'suite', input), error => error.code === code);
+  const state = await transaction(f.roots, 'suite', state => state); assert.equal(state.rounds, 0); assert.equal(state.candidates.length, 1);
+});
+test('mapping covers action-only and verification-only steps without lexical source analysis', async t => {
+  const f = fixture(t), input = source(); input.scenarios[0].steps.unshift({action: 'Open the view', expected: []});
+  put(f.roots.projectRoot, 'playwright.config.mjs', 'export default {};'); put(f.roots.projectRoot, 'tests/ObservationTests.spec.ts', '// Reviewer resolves business methods; registration validates mapping structure only.');
+  await beginGeneration(f.roots, handoff(f, input), 'author');
+  const mapped = candidate(input); mapped.tests[0].mapping[1].actions = [];
+  const result = await registerCandidate(f.roots, 'suite', mapped); assert.deepEqual(result.tests[0].mapping, mapped.tests[0].mapping);
+});
+
+async function legacy(t, rounds = 3, statuses = ['PASS', 'FAIL', 'STARTED']) {
+  const f = fixture(t), input = candidate();
+  put(f.roots.projectRoot, input.config, 'export default {};'); put(f.roots.projectRoot, input.tests[0].spec, '// Legacy consumer');
+  put(f.roots.projectRoot, '.harness/state/legacy-review.md', 'Synthetic historical review.');
+  await beginGeneration(f.roots, handoff(f), 'author');
+  await transaction(f.roots, 'suite', (state, save) => {
+    state.rounds = rounds;
+    const old = structuredClone(input); delete old.tests[0].mapping;
+    state.candidates.push({...old, revision: 'legacy-revision', snapshot: snapshot(f.roots), round: rounds});
+    state.reviews.push({revision: 'legacy-revision', reviewer: 'legacy-reviewer', verdict: 'APPROVE', findings: [], artifact: reviewArtifact(f.roots, '.harness/state/legacy-review.md')});
+    for (const status of statuses) state.runs.push({id: `legacy-${status}`, revision: 'legacy-revision', status});
+    save(state);
+  });
+  return {...f, input, before: structuredClone(await transaction(f.roots, 'suite', state => state))};
+}
+for (const rounds of [0, 3]) test(`legacy migration preserves history and repair count ${rounds}`, async t => {
+  const f = await legacy(t, rounds);
+  assert.equal((await generationStatus(f.roots, 'suite')).status, 'NEEDS_REVIEW');
+  put(f.roots.projectRoot, f.input.tests[0].spec, '// Migration removes runtime source markers.');
+  const migrated = await registerCandidate(f.roots, 'suite', {...f.input, migration: 'case-assertions'});
+  assert.equal(migrated.round, rounds); assert.equal(migrated.gate, 'case-assertions');
+  const after = await transaction(f.roots, 'suite', state => state);
+  assert.equal(after.rounds, rounds); assert.deepEqual(after.candidates.slice(0, -1), f.before.candidates);
+  for (const name of ['reviews', 'runs', 'handoff']) assert.deepEqual(after[name], f.before[name]);
+  assert.equal((await verificationRecord(f.roots, 'suite', 'legacy-FAIL')).status, 'FAIL');
+  await assert.rejects(verifyGeneration(f.roots, 'suite'), /approval/);
+  await assert.rejects(registerCandidate(f.roots, 'suite', {...f.input, migration: 'case-assertions'}), /only once/);
+});
+test('migration cannot change native scope or bypass a combined repair at the budget limit', async t => {
+  const f = await legacy(t), changed = structuredClone(f.input); changed.tests[0].titlePath[1] = 'different';
+  await assert.rejects(registerCandidate(f.roots, 'suite', {...changed, migration: 'case-assertions'}), /preserve/);
+  await assert.rejects(registerCandidate(f.roots, 'suite', {...f.input, migration: 'case-assertions', repair: 'script-defect'}), /Three cumulative/);
+  assert.deepEqual(await transaction(f.roots, 'suite', state => state), f.before);
+});
+test('mixed migration charges a repair and ordinary v2 registration permanently closes the exemption', async t => {
+  const mixed = await legacy(t, 1); const migrated = await registerCandidate(mixed.roots, 'suite', {...mixed.input, migration: 'case-assertions', repair: 'script-defect'});
+  assert.equal(migrated.round, 2);
+  const ordinary = await legacy(t, 1); const repaired = await registerCandidate(ordinary.roots, 'suite', {...ordinary.input, repair: 'review-findings'});
+  assert.equal(repaired.round, 2);
+  await assert.rejects(registerCandidate(ordinary.roots, 'suite', {...ordinary.input, migration: 'case-assertions'}), /only once/);
+});
+test('migration does not grant later free repairs or apply to a new source', async t => {
+  const f = await legacy(t); await registerCandidate(f.roots, 'suite', {...f.input, migration: 'case-assertions'});
+  await assert.rejects(registerCandidate(f.roots, 'suite', {...f.input, repair: 'script-defect'}), /Three cumulative/);
+  const fresh = fixture(t); await beginGeneration(fresh.roots, handoff(fresh), 'author');
+  put(fresh.roots.projectRoot, 'playwright.config.mjs', 'export default {};'); put(fresh.roots.projectRoot, 'tests/ObservationTests.spec.ts', '// Initial candidate');
+  await assert.rejects(registerCandidate(fresh.roots, 'suite', {...candidate(), migration: 'case-assertions'}), /only once/);
+});
+test('CLI mapping diagnostics expose fixed reason codes without source references', async t => {
+  const f = await prepared(t), input = {...candidate(), repair: 'script-defect'};
+  input.tests[0].mapping[0].expectations[0].validations = ['DoNotEcho.privateOperation()'];
+  put(f.roots.projectRoot, '.harness/state/candidate.json', input);
+  const result = spawnSync(process.execPath, [join(f.roots.packageRoot, 'scripts/generate-tests.mjs'), 'candidate', '--project-root', f.roots.projectRoot, '--id', 'suite', '--input', '.harness/state/candidate.json'], {encoding: 'utf8', windowsHide: true});
+  assert.equal(result.status, 2); assert.equal(JSON.parse(result.stderr).code, 'MAPPING_REFERENCES'); assert(!result.stderr.includes('DoNotEcho'));
 });

@@ -22,7 +22,8 @@ abbreviations (`delUsr()`), or names promising more than the body does
 
 Iron law §4.6: every action method opens exactly ONE Allure step of its own,
 with a business-readable title. The step opens as the first statement and
-closes as the last — nothing executes outside it. Composing other public
+closes as the last. Lifecycle cleanup may return before its step when there is no
+candidate (design-conventions §4a); ordinary actions execute nothing outside it. Composing other public
 step-wrapped actions inside that step is sanctioned (settled —
 design-conventions, Decision records): their steps nest as sub-steps in
 Allure, and that nesting is intended — it is exactly how a composed business
@@ -78,8 +79,9 @@ quantity) — never the full payload (with a typed-object parameter, practice 11
 interpolate selected fields), and never zero when the action takes
 distinguishing inputs: `ApisUserManagement.login()` (practice 2) takes an email,
 so its repaired title must carry it. Iron law §4.7: passwords, tokens, and
-credentials never appear in step titles, logs, or attachments — redaction lives
-in `utils/`, and an interpolated title bypasses it. Payment-card numbers and CVC
+credentials must stay out of authored titles/metadata and unnecessary attachments.
+Facade redaction has a limited scope; see utility-classes §20. Lifecycle cleanup
+uses a value-free title even when receiving identities/credentials. Payment-card numbers and CVC
 are title-secrets too: card data may live in test-data JSON as synthetic
 business input ([test-data](../../test-data/SKILL.md)), but never in a title.
 
@@ -152,9 +154,11 @@ stray brace in `` `Fill in contact us form with data}` ``
 (`src/pages/ContactUsFormPage.ts`) and the literal newline mid-title in
 `src/pages/PaymentPage.ts` `pay()`. Proofread titles in the report (§4.10).
 
-## 5. No assertions inside action methods
+## 5. Keep scenario assertions outside ordinary actions
 
-Actions perform; validation methods (prefixed `verify`, placed last under
+The domain lifecycle cleanup exception in design-conventions §4a permits ownership
+and absence/restoration postconditions; they earn no scenario coverage in hooks.
+Ordinary actions perform; validation methods (prefixed `verify`, placed last under
 `///// Validations`) assert. Mixing them makes actions unreusable in negative
 tests (a `login()` that asserts success can never test a failed login) and
 hides the oracle from the spec. No `expect()` of any kind inside an action —
@@ -252,7 +256,8 @@ is never fine is two methods with the same name-meaning and diverging bodies.
 
 ## 9. Keep logic out of actions
 
-No loops, no conditionals, no `try`/`catch` (iron laws §4.3–4.4). An action is
+Apart from small lifecycle cleanup guards under §4a, no loops, conditionals or
+`try`/`catch` (iron laws §4.3–4.4). An ordinary action is
 a straight-line sequence of awaited calls. If a variant is needed, prefer an
 optional/default parameter or a second intent-named method (§5, overloading
 row) over an `if`. Anything genuinely complex — retries, polling, branching on
@@ -274,7 +279,9 @@ individual parameters) fed from `resources/testData/`, with fixed option lists
 
 ## 11. Cap positional parameters at ~4 — a bigger form takes one typed object
 
-Positional strings past a handful are swap bugs waiting to compile. An action
+Small inputs prefer explicitly named positional parameters; no named interface is
+required for every small argument group. Positional strings past a handful are swap
+bugs waiting to compile. An action
 with more than ~4 inputs takes ONE typed object (an `interface`, fixed option
 lists as enums per design-conventions §2), destructured in the body — call
 sites read as named fields, and a field swap becomes a compile error.
@@ -288,7 +295,9 @@ async createNewAccount(password: string, day: string, month: string, year: strin
 
 ✅ Canonical shape: `async createNewAccount(details: AccountDetails)` with
 `const { firstName, lastName, city, ... } = details;` opening the step body,
-fed from the paired JSON (practice 10).
+fed from the paired JSON or test-owned disposable runtime values (practice 10).
+
+Ownership and defaults follow [design-conventions §4a](../../pom-architecture/references/design-conventions.md#4a-test-data-ownership-method-contracts-and-disposable-inputs).
 
 ## 12. Use the verb the control is built for
 
@@ -381,26 +390,25 @@ This skill does NOT cover:
 
 - [ ] Name is a camelCase verb phrase stating the intent, not the first click (§2)
 - [ ] Entire body wrapped in exactly one Allure step of its own; nothing
-      executes outside it; sub-steps come only from composed public actions
+      executes outside it except a no-candidate cleanup guard under §4a; sub-steps come only from composed public actions
       (intended nesting) — never two sibling steps opened by one method
 - [ ] Public ⇔ step-wrapped; private helper ⇔ step-less — no public step-less
       action, no step-opening private helper
 - [ ] Step title reads as a business step, matches what the body does, and
       interpolates the 1–3 identifying business parameters — never the full
-      payload, never none when the action takes distinguishing inputs
+      payload; credential-free cleanup titles follow §4a and utility-classes §20
 - [ ] No secrets (passwords, tokens, payment-card numbers/CVC) anywhere in the
       step title; upload titles carry the file name, never the path
-- [ ] Zero `expect()` calls — assertions live in `verify*` validation methods
+- [ ] Scenario assertions live in `verify*` methods; focused cleanup methods may assert lifecycle postconditions under §4a
 - [ ] Returns `Promise<void>` unless a consumer exists; value returned via
       `return await allure.step(...)`; never `return this`
 - [ ] Granularity is one user-visible service — neither element micro-actions
       nor multi-page mega-flows
 - [ ] No duplicate of an existing action's intent — repo-wide search across `pages/`,
       `apis/`, `dbs/` done before creating (case/suffix-tolerant, legacy names
-      included); no loops/conditionals/try-catch
-- [ ] All business data arrives as parameters — nothing hardcoded in the body
-- [ ] At most ~4 positional parameters — a bigger form takes one typed object
-      (enums for fixed option lists)
+      included); ordinary actions have no loops/conditionals/try-catch; small domain cleanup guards follow §4a
+- [ ] Scenario data arrives as parameters; stable cleanup contract checks may use domain constants under §4a
+- [ ] At most ~4 explicit positional parameters; a bigger form takes one typed object (enums for fixed option lists), owned under design-conventions §4a
 - [ ] Right verb per control: `selectOption`, `check()`/`uncheck()` — never
       click-toggling a checkbox; scrolls prefer `scrollIntoViewIfNeeded()` on a
       real locator; no inline locators in action bodies

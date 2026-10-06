@@ -1,5 +1,12 @@
 # Local input route
 
+For current neutral generation, [M13](../../../../docs/M13-GENERATION.md) owns the
+candidate mapping, case-level assertion gate and explicit legacy migration. The ADO
+traceability artifact below applies to legacy layouts only. Generated business code
+uses ordinary validation parameters, built-in isolated fixtures by default and direct
+domain teardown under [§4a](../../pom-architecture/references/design-conventions.md#4a-test-data-ownership-method-contracts-and-disposable-inputs).
+
+
 For a local source, load it with `scripts/load-local-source.mjs` from the installed
 package and the explicitly selected consumer environment. No ADO configuration,
 credentials, network request or AgenTeX installation is needed for this route.
@@ -232,7 +239,9 @@ independent framework-review re-checks every new method against the inventory.
 2. `test-data` — `resources/testData/<Feature>TestJsonFile.json`: inputs and expected
    values from the ADO steps (copy expected strings EXACTLY as the app renders them,
    not as ADO paraphrases them — the harvest notes are the authority, and the string
-   must match the locale the environment actually renders: source wording may differ from the configured application locale), secrets to `process.env`. Mutable
+   must match the locale the environment actually renders: source wording may differ from the configured application locale). Externally provisioned access goes to
+   `process.env`; fixed synthetic/invalid inputs stay in paired JSON; disposable
+   generation and local schema ownership follow [§4a](../../pom-architecture/references/design-conventions.md#4a-test-data-ownership-method-contracts-and-disposable-inputs). Mutable
    inputs land in per-case `tc<id>` clusters (id = the case's tms id from the
    manifest); record-creating bases carry the TC id inside the value where the field
    tolerates a suffix — format-constrained fields get distinct valid per-case values
@@ -328,7 +337,7 @@ For each failure, classify before touching anything:
 | Class | Signal | Action |
 |---|---|---|
 | Script defect | wrong/brittle locator, timing, wrong test data, strict-mode violation | Fix via the matching skill (element-locators for locators, etc.), re-run |
-| Data reusability (script-defect family) | passed an earlier run, now fails with already-exists / duplicate / unique-constraint / leftover-record symptoms — typically on the confirmation run | Fix via the test-data reusability ladder (practice 8): per-case + per-run unique data → API/DB seed-and-cleanup (consult `resources/apisCollections/` / `resources/Queries/`) → assertion-free GUI cleanup ONLY when no lower-layer path exists (flag it in the PR). Record as `script-defect` with note `data-reusability: …` |
+| Data reusability (script-defect family) | passed an earlier run, now fails with already-exists / duplicate / unique-constraint / leftover-record symptoms — typically on the confirmation run | Fix via the test-data reusability ladder (practice 8): per-case + per-run unique data → API/DB seed-and-cleanup (consult `resources/apisCollections/` / `resources/Queries/`) → GUI cleanup in teardown under design-conventions §4a ONLY when no lower-layer path exists (flag it in the PR). Record as `script-defect` with note `data-reusability: …` |
 | App defect | EXPLORE phase saw the same failure on the manual path | Keep the assertion; `test.fixme` + `allure.issue`; offer `/bug-report-azure` |
 | Environment | connectivity, credentials, seed API down | Report BLOCKED to the user; do not "fix" the test around it |
 | Unclassifiable | EXPLORE was skipped, no manual-path data | After the final round, reproduce the failing step once manually in a scratch playwright-cli session: reproduces → app defect; doesn't → report UNCLASSIFIED with both hypotheses |
@@ -433,7 +442,7 @@ silently skipped:
    (from `npx --no pom-harness metrics` — terminal cases must not hide in run
    reports), the methods newly created per case (the
    reuse-gate output), any
-   assertion-free GUI-cleanup last-resorts (reusability-ladder step 3 flags), and
+   GUI cleanup last resorts under design-conventions §4a (reusability-ladder step 3 flags), and
    the framework-review verdict. A nonzero exit means delivery is incomplete;
    inspect the redacted diagnostic and receipt before retrying.
 6. **Publish outcomes to ADO** (opt-in, confirm with the user first — it writes to

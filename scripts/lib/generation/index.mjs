@@ -1,9 +1,39 @@
 import {randomUUID} from 'node:crypto';
 import {readFileSync} from 'node:fs';
-import {fingerprint, frozen, data, id, keys, requireThat, unique} from '../execution-core/data.mjs';
+import {fingerprint, frozen, data, id, keys, requireThat, unique, integer} from '../execution-core/data.mjs';
 import {validateHandoff} from './handoff.mjs';
 import {transaction, snapshot, relativeFile, reviewArtifact} from './storage.mjs';
 export {createGenerationHandoff, sourceExpectations} from './handoff.mjs';
+const CASE_GATE = 'case-assertions';
+
+function mappingThat(condition, code) {
+  if (!condition) throw Object.assign(new Error(code), {code});
+}
+
+/** Review data only: do not pretend lexical method names prove executable coverage. */
+function validateMapping(test, handoff) {
+  const scenario = handoff.source.scenarios.find(s => s.id === test.scenarioId);
+  mappingThat(Array.isArray(test.mapping) && test.mapping.length === scenario.steps.length, 'MAPPING_STEPS');
+  const steps = new Set();
+  const references = refs => Array.isArray(refs) && new Set(refs).size === refs.length && refs.every(ref =>
+    typeof ref === 'string' && ref.length <= 200 && /^[A-Za-z_$][\w$]*\.[A-Za-z_$][\w$]*$/.test(ref));
+  for (const row of test.mapping) {
+    keys(row, ['step', 'actions', 'expectations'], 'candidate mapping');
+    mappingThat(integer(row.step, 1, scenario.steps.length) && !steps.has(row.step), 'MAPPING_STEPS'); steps.add(row.step);
+    mappingThat(references(row.actions) && Array.isArray(row.expectations), 'MAPPING_REFERENCES');
+    const expected = handoff.expectations.filter(e => e.scenarioId === test.scenarioId && e.step === row.step).map(e => e.key).sort();
+    mappingThat(row.expectations.every(e => e && typeof e.key === 'string') &&
+      fingerprint(row.expectations.map(e => e.key).sort()) === fingerprint(expected), 'MAPPING_KEYS');
+    for (const expectation of row.expectations) {
+      keys(expectation, ['key', 'validations'], 'candidate expectation');
+      mappingThat(references(expectation.validations) && expectation.validations.length > 0, 'MAPPING_REFERENCES');
+    }
+    mappingThat(row.actions.length > 0 || row.expectations.length > 0, 'MAPPING_REFERENCES');
+  }
+}
+
+const nativeScope = candidate => fingerprint({config: candidate.config, tests: candidate.tests.map(({scenarioId, spec, project, titlePath}) =>
+  ({scenarioId, spec, project, titlePath})).sort((a, b) => a.scenarioId.localeCompare(b.scenarioId))});
 
 export async function beginGeneration(roots, handoffInput, author) {
   const handoff = validateHandoff(handoffInput); id(author);
@@ -14,35 +44,44 @@ export async function beginGeneration(roots, handoffInput, author) {
 }
 
 function candidateInput(roots, state, input) {
-  const checked = data(input); keys(checked, ['config', 'tests', 'repair'], 'generation candidate'); relativeFile(roots, checked.config);
+  const checked = data(input); keys(checked, ['config', 'tests', 'repair', 'migration'], 'generation candidate'); relativeFile(roots, checked.config);
   requireThat(Array.isArray(checked.tests) && checked.tests.length === state.handoff.source.scenarios.length, 'Candidate must cover exactly the source scenarios.');
   unique(checked.tests.map(t => t.scenarioId), 'candidate scenarios');
   unique(checked.tests.map(t => fingerprint([t.spec, t.project, t.titlePath])), 'candidate tests');
   for (const test of checked.tests) {
-    keys(test, ['scenarioId', 'spec', 'project', 'titlePath'], 'candidate test'); relativeFile(roots, test.spec);
+    keys(test, ['scenarioId', 'spec', 'project', 'titlePath', 'mapping'], 'candidate test'); relativeFile(roots, test.spec);
     requireThat(state.handoff.source.scenarios.some(s => s.id === test.scenarioId), 'Unexpected generated scenario.');
     requireThat(typeof test.project === 'string' && Array.isArray(test.titlePath) && test.titlePath.length > 0, 'Use an explicit project and complete test title path.');
     for (const title of [test.project, ...test.titlePath]) requireThat(typeof title === 'string' && (title === test.project || title.trim().length > 0) && !/[\r\n›<>\[\]]/.test(title) && title.trim() === title, 'Test identity cannot be represented unambiguously in a native test list.');
+    validateMapping(test, state.handoff);
   }
   if (checked.repair !== undefined) requireThat(['script-defect', 'environment', 'review-findings'].includes(checked.repair), 'Classify the repair; preserve application failures rather than weakening assertions.');
+  if (checked.migration !== undefined) requireThat(checked.migration === CASE_GATE, 'Unknown generation migration.');
   return checked;
 }
 
-/** First candidate is free; every subsequent repair round consumes the same source's budget. */
+/** One legacy gate transition is free; ordinary repairs retain the cumulative budget. */
 export async function registerCandidate(roots, sourceId, input) {
   return transaction(roots, sourceId, (state, save) => {
     requireThat(state, 'Begin from a validated handoff.');
     const checked = candidateInput(roots, state, input), current = snapshot(roots);
     requireThat(current.files.some(f => f.path === checked.config) && checked.tests.every(t => current.files.some(f => f.path === t.spec)), 'Config and specs must be in the frozen consumer snapshot.');
-    if (state.candidates.length) {requireThat(checked.repair && state.rounds < 3, 'Three cumulative repair rounds maximum; classify a repair before continuing.'); state.rounds++;}
-    else requireThat(!checked.repair, 'Initial generation is not a repair.');
-    const candidate = {...checked, revision: `revision-${randomUUID()}`, snapshot: current, round: state.rounds};
+    if (checked.migration) {
+      const previous = state.candidates.at(-1);
+      requireThat(previous && previous.gate === undefined && !state.candidates.some(c => c.gate === CASE_GATE), 'The legacy gate migration is available only once.');
+      requireThat(nativeScope(previous) === nativeScope(checked), 'Gate migration must preserve the source and native test scope.');
+    }
+    if (state.candidates.length && (!checked.migration || checked.repair)) {
+      requireThat(checked.repair && state.rounds < 3, 'Three cumulative repair rounds maximum; classify a repair before continuing.'); state.rounds++;
+    } else if (!state.candidates.length) requireThat(!checked.repair && !checked.migration, 'Initial generation is not a repair or migration.');
+    const candidate = {...checked, gate: CASE_GATE, revision: `revision-${randomUUID()}`, snapshot: current, round: state.rounds};
     state.candidates.push(candidate); save(state); return frozen(candidate);
   });
 }
 
 export function currentCandidate(roots, state) {
   const candidate = state?.candidates.at(-1); requireThat(candidate, 'No generated candidate.');
+  requireThat(candidate.gate === CASE_GATE, 'Register the legacy gate migration before new verification.');
   requireThat(snapshot(roots).fingerprint === candidate.snapshot.fingerprint, 'Consumer files changed; register and review a repair before verification.');
   return candidate;
 }
@@ -76,7 +115,10 @@ export async function generationStatus(roots, sourceId) {
     let candidate; try {candidate = approvedCandidate(roots, state);} catch {return frozen({status: 'NEEDS_REVIEW', rounds: state.rounds, greens: 0});}
     const runs = state.runs.filter(r => r.revision === candidate.revision);
     for (const run of runs.filter(r => r.status === 'PASS')) {
-      try {requireThat(fingerprint(JSON.parse(readFileSync(relativeFile(roots, run.receipt.path), 'utf8'))) === run.receipt.fingerprint, 'Verification receipt changed.');}
+      try {
+        const receipt = JSON.parse(readFileSync(relativeFile(roots, run.receipt.path), 'utf8'));
+        requireThat(run.gate === CASE_GATE && receipt.version === 2 && fingerprint(receipt) === run.receipt.fingerprint, 'Verification gate or receipt changed.');
+      }
       catch {return frozen({status: 'NEEDS_REVIEW', rounds: state.rounds, greens: 0});}
     }
     const greens = runs.every(r => r.status === 'PASS') ? runs.length : 0;

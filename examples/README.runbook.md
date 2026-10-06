@@ -17,9 +17,15 @@ npx playwright install --with-deps    # browsers (first time / CI)
 
 Use Node 24. Destinations — application URLs, database servers — live in
 `.harness/targets.json` (read by `src/config/targets.ts`). Copy `.env.example` to `.env`
-(gitignored) and fill in the secrets — credentials and DB passwords come **only** from
-environment variables, loaded by dotenv in `playwright.config.ts`. Never commit a
-literal credential.
+(gitignored) and fill in the secrets — externally provisioned credentials and DB
+passwords come from environment variables, loaded by dotenv in `playwright.config.ts`.
+Fixed synthetic signup passwords belong in the paired test-data JSON; the shipped
+values are placeholders.
+
+Adapt the example endpoints to the application before running them. In particular,
+`ApisUserManagement.cleanupUserIfOwned` reports a missing ownership/absence contract
+until the application's observed checks are implemented. Its existing `deleteUser(email)`
+needs no new password parameter. See the lifecycle rules in design-conventions §4a.
 
 ## Running tests
 

@@ -9,7 +9,7 @@ export default class VerificationReporter {
   onBegin(suite) {this.verification.onBegin(this.config, suite); this.allure.onBegin(suite);}
   onTestBegin(test, result) {this.allure.onTestBegin(test, result);}
   onStepBegin(test, result, step) {this.allure.onStepBegin(test, result, step);}
-  onStepEnd(test, result, step) {this.verification.onStepEnd(test, result, step); this.allure.onStepEnd(test, result, step);}
+  onStepEnd(test, result, step) {this.allure.onStepEnd(test, result, step);}
   async onTestEnd(test, result) {this.verification.onTestEnd(test, result); await this.allure.onTestEnd(test, result);}
   onError(error) {this.verification.onError(error); this.allure.onError(error);}
   async onEnd(result) {this.verification.onEnd(result); await this.allure.onEnd(result);}

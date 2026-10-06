@@ -1,6 +1,5 @@
-import { test, type Page, type Locator } from '@playwright/test';
+import { type Page, type Locator } from '@playwright/test';
 import { step } from 'allure-js-commons';
-import { sourceExpectation } from 'playwright-pom-harness/scripts/lib/generation/assertion.mjs';
 import { expectToHaveText } from '../utils/Expects.js';
 import { applications } from '../config/applications.js';
 
@@ -26,11 +25,9 @@ export class ObservationPage {
 
   ///// Validations
 
-  async verifyObservation(key: string, expected: string) {
+  async verifyObservation(expected: string) {
     await step(`Verify the observation is ${expected}`, async () => {
-      await sourceExpectation(test, key, async () => {
-        await expectToHaveText('the observation heading', this.observation_header, expected);
-      });
+      await expectToHaveText('the observation heading', this.observation_header, expected);
     });
   }
 }

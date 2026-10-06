@@ -32,6 +32,12 @@ const cases=[
  ['no-test-only',spec,'test.only("case", () => {});','test("case", () => {});'],
  ['no-wait-timeout',page,'page.waitForTimeout(500);','page.waitForLoadState();'],
  ['no-try-outside-utils',page,'try { doThing(); } catch {}','doThing();'],
+ ['playwright-private-api','src/utils/Telemetry.ts','testInfo._addStep({});',"import type { Reporter } from '@playwright/test/reporter';"],
+ ['test-import-source',spec,"import { test } from '../src/utils/Fixture';","import { test } from '@playwright/test';"],
+ ['source-expectation-plumbing',page,'async verifyPage(sourceExpectationKey: string) {}','async verifyPage(expected: string) {}'],
+ ['allure-metadata-await',spec,"allure.tms('101');","await allure.tms('101');"],
+ ['allure-link-id',spec,"await allure.tms(adoUrl('101'), 'Case 101');","await allure.tms('101');"],
+ ['allure-link-templates',null,'',''],
  ['no-expect-in-spec',spec,'import { test, expect } from "@playwright/test";','import { test } from "@playwright/test";'],
  ['no-locator-in-spec',spec,'page.getByRole("button");','await examplePage.submit();'],
  ['no-raw-request-in-spec',spec,'request.patch("/record");','await api.updateRecord();'],
@@ -42,6 +48,8 @@ const cases=[
  ['timeout-below-default',page,'expectToBeVisible(item, "item", {timeout: 1000});','expectToBeVisible(item, "item");'],
  ['secret-literal','src/config/example.ts','const pass'+'word = "'+'synthetic-fixture-value'+'"; // conventions-ok; process.env.OTHER','const pass'+'word = process.env.TEST_PASSWORD;'],
  ['spec-data-pairing',spec,'export {};','export {};'],
+ ['spec-data-source',spec,"import {readFileSync as read} from 'node:fs';\nread('./resources/testData/Common.json', 'utf8');","import {readFileSync as read} from 'node:fs';\nread('./resources/testData/ExampleTestJsonFile.json', 'utf8');"],
+ ['business-test-data-dependency','src/apis/ApisExample.ts',"import type {Schema} from '../../tests/ExampleTests.spec';","import type {OperationInput} from './OperationInput';"],
  ['spec-naming','tests/wrong.spec.ts','export {};','export {};'],
  ['tms-per-test',spec,'test("case",()=>{});','test("case",()=>{allure.tms("1001");});'],
  ['feature-per-test',spec,'test("case",()=>{});','test("case",()=>{allure.feature("Example");});'],
@@ -59,13 +67,17 @@ const cases=[
 
 test('fixtures cover every registered rule exactly once',()=>{
  const r=spawnSync(process.execPath,[checker,'--list-rules'],{encoding:'utf8'});assert.equal(r.status,0);
- assert.deepEqual(cases.map(c=>c[0]).sort(),Object.values(JSON.parse(r.stdout)).flat().sort());assert.equal(cases.length,26);
+ assert.deepEqual(cases.map(c=>c[0]).sort(),Object.values(JSON.parse(r.stdout)).flat().sort());assert.equal(cases.length,34);
 });
 for(const [rule,file,bad,good] of cases) for(const violating of [true,false]) test(`${rule}: ${violating?'detect':'accept'}`,t=>{
  const f=fixture(t);
  if(file) f.put(rule==='spec-naming' && !violating ? spec:file,violating?bad:good);
  if(rule!=='spec-data-pairing' || !violating) f.put('resources/testData/ExampleTestJsonFile.json','{}');
  if(rule==='no-kebab-test-data') f.put(violating?'resources/test-data/example.json':'resources/testData/example.json','{}');
+ if(rule==='allure-link-templates') {
+   f.put(spec,"await allure.tms('101');");
+   f.put('playwright.config.ts',`export default {reporter:[['allure-playwright', {${violating ? '' : "links:{tms:{urlTemplate:'https://dev.azure.com/example-org/Project/_workitems/edit/%s'}}"}}]]};`);
+ }
  if(rule.startsWith('traceability-')) {
    f.put(page,'export class ExamplePage { submit() {} }');
    const layer=violating && rule==='traceability-format-drift'?'pages':'UI';
@@ -135,4 +147,133 @@ test('changed scope includes touched story verification folders and skips untouc
 });
 test('Git failure never becomes successful empty scope',t=>{
  const f=fixture(t);assert.equal(f.run('--changed').status,2);assert.equal(f.run('--changed','--base-ref','main').status,2);
+});
+
+test('private Playwright checks cover root lifecycle files and imports but accept public exports and version reads', t => {
+ const f=fixture(t), privateRule=result=>findings(result).some(hit=>hit.rule==='playwright-private-api');
+ for(const source of [
+   "import {thing} from 'playwright/lib/internal';",
+   "await import('playwright-core/lib/server');",
+   "import {createRequire as factory} from 'node:module'; const load=factory(import.meta.url); load('playwright/lib/internal');",
+   'testInfo._addStep({}); // conventions-ok', 'runner._instrumentation.addListener(listener);',
+ ]) {
+   f.put('playwright.config.ts',source);assert(privateRule(f.run()));assert.equal(f.run().status,1);
+   assert.equal(f.run('--files','playwright.config.ts').status,1);assert.equal(f.run('--write-baseline').status,2);
+ }
+ f.put('playwright.config.ts',"import type {Reporter} from '@playwright/test/reporter';\nconst version=require('@playwright/test/package.json').version;\nimport {test as base} from '@playwright/test';\n// testInfo._addStep({});\nconst documentation='playwright/lib/internal';");
+ assert.equal(privateRule(f.run()),false);
+ f.put('global-setup.ts','runner._instrumentation.addListener(listener);');assert(privateRule(f.run()));
+});
+
+test('legitimate public fixture imports and exports can carry a reviewed warning exemption', t => {
+ const f=fixture(t); f.put('resources/testData/ExampleTestJsonFile.json','{}');
+ f.put(spec,"import {test} from './fixtures'; // conventions-ok: shared database transaction lifecycle\n");
+ f.put('src/utils/Fixture.ts',"export const test = base.extend({}); // conventions-ok: shared database transaction lifecycle\n");
+ assert.equal(findings(f.run()).some(hit=>hit.rule==='test-import-source'),false);
+ f.put('src/utils/Fixture.ts','export const test = base.extend({});');
+ assert(findings(f.run()).some(hit=>hit.rule==='test-import-source'));
+ f.put('src/utils/Fixture.ts',"export const test = base.extend({}); const text='// conventions-ok';");
+ assert(findings(f.run()).some(hit=>hit.rule==='test-import-source'));
+});
+
+test('metadata rules ignore comments, respect aliases and allow synchronous public metadata calls', t => {
+ const f=fixture(t);f.put(spec,"import * as a from 'allure-js-commons';\nimport {issue as bug} from 'allure-js-commons';\na.tms('101');\nawait bug('202');\n// allure.tms(url);\nconst example='sourceExpectationKey';");
+ const hits=findings(f.run());assert.equal(hits.filter(hit=>hit.rule==='allure-metadata-await').length,1);
+ assert.equal(hits.some(hit=>['allure-link-id','source-expectation-plumbing'].includes(hit.rule)),false);
+ f.put(spec,"import * as allure from 'allure-js-commons/sync';\nallure.tms('101');");
+ assert.equal(findings(f.run()).some(hit=>hit.rule==='allure-metadata-await'),false);
+});
+
+test('link-template warning only applies to used metadata and an adjacent reporter exemption', t => {
+ const f=fixture(t), warned=()=>findings(f.run()).some(hit=>hit.rule==='allure-link-templates');
+ f.put('resources/testData/ExampleTestJsonFile.json','{}');
+ f.put(spec,"await allure.testCaseId('local-case');");assert.equal(warned(),false);
+ f.put(spec,"await allure.tms('101');");assert.equal(warned(),true);
+ f.put('playwright.config.ts',"// conventions-ok: unrelated\nexport default {reporter:[['allure-playwright',{}]]};");assert.equal(warned(),true);
+ f.put('playwright.config.ts',"export default {reporter:[['allure-playwright',{}]]}; // conventions-ok: illustrative IDs, no destination");assert.equal(warned(),false);
+ f.put('playwright.config.ts',"export default {reporter:[['allure-playwright',{links:configuredLinks}]]};");assert.equal(warned(),true);assert.equal(f.run().status,0);
+});
+
+test('actual data reads must use the owning pair even when both pairs and shared JSON exist', t => {
+ const f=fixture(t);
+ for(const feature of ['Example','Other']) {
+  f.put(`resources/testData/${feature}TestJsonFile.json`,'{}');
+  f.put(`tests/${feature}Tests.spec.ts`,"import * as files from 'node:fs';\nfiles.readFileSync('./resources/testData/Common.json', 'utf8');");
+ }
+ f.put('resources/testData/Common.json','{}');
+ assert.deepEqual(findings(f.run()).filter(hit=>hit.rule==='spec-data-source').map(hit=>hit.file).sort(),['tests/ExampleTests.spec.ts','tests/OtherTests.spec.ts']);
+});
+
+test('multiline filesystem aliases are checked, normalized paired reads and binary fixtures are allowed', t => {
+ const f=fixture(t);f.put('resources/testData/ExampleTestJsonFile.json','{}');
+ f.put(spec,"import {\n readFileSync as load\n} from 'node:fs';\nload('resources/testData/../testData/Other.json', 'utf8');");
+ assert(findings(f.run()).some(hit=>hit.rule==='spec-data-source' && hit.line===4));
+ f.put(spec,"import files from 'fs';\nfiles.readFileSync('./resources/testData/ExampleTestJsonFile.json', 'utf8');\nfiles.readFileSync('./resources/testData/fixtures/Example/upload.pdf');");
+ assert(!findings(f.run()).some(hit=>hit.rule==='spec-data-source'));
+});
+
+test('runtime static, dynamic and CommonJS JSON imports violate the spec loading contract', t => {
+ const f=fixture(t);f.put('resources/testData/ExampleTestJsonFile.json','{}');
+ for(const source of ["import data from '../resources/testData/ExampleTestJsonFile.json';", "await import('../resources/testData/ExampleTestJsonFile.json');", "await import('../resources/testData/ExampleTestJsonFile.json', {with: {type: 'json'}});", "const data = require('../resources/testData/ExampleTestJsonFile.json');", "const shape = typeof import('../resources/testData/ExampleTestJsonFile.json');"]) {
+  f.put(spec,source);assert(findings(f.run()).some(hit=>hit.rule==='spec-data-source'));
+ }
+});
+
+test('spec JSON types can be inferred from their own pair without named interfaces or runtime imports', t => {
+ const f=fixture(t);f.put('resources/testData/ExampleTestJsonFile.json','{}');
+ for(const source of ["let testData: typeof import('../resources/testData/ExampleTestJsonFile.json');", "import type Data from '../resources/testData/ExampleTestJsonFile.json';"]) {
+  f.put(spec,source);assert(!findings(f.run()).some(hit=>hit.rule==='spec-data-source'));
+ }
+ f.put(spec,"let testData: typeof import('../resources/testData/OtherTestJsonFile.json');");
+ assert(findings(f.run()).some(hit=>hit.rule==='spec-data-source'));
+ f.put('src/apis/ApisExample.ts',"let testData: typeof import('../../resources/testData/ExampleTestJsonFile.json');");
+ assert(findings(f.run()).some(hit=>hit.rule==='business-test-data-dependency'));
+});
+
+test('business imports, re-exports and loads cannot reach specs or canonical test-data sources', t => {
+ const f=fixture(t);
+ f.put(spec,"import * as fs from 'node:fs';\nfs.readFileSync('./resources/private-inputs.json', 'utf8');");
+ f.put('resources/testData/ExampleTestJsonFile.json','{}');
+ const business='src/apis/ApisExample.ts';
+ for(const source of [
+  "import type {\n Schema as Input\n} from '../../tests/ExampleTests.spec';",
+  "export {Input} from '../../resources/testData/Shapes';",
+  "import {readFileSync as load} from 'fs';\nload('./resources/testData/ExampleTestJsonFile.json', 'utf8');",
+  "const fs = require('node:fs');\nfs.readFileSync('./resources/testData/ExampleTestJsonFile.json', 'utf8');"
+ ]) {f.put(business,source);assert(findings(f.run()).some(hit=>hit.rule==='business-test-data-dependency'));}
+ f.put(business,"const input = await import('../../resources/testData/ExampleTestJsonFile.json', {with: {type: 'json'}});");
+ assert(findings(f.run()).some(hit=>hit.rule==='business-test-data-dependency'));
+});
+
+test('operation types, small parameters, indexed business types and technical sources remain allowed', t => {
+ const f=fixture(t);
+ f.put('src/apis/ApisExample.ts',"import type {CustomerResponse} from './CustomerResponse';\nimport {ApiActions} from '../utils/ApiActions';\nexport interface RegistrationInput { email: string; credential: string; }\nexport class ApisExample {\n  verifyAbsent(response: APIResponse, expectedHttpStatus: number, expectedResponseCode: number) {}\n  register(input: RegistrationInput) {}\n  verifyCode(expected: CustomerResponse['responseCode']) {}\n}\n");
+ assert.deepEqual(findings(f.run()),[]);
+});
+
+test('source checks ignore comments, quoted examples, regexes and unresolved dynamic paths', t => {
+ const f=fixture(t);f.put('resources/testData/ExampleTestJsonFile.json','{}');
+ f.put(spec,"import * as fs from 'node:fs';\n// fs.readFileSync('./resources/testData/Common.json');\nconst example = \"import data from '../resources/testData/Common.json';\";\nconst pattern = /import data from 'Common.json'/;\nfs.readFileSync(testDataPath, 'utf8');");
+ assert(!findings(f.run()).some(hit=>hit.rule==='spec-data-source'));
+});
+
+test('a business-file hook does not scan unrelated or symlinked specs', t => {
+ const f=fixture(t), outside=fixture(t);outside.put('UnrelatedTests.spec.ts','not a dependency');
+ mkdirSync(join(f.root,'tests'),{recursive:true});symlinkSync(outside.root,join(f.root,'tests/linked'),'junction');
+ f.put('src/dbs/DbsExample.ts',"import * as fs from 'fs';\nfs.readFileSync('./resources/testData/ExampleTestJsonFile.json', 'utf8');");
+ const result=f.run('--files','src/dbs/DbsExample.ts');
+ assert.equal(result.status,1);assert(findings(result).some(hit=>hit.rule==='business-test-data-dependency'));
+ rmSync(join(f.root,'tests/linked'));
+});
+
+test('partial dynamic paths and similarly named member methods do not invent literal dependencies', t => {
+ const f=fixture(t);f.put('resources/testData/ExampleTestJsonFile.json','{}');
+ f.put(spec,"import * as fs from 'node:fs';\nfs.readFileSync('./resources/testData/Common.json' + suffix);\nclient.import('../resources/testData/Common.json');\nclient.require('../resources/testData/Common.json');\nclient.fs.readFileSync('./resources/testData/Common.json');");
+ assert(!findings(f.run()).some(hit=>hit.rule==='spec-data-source'));
+});
+
+test('arrow-returned regex bodies cannot invent imports or filesystem reads', t => {
+ const f=fixture(t);f.put('resources/testData/ExampleTestJsonFile.json','{}');
+ f.put(spec,"import * as fs from 'node:fs';\nconst modulePattern = () => /import('Common.json')/;\nconst readPattern = () => /fs.readFileSync('Common.json')/;");
+ assert(!findings(f.run()).some(hit=>hit.rule==='spec-data-source'));
 });

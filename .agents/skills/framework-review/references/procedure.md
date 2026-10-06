@@ -2,7 +2,7 @@
 
 ## Neutral generation review (M13)
 
-For M13 output, review the frozen handoff, candidate file hashes and source-to-assertion bindings described in [M13](../../../../docs/M13-GENERATION.md). The legacy ADO traceability table below applies to legacy ADO artifacts. Neutral local cases carry `allure.testCaseId`; external cases retain their real `allure.tms` links. Require the actual assertions to preserve source intent, and review operation definitions and lifecycle dispositions. A reviewer identity field alone is not evidence of independent review. User-authorized branch and delivery choices take precedence over template defaults.
+For M13 output, review the frozen handoff, candidate file hashes, source-to-observation bindings and candidate step/expectation review mappings described in [M13](../../../../docs/M13-GENERATION.md). The legacy ADO traceability table below applies to legacy ADO artifacts. Neutral local cases carry `allure.testCaseId`; external cases retain their real `allure.tms` links. Require the actual assertions to preserve source intent, and review operation definitions and lifecycle dispositions. A reviewer identity field alone is not evidence of independent review. User-authorized branch and delivery choices take precedence over template defaults.
 
 Inputs: a diff scope (default: `git diff master...HEAD` plus unstaged changes,
 **plus untracked files from `git status --porcelain`** — at the pipeline's GENERATE
@@ -35,17 +35,23 @@ the diff against the box; on doubt, open the owning playbook section (the box �
 mapping is in the §6 text itself) and judge by ITS checklist, not memory. Record per
 box: PASS / FAIL / N-A, with `file:line` evidence for every FAIL.
 
-Also check, from the harness's own rules (not in §6):
+Apply §6, with these review procedures and additional harness checks:
 - Generated tests carry the right `allure.tms` ids (diff vs `_suite.json` when
   reviewing pipeline output).
-- **Traceability table** (pipeline output, 2026-08-27 ruling): the diff carries
+- **Traceability table** (legacy ADO artifacts only, 2026-08-27 ruling): the diff carries
   `test/ado-suite-<id>/_traceability.md`; it covers every tms id the spec carries,
   every method it names exists on the named class (grep), every API/DB row carries
   a `Why this layer` code from the closed vocabulary (`per-ADO`/`seed`/`oracle`/
   `cross-check`/`reroute`), and every `reroute` names the observable it replaced.
   A missing, stale, method-inventing, or reason-less table is a finding
   (class: `traceability-table-stale`).
-- No secrets in code, step titles, or test data (values, not handle names).
+- Apply [§4a](../../pom-architecture/references/design-conventions.md#4a-test-data-ownership-method-contracts-and-disposable-inputs) to actual JSON loading, schema dependencies and credential provenance. Reject aggregate schemas, cross-spec bases and indexed/aliased/`Pick` slices of complete spec schemas; genuine business-response slices remain valid.
+- Shared operation types need demonstrated reuse; reject generic API classes introduced merely to collect types/constants, and expected outcomes hidden in defaults.
+- Check optional attempted identities retained before creation, safe attribution before deletion, lost-response reconciliation, verified absence, failure-path cleanup and preserved original errors under §4a. Inspect negative-input relationships and the documented limits of redaction.
+- For case-level candidates, review every step/expectation mapping against actual business behavior, including composed methods. Detect dummy assertions and missing coverage; do not require a second traceability file, direct calls or an automated method resolver. Receipts prove case-level assertion execution only.
+- For the one-time legacy migration, confirm unchanged source/handoff/config/native identities and release-related scope, classify unrelated repairs normally, and reconcile prior failed/interrupted effects before replay. Require fresh review and two v2 runs.
+- Review nonstandard test imports for concrete public fixture value. Existing warning suppression is sufficient for reviewed exceptions; no dated ruling or resource-count threshold. Confirmed private API violations cannot be suppressed or baselined. Warnings alone do not block ordinary consumer CI.
+- Literal dependency checks do not prove ownership: independently inspect dynamic/helper-mediated loads, indirect type dependencies and the provenance of generated/synthetic inputs.
 - Page-map edits honor [its contract](../../automate-test/references/page-map.md)
   (orchestrator-written, drift ledger append-only), and any element with **three or
   more drift-ledger entries** becomes a finding — its selector strategy is wrong, not

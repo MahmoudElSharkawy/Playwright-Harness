@@ -49,7 +49,11 @@ try {
       const output = execFileSync(process.execPath, args, {cwd: roots.projectRoot, encoding: 'utf8', windowsHide: true, timeout: 90000, maxBuffer: 1024 * 1024});
       checks.push({name, exitCode: 0, output});
     }
-    const candidate = await registerCandidate(roots, fixture.source.id, {config: 'playwright.config.ts', tests: fixture.cases.map(c => ({scenarioId: c.id, spec: 'tests/ObservationTests.spec.ts', project: 'proof', titlePath: ['Workflow observations', c.title]})),
+    const candidate = await registerCandidate(roots, fixture.source.id, {config: 'playwright.config.ts', tests: fixture.cases.map(c => {
+      const owner = c.id === 'ui' ? 'ObservationPage' : c.definition?.family === 'api' || c.execution?.startsWith('api') ? 'ApisObservations' : 'DbsObservations';
+      return {scenarioId: c.id, spec: 'tests/ObservationTests.spec.ts', project: 'proof', titlePath: ['Workflow observations', c.title],
+        mapping: [{step: 1, actions: [`${owner}.${c.id === 'ui' ? 'navigate' : c.definition ? 'observe' : 'exerciseLifecycle'}`], expectations: [{key: c.key, validations: [`${owner}.verifyObservation`]}]}]};
+    }),
       ...(state.candidates.length ? {repair: 'review-findings'} : {})});
     const file = save(`.harness/workflow/candidates/${candidate.revision}.json`, {revision: candidate.revision, fingerprint: candidate.snapshot.fingerprint, sourceId: fixture.source.id, round: candidate.round, checks,
       notes: {refinement: digest(readFileSync(join(roots.projectRoot, 'refinement.json'))), knowledge: digest(readFileSync(join(roots.projectRoot, '.harness/knowledge-candidates/workflow.json')))}});

@@ -40,19 +40,10 @@ export default defineConfig({
     ['./src/utils/AllureReport.ts'],
     ['html', { open: 'always', outputFolder: 'reports/playwright-report' }],
     // Paths and environmentInfo are shared with setup and the post-flush report job.
-    ['allure-playwright', {
+    ['allure-playwright', { // conventions-ok: illustrative IDs have no destination; remove this exemption when configuring real links.
       resultsDir: allureConfig.resultsDir,
       environmentInfo: allureEnvironmentInfo,
-      links: {
-        tms: {
-          nameTemplate: 'Test: #%s',
-          urlTemplate: 'https://dev.azure.com/your-org/your-project/_workitems/edit/%s'
-        },
-        // issue: {
-        //   nameTemplate: 'Bug: #%s',
-        //   urlTemplate: 'https://dev.azure.com/your-org/your-project/_workitems/edit/%s'
-        // },
-      },
+      // Configure literal links.tms / links.issue templates when linking is requested (harness-setup).
     }],
     ['json', { outputFile: 'reports/json-report/test-results.json' }],
     // consumed by Azure Pipelines' PublishTestResults task — feeds the run's Tests tab
@@ -67,7 +58,7 @@ export default defineConfig({
     actionTimeout: ACTION_DEFAULT_MS,
     /* Sized to measured slow-environment page loads. */
     navigationTimeout: NAVIGATION_DEFAULT_MS,
-    /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
+    /* Native traces, screenshots, videos and report details may contain credentials; restrict artifact access and retention. */
     trace: 'on-first-retry',
     headless: true,
     // viewport: { width: 1920, height: 1080 },

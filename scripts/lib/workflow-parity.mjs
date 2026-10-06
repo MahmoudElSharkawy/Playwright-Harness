@@ -155,8 +155,13 @@ export async function workflowSemantics(roots, {source, executionIds, generatedI
         requireThat(record.reporting.directory === `reports/execution/${run.id}/${id}`, 'Generated report association changed.');
         return {id, ...checked, reporting: checkExecutionReport(roots, record.reporting.directory, checked.result)};
       });
-      return {status: run.status, expectations: sourceExpectations(source),
-        tests: selected.map(test => ({scenarioId: test.scenarioId, expectations: receipt.tests.find(t => t.id === test.id).results[0].expectations.map(e => ({key: e.key, evaluated: e.assertions > 0, failed: e.failed})).sort((a, b) => a.key.localeCompare(b.key))})),
+      return {status: run.status, gate: receipt.version === 1 ? 'source-expectations' : 'case-assertions', expectations: sourceExpectations(source),
+        tests: selected.map(test => {
+          const result = receipt.tests.find(t => t.id === test.id).results[0];
+          return {scenarioId: test.scenarioId, assertions: receipt.version === 1
+            ? {evaluated: result.expectations.every(e => e.assertions > 0), failed: result.expectations.some(e => e.failed)}
+            : {evaluated: result.assertions.passed > 0, failed: result.assertions.failed > 0}, skipped: receipt.version === 2 && result.skippedSteps > 0};
+        }),
         executions: generated.map(g => ({id: g.id, execution: g.semantic, reporting: g.reporting})),
         allure: checkWorkflowAllure(roots, {...run, sourceId: source.id}, candidate.tests, generated)};
     });

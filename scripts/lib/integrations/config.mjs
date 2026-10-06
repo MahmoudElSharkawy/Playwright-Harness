@@ -24,11 +24,21 @@ export function readConsumerJson(roots, path, optional = false) {
   requireValue(bytes.length <= 2 * 1024 * 1024, 'Consumer JSON exceeds 2 MiB.');
   try { return JSON.parse(bytes.toString('utf8')); } catch { throw new Error('Consumer configuration/input must be valid JSON.'); }
 }
+function adoCoordinates(organizationUrl, project) {
+  let url; try { url = new URL(organizationUrl); } catch { throw new Error('Configure an explicit HTTPS ADO collection URL.'); }
+  requireValue(url.protocol === 'https:' && !url.username && !url.password && !url.search && !url.hash && !/%|\\/.test(url.pathname), 'ADO collection URL must be HTTPS without credentials, escapes, query or fragment.');
+  requireValue(typeof project === 'string' && /^[^/\\?#%\x00-\x1f]{1,150}$/.test(project) && !['.', '..'].includes(project), 'Configure an explicit ADO project name or ID.');
+  return url.href.replace(/\/+$/, '');
+}
+
+/** Format known work-item coordinates locally; credentials and network access are unnecessary. */
+export function workItemUrlTemplate(organizationUrl, project) {
+  return `${adoCoordinates(organizationUrl, project)}/${encodeURIComponent(project)}/_workitems/edit/%s`;
+}
+
 export function validateAdoConfiguration(input) {
   keys(input, ['organizationUrl', 'project', 'credentialRef', 'repository', 'planId', 'automationField', 'timeoutMs', 'maxResponseBytes', 'bugs'], 'ADO configuration');
-  let url; try { url = new URL(input.organizationUrl); } catch { throw new Error('Configure an explicit HTTPS ADO collection URL.'); }
-  requireValue(url.protocol === 'https:' && !url.username && !url.password && !url.search && !url.hash && !/%|\\/.test(url.pathname), 'ADO collection URL must be HTTPS without credentials, escapes, query or fragment.');
-  requireValue(typeof input.project === 'string' && /^[^/\\?#%\x00-\x1f]{1,150}$/.test(input.project) && !['.', '..'].includes(input.project), 'Configure an explicit ADO project name or ID.');
+  const organizationUrl = adoCoordinates(input.organizationUrl, input.project);
   requireValue(typeof input.credentialRef === 'string' && /^[A-Z_][A-Z0-9_]{0,99}$/.test(input.credentialRef), 'ADO credentials must use an environment-variable reference.');
   if (input.repository !== undefined) requireValue(typeof input.repository === 'string' && /^[^/\\?#%\x00-\x1f]{1,150}$/.test(input.repository) && !['.', '..'].includes(input.repository), 'Invalid configured repository.');
   if (input.automationField !== undefined) requireValue(/^Custom\.[A-Za-z][A-Za-z0-9_]*$/.test(input.automationField), 'Optional automation field must be a Custom field reference.');
@@ -45,7 +55,7 @@ export function validateAdoConfiguration(input) {
   const timeoutMs = input.timeoutMs ?? 30000, maxResponseBytes = input.maxResponseBytes ?? 2 * 1024 * 1024;
   requireValue(Number.isInteger(timeoutMs) && timeoutMs >= 10 && timeoutMs <= 60000, 'ADO timeout must be 10–60000 ms.');
   requireValue(Number.isInteger(maxResponseBytes) && maxResponseBytes >= 128 && maxResponseBytes <= 8 * 1024 * 1024, 'Invalid ADO response bound.');
-  return Object.freeze({...input, organizationUrl: url.href.replace(/\/+$/, ''), timeoutMs, maxResponseBytes});
+  return Object.freeze({...input, organizationUrl, timeoutMs, maxResponseBytes});
 }
 
 /** Opt-in only. Never read this file, credentials or legacy configuration for a local source. */
