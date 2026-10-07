@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased — Allure locator titles
+## 3.2.3 — Allure locator titles
 
 ### Upgrade actions
 
