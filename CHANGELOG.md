@@ -1,6 +1,6 @@
 # Changelog
 
-## 3.2.4 — Execution test folder
+## 3.3.0 — Execution test folder
 
 ### Upgrade actions
 
