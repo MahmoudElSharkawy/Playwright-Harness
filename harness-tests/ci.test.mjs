@@ -151,7 +151,8 @@ test('package contracts require upgrade actions for the newest version and a rec
   const root = contractRoot(t), changelog = readFileSync(join(root, 'CHANGELOG.md'), 'utf8').replaceAll('\r\n', '\n'), version = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).version;
   writeFileSync(join(root, 'CHANGELOG.md'), changelog.replace(`## ${version} `, '## 0.0.1 '));
   assert.throws(() => checkContracts(root), /newest CHANGELOG version heading/);
-  writeFileSync(join(root, 'CHANGELOG.md'), changelog.replace('### Upgrade actions', '### Notes'));
+  const releaseStart = changelog.indexOf(`## ${version} `);
+  writeFileSync(join(root, 'CHANGELOG.md'), changelog.slice(0, releaseStart) + changelog.slice(releaseStart).replace('### Upgrade actions', '### Notes'));
   assert.throws(() => checkContracts(root), /Upgrade actions/);
   writeFileSync(join(root, 'CHANGELOG.md'), `## Unreleased — next\n\n- Later work.\n\n${changelog}`); assert.equal(checkContracts(root).status, 'PASS');
   save(join(root, 'scripts/managed-digests.json'), {instructionBlocks: []});

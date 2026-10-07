@@ -220,8 +220,7 @@ test('dynamic Allure templates are reported as unresolved without changing the v
 });
 
 // Opt-in browser proof: HARNESS_ALLURE_LOCATOR_PROOF=1; HARNESS_BROWSER_CHANNEL may select an installed Chrome/Edge.
-for (const fails of [false, true]) test(`normal and scoped Allure retain live locators and ${fails ? 'failed' : 'passed'} status`,
-  {skip: process.env.HARNESS_ALLURE_LOCATOR_PROOF !== '1'}, async t => {
+if (process.env.HARNESS_ALLURE_LOCATOR_PROOF === '1') for (const fails of [false, true]) test(`normal and scoped Allure retain live locators and ${fails ? 'failed' : 'passed'} status`, async t => {
     const html = '<input id="field"><button id="submit">Submit</button><p id="message" data-state="ready" style="color:rgb(0,0,0)">Ready</p>'
       + '<div id="hidden" hidden></div><input id="disabled" disabled><input id="unchecked" type="checkbox"><input id="readonly" readonly value="synthetic-private">'
       + '<ul id="actual"><li>A</li><li>B</li></ul><ul id="reference"><li>A</li><li>B</li></ul>';
