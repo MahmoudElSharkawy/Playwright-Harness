@@ -99,11 +99,11 @@ org/project from `config/project.json`'s `azure` block, fetches every test case 
 suite (steps XML parsed, shared steps inlined, parameter data tables extracted), and
 writes:
 
-- `test/ado-suite-<suiteId>/tc-<id>-<slug>.md` — one AgenTeX spec per test case, in
+- `execution-tests/ado-suite-<suiteId>/tc-<id>-<slug>.md` — one AgenTeX spec per test case, in
   the exact markdown grammar the browser-testing skill expects (Target from the
   default environment's `portalUrl`, expected results as acceptance criteria,
   steps as a stateful scenario chain).
-- `test/ado-suite-<suiteId>/_suite.json` — the manifest: case ids/titles/tags, the
+- `execution-tests/ado-suite-<suiteId>/_suite.json` — the manifest: case ids/titles/tags, the
   raw parsed steps per case (the ADO source of truth for phase 4, independent of any
   spec refinement), spec-file map, and `suggestedFeature` / `suggestedSpecFile` /
   `suggestedDataFile` for phase 4.
@@ -202,7 +202,7 @@ Two refinement assists:
   landmarks, and gotchas already proven for these pages make concretization exact
   instead of guessed.
 - A case too ambiguous to refine on paper routes to a live walkthrough:
-  `/define-flow test/ado-suite-<suiteId>/tc-<id>-*.md` — the user answers each
+  `/define-flow execution-tests/ado-suite-<suiteId>/tc-<id>-*.md` — the user answers each
   ambiguity while the step executes, and the proven spec it saves becomes the
   refined spec (record the walkthrough in the Refinement log).
 
@@ -342,7 +342,7 @@ For each failure, classify before touching anything:
 | Environment | connectivity, credentials, seed API down | Report BLOCKED to the user; do not "fix" the test around it |
 | Unclassifiable | EXPLORE was skipped, no manual-path data | After the final round, reproduce the failing step once manually in a scratch playwright-cli session: reproduces → app defect; doesn't → report UNCLASSIFIED with both hypotheses |
 
-**Track rounds on disk.** Keep `test/ado-suite-<suiteId>/_verify-state.json` — per
+**Track rounds on disk.** Keep `execution-tests/ado-suite-<suiteId>/_verify-state.json` — per
 TC id: fix rounds used, consecutive greens, classification, last run result
 (`{ "sourceFingerprint": "<from the verified _suite.json>", "cases": { "<tcId>": { "status":
 "passed|failed|blocked|fixme|pending-confirmation", "rounds": n, "greens": n,
@@ -397,7 +397,7 @@ silently skipped:
 1. **Lint gate**: `npx --no pom-harness check-conventions --changed` must show 0 new FAILs
    (--changed includes staged and untracked files).
 2. **Traceability table** (2026-08-27 ruling): write
-   `test/ado-suite-<suiteId>/_traceability.md` — one section per test case, one row per
+   `execution-tests/ado-suite-<suiteId>/_traceability.md` — one section per test case, one row per
    executable step: `| # | Step | Method | Class | Layer | Why this layer |`
    (Layer = UI / API / DB), mapping every refined step to the business method that
    implements it (composed calls listed together; nested plumbing like a token fetch
@@ -410,16 +410,16 @@ silently skipped:
    replaces — the detailed story stays in the spec's Refinement log). Codes combine
    with `+` (`oracle+reroute`); extending the vocabulary is a design-conventions
    change, never a per-file invention. Skipped/blocked cases get a one-line entry
-   stating why. **Correction:** `test/` is fully gitignored by this framework's
-   delivery convention — `git ls-files test/` is empty, and no suite delivery ever
-   commits a `test/ado-suite-*/` folder. This file is therefore local-only, NOT a
+   stating why. **Correction:** `execution-tests/` is fully gitignored by this framework's
+   delivery convention — `git ls-files execution-tests/` is empty, and no suite delivery ever
+   commits an `execution-tests/ado-suite-*/` folder. This file is therefore local-only, NOT a
    committed/versioned artifact — its content reaches the PR only via the
    description matrix + the posted comment thread (step 5 below). framework-review
    still cross-checks it against the spec, just locally, never from a git diff.
 3. **Commit ONLY the pipeline's artifacts** on the `automation/ado-suite-<suiteId>-*`
    branch: the generated `tests/` / `pages/` / `apis/` /
    `dbs/` / `resources/testData/` files, `.harness/knowledge/ui/` updates, and the
-   class-ledger row. `test/ado-suite-<suiteId>/` (including `_traceability.md`,
+   class-ledger row. `execution-tests/ado-suite-<suiteId>/` (including `_traceability.md`,
    `_verify-state.json`, `_suite.json`) stays local-only per the gitignore — never
    `git add` it, never force-add against the ignore rule. Run `git status --porcelain`
    first — anything else in the tree is REPORTED to the user, never swept into the
@@ -433,7 +433,7 @@ silently skipped:
    Record the result in the manifest: `"pr": { "id": <n>, "url": "..." }` in
    `_suite.json`. The description carries: the TC ↔ test ↔ verify-status matrix, a
    pointer to the (local-only) `_traceability.md` (the full TC ↔ step ↔ method ↔ layer
-   matrix stays local because `test/` is gitignored).
+   matrix stays local because `execution-tests/` is gitignored).
    keep the description within the adapter’s 4000-character limit; longer text is
    refused without truncation. Additional PR comments require separate authorized
    delivery and are not posted by this command.
@@ -469,7 +469,7 @@ silently skipped:
 
 **Report to the user** (also the PR description's source):
 - Matrix: TC id → title → EXPLORE verdict → generated test title → VERIFY status → note.
-- Artifacts: `test/ado-suite-<suiteId>/`, `executions/execu_<ts>/report.md`, the
+- Artifacts: `execution-tests/ado-suite-<suiteId>/`, `executions/execu_<ts>/report.md`, the
   generated spec + data files, PR link, Allure TMS links (wired via `allure.tms`).
 - Defects: list app defects with evidence paths; offer `/bug-report-azure` (requires
   az CLI) or manual filing with the prepared defect blocks.
@@ -529,7 +529,7 @@ with no intervening edit violates the workflow; the current hook is advisory.
 | Phase considered done when | Artifact |
 |---|---|
 | BRANCH | current branch is `automation/ado-suite-<suiteId>-*` (never master) |
-| FETCH | `test/ado-suite-<suiteId>/_suite.json` exists (with ≥1 case) |
+| FETCH | `execution-tests/ado-suite-<suiteId>/_suite.json` exists (with ≥1 case) |
 | REFINE | every spec in the suite folder ends with a `## Refinement log` section, and every prose precondition is resolved per [prerequisite-dictionary.md](prerequisite-dictionary.md) (seed steps, GUI-chain expansion, or NEEDS-FIXTURE) |
 | EXPLORE | Assessed exploration has a verified frozen [M13 generation handoff](../../../../docs/M13-GENERATION.md), preserving each source expectation and its evidence; missing evidence requires scoped exploration before generation |
 | GENERATE | every file in `_suite.json.resolvedSpecFiles` exists and, across them, every manifest tms id appears in an `allure.tms` call (grep `tests/*.spec.ts` before declaring a partial), AND the framework-review verdict is APPROVE |

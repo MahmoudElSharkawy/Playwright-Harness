@@ -2,7 +2,7 @@
 /**
  * harness-metrics.mjs — aggregate the harness pipeline's on-disk state into one report.
  *
- * Reads:   test/ado-{suite,story}-<id>/_suite.json + _verify-state.json (pipeline/verify state)
+ * Reads:   execution-tests/ado-{suite,story}-<id>/_suite.json + _verify-state.json (pipeline/verify state)
  *          .harness/knowledge/ui/*.md                                  (per-page "Drift ledger" tables)
  *          .harness/state/review/class-ledger.md         (review finding-class rows)
  * Prints:  automation coverage per suite and in total (passed + fixme over total cases),
@@ -25,7 +25,7 @@ import {projectArgument,consumerPath} from './lib/consumer-paths.mjs';
 
 const {roots}=projectArgument();
 const ROOT = roots.projectRoot;
-const SUITES_DIR = join(ROOT, 'test');
+const SUITES_DIR = join(ROOT, 'execution-tests');
 const PAGE_MAP_DIR = consumerPath(roots,'.harness/knowledge/ui');
 const CLASS_LEDGER = consumerPath(roots,'.harness/state/review/class-ledger.md');
 const DRIFT_FLAG_AT = 3; // three drift entries for one element = wrong strategy, not unlucky
@@ -40,7 +40,7 @@ function readJsonSafe(path) {
   catch (e) { warn(`skipped malformed ${path}: ${e.message}`); return null; }
 }
 
-// ---------- suites (test/ado-suite-*/ and story-scoped test/ado-story-*/) ----------
+// ---------- suites (execution-tests/ado-suite-*/ and story-scoped execution-tests/ado-story-*/) ----------
 
 function collectSuites() {
   if (!existsSync(SUITES_DIR)) return [];
@@ -229,7 +229,7 @@ function main() {
 
   out.push('== SUITES ==');
   if (!suiteStats.length) {
-    out.push('no pipeline state found (no test/ado-suite-*/ or test/ado-story-*/ folder holds _suite.json or _verify-state.json)');
+    out.push('no pipeline state found (no execution-tests/ado-suite-*/ or execution-tests/ado-story-*/ folder holds _suite.json or _verify-state.json)');
   } else {
     const rows = suiteStats.map((s) => suiteRow(s.suite, s));
     if (suiteStats.length > 1) rows.push(suiteRow('TOTAL', totals));

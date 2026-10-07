@@ -93,9 +93,19 @@ force, description-file, draft and JSON entrypoints remain available. Output is
 structured JSON; success is exit 0 and any failure is exit 1. Legacy distinct
 numeric error codes and automatic publication are intentionally discontinued.
 
-Fetch retains `_suite.json` and Markdown specifications. It preserves files with a
-Refinement log unless `--force` is supplied and checks the prior manifest's ADO
-identity before reuse. Nested shared steps are resolved with cycle/depth limits;
+Fetch writes `_suite.json` and Markdown specifications under
+`execution-tests/ado-suite-<suiteId>/` or `execution-tests/ado-story-<storyId>/` by
+default; an explicit `--out` still selects another parent folder.
+
+For existing projects, manually move each `ado-suite-*` and `ado-story-*` folder
+from `test/` into `execution-tests/` before continuing its workflow. Keep all files,
+including refinements, manifests, traceability and verification state. If the
+destination already exists, reconcile it manually before moving; do not overwrite
+it. Setup does not move these folders, and readers use only `execution-tests/`.
+
+Fetch preserves files with a Refinement log unless `--force` is supplied and checks
+the prior manifest's ADO identity before reuse. Nested shared steps are resolved
+with cycle/depth limits;
 missing cases/shared items or partial parsing fail instead of producing invented
 assertions. Parameter metadata and data-table XML are retained, with the legacy
 table projection where recognizable. `--source-out` additionally exports the
@@ -136,7 +146,7 @@ fetch it writes consumer files unless `--dry-run` is supplied and never mutates 
   linked items.
 - **Same contract.** Included cases use the suite fetch's case reader: steps, shared
   steps, parameters, data and limits are identical. Output reuses the suite layout
-  under `test/ado-story-<storyId>/`: `_suite.json` carries `storyId`, `storyTitle`
+  under `execution-tests/ado-story-<storyId>/`: `_suite.json` carries `storyId`, `storyTitle`
   and `links` instead of plan/suite identity, plus one spec per case. A previous
   manifest for another destination, suite or story is refused before writes.
   `--source-out` exports a neutral source with ID `ado-story-<storyId>`.

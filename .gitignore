@@ -32,6 +32,8 @@ ctrf/
 # Legacy manual execution artifacts (reports, screenshots, logs per run)
 /executions/
 # Imported manual cases can contain private source content.
+/execution-tests/
+# Legacy imported cases remain ignored until manually moved.
 /test/
 # Legacy authentication storage — never commit live credentials
 test/.auth/

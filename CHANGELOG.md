@@ -1,5 +1,15 @@
 # Changelog
 
+## 3.2.4 — Execution test folder
+
+### Upgrade actions
+
+- Before continuing an existing ADO workflow, manually move its `ado-suite-*` and `ado-story-*` folders from `test/` into `execution-tests/`, preserving all contents. Reconcile any existing destination before moving. Setup does not move these folders; publishing, tracker, metrics and convention checks use only the new location. See [manual migration](docs/M12-ADO.md#compatibility-commands).
+
+### Changes
+
+- Rename the default parent folder for fetched Markdown cases and supporting manifests, traceability and verification state to `execution-tests/`. Update its readers, ignore rules, package inventory and guidance together; preserve explicit fetch `--out`, filenames, source fingerprints and refinements.
+
 ## 3.2.3 — Allure locator titles
 
 ### Upgrade actions
