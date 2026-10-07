@@ -89,8 +89,8 @@ The report generator is pinned to `allure` 3.19.1 and configured in `allurerc.js
 The `AllureReport.ts` reporter retains the official reporter's options and appends
 public locator metadata to native action/assertion titles. Locator assertions read
 `Expect … → locator('…')`; count comparisons include the reference locator too.
-To adopt this in an existing project, merge the updated utility and copy its
-`allure-step-titles.cjs` helper. Replace the separate `allure-playwright` and generator
+To adopt this in an existing project, merge the updated utility. Its locator handling
+is contained in the class. Replace the separate `allure-playwright` and generator
 entries with one `./src/utils/AllureReport.ts` entry before the HTML reporter,
 preserving the official reporter's options. Apply the count-comparison message update
 in `Expects.ts`; setup does not overwrite consumer customizations.

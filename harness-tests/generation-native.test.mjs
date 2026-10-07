@@ -127,6 +127,23 @@ for (const [status, body] of [['PASS', 'await expect(2).toBe(2);'], ['FAIL', 'aw
   assert.equal(result.status, status, JSON.stringify(result)); assert.equal(result.reporting.status, 'FAILED');
 });
 
+test('scoped Allure reuses the maintained class in an ESM consumer without generating normal HTML', async t => {
+  const files = Object.fromEntries(['src/utils/AllureReport.ts', 'src/config/reporting.ts']
+    .map(file => [file, readFileSync(join(packageRoot, 'examples', file), 'utf8')]));
+  const f = await nativeFixture(t, undefined, '', false, {files});
+  put(f.roots.projectRoot, 'allure-report/index.html', 'Existing normal report');
+  const result = await verifyGeneration(f.roots, f.source.id, {allure: true});
+  assert.equal(result.status, 'PASS'); assert.equal(result.reporting.status, 'CAPTURED', JSON.stringify(result));
+  assert.equal(readFileSync(join(f.roots.projectRoot, 'allure-report/index.html'), 'utf8'), 'Existing normal report');
+});
+
+test('scoped Allure retains official capture with a legacy generation-only utility', async t => {
+  const f = await nativeFixture(t, undefined, '', false, {files: {'src/utils/AllureReport.ts':
+    "export default class AllureReport {onExit(){throw new Error('Legacy generator must not run');}}"}});
+  const result = await verifyGeneration(f.roots, f.source.id, {allure: true});
+  assert.equal(result.status, 'PASS'); assert.equal(result.reporting.status, 'CAPTURED', JSON.stringify(result));
+});
+
 test('only hook assertions cannot satisfy case coverage', async t => {
   const f = await nativeFixture(t, '', "test.beforeEach(async()=>{await expect(2).toBe(2);});test.afterEach(async()=>{await expect(3).toBe(3);});");
   const result = await verifyGeneration(f.roots, f.source.id); assert.equal(result.status, 'NEEDS_REVIEW'); assert.equal(result.failureClass, 'ASSERTION_COVERAGE');
@@ -224,7 +241,7 @@ for (const fails of [false, true]) test(`normal and scoped Allure retain live lo
         await test.info().attach('Synthetic locator attachment',{body:'unchanged',contentType:'text/plain'});
         ${fails ? "await checks.expectToHaveText('the message',message,'Wrong',{timeout:100});" : ''}
       });});`;
-    const files = Object.fromEntries(['src/utils/allure-step-titles.cjs', 'src/utils/Expects.ts', 'src/utils/AllureReport.ts', 'src/config/reporting.ts', 'allurerc.json']
+    const files = Object.fromEntries(['src/utils/Expects.ts', 'src/utils/AllureReport.ts', 'src/config/reporting.ts', 'allurerc.json']
       .map(file => [file, readFileSync(join(packageRoot, 'examples', file), 'utf8')]));
     const f = await nativeFixture(t, body, '', false, {files, fixtures: '{page}', packageType: 'commonjs',
       imports: "import * as allure from 'allure-js-commons';import * as checks from '../src/utils/Expects';",

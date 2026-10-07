@@ -4,10 +4,20 @@ import Module, {createRequire, stripTypeScriptTypes} from 'node:module';
 import {readFileSync} from 'node:fs';
 import {join, dirname} from 'node:path';
 import {packageRoot} from '../scripts/lib/consumer-paths.mjs';
-import {createAllureStepView} from '../examples/src/utils/allure-step-titles.cjs';
+
+// Load the real class in memory for step tests; generation is covered by the native runner tests.
+const reportPath = join(packageRoot, 'examples/src/utils/AllureReport.ts');
+const reportSource = stripTypeScriptTypes(readFileSync(reportPath, 'utf8'))
+  .replace("import AllureReporter from 'allure-playwright';", "const AllureReporter = require('allure-playwright').default;")
+  .replace("import { allureConfig } from '../config/reporting';", 'const allureConfig = {};')
+  .replace(/import (.+) from '(node:[^']+)';/g, (_, bindings, name) => `const ${bindings.replace('* as ', '')} = require('${name}');`)
+  .replace('export default class', 'module.exports = class');
+const reportModule = new Module(reportPath); reportModule.filename = reportPath; reportModule.paths = Module._nodeModulePaths(dirname(reportPath));
+reportModule._compile(reportSource, reportPath);
+const Reporter = reportModule.exports;
 
 test('locator views preserve native events, parent identity and completed metadata', () => {
-  const allureStep = createAllureStepView();
+  const reporter = new Reporter({}), allureStep = step => reporter.allureStep(step);
   const parent = {category: 'test.step', title: 'Business action', steps: []};
   const child = {category: 'pw:api', title: 'Click', parent, params: {locator: "locator('#submit')"}, steps: []};
   const parentView = allureStep(parent), childView = allureStep(child);
@@ -31,7 +41,7 @@ test('all locator assertion wrappers retain their selector after the arrow in Al
   const sourcePath = join(packageRoot, 'examples/src/utils/Expects.ts'), require = createRequire(sourcePath);
   require('@playwright/test');
   const native = require(join(packageRoot, 'examples/node_modules/playwright/lib/matchers/expect.js'));
-  const previous = native.expectConfig(), Reporter = require('allure-playwright').default, reporter = new Reporter({}), allureStep = createAllureStepView();
+  const previous = native.expectConfig(), reporter = new Reporter({});
   const recorded = [], nativeSteps = [];
   reporter.allureResultsUuids.set('synthetic', 'test-uuid');
   reporter.allureRuntime = {startStep: (testUuid, parentUuid, step) => {recorded.push(step); return step.uuid;}};
@@ -39,7 +49,7 @@ test('all locator assertion wrappers retain their selector after the arrow in Al
     _deadline: () => ({deadline: Infinity, timeout: 5000}),
     _addStep: data => {
       nativeSteps.push(data);
-      reporter.onStepBegin({id: 'synthetic'}, {}, allureStep({...data, startTime: new Date(0), steps: [], attachments: [], annotations: []}));
+      reporter.onStepBegin({id: 'synthetic'}, {}, {...data, startTime: new Date(0), steps: [], attachments: [], annotations: []});
       return {...data, complete() {}};
     },
   }});

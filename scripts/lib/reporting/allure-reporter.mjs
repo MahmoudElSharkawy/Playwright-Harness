@@ -1,15 +1,13 @@
 import {randomUUID} from 'node:crypto';
-import {writeFileSync} from 'node:fs';
+import {existsSync, writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {consumerRoots} from '../consumer-paths.mjs';
 import {reportDirectory} from './index.mjs';
 import {installedAllure, allureInventory} from './allure.mjs';
 import {validateAllureLinks} from '../convention-source.mjs';
-import {createAllureStepView} from '../../../examples/src/utils/allure-step-titles.cjs';
 
 /** Concrete optional adapter for the installed official Allure reporter, not a verdict engine. */
 export default class HarnessAllureReporter {
-  allureStep = createAllureStepView();
   constructor(options = {}) {
     this.failed = false; this.tests = 0;
     try {
@@ -18,7 +16,13 @@ export default class HarnessAllureReporter {
       const installed = installedAllure(this.roots, 'allure-playwright');
       if (installed.version !== '3.13.0') throw new Error('Unsupported Allure reporter.');
       this.reporter = installed.version;
-      const Reporter = installed.require(installed.entry).default;
+      let Reporter = installed.require(installed.entry).default;
+      // Reuse the consumer's maintained reporter; scoped forwarding never calls its onExit.
+      const consumerReporter = join(this.roots.projectRoot, 'src/utils/AllureReport.ts');
+      if (existsSync(consumerReporter)) {
+        const configuredReporter = installed.require(consumerReporter).default;
+        if (typeof configuredReporter.prototype.version === 'function') Reporter = configuredReporter;
+      }
       const linkInput = options.links ?? (process.env.HARNESS_ALLURE_LINKS ? JSON.parse(process.env.HARNESS_ALLURE_LINKS) : undefined);
       const links = linkInput === undefined ? undefined : validateAllureLinks(linkInput);
       this.delegate = new Reporter({resultsDir: join(this.path, 'allure-results'), detail: true, suiteTitle: true,
@@ -32,7 +36,6 @@ export default class HarnessAllureReporter {
   forward(method, args) {
     if (this.failed) return;
     try {
-      if (method === 'onStepBegin' || method === 'onStepEnd') args = [args[0], args[1], this.allureStep(args[2])];
       const pending = this.delegate?.[method]?.(...args);
       if (pending?.then) return new Promise(resolve => {
         const timer = setTimeout(() => {this.failed = true; resolve();}, 5000);

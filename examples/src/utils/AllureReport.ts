@@ -5,11 +5,27 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { allureConfig } from '../config/reporting';
-import { createAllureStepView } from './allure-step-titles.cjs';
 
 /** Records locator-bearing Allure steps and generates HTML after every reporter has flushed. */
 export default class AllureReport extends AllureReporter {
-  private readonly allureStep = createAllureStepView();
+  private readonly stepViews = new WeakMap<TestStep, TestStep>();
+
+  /** Keeps stable step identities and parents for Allure without changing native events. */
+  private allureStep(step: TestStep): TestStep {
+    let view = this.stepViews.get(step);
+    if (!view) {
+      view = { ...step };
+      this.stepViews.set(step, view);
+    }
+    const locator = step.params?.locator;
+    const appendLocator = ['pw:api', 'expect'].includes(step.category)
+      && typeof locator === 'string' && locator.length > 0 && !step.title.endsWith(` ${locator}`);
+    Object.assign(view, step, {
+      title: appendLocator ? `${step.title} ${locator}` : step.title,
+      parent: step.parent ? this.allureStep(step.parent) : undefined,
+    });
+    return view;
+  }
 
   /** Preserves native events while supplying locator-bearing titles to the official reporter. */
   onStepBegin(test: TestCase, result: TestResult, step: TestStep): void {

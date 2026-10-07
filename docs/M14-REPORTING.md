@@ -90,9 +90,11 @@ declarations/lockfiles accurate. Other versions fail explicitly as unavailable u
 validated. Configuration follows the official [Playwright configuration reference](https://allurereport.org/docs/playwright-configuration/):
 `resultsDir`, `detail` and `suiteTitle`. Native reporter interfaces were also checked
 against the installed version. No reporter registry or copied Allure implementation
-is included. A small shared `allure-step-titles.cjs` helper appends the public
-`TestStep.params.locator` to native action/assertion titles. It gives Allure stable
-step views without changing native events; both normal and scoped reports use it.
+is included. `AllureReport.ts` appends the public `TestStep.params.locator` to native
+action/assertion titles using a private method and stable step views, without changing
+native events. Scoped reporting reuses the consumer's maintained class for capture
+only, without calling its `onExit`. Consumers without this class retain official
+capture; adopting the updated class enables locator titles.
 The example uses one `src/utils/AllureReport.ts` reporter, extending the official
 reporter with locator titles and accepting its existing options. Its `onExit`
 generates after every reporter's `onEnd`, including environment metadata. Keep it
@@ -102,7 +104,7 @@ validations, `allure.step` and attachment calls require no migration. Do not cop
 the unsupported `outputFolder` key into Allure reporter configurations.
 
 For existing consumer reports, merge the updated `examples/src/utils/AllureReport.ts`
-into your utility and copy `examples/src/utils/allure-step-titles.cjs` alongside it.
+into your utility.
 Replace the separate `allure-playwright` and generator entries with one
 `['./src/utils/AllureReport.ts', existingAllureOptions]` entry before the HTML reporter.
 Apply the `Expects.ts` count-comparison message update to show actual and reference
