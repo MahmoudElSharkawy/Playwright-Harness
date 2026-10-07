@@ -34,8 +34,8 @@ npx --no pom-harness tracker --archive             # also keep a timestamped cop
 npx --no pom-harness tracker --json                # machine-readable summary (for loops/agents)
 ```
 
-`--sync` maps pipeline state (`_verify-state.json` in `test/ado-suite-*/` and
-`test/ado-story-*/`) to tracker status: `passed`→done · `fixme`/`blocked`→blocked ·
+`--sync` maps pipeline state (`_verify-state.json` in `execution-tests/ado-suite-*/` and
+`execution-tests/ado-story-*/`) to tracker status: `passed`→done · `fixme`/`blocked`→blocked ·
 `failed` at the 3-round cap→blocked, else doing · `pending-confirmation`→doing. A case
 whose folders disagree is skipped with a warning. It never touches cases under
 a `manual` ruling, and never overrides a history event newer than the verify-state

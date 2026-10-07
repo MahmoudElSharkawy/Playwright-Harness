@@ -85,9 +85,9 @@ test('dynamic userinfo or port does not exempt a literal hostname',()=>{
 });
 test('inventory excludes protected recovery, local secrets and installed dependencies',t=>{
  const root=temporary(t);writeFileSync(join(root,'README.md'),'safe');
- for(const dir of ['.m1-private','node_modules','.validation']) {mkdirSync(join(root,dir));writeFileSync(join(root,dir,'sample'),'excluded');}
+ for(const dir of ['.m1-private','node_modules','.validation','execution-tests','test']) {mkdirSync(join(root,dir));writeFileSync(join(root,dir,'sample'),'excluded');}
  writeFileSync(join(root,'.env'),'excluded');writeFileSync(join(root,'unexpected.bin'),'unknown');
- const result=inventory(root);assert.deepEqual(result.files,['README.md']);assert.equal(result.unexpected.length,1);assert.equal(result.excluded.length,4);
+ const result=inventory(root);assert.deepEqual(result.files,['README.md']);assert.equal(result.unexpected.length,1);assert.deepEqual(result.excluded,['.env','.m1-private','.validation','execution-tests','node_modules','test']);
 });
 test('links verify existing targets, missing targets, encoding and containment',t=>{
  const root=temporary(t);mkdirSync(join(root,'docs'));writeFileSync(join(root,'README.md'),'safe');

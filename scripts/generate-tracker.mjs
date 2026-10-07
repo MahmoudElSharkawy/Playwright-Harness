@@ -9,7 +9,7 @@
  *          .harness/state/tracker/history.jsonl      (append-only dated
  *              status events; later lines win — the progress source of truth)
  *          .agents/skills/plan-tracker/assets/tracker-template.html
- *          test/ado-{suite,story}-<id>/_verify-state.json       (--sync only: live
+ *          execution-tests/ado-{suite,story}-<id>/_verify-state.json       (--sync only: live
  *              pipeline state, diffed into a new history event)
  * Writes:  reports/tracker/plan-<planId>-tracker.html           (gitignored output)
  *          reports/tracker/archive/plan-<planId>-tracker-<ts>.html (--archive only)
@@ -21,7 +21,7 @@
  * Options:
  *   --plan <id>       pick data/plan-<id>.json when the data folder holds more than
  *                     one registry (a single registry is discovered automatically)
- *   --sync            before rendering, diff test/ado-{suite,story}-*\/_verify-state.json
+ *   --sync            before rendering, diff execution-tests/ado-{suite,story}-*\/_verify-state.json
  *                     against the folded history and append the differences as one
  *                     dated event. Mapping: passed→done · fixme/blocked→blocked ·
  *                     failed→blocked at the 3-round cap, else doing ·
@@ -49,7 +49,7 @@ const SKILL_DIR = join(roots.packageRoot, '.agents', 'skills', 'plan-tracker');
 const DATA_DIR = consumerPath(roots,'.harness/state/tracker');
 const HISTORY_PATH = consumerPath(roots,join(DATA_DIR, 'history.jsonl'));
 const TEMPLATE_PATH = join(SKILL_DIR, 'assets', 'tracker-template.html');
-const SUITES_DIR = join(ROOT, 'test');
+const SUITES_DIR = join(ROOT, 'execution-tests');
 
 const STATUSES = new Set(['todo', 'doing', 'done', 'blocked']);
 const ROUND_CAP = 3; // mirrors harness-metrics.mjs — failed at the cap is terminal, i.e. blocked
@@ -239,7 +239,7 @@ if (opts.sync) {
     syncEvent = {
       at: localDate(new Date()),
       source: 'verify-state sync',
-      note: `Synced from test/ado-{suite,story}-*/_verify-state.json (passed→done · fixme/blocked→blocked · failed at ${ROUND_CAP}-round cap→blocked · else in-flight→doing): ${counts}.`,
+      note: `Synced from execution-tests/ado-{suite,story}-*/_verify-state.json (passed→done · fixme/blocked→blocked · failed at ${ROUND_CAP}-round cap→blocked · else in-flight→doing): ${counts}.`,
       set,
     };
     if (opts.dryRun) {

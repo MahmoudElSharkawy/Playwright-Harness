@@ -212,7 +212,7 @@ export function adoptProject({projectRoot,installedRoot=packageRoot,environment,
   const ignoreLines=['/.harness/runs/','/.harness/state/','/.harness/knowledge-candidates/','/.harness/installation.json',
     '.env','.env.*','!.env.example','.claude/settings.local.json','*.pfx','*.key',
     'node_modules/','test-results/','playwright-report/','blob-report/','playwright/.cache/','playwright/.auth/',
-    'allure-report/','allure-results/','reports/','ctrf/','.playwright-cli/','/executions/','/test/',
+    'allure-report/','allure-results/','reports/','ctrf/','.playwright-cli/','/executions/','/execution-tests/','/test/',
     // Links and pointers are machine-specific; no trailing slash, so a Linux symlink matches too.
     ...[...managedLinks,...managedFiles].map(rel=>`/${rel}`)];
   const absent=ignoreLines.filter(line=>!ignore.split(/\r?\n/).includes(line));

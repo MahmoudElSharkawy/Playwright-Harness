@@ -20,7 +20,7 @@ export function inventory(root) {
       const file = relative(root, absolute).replaceAll('\\', '/');
       if (item.isSymbolicLink()) { unexpected.push({ file, rule: 'symbolic-link' }); continue; }
       if (item.isDirectory()) {
-        if (OMIT_DIRS.has(item.name) || ['test', '.harness'].includes(file)) { excluded.push(file); continue; }
+        if (OMIT_DIRS.has(item.name) || ['execution-tests', 'test', '.harness'].includes(file)) { excluded.push(file); continue; }
         walk(absolute); continue;
       }
       if (!item.isFile()) continue;

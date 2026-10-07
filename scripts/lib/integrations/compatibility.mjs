@@ -47,7 +47,7 @@ function pointers(roots, manifest) {
 }
 /** One consumer write flow for every fetch scope; the scope object is exactly what the fingerprint covers. */
 function writeFetched(roots, opt, config, {name, scope, title, same, convert, extra = {}}) {
-  const folder = join(opt.out ?? 'test', name), path = join(folder, '_suite.json');
+  const folder = join(opt.out ?? 'execution-tests', name), path = join(folder, '_suite.json');
   const previous = readConsumerJson(roots, path, true);
   if (previous) same(previous);
   const sourceFingerprint = hash(scope), feature = pascalCase(title);
@@ -103,7 +103,7 @@ export async function runCompatibility(command, argv, dependencies = {}) {
     return command === 'tag-ado-workitem' ? management.tag({ids, tag: opt.tag, execute: opt.execute ?? false}) : management.relink({ids, storyId: opt.story, execute: opt.execute ?? false});
   }
   if (command === 'publish-ado-results') {
-    const suiteId = adoId(opt.suite), folder = `test/ado-suite-${suiteId}`, manifest = readConsumerJson(roots, `${folder}/_suite.json`);
+    const suiteId = adoId(opt.suite), folder = `execution-tests/ado-suite-${suiteId}`, manifest = readConsumerJson(roots, `${folder}/_suite.json`);
     const planId = adoId(opt.plan ?? manifest.planId); sameDestination(manifest, config, planId, suiteId);
     const state = readConsumerJson(roots, `${folder}/_verify-state.json`);
     if (manifest.sourceFingerprint) requireValue(state.sourceFingerprint === manifest.sourceFingerprint, 'Verification source fingerprint is missing or stale; verify the current source.');

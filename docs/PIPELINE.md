@@ -75,14 +75,17 @@ file, or an ADO plan/suite or user story exported to that format.
   ADO configured.
 - **Outputs:** a loader record (`--out`) holding the source's relative path and SHA-256
   fingerprint, with status `LOADED` and `executed: false`. An ADO fetch also writes
-  `_suite.json` and one Markdown spec per case under `test/ado-suite-<suiteId>/` or
-  `test/ado-story-<storyId>/`; `--source-out` exports the neutral format.
+  `_suite.json` and one Markdown spec per case under `execution-tests/ado-suite-<suiteId>/` or
+  `execution-tests/ado-story-<storyId>/`; `--source-out` exports the neutral format.
 - **Rules:** keep the source immutable and preserve every action, expectation and
   external reference. Each scenario needs at least one expectation. Limits are 2 MiB,
   1–500 scenarios and 1–1000 steps per scenario. `LOADED` means the source was read,
   not that anything passed. The loader refuses an existing `--out` destination. ADO
   fetches never change ADO. Parameterized or incomplete ADO cases fail conversion and
   must be refined into the neutral format explicitly.
+
+Existing `test/ado-suite-*` and `test/ado-story-*` folders need a one-time manual
+move; see [fetch storage and migration](M12-ADO.md#compatibility-commands).
 
 ```text
 npx --no pom-harness load-source --source .harness/sources/<name>.json --environment <env> --out .harness/runs/source.json

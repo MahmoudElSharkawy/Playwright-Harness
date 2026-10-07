@@ -39,7 +39,7 @@ Apply §6, with these review procedures and additional harness checks:
 - Generated tests carry the right `allure.tms` ids (diff vs `_suite.json` when
   reviewing pipeline output).
 - **Traceability table** (legacy ADO artifacts only, 2026-08-27 ruling): the diff carries
-  `test/ado-suite-<id>/_traceability.md`; it covers every tms id the spec carries,
+  `execution-tests/ado-suite-<id>/_traceability.md`; it covers every tms id the spec carries,
   every method it names exists on the named class (grep), every API/DB row carries
   a `Why this layer` code from the closed vocabulary (`per-ADO`/`seed`/`oracle`/
   `cross-check`/`reroute`), and every `reroute` names the observable it replaced.
