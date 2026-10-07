@@ -194,7 +194,9 @@ export function allureLinkTemplates(text) {
     if (entry[0]?.value !== '[' || expressionEnd(entry, 0) !== entry.length - 1) return {state: 'UNRESOLVED'};
     const parts = expressions(entry.slice(1, -1));
     if (parts[0]?.length !== 1 || parts[0][0].kind !== 'string') return {state: 'UNRESOLVED'};
-    if (parts[0][0].value === 'allure-playwright') matches.push(parts);
+    // Legacy AllureReport entries had no options and only generated HTML.
+    if (parts[0][0].value === 'allure-playwright'
+      || (parts[0][0].value === './src/utils/AllureReport.ts' && parts.length > 1)) matches.push(parts);
   }
   if (!matches.length) return {state: 'NONE'};
   if (matches.length !== 1 || matches[0].length > 2) return {state: 'UNRESOLVED'};

@@ -86,7 +86,8 @@ for (const [name, fails, missingGenerator] of [['passing test', false, false], [
       }
     } else symlinkSync(join(example, 'node_modules'), join(root, 'node_modules'), process.platform === 'win32' ? 'junction' : 'dir');
     put(root, 'package.json', '{"type":"commonjs"}');
-    put(root, 'playwright.config.ts', `export default {testDir:'./tests',workers:1,retries:0,globalSetup:'./global-setup.ts',reporter:[['allure-playwright',{resultsDir:'allure-results',environmentInfo:{fixture:'after-flush'}}],['./src/utils/AllureReport.ts']]};`);
+    const resultsDir = fails ? 'allure-results' : 'reports/custom allure-results';
+    put(root, 'playwright.config.ts', `export default {testDir:'./tests',workers:1,retries:0,globalSetup:'./global-setup.ts',reporter:[['./src/utils/AllureReport.ts',{resultsDir:${JSON.stringify(resultsDir)},environmentInfo:{fixture:'after-flush'}}]]};`);
     put(root, 'tests/Report.spec.ts', `import {test,expect} from '@playwright/test'; import {step} from 'allure-js-commons'; test('native report',async()=>{await step('Business action',async()=>{await test.step('Technical operation',async()=>{await test.info().attach('Synthetic attachment',{body:'unchanged',contentType:'text/plain'});});});await expect(2).toBe(${fails ? 3 : 2});});`);
     const run = spawnSync(process.execPath, [join(example, 'node_modules/@playwright/test/cli.js'), 'test', '--config=playwright.config.ts'],
       {cwd: root, env: {...process.env, CI: '1', AUTO_ALLURE_OPEN: 'false'}, encoding: 'utf8', timeout: 90000, windowsHide: true});
@@ -110,7 +111,7 @@ test('the example finishes Allure before entering the HTML viewer exit hook', t 
   symlinkSync(join(example, 'node_modules'), join(root, 'node_modules'), process.platform === 'win32' ? 'junction' : 'dir');
   put(root, 'package.json', '{"type":"commonjs"}');
   // Keep the shipped reporter order. Observe the point at which the real HTML viewer can block onExit.
-  put(root, 'proof.config.ts', `import source from './playwright.config'; export default {...source,workers:1,retries:0,reporter:source.reporter.filter(([name])=>['list','html','allure-playwright','./src/utils/AllureReport.ts'].includes(name)).map(([name,options])=>name==='html'?['./HtmlExitBoundary.ts']:[name,options])};`);
+  put(root, 'proof.config.ts', `import source from './playwright.config'; export default {...source,workers:1,retries:0,reporter:source.reporter.filter(([name])=>['list','html','./src/utils/AllureReport.ts'].includes(name)).map(([name,options])=>name==='html'?['./HtmlExitBoundary.ts']:[name,options])};`);
   put(root, 'HtmlExitBoundary.ts', `import {existsSync,writeFileSync} from 'node:fs'; export default class HtmlExitBoundary {onExit(){writeFileSync('html-exit.json',JSON.stringify({reportReady:existsSync('allure-report/index.html')}));}}`);
   put(root, 'tests/Report.spec.ts', `import {test,expect} from '@playwright/test'; test('native report ordering',()=>{expect(2).toBe(2);});`);
   const run = spawnSync(process.execPath, [join(example, 'node_modules/@playwright/test/cli.js'), 'test', '--config=proof.config.ts'],

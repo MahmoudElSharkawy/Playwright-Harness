@@ -191,6 +191,9 @@ test('link-template warning only applies to used metadata and an adjacent report
  f.put(spec,"await allure.tms('101');");assert.equal(warned(),true);
  f.put('playwright.config.ts',"// conventions-ok: unrelated\nexport default {reporter:[['allure-playwright',{}]]};");assert.equal(warned(),true);
  f.put('playwright.config.ts',"export default {reporter:[['allure-playwright',{}]]}; // conventions-ok: illustrative IDs, no destination");assert.equal(warned(),false);
+ f.put('playwright.config.ts',"export default {reporter:[['./src/utils/AllureReport.ts',{}]]};");assert.equal(warned(),true);
+ f.put('playwright.config.ts',"export default {reporter:[['./src/utils/AllureReport.ts',{}]]}; // conventions-ok: illustrative IDs, no destination");assert.equal(warned(),false);
+ f.put('playwright.config.ts',"export default {reporter:[\n['./src/utils/AllureReport.ts'],\n['allure-playwright',{}] // conventions-ok: illustrative IDs, no destination\n]};");assert.equal(warned(),false);
  f.put('playwright.config.ts',"export default {reporter:[['allure-playwright',{links:configuredLinks}]]};");assert.equal(warned(),true);assert.equal(f.run().status,0);
 });
 

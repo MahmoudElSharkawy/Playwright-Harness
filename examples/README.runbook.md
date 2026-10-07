@@ -73,7 +73,7 @@ One run produces (mirrors the `reporter` array in `playwright.config.ts`):
 |---|---|---|
 | Console list | terminal output | `list` reporter |
 | Playwright HTML report | `reports/playwright-report/` | `html` reporter (`open: 'always'` locally) |
-| Allure raw results | `allure-results/` (explicit `resultsDir`; `outputFolder` is unsupported) | `allure-playwright` reporter |
+| Allure raw results | `allure-results/` (explicit `resultsDir`; `outputFolder` is unsupported) | `src/utils/AllureReport.ts`, extending `allure-playwright` |
 | Allure 3 single-file HTML (latest) | `allure-report/index.html` | `src/utils/AllureReport.ts`, after all reporters flush |
 | Archived Allure HTML | `reports/allure-history/<timestamp>/index.html` — one copy per run, not trend history | `src/utils/AllureReport.ts` (opt out: `ALLURE_HISTORY=false`) |
 | JSON results | `reports/json-report/test-results.json` | `json` reporter |
@@ -86,6 +86,14 @@ One run produces (mirrors the `reporter` array in `playwright.config.ts`):
 > (design-conventions, *Report output contract*).
 
 The report generator is pinned to `allure` 3.19.1 and configured in `allurerc.json`.
+The `AllureReport.ts` reporter retains the official reporter's options and appends
+public locator metadata to native action/assertion titles. Locator assertions read
+`Expect … → locator('…')`; count comparisons include the reference locator too.
+To adopt this in an existing project, merge the updated utility. Its locator handling
+is contained in the class. Replace the separate `allure-playwright` and generator
+entries with one `./src/utils/AllureReport.ts` entry before the HTML reporter,
+preserving the official reporter's options. Apply the count-comparison message update
+in `Expects.ts`; setup does not overwrite consumer customizations.
 It runs on Node, without Java. Tests and action methods retain their existing
 `allure-js-commons` calls. The report keeps epic/feature/story grouping, embedded
 attachments and the existing output paths. Generation occurs in the reporter's

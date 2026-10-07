@@ -1,5 +1,15 @@
 # Changelog
 
+## 3.2.3 — Allure locator titles
+
+### Upgrade actions
+
+- Existing consumers: merge the updated `examples/src/utils/AllureReport.ts` into your utility. Replace the separate `allure-playwright` and generator entries with one `./src/utils/AllureReport.ts` entry before the HTML reporter, preserving the official reporter's options. Apply the count-comparison title change in `Expects.ts`. Setup preserves existing customized code and config.
+
+### Changes
+
+- Restore inline locator text for native actions and assertions using public Playwright step metadata inside `AllureReport.ts`. It handles normal capture and HTML generation; scoped reporting reuses the consumer's maintained class for capture only. Count comparisons explicitly include both locators; dependency versions and assertion behavior stay unchanged.
+
 ## 3.2.2 — Simpler generated consumer projects
 
 ### Upgrade actions

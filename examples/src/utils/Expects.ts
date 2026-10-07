@@ -14,9 +14,10 @@ import { expect, type Locator, type Page } from '@playwright/test';
  * `Expect <subject> to <verb phrase> <formatted expected>`. Business layers pass a
  * business subject phrase ("the quote response status") and the same values the
  * matcher receives — the facade knows verbs, never domain nouns (practice 1 litmus).
- * Locator-backed wrappers end the message with " →", so titles read
- * `<business clause> → <selector tail>`; value/page receivers get no Playwright
- * tail, hence no delimiter.
+ * Direct locator wrappers end the message with " →"; AllureReport appends the public
+ * Playwright locator parameter, yielding `<business clause> → <selector tail>`.
+ * Polling comparisons include both locator strings themselves. Value/page receivers
+ * get no locator tail, hence no delimiter.
  * Callers must keep secrets out of subjects/titles and use secret variants as needed;
  * expected values
  * arrive as the caller's parameters, so a message can never smuggle a literal the
@@ -25,7 +26,7 @@ import { expect, type Locator, type Page } from '@playwright/test';
  * Contract (playbook §18): no extra `test.step` — the message-titled expect step IS
  * the step, so nesting is identical to a bare expect; locator/page wrappers delegate
  * the `Locator`/`Page` straight to native `expect` (web-first auto-retry and options
- * untouched; Playwright still appends its ` locator('…')` suffix after the message);
+ * untouched; AllureReport appends Playwright's locator metadata after the message);
  * one wrapper per matcher actually used in the repo — extend by need (iron law 11).
  * Which call sites MUST use these wrappers is validation-methods §13's territory.
  */
@@ -206,7 +207,7 @@ export async function expectToHaveMatchingCount(
         const [actual, expected] = await Promise.all([locator.count(), referenceLocator.count()]);
         return actual === expected ? true : `${actual} of ${expected}`;
       },
-      { message: `Expect ${subject} to show as many ${unit}(s) as the reference set →`, ...options },
+      { message: `Expect ${subject} to show as many ${unit}(s) as the reference set → ${locator.toString()} (reference: ${referenceLocator.toString()})`, ...options },
     )
     .toBe(true);
 }

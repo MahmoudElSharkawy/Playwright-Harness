@@ -18,6 +18,15 @@ test('literal link reader preserves separate destinations and custom names witho
   assert.deepEqual(validateAllureLinks(links), links);
 });
 
+test('locator reporter links remain available to scoped verification without resolving arbitrary wrappers', () => {
+  const source = config(`links: ${JSON.stringify(links)}`).replace("'allure-playwright'", "'./src/utils/AllureReport.ts'");
+  assert.deepEqual(allureLinkTemplates(source), {state: 'CONFIGURED', links});
+  assert.equal(allureLinkTemplates(source.replace('AllureReport.ts', 'OtherReporter.ts')).state, 'NONE');
+  assert.equal(allureLinkTemplates(source.replace(JSON.stringify(links), 'configuredLinks')).state, 'UNRESOLVED');
+  const legacy = config(`links: ${JSON.stringify(links)}`).replace("[['list']", "[['./src/utils/AllureReport.ts'], ['list']");
+  assert.deepEqual(allureLinkTemplates(legacy), {state: 'CONFIGURED', links});
+});
+
 test('missing and placeholder links are distinguished from unsupported dynamic configuration', () => {
   for (const source of ['', 'export default {};', config(''), config('links: {}'), `// ${config(`links: ${JSON.stringify(links)}`)}`]) assert.equal(allureLinkTemplates(source).state, 'NONE');
   assert.equal(allureLinkTemplates(config(`links: {tms: {urlTemplate: 'https://dev.azure.com/your-org/your-project/_workitems/edit/%s'}}`)).state, 'PLACEHOLDER');

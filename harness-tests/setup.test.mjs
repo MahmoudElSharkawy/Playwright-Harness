@@ -130,6 +130,10 @@ test('restore after a crashed stage 2 brings back a replaced legacy folder and t
 test('restore on a fresh project removes what setup created instead of running npm ci',t=>{
  const root=project(t);archive(join(root,archiveName));
  const result=setup(root);assert.equal(result.status,'DONE');assert(result.starter.includes('playwright.config.ts'));
+ assert(result.starter.includes('src/utils/AllureReport.ts'));
+ const config = readFileSync(join(root,'playwright.config.ts'),'utf8');
+ assert.equal((config.match(/\.\/src\/utils\/AllureReport\.ts/g) ?? []).length, 1);
+ assert(!config.includes("['allure-playwright'"));
  const npm=npmStub();assert.equal(restoreLastRun(root,{npm,packageRoot}).status,'RESTORED');
  assert.deepEqual(npm.calls,[]);assert.deepEqual(readdirSync(root),[archiveName]);
 });

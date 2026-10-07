@@ -390,8 +390,9 @@ Contract:
 - **Grammar lives here only** — `Expect <subject> to <verb phrase> <fmt(expected)>`;
   negation variants state `not` in the message (`expectNotToBeNull` → `… not to be
   null`); `fmt()` quotes strings, prints compact arrays (`[] (empty)`), clips objects;
-  locator-backed wrappers end the message with `→` to delimit Playwright's appended
-  selector tail (value/page receivers get no tail, hence no delimiter).
+  direct locator wrappers end the message with `→`; `AllureReport.ts` appends the
+  public Playwright locator parameter. Polling count comparisons explicitly include
+  both locator strings. Value/page receivers get no locator tail or delimiter.
 - **No extra step, no attachments** — the message-titled expect step IS the step
   (nesting identical to a bare expect, iron law 10); no `test.info()` probing needed
   (the message works outside tests too).
