@@ -1,17 +1,32 @@
-import type { Reporter } from '@playwright/test/reporter';
+import type { TestCase, TestResult, TestStep } from '@playwright/test/reporter';
+import AllureReporter from 'allure-playwright';
 import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { allureConfig } from '../config/reporting';
+import { createAllureStepView } from './allure-step-titles.cjs';
 
-/** Generates Allure 3 after every reporter has flushed. Reporting never changes test outcomes. */
-export default class AllureReport implements Reporter {
+/** Records locator-bearing Allure steps and generates HTML after every reporter has flushed. */
+export default class AllureReport extends AllureReporter {
+  private readonly allureStep = createAllureStepView();
+
+  /** Preserves native events while supplying locator-bearing titles to the official reporter. */
+  onStepBegin(test: TestCase, result: TestResult, step: TestStep): void {
+    super.onStepBegin(test, result, this.allureStep(step));
+  }
+
+  /** Refreshes completed metadata on the same Allure view, including errors and attachments. */
+  onStepEnd(test: TestCase, result: TestResult, step: TestStep): void {
+    super.onStepEnd(test, result, this.allureStep(step));
+  }
+
   /** Native onExit runs after all onEnd hooks, including Allure's environment output. */
   async onExit(): Promise<void> {
     try {
+      await super.onExit();
       const projectRoot = fs.realpathSync(process.cwd());
-      const resultsDir = path.resolve(projectRoot, allureConfig.resultsDir);
+      const resultsDir = path.resolve(projectRoot, this.options.resultsDir ?? allureConfig.resultsDir);
       const reportDir = path.resolve(projectRoot, allureConfig.reportDir);
       const reportFile = path.join(reportDir, 'index.html');
       const relativeOutput = path.relative(projectRoot, reportDir);

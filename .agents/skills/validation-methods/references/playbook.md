@@ -419,7 +419,9 @@ law 5 — so it can never be a smuggled literal), and subjects/values must never
 secrets (iron law 7 — use the facade's confidential-value variants, which protect the
 authored title only; utility-classes §18/§20). Locator wrappers pass the
 `Locator` straight through — web-first auto-retry and `{ timeout }` options are
-untouched, and Playwright still appends the ` locator('…')` suffix after the message.
+untouched. The maintained `AllureReport.ts` reporter appends Playwright's public
+locator parameter after the message; polling count comparisons include both locator
+strings explicitly.
 Hand-rolled `expect(x, 'msg')` messages are not a substitute — one grammar source, no
 drift (enforced warn-level by `check-conventions.mjs` `assertion-message`; per-line
 escape: `// conventions-ok`).

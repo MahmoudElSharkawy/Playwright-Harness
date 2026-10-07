@@ -20,10 +20,10 @@ async function nativeFixture(t, body = 'await expect(2 + 2).toBe(4);', extra = '
   if (withoutAllure) {
     for (const name of ['@playwright/test', 'playwright', 'playwright-core']) {const target = join(f.roots.projectRoot, 'node_modules', name); mkdirSync(dirname(target), {recursive: true}); symlinkSync(join(f.roots.packageRoot, 'examples/node_modules', name), target, process.platform === 'win32' ? 'junction' : 'dir');}
   } else symlinkSync(join(f.roots.packageRoot, 'examples/node_modules'), join(f.roots.projectRoot, 'node_modules'), process.platform === 'win32' ? 'junction' : 'dir');
-  put(f.roots.projectRoot, 'package.json', '{"type":"module"}');
+  put(f.roots.projectRoot, 'package.json', JSON.stringify({type: options.packageType ?? 'module'}));
   put(f.roots.projectRoot, 'playwright.config.mjs', options.config ?? "export default {testDir:'./tests', projects:[{name:'native'}]};");
   for (const [file, contents] of Object.entries(options.files ?? {})) put(f.roots.projectRoot, file, contents);
-  put(f.roots.projectRoot, 'tests/ArithmeticTests.spec.ts', `import {test, expect} from '@playwright/test';\n${options.imports ?? ''}\ntest.describe('Arithmetic',()=>{test('adds',async()=>{${body}});test('unselected',async()=>{throw new Error('must never execute');});${extra}});`);
+  put(f.roots.projectRoot, 'tests/ArithmeticTests.spec.ts', `import {test, expect} from '@playwright/test';\n${options.imports ?? ''}\ntest.describe('Arithmetic',()=>{test('adds',async(${options.fixtures ?? ''})=>{${body}});test('unselected',async()=>{throw new Error('must never execute');});${extra}});`);
   await beginGeneration(f.roots, createGenerationHandoff(source, [{run: f.run, roots: f.roots, observations: f.report}], bindings), 'contract-author');
   const input = {config: 'playwright.config.mjs', tests: [{scenarioId: 'case-1', spec: 'tests/ArithmeticTests.spec.ts', project: 'native', titlePath: ['Arithmetic', 'adds'],
     mapping: [{step: 1, actions: [], expectations: [{key, validations: ['ArithmeticFixture.verifySum']}]}]}]};
@@ -201,3 +201,69 @@ test('dynamic Allure templates are reported as unresolved without changing the v
   const result = await verifyGeneration(f.roots, f.source.id, {allure: true}); assert.equal(result.status, 'PASS'); assert.equal(result.reporting.links, 'UNRESOLVED');
   const captured = allureResults(join(f.roots.projectRoot, result.reporting.directory, 'allure-results'))[0]; assert.equal(captured.links[0].url, '101');
 });
+
+// Opt-in browser proof: HARNESS_ALLURE_LOCATOR_PROOF=1; HARNESS_BROWSER_CHANNEL may select an installed Chrome/Edge.
+for (const fails of [false, true]) test(`normal and scoped Allure retain live locators and ${fails ? 'failed' : 'passed'} status`,
+  {skip: process.env.HARNESS_ALLURE_LOCATOR_PROOF !== '1'}, async t => {
+    const html = '<input id="field"><button id="submit">Submit</button><p id="message" data-state="ready" style="color:rgb(0,0,0)">Ready</p>'
+      + '<div id="hidden" hidden></div><input id="disabled" disabled><input id="unchecked" type="checkbox"><input id="readonly" readonly value="synthetic-private">'
+      + '<ul id="actual"><li>A</li><li>B</li></ul><ul id="reference"><li>A</li><li>B</li></ul>';
+    const body = `await page.setContent(${JSON.stringify(html)});await allure.tms('101');await allure.issue('202');
+      await allure.step('Business locator checks',async()=>{await test.step('Technical locator checks',async()=>{
+        const field=page.locator('#field'),message=page.locator('#message'),rows=page.locator('#actual li');
+        await field.fill('synthetic-user');await page.locator('#submit').click();
+        await checks.expectToHaveText('the message',message,'Ready');await checks.expectToContainText('the message',message,'Ready');
+        await checks.expectToHaveValue('the field',field,'synthetic-user');await checks.expectToHaveCount('the rows',rows,2);await checks.expectNotToHaveCount('the rows',rows,3);
+        await checks.expectToHaveAttribute('the message',message,'data-state','ready');await checks.expectToHaveCSS('the message',message,'color','rgb(0, 0, 0)');
+        await checks.expectToBeVisible('the message',message);await checks.expectToBeHidden('the hidden field',page.locator('#hidden'));
+        await checks.expectToBeEnabled('the field',field);await checks.expectToBeDisabled('the disabled field',page.locator('#disabled'));
+        await checks.expectNotToBeChecked('the checkbox',page.locator('#unchecked'));await checks.expectNotToBeEditable('the readonly field',page.locator('#readonly'));
+        await checks.expectToContainSecretText('the message',message,'Ready');await checks.expectToHaveSecretValue('the readonly field',page.locator('#readonly'),'synthetic-private');
+        await checks.expectToHaveMatchingCount('the rows',rows,page.locator('#reference li'));
+        checks.expectToBe('the total',2,2);await checks.expectToHaveURL(page,'about:blank');
+        await test.info().attach('Synthetic locator attachment',{body:'unchanged',contentType:'text/plain'});
+        ${fails ? "await checks.expectToHaveText('the message',message,'Wrong',{timeout:100});" : ''}
+      });});`;
+    const files = Object.fromEntries(['src/utils/allure-step-titles.cjs', 'src/utils/Expects.ts', 'src/utils/AllureReport.ts', 'src/config/reporting.ts', 'allurerc.json']
+      .map(file => [file, readFileSync(join(packageRoot, 'examples', file), 'utf8')]));
+    const f = await nativeFixture(t, body, '', false, {files, fixtures: '{page}', packageType: 'commonjs',
+      imports: "import * as allure from 'allure-js-commons';import * as checks from '../src/utils/Expects';",
+      config: `export default {testDir:'./tests',workers:1,retries:0,projects:[{name:'native'}],use:{channel:process.env.HARNESS_BROWSER_CHANNEL},reporter:[['list'],['./src/utils/AllureReport.ts',{resultsDir:'allure-results',links:${JSON.stringify(linkTemplates)}}]]};`,
+    });
+    const normal = spawnSync(process.execPath, [join(packageRoot, 'examples/node_modules/playwright/cli.js'), 'test', '--config', f.input.config, '--grep', 'adds'],
+      {cwd: f.roots.projectRoot, env: {...process.env, AUTO_ALLURE_OPEN: 'false', ALLURE_HISTORY: 'false'}, encoding: 'utf8', windowsHide: true, timeout: 90000});
+    assert.equal(normal.status, fails ? 1 : 0, normal.stdout + normal.stderr);
+    const normalHtml = readFileSync(join(f.roots.projectRoot, 'allure-report/index.html'), 'utf8');
+    const scoped = await verifyGeneration(f.roots, f.source.id, {allure: true});
+    assert.equal(scoped.status, fails ? 'FAIL' : 'PASS', JSON.stringify(scoped)); assert.equal(scoped.reporting.links, 'CONFIGURED');
+    const generated = await generateAllure(f.roots, scoped.reporting.directory);
+    assert.equal(generated.status, 'GENERATED', JSON.stringify(generated));
+    const flatten = steps => (steps ?? []).flatMap(step => [step, ...flatten(step.steps)]);
+    const required = ["Click locator('#submit')", "Fill \"synthetic-user\" locator('#field')", "Expect the message to be visible → locator('#message')",
+      "Expect the rows to show as many item(s) as the reference set → locator('#actual li') (reference: locator('#reference li'))",
+      'Expect the total to be 2', 'Expect the page URL to be "about:blank"'];
+    for (const directory of ['allure-results', `${scoped.reporting.directory}/allure-results`]) {
+      const result = allureResults(join(f.roots.projectRoot, directory))[0], steps = flatten(result.steps);
+      assert.equal(result.status, fails ? 'failed' : 'passed');
+      for (const title of required) assert(steps.some(step => step.name === title), title);
+      assert(steps.filter(step => step.name.startsWith('Expect ') && step.name.includes(' →')).every(step => !step.name.endsWith(' →')));
+      if (fails) {
+        const failed = steps.find(step => step.name === "Expect the message to have text \"Wrong\" → locator('#message')");
+        assert(failed); assert.equal(failed.status, 'failed'); assert.match(failed.statusDetails.message, /Wrong/);
+      }
+      const business = result.steps.find(step => step.name === 'Business locator checks');
+      assert(business.steps.some(step => step.name === 'Technical locator checks'));
+      const attachments = flatten(business.steps).flatMap(step => step.attachments ?? []);
+      const attachment = attachments.find(item => item.name === 'Synthetic locator attachment'); assert(attachment);
+      assert.equal(readFileSync(join(f.roots.projectRoot, directory, attachment.source), 'utf8'), 'unchanged');
+      assert.equal(result.links.find(link => link.type === 'tms').url, linkTemplates.tms.urlTemplate.replace('%s', '101'));
+      assert.equal(result.links.find(link => link.type === 'issue').url, linkTemplates.issue.urlTemplate.replace('%s', '202'));
+    }
+    for (const rendered of [normalHtml, readFileSync(join(f.roots.projectRoot, generated.nativeArtifact.path), 'utf8')]) {
+      const embedded = [...rendered.matchAll(/\bd\(("(?:[^"\\]|\\.)*"),("(?:[^"\\]|\\.)*")\)/g)]
+        .filter(match => /^data\/test-results\/.+\.json$/.test(JSON.parse(match[1])))
+        .map(match => JSON.parse(Buffer.from(JSON.parse(match[2]), 'base64').toString()));
+      assert.equal(embedded.length, 1);
+      for (const title of required) assert(flatten(embedded[0].steps).some(step => step.name === title), title);
+    }
+  });

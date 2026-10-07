@@ -37,14 +37,13 @@ export default defineConfig({
   reporter: [
     ['list'],
     // Finish Allure before the HTML viewer's onExit can keep an interactive run open.
-    ['./src/utils/AllureReport.ts'],
-    ['html', { open: 'always', outputFolder: 'reports/playwright-report' }],
     // Paths and environmentInfo are shared with setup and the post-flush report job.
-    ['allure-playwright', { // conventions-ok: illustrative IDs have no destination; remove this exemption when configuring real links.
+    ['./src/utils/AllureReport.ts', { // conventions-ok: illustrative IDs have no destination; remove this exemption when configuring real links.
       resultsDir: allureConfig.resultsDir,
       environmentInfo: allureEnvironmentInfo,
       // Configure literal links.tms / links.issue templates when linking is requested (harness-setup).
     }],
+    ['html', { open: 'always', outputFolder: 'reports/playwright-report' }],
     ['json', { outputFile: 'reports/json-report/test-results.json' }],
     // consumed by Azure Pipelines' PublishTestResults task — feeds the run's Tests tab
     ['junit', { outputFile: 'reports/junit/results.xml' }],

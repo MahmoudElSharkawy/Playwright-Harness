@@ -313,7 +313,9 @@ function repoRules() {
     const config = ROOT_FILES.find(file => file.startsWith('playwright.config.') && existsSync(join(ROOT, file)));
     const text = config ? readFileSync(join(ROOT, config), 'utf8') : '';
     const templates = allureLinkTemplates(text);
-    const reporter = sourceTokens(text).find(token => token.kind === 'string' && token.value === 'allure-playwright');
+    const tokens = sourceTokens(text);
+    const reporter = tokens.find(token => token.kind === 'string' && token.value === 'allure-playwright')
+      ?? tokens.find(token => token.kind === 'string' && token.value === './src/utils/AllureReport.ts');
     const line = reporter ? text.slice(0, reporter.start).split('\n').length : 1;
     const suppressed = exemptionAt(text, line);
     if (!suppressed && (templates.state !== 'CONFIGURED' || [...kinds].some(kind => !templates.links[kind]))) findings.push({
