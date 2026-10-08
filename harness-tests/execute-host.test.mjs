@@ -6,7 +6,7 @@ import {randomUUID} from 'node:crypto';
 import {executionFixture} from './fixtures/execute.mjs';
 import {startScenario, runHostedScenario, runInput} from '../scripts/lib/execute/host.mjs';
 import {controlDirectory, sendCommand, delay, HostMailbox} from '../scripts/lib/execute/mailbox.mjs';
-import {readBounded, readFrozen, ownedFile, writeJson, saveExecution} from '../scripts/lib/execute/storage.mjs';
+import {readBounded, readOptional, readFrozen, ownedFile, writeJson, saveExecution} from '../scripts/lib/execute/storage.mjs';
 import {collectExecution, writeExecutionReport} from '../scripts/lib/execute/report.mjs';
 import {processInventory} from '../scripts/lib/browser/processes.mjs';
 import {createRun} from '../scripts/lib/execution-core/index.mjs';
@@ -24,6 +24,17 @@ async function hostedFixture(f, runId, ownership = {}) {
   writeJson(ownedFile(f.roots, f.executionId, `snapshots/${runId}.json`), {version: 1, executionId: f.executionId, runId, scenarioId: scenario.id, freezeFingerprint: loaded.execution.freezeFingerprint, inputFingerprint: run.inputFingerprint, input}, {exclusive: true});
   saveExecution(f.roots, f.executionId, {...loaded.execution, runs: [{runId, scenarioId: scenario.id, state: 'STARTING', startedAt: input.startedAt}]});
   return {owner: await acquireLauncher(f.roots, {executionId: f.executionId, runId}, ownership), scenario};
+}
+
+async function waitForHost(directory, expected, timeoutMs) {
+  const deadline = performance.now() + timeoutMs; let host;
+  do {
+    host = readOptional(join(directory, 'host.json'));
+    if (host?.state === expected || ['FINISHED', 'INTERRUPTED', 'INTEGRITY_FAILURE'].includes(host?.state)) break;
+    await delay(50);
+  } while (performance.now() < deadline);
+  assert.equal(host?.state, expected, `Host must reach ${expected} before its test deadline.`);
+  return host;
 }
 
 test('H1: a policy-denied browser begin settles without entering its callback or retaining the lock', {timeout: 15000}, async t => {
@@ -149,13 +160,38 @@ for (const mode of ['near-limit', 'oversized', 'post-dispatch']) test(`H3 H5 L4:
   else {assert.equal(receipt.status, mode === 'oversized' ? 'REPLY_OMITTED' : 'ERROR'); assert.equal(receipt.dispatch.dispatched, true); assert.equal(receipt.dispatch.nativeCommand, 'click');}
   assert.equal(receipt.requestId, duplicateId); assert.equal(collectExecution(f.roots, f.executionId).runs[0].state, 'ASSESSED');
 });
-test('detached API-only host completes, reassesses, reports, and needs no browser or unrelated secrets', async t => {
-  const f = await executionFixture(t); f.apiStep(); f.freeze(); const started = await startScenario(f.roots, f.executionId, {readyTimeoutMs: 15000}); assert.equal(started.status, 'READY');
-  const directory = controlDirectory(f.roots, f.executionId, started.runId), reply = await sendCommand(directory, started.runId, ['begin-step', 's001'], {timeoutMs: 10000}); assert.equal(reply.status, 'STEP_COMPLETE'); assert.equal(reply.assertions[0].status, 'PASS');
-  for (let i = 0; i < 100 && readBounded(join(directory, 'host.json')).state !== 'FINISHED'; i++) await delay(50);
+test('detached API-only host completes, reassesses, reports, and needs no browser or unrelated secrets', {timeout: 120000}, async t => {
+  const f = await executionFixture(t), nativeTimeoutMs = process.platform === 'win32' ? 60000 : 15000;
+  // This proves a real detached lifecycle, not a short deadline. Windows CIM
+  // and ACL startup count against the frozen scenario's budget too.
+  if (process.platform === 'win32') f.refinement.limits = {timeoutMs: 60000, cleanupTimeoutMs: 10000};
+  f.apiStep(); f.freeze(); const started = await startScenario(f.roots, f.executionId, {readyTimeoutMs: nativeTimeoutMs}); assert.equal(started.status, 'READY');
+  const directory = controlDirectory(f.roots, f.executionId, started.runId), reply = await sendCommand(directory, started.runId, ['begin-step', 's001'], {timeoutMs: nativeTimeoutMs}); assert.equal(reply.status, 'STEP_COMPLETE'); assert.equal(reply.assertions[0].status, 'PASS');
+  await waitForHost(directory, 'FINISHED', nativeTimeoutMs);
+  assert.equal(await lockStatus(f.roots), null);
   const view = collectExecution(f.roots, f.executionId); assert.equal(view.scenarios[0].status, 'PASS'); assert.equal(view.runs[0].result.scenarios[0].resources.length, 0); assert.equal(f.requests.length, 1);
   const report = writeExecutionReport(f.roots, f.executionId); assert.equal(report.status, 'WRITTEN'); assert.equal(report.scenarios[0].methods.checked, 1);
   const pid = readBounded(join(directory, 'host.json')).pid; for (let i = 0; i < 10 && (await processInventory()).some(item => item.pid === pid); i++) await delay(100);
+});
+
+test('host reassessment waits for delayed finalization instead of reading an unfinished run', {timeout: 30000}, async t => {
+  const f = await executionFixture(t), runId = 'run-delayed-finalization'; f.apiStep(); f.refinement.limits.cleanupTimeoutMs = 15000;
+  let release, reached; const held = new Promise(resolve => {release = resolve;}), cleanupReached = new Promise(resolve => {reached = resolve;});
+  const inventory = async () => [{pid: process.pid, identity: 'delayed-finalization'}], {owner} = await hostedFixture(f, runId, {inventory});
+  const runtime = (run, roots, options, callbacks) => runSequentialScenario(run, roots, options, {...callbacks, cleanup: async context => {reached(); await held; return callbacks.cleanup(context);}});
+  const directory = controlDirectory(f.roots, f.executionId, runId), pending = runHostedScenario(f.roots, f.executionId, runId, owner.nonce, {inventory, runtime});
+  let finished;
+  try {
+    await waitForHost(directory, 'READY', 10000);
+    const reply = await sendCommand(directory, runId, ['begin-step', 's001'], {timeoutMs: 10000}); assert.equal(reply.status, 'STEP_COMPLETE');
+    await cleanupReached; let settled = false;
+    finished = waitForHost(directory, 'FINISHED', 15000); finished.then(() => {settled = true;}, () => {settled = true;});
+    // Hold the actual runtime beyond the previous five-second polling window.
+    await delay(5500); assert.equal(settled, false); assert.equal(readFrozen(f.roots, f.executionId).execution.runs[0].state, 'RUNNING');
+    release(); await finished; await pending;
+    assert.equal(collectExecution(f.roots, f.executionId).scenarios[0].status, 'PASS');
+    assert.equal(writeExecutionReport(f.roots, f.executionId).status, 'WRITTEN'); assert.equal(await lockStatus(f.roots), null);
+  } finally {release(); await Promise.allSettled([pending, ...(finished ? [finished] : [])]);}
 });
 
 for (const retain of [false, true]) test(`mailbox persistence failure aborts runtime before ${retain ? 'retaining incomplete cleanup ownership' : 'releasing cleaned ownership'}`, async t => {

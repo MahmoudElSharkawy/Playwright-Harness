@@ -30,6 +30,37 @@ export function testFailureLocations(output, files) {
   }
   return [...locations.values()].slice(0, 100);
 }
+/** Failure metadata is allow-listed; messages, values, names and full paths stay private. */
+export function testFailureDiagnostics(output, files) {
+  const allowed = {
+    failureType: ['testCodeFailure', 'testTimeoutFailure', 'cancelledByParent', 'subtestsFailed', 'hookFailed'],
+    code: ['ERR_ASSERTION', 'ERR_TEST_FAILURE', 'ENOENT', 'EEXIST', 'EPERM', 'EACCES', 'EBUSY', 'ETIMEDOUT', 'ABORT_ERR'],
+    operator: ['strictEqual', 'deepStrictEqual', 'notStrictEqual', 'notDeepStrictEqual', 'deepEqual', 'notDeepEqual', '==', '!=', '===', '!==', 'fail', 'throws', 'rejects', 'ifError', 'match', 'doesNotMatch']
+  };
+  const coordinate = source => {
+    const match = source.match(/([^\\/]+):(\d+):(\d+)\)?$/);
+    if (!match) return undefined;
+    const [, file, row, col] = match, line = Number(row), column = Number(col);
+    return files.includes(file) && Number.isSafeInteger(line) && line > 0 && Number.isSafeInteger(column) && column > 0 ? {file, line, column} : undefined;
+  };
+  const failures = [];
+  for (const match of output.matchAll(/^\s*not ok [^\r\n]*\r?\n([\s\S]*?)^\s*\.\.\.\r?$/gm)) {
+    const block = match[1], location = coordinate(block.match(/^\s+location: ['"]([^\r\n]+)['"]\r?$/m)?.[1] ?? '');
+    if (!location) continue;
+    const failure = {location};
+    for (const [field, values] of Object.entries(allowed)) {
+      const value = block.match(new RegExp(`^\\s+${field}: ['"]?([^'"\\r\\n]+)['"]?\\r?$`, 'm'))?.[1];
+      if (values.includes(value)) failure[field] = value;
+    }
+    const durationMs = Number(block.match(/^\s+duration_ms: (\d+(?:\.\d+)?)\r?$/m)?.[1]);
+    if (Number.isFinite(durationMs) && durationMs >= 0) failure.durationMs = durationMs;
+    const stack = block.match(/^\s+stack: \|[^\r\n]*\r?\n([\s\S]*)/m)?.[1] ?? '';
+    const stackLocation = stack.split(/\r?\n/).map(line => coordinate(line.trim())).find(Boolean);
+    if (stackLocation) failure.stackLocation = stackLocation;
+    failures.push(failure); if (failures.length === 100) break;
+  }
+  return failures;
+}
 export function completeNativeProof(kind, proof, recovery, assessment, cleanup) {
   return proof?.status === 'PASS' && recovery?.complete === true && assessment?.status === 'PASS' &&
     (kind === 'browser' ? completeBrowserChecks(assessment.checks) : kind === 'execute' ? completeExecuteChecks(assessment.checks) && assessment.fixtureServersClosed === true && ['end', 'per-step'].every(mode => Number.isFinite(assessment.diagnosticsLatencyMs?.[mode]) && assessment.diagnosticsLatencyMs[mode] >= 0) : kind === 'parallel' &&

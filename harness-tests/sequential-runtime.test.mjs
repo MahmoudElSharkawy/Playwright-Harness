@@ -85,8 +85,16 @@ test('unawaited work is drained and prevents a clean pass', async t => {
 
 test('cleanup/restoration share one finite budget across API and database', async t => {
   const observe = read('observe'), clean = read('clean'), restore = db('restore', {checks: [check('restore-ok')]});
-  const f = await fixture(t, [step(observe, 'VERIFY'), step(clean, 'CLEANUP'), step(restore, 'RESTORE')], {limits: {cleanupTimeoutMs: 80}, handler: async ({request, reply}) => {if (request.path === '/items') await pause(45); reply(200);}});
-  const result = await f.start({verify: ctx => call(ctx, observe), cleanup: async ctx => {await call(ctx, clean); await pause(65); await ctx.database.execute({operation: restore, invocationId: restore.id, phase: 'RESTORE'});}});
+  // Advance the shared clock only after successful API cleanup. Real short
+  // sleeps can expire the phase before this test reaches the DB restoration.
+  let now = Date.now(), credentialResolutions = 0; t.mock.method(Date, 'now', () => now);
+  const f = await fixture(t, [step(observe, 'VERIFY'), step(clean, 'CLEANUP'), step(restore, 'RESTORE')], {limits: {cleanupTimeoutMs: 2000}});
+  const result = await f.start({verify: ctx => call(ctx, observe), cleanup: async ctx => {
+    await call(ctx, clean); now += f.run.inputs.limits.cleanupTimeoutMs + 1;
+    await ctx.database.execute({operation: restore, invocationId: restore.id, phase: 'RESTORE'});
+  }}, {database: {resolveCredential: () => {credentialResolutions++; throw new Error('Expired restoration must not resolve credentials.');}}});
+  const completed = result.scenarios[0].attempts.find(attempt => attempt.identity.operationId === clean.id);
+  assert.equal(completed.outcome, 'SUCCESS'); assert.equal(f.requests.length, 2); assert.equal(credentialResolutions, 0);
   const last = result.scenarios[0].attempts.at(-1); assert.equal(last.failureClass, 'TIMEOUT'); assert.equal(last.effect.certainty, 'not-executed'); assert.notEqual(result.status, 'PASS');
 });
 

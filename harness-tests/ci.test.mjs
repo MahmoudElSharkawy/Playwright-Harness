@@ -5,7 +5,7 @@ import {tmpdir} from 'node:os';
 import {join, dirname} from 'node:path';
 import {validateInstalledGraph, clearedOverrides} from '../scripts/ci/distribution.mjs';
 import {checkContracts} from '../scripts/ci/contracts.mjs';
-import {testCounts, completeTests, completeChecks, requiredChecks, completeNativeProof, browserDiagnostics, executeDiagnostics, testFailureLocations, nativeSummaryFields} from '../scripts/ci/results.mjs';
+import {testCounts, completeTests, completeChecks, requiredChecks, completeNativeProof, browserDiagnostics, executeDiagnostics, testFailureLocations, testFailureDiagnostics, nativeSummaryFields} from '../scripts/ci/results.mjs';
 
 test('U3: CI native summary allow-lists numeric metrics and cleanup flags', () => {
   assert.deepEqual(nativeSummaryFields('execute', {diagnosticsLatencyMs: {end: 1, 'per-step': 2, unexpected: 'private'}}), {diagnosticsLatencyMs: {end: 1, 'per-step': 2}});
@@ -114,6 +114,59 @@ test('failed execution diagnostics retain retry stages without exposing raw mess
 test('failed TAP locations expose only known test files and positive source coordinates', () => {
   const output = "not ok 1 synthetic\n  ---\n  location: 'C:\\private-user\\harness-tests\\execute-host.test.mjs:27:3'\n  error: 'private-token'\n  ...\nnot ok 2 synthetic\n  location: '/private-user/harness-tests/execute-host.test.mjs:27:3'\n  location: '/private-user/private-token.test.mjs:1:1'\n  location: '/private-user/harness-tests/execute-host.test.mjs:0:1'\n";
   assert.deepEqual(testFailureLocations(output, ['execute-host.test.mjs']), [{file: 'execute-host.test.mjs', line: 27, column: 3}]);
+});
+
+test('failed TAP diagnostics retain assertion coordinates and fixed metadata while excluding private output', () => {
+  const output = `not ok 1 - private-test-name
+  ---
+  duration_ms: 6000.25
+  location: 'C:\\private-user\\harness-tests\\execute-host.test.mjs:152:1'
+  failureType: 'testCodeFailure'
+  error: 'private-error'
+  code: 'ERR_ASSERTION'
+  expected: 'private-expected'
+  actual: 'private-actual'
+  operator: 'strictEqual'
+  stack: |-
+    private-stack-text
+    at privateFunction (file:///private-user/scripts/private.mjs:7:1)
+    TestContext.<anonymous> (file:///private-user/harness-tests/execute-host.test.mjs:159:57)
+  ...
+not ok 2 - private-test-name
+  ---
+  location: '/private-user/harness-tests/execute-host.test.mjs:180:1'
+  failureType: 'private-type'
+  code: 'private-code'
+  operator: 'private-operator'
+  stack: |-
+    at privateFunction (/private-user/private-file.test.mjs:1:1)
+  ...
+not ok 3 - unknown
+  ---
+  location: '/private-user/private-file.test.mjs:1:1'
+  code: 'ERR_ASSERTION'
+  ...
+`;
+  const result = testFailureDiagnostics(output, ['execute-host.test.mjs']);
+  assert.deepEqual(result, [
+    {location: {file: 'execute-host.test.mjs', line: 152, column: 1}, failureType: 'testCodeFailure', code: 'ERR_ASSERTION', operator: 'strictEqual', durationMs: 6000.25, stackLocation: {file: 'execute-host.test.mjs', line: 159, column: 57}},
+    {location: {file: 'execute-host.test.mjs', line: 180, column: 1}}
+  ]);
+  assert(!JSON.stringify(result).includes('private'));
+  const invalid = output.replaceAll(':152:1', ':0:1').replaceAll(':180:1', ':9007199254740992:1');
+  assert.deepEqual(testFailureDiagnostics(invalid, ['execute-host.test.mjs']), []);
+  assert.equal(testFailureDiagnostics(output.repeat(60), ['execute-host.test.mjs']).length, 100);
+});
+
+test('failed TAP diagnostics identify the actual assertion in real Node test output', t => {
+  const root = temporary(t), file = join(root, 'synthetic.test.mjs');
+  writeFileSync(file, "import test from 'node:test';\nimport assert from 'node:assert/strict';\ntest('private-test-name', () => {\n  assert.equal('private-actual', 'private-expected');\n});\n");
+  const result = command(['--test', '--test-reporter=tap', file], {cwd: root, env: {NODE_TEST_CONTEXT: undefined}});
+  assert.equal(result.status, 'FAIL');
+  const [failure] = testFailureDiagnostics(result.output, ['synthetic.test.mjs']);
+  assert.equal(failure.code, 'ERR_ASSERTION'); assert.equal(failure.operator, 'strictEqual');
+  assert.equal(failure.location.line, 3); assert.equal(failure.stackLocation.line, 4);
+  assert(!JSON.stringify(failure).includes('private'));
 });
 test('native parallel proof still requires both substantive scopes and complete cleanup', () => {
   const assessment = {status: 'PASS', comparison: {status: 'PASS'}, counts: [{scenarios: 13, assertions: 35, evidence: 166}, {scenarios: 13, assertions: 35, evidence: 166}]};
