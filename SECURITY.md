@@ -31,4 +31,4 @@ action/assertion data, traces, screenshots, videos or underlying Allure artifact
 Value-free assertion titles protect titles only. Prefer disposable test credentials
 and restrict artifact access and retention; do not publish raw reports by default.
 Do not add consumer-side private Playwright interception or credential registries to
-imply stronger protection. See the [reporting boundaries](docs/M14-REPORTING.md#links-and-protection-boundaries).
+imply stronger protection. See the [reporting boundaries](docs/reporting.md#attachments-links-and-protection).

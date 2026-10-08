@@ -153,8 +153,10 @@ keys. Then run:
 npx --no pom-harness check --add-env-keys
 ```
 
-This appends an empty `NAME=` line for every secret that the default environment's
-targets and the Azure DevOps configuration name. It never reads or prints values.
+This appends empty `NAME=` lines for missing API/database credential references in
+the default environment and the Azure DevOps credential reference. Browser login
+references are not included: add empty keys for the configured users' `usernameRef`
+and `passwordRef` yourself, removing the `env:` prefix. Never read or print secret values.
 Tell the user which keys to fill in `.env`; the file stays git-ignored.
 
 ### 2.5 Report readiness
@@ -238,4 +240,4 @@ they are the project's own installation, at the version its lockfile records.
 
 ## Manual execution configuration (3.2.0)
 
-Browser targets may declare startUrl and users handles with usernameRef/passwordRef environment references. Add empty keys to the ignored .env; never serialize values into targets.json. Optional ado.bugs defaults configure paths, assignment, tags, extra scalar fields and attachment bounds. Upgrade every teammate before committing these new keys. API/DB-only manual runs need no browser or unrelated login credentials; next enforces scoped readiness. See [M19](../../../../docs/M19-EXECUTE.md).
+Browser targets may declare startUrl and users handles with usernameRef/passwordRef environment references. Add empty keys to the ignored .env; never serialize values into targets.json. Optional ado.bugs defaults configure paths, assignment, tags, extra scalar fields and attachment bounds. Upgrade every teammate before committing these new keys. API/DB-only manual runs need no browser or unrelated login credentials; next enforces scoped readiness. See [manual execution](../../../../docs/manual-execution.md).

@@ -27,7 +27,7 @@ refine them into neutral input before generation. Pass the neutral source throug
 the same workflow below. Local input requires no ADO configuration.
 
 Read the
-[generation procedure](../../../docs/M13-GENERATION.md) for the executable handoff,
+[generation procedure](../../../docs/PIPELINE.md) for the executable handoff,
 review and verification contracts before running the pipeline:
 
 ```text
@@ -64,9 +64,9 @@ Source → refinement → observed execution → durable POM generation
 - Preserve existing application code and consumer customizations. Use the user's ongoing
   branch/delivery instructions; do not infer authorization for external writes from READY.
 
-Use [M14 reporting](../../../docs/M14-REPORTING.md) for validated execution reports and optional Allure capture during verification. Keep the recorded verifier outcome visible above native test detail; report generation never grants delivery readiness.
+Use [reporting](../../../docs/reporting.md) for validated execution reports and optional Allure capture during verification. Keep the recorded verifier outcome visible above native test detail; report generation never grants delivery readiness.
 
-Use [M12 adapters](../../../docs/M12-ADO.md) for explicitly authorized external delivery.
+Use [Azure DevOps](../../../docs/azure-devops.md) for explicitly authorized external delivery.
 Local sources support the complete generation/review/verification path without ADO.
 Legacy ADO artifact layouts remain documented in [the compatibility playbook](references/playbook.md).
 Its historical host, catalog, parallelism and cleanup assumptions do not override the

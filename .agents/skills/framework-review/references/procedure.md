@@ -1,8 +1,10 @@
 # Framework Review — procedure
 
-## Neutral generation review (M13)
+<a id="neutral-generation-review-m13"></a>
 
-For M13 output, review the frozen handoff, candidate file hashes, source-to-observation bindings and candidate step/expectation review mappings described in [M13](../../../../docs/M13-GENERATION.md). The legacy ADO traceability table below applies to legacy ADO artifacts. Neutral local cases carry `allure.testCaseId`; external cases retain their real `allure.tms` links. Require the actual assertions to preserve source intent, and review operation definitions and lifecycle dispositions. A reviewer identity field alone is not evidence of independent review. User-authorized branch and delivery choices take precedence over template defaults.
+## Neutral generation review
+
+For generated automation, review the frozen handoff, candidate file hashes, source-to-observation bindings and candidate step/expectation review mappings described in the [automation workflow](../../../../docs/PIPELINE.md). The legacy ADO traceability table below applies to legacy ADO artifacts. Neutral local cases carry `allure.testCaseId`; external cases retain their real `allure.tms` links. Require the actual assertions to preserve source intent, and review operation definitions and lifecycle dispositions. A reviewer identity field alone is not evidence of independent review. User-authorized branch and delivery choices take precedence over template defaults.
 
 Inputs: a diff scope (default: `git diff master...HEAD` plus unstaged changes,
 **plus untracked files from `git status --porcelain`** — at the pipeline's GENERATE

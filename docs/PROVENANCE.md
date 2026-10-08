@@ -65,7 +65,7 @@ M12 adds project-authored optional ADO adapters and local synthetic contract fix
 The compatibility Steps parser/renderer is adapted from the owner-cleared supplied
 harness. Official Microsoft REST documentation informed request shapes; no upstream
 implementation was copied and no dependency or third-party notice changed. See
-[the adapter guide](M12-ADO.md) for the specific documentation references.
+[the adapter guide](azure-devops.md) for the specific documentation references.
 
 The ADO story retrieval follow-up is project-authored and reuses the M12 transport,
 ownership checks and case reader. Official Microsoft link-type and work-item type
@@ -87,6 +87,10 @@ npm installs these packages from the registry; no implementation is
 copied or bundled. The [runtime inventory](../scripts/runtime-dependency-licenses.json)
 gains the three CLI records, with the same integrity values as the spike inventory, and
 now covers 90 records. The spike keeps its own lock and inventory for its development tests.
+
+Fresh consumer installs also pin the already-recorded `readable-stream` 4.7.0 (MIT).
+This keeps npm from resolving a newer transitive version through `bl`; the runtime
+inventory, dependency versions and integrity values remain unchanged.
 
 AgenTeX (MIT) and Microsoft Playwright CLI (Apache-2.0) were inspected as references.
 No upstream implementation was copied into M1. Exact research revisions are recorded

@@ -309,7 +309,7 @@ Register the generator before the HTML reporter: the viewer can keep its `onExit
 hook open during local terminal runs and prevent later exit hooks from running.
 The example uses Node-based Allure 3 with an explicit single-file configuration.
 No test, action method or Allure metadata call needs to change. See
-[M14 reporting](../../../../docs/M14-REPORTING.md) for the pinned generator and
+[reporting](../../../../docs/reporting.md) for the pinned generator and
 the independent authority of harness verdicts.
 
 ## 15. Lifecycle scripts never fail the run over report plumbing

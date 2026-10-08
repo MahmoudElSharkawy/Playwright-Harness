@@ -147,7 +147,9 @@ test('S2 C8: shared parameter quotes and literal apostrophes keep their intended
 
 test('U1: automation exploration and generation reference the current handoff, not removed legacy notes', () => {
   const playbook = readFileSync(join(packageRoot, '.agents/skills/automate-test/references/playbook.md'), 'utf8'), map = readFileSync(join(packageRoot, '.agents/skills/automate-test/references/page-map.md'), 'utf8');
-  assert(!playbook.includes('codegen-notes/')); assert(!playbook.includes('preflight.js')); assert.match(playbook, /M13 generation handoff/); assert.match(map, /M13/);
+  assert(!playbook.includes('codegen-notes/')); assert(!playbook.includes('preflight.js'));
+  for (const document of [playbook, map]) assert.match(document, /\[[^\]]+\]\(\.\.\/\.\.\/\.\.\/\.\.\/docs\/PIPELINE\.md\)/);
+  assert(existsSync(join(packageRoot, 'docs/PIPELINE.md')), 'The current automation workflow guide must be distributed.');
 });
 
 test('D4 D6 D7: generated Markdown and ADO metadata stay bounded and typed', () => {

@@ -32,6 +32,9 @@ const digest = async () => {
 const before = await digest(), fixture = await browserFixture(), checks = [];
 const roots = name => ({packageRoot, projectRoot, runRoot: join(projectRoot, '.harness', 'runs', name)});
 const environment = {name: 'qa', environmentMode: 'test', apiTargets: [], databaseTargets: [], browserTargets: ['app'], targets: {api: {}, databases: {}, browser: {app: {origins: [fixture.origin]}}}};
+// The run budget includes native launch, ACL and process ownership inspection.
+// Leave Windows setup room before exercising the intended callback/body expiry.
+const deadlineProbeTimeoutMs = process.platform === 'win32' ? 30000 : 8000;
 const op = mutation => defineOperation({id: 'exercise', family: 'browser', target: 'app', capability: mutation ? 'browserMutations' : 'browserReads', source: {kind: 'inline', reference: 'synthetic-browser-case', version: '1.0.0'}, definition: {intent: 'Observe synthetic browser behavior'}});
 const observed = async (context, actual, expected, moreEvidence = []) => {
   const proof = await context.evidence('observation', {actual, expected});
@@ -139,26 +142,27 @@ try {
     assert.equal(run.result.scenarios[0].attempts[1].failureClass, 'CANCELLED'); return run.facts;
   });
   await check('callback-deadline', async () => {
-    let expired;
+    let expired, callbackWaiting = false;
     const run = await scenario('callback-deadline', 'BLOCKED', async context => {
-      expired = context; await context.native(['goto', fixture.origin]); await new Promise(() => {});
-    }, {runTimeoutMs: 8000});
+      expired = context; await context.native(['goto', fixture.origin]); callbackWaiting = true; await new Promise(() => {});
+    }, {runTimeoutMs: deadlineProbeTimeoutMs});
+    assert.equal(callbackWaiting, true, 'Deadline proof did not reach its hanging callback.');
     assert.equal(run.result.scenarios[0].attempts[1].failureClass, 'TIMEOUT'); assert.throws(() => expired.native(['snapshot']), /ended/); return run.facts;
   });
   await check('body-deadline', async () => {
     let expired;
     const run = await scenario('body-deadline', 'NEEDS_REVIEW', async context => {
       await context.native(['goto', fixture.origin]); await observed(context, JSON.parse((await context.native(['eval', 'document.title'])).result), 'Synthetic browser fixture');
-    }, {runTimeoutMs: 8000, afterAttempt: async browser => {expired = browser; await new Promise(() => {});}});
+    }, {runTimeoutMs: deadlineProbeTimeoutMs, afterAttempt: async browser => {expired = browser; await new Promise(() => {});}});
     await assert.rejects(expired.attempt({operation: op(false), invocationId: 'late'}, async () => {}), /active scenario/); return run.facts;
   });
   await check('deadline-before-required-invocation', async () => {
-    const run = await scenario('deadline-before-required-invocation', 'BLOCKED', async () => {throw new Error('Unreachable callback was invoked');}, {runTimeoutMs: 8000, beforeAttempt: async () => {await new Promise(() => {});}});
+    const run = await scenario('deadline-before-required-invocation', 'BLOCKED', async () => {throw new Error('Unreachable callback was invoked');}, {runTimeoutMs: deadlineProbeTimeoutMs, beforeAttempt: async () => {await new Promise(() => {});}});
     assert.equal(run.facts.attempts, 0); assert.equal(run.result.scenarios[0].attempts[1].effect.certainty, 'not-executed');
     assert.equal(run.result.scenarios[0].attempts[1].assertions[0].status, 'NOT_EVALUATED'); return run.facts;
   });
   await check('policy-refusal-after-deadline', async () => {
-    const run = await scenario('policy-refusal-after-deadline', 'BLOCKED', async () => {throw new Error('Denied mutation was invoked');}, {mutation: true, environmentMode: 'protected', runTimeoutMs: 8000, beforeAttempt: async () => {await new Promise(() => {});}});
+    const run = await scenario('policy-refusal-after-deadline', 'BLOCKED', async () => {throw new Error('Denied mutation was invoked');}, {mutation: true, environmentMode: 'protected', runTimeoutMs: deadlineProbeTimeoutMs, beforeAttempt: async () => {await new Promise(() => {});}});
     assert.equal(run.facts.attempts, 0); assert.equal(run.result.scenarios[0].attempts[1].failureClass, 'POLICY');
     assert.equal(run.result.scenarios[0].attempts[1].effect.certainty, 'not-executed'); return run.facts;
   });
@@ -167,7 +171,7 @@ try {
     const run = await scenario('sanitizer-deadline', 'BLOCKED', async context => {
       await context.native(['goto', fixture.origin]); await context.native(['snapshot', '--filename=page.yml']);
       await context.artifact('snapshot', 'page.yml', () => new Promise(resolveBytes => {release = resolveBytes;}));
-    }, {runTimeoutMs: 8000});
+    }, {runTimeoutMs: deadlineProbeTimeoutMs});
     assert.equal(run.result.scenarios[0].attempts[1].failureClass, 'TIMEOUT'); assert.ok(release);
     release(Buffer.from('late sanitized bytes')); await new Promise(resolveTick => setImmediate(resolveTick));
     assert.equal(run.result.evidence.some(item => item.kind === 'snapshot'), false); return run.facts;

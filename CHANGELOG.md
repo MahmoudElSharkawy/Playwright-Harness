@@ -4,7 +4,7 @@
 
 ### Upgrade actions
 
-- Before continuing an existing ADO workflow, manually move its `ado-suite-*` and `ado-story-*` folders from `test/` into `execution-tests/`, preserving all contents. Reconcile any existing destination before moving. Setup does not move these folders; publishing, tracker, metrics and convention checks use only the new location. See [manual migration](docs/M12-ADO.md#compatibility-commands).
+- Before continuing an existing ADO workflow, manually move its `ado-suite-*` and `ado-story-*` folders from `test/` into `execution-tests/`, preserving all contents. Reconcile any existing destination before moving. Setup does not move these folders; publishing, tracker, metrics and convention checks use only the new location. See [manual migration](docs/azure-devops.md#fetch-storage-and-migration).
 
 ### Changes
 
@@ -26,7 +26,7 @@
 
 - Run setup from the 3.2.2 archive in each project, then reload the agent's skills. Setup replaces managed `automate-suite` links with `automate-test`; customized skills and consumer code remain subject to review.
 - Review existing specs against the updated lifecycle and reporting guidance. Remove unnecessary tracing-only wrappers and parameters, retain safe domain cleanup, and preserve justified fixtures, application contracts and reporter customizations. Setup does not refactor consumer code automatically.
-- When continuing an eligible legacy generation source, register its explicit one-time `migration: 'case-assertions'` transition through the existing candidate command. Preserve history and the repair count; obtain fresh independent review and two fresh scoped v2 green runs. Unrelated repairs still consume a round. See [migration instructions](docs/M13-GENERATION.md#one-time-migration-from-the-legacy-gate).
+- When continuing an eligible legacy generation source, register its explicit one-time `migration: 'case-assertions'` transition through the existing candidate command. Preserve history and the repair count; obtain fresh independent review and two fresh scoped v2 green runs. Unrelated repairs still consume a round. See [migration instructions](docs/PIPELINE.md#legacy-candidate-migration).
 - Correct newly reported paired-JSON and business test-data dependency violations. Review warnings about imports, metadata and link templates; warnings alone do not block ordinary consumer CI. Observe the documented reporting redaction limits and artifact access/retention requirements.
 
 ### Changes
@@ -41,7 +41,7 @@
 - Default generated GUI specs to standard Playwright imports and the built-in isolated page; preserve justified public fixtures. Remove callback cleanup registration, private telemetry, replacement test wrappers and source-key business plumbing from generation guidance.
 - Keep timestamp-based case data and paired-JSON synthetic passwords as the simple defaults. Preserve existing context, deletion and authentication contracts; the starter reports its missing ownership/absence checks instead of assuming a credential-based lookup API.
 - Replace marker-level runtime proof with v2 case-level assertion receipts and step/expectation review mappings. Scope, integrity, independent review and two-run gates remain; runtime receipts no longer claim every source expectation executed.
-- Upgrade existing generation explicitly with `migration: 'case-assertions'` on the existing candidate command. One legacy transition preserves history, identities and the repair count even at round three; require fresh review and two v2 runs. Unrelated repairs still consume a round. See [migration instructions](docs/M13-GENERATION.md#one-time-migration-from-the-legacy-gate); custom consumer code is not rewritten.
+- Upgrade existing generation explicitly with `migration: 'case-assertions'` on the existing candidate command. One legacy transition preserves history, identities and the repair count even at round three; require fresh review and two v2 runs. Unrelated repairs still consume a round. See [migration instructions](docs/PIPELINE.md#legacy-candidate-migration); custom consumer code is not rewritten.
 - Await asynchronous Allure metadata with literal real IDs and transport validated literal reporter links into scoped capture. Preserve custom configuration; dynamic templates produce an unresolved diagnostic and raw scoped IDs without changing verdicts. Remove active starter placeholder URLs.
 - Fail confirmed private Playwright instrumentation/deep imports without suppression or baseline escape. Warn on nonstandard test imports, source markers, metadata misuse and absent/placeholder/unresolved links; warnings alone do not block ordinary consumer CI. Reviewed public fixtures retain existing warning suppression.
 - Document selected-header/structured-key redaction limits and title-only secret protection. Native artifacts still need restricted access and retention; no private telemetry layer is added.

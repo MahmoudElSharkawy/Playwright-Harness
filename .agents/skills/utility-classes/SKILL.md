@@ -32,7 +32,7 @@ synthetic-data generation — a checksum-valid value that isn't externally regis
 and gets consumed permanently on use, so it's generated fresh per run instead of drawn
 from a reused pool).
 
-For shared-runtime outcomes, follow [M14 reporting](../../../docs/M14-REPORTING.md). Attach the validated JSON/HTML through `attachResult(test, result)` inside the technical step, inspect its delivery status, and keep reporting failures separate from test outcomes. Generate Allure only after native execution and reporter flush; never infer a harness verdict from native test counts.
+For shared-runtime outcomes, follow [reporting](../../../docs/reporting.md). Attach the validated JSON/HTML through `attachResult(test, result)` inside the technical step, inspect its delivery status, and keep reporting failures separate from test outcomes. Generate Allure only after native execution and reporter flush; never infer a harness verdict from native test counts.
 The example uses `src/utils/AllureReport.ts` in reporter `onExit` with the pinned
 Node-based Allure 3 generator; do not generate during `globalTeardown`. Register
 this reporter before the HTML viewer, which can keep its `onExit` hook open.

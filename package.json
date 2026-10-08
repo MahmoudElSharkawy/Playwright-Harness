@@ -91,6 +91,7 @@
     "@playwright/cli": "0.1.22",
     "mssql": "12.7.2",
     "pg": "8.23.1",
+    "readable-stream": "4.7.0",
     "tedious": "20.0.0"
   }
 }
