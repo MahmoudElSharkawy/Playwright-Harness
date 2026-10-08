@@ -88,6 +88,10 @@ copied or bundled. The [runtime inventory](../scripts/runtime-dependency-license
 gains the three CLI records, with the same integrity values as the spike inventory, and
 now covers 90 records. The spike keeps its own lock and inventory for its development tests.
 
+Fresh consumer installs also pin the already-recorded `readable-stream` 4.7.0 (MIT).
+This keeps npm from resolving a newer transitive version through `bl`; the runtime
+inventory, dependency versions and integrity values remain unchanged.
+
 AgenTeX (MIT) and Microsoft Playwright CLI (Apache-2.0) were inspected as references.
 No upstream implementation was copied into M1. Exact research revisions are recorded
 in [the provenance inventory](../scripts/provenance.json). Architectural ideas and links
