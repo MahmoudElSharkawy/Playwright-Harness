@@ -54,6 +54,6 @@ router) and follow its routing table.
 
 ## Automation workflow
 
-Use the canonical automate-test skill and [M13 generation procedure](docs/M13-GENERATION.md): load a neutral local source or explicitly configured ADO source, preserve its assertions, explore through shared runtimes, generate/reuse POM code, obtain an independent review, and earn two independent scoped green runs. Three cumulative repair rounds are available. Catalogs, helpers and fixed inline definitions are peers. Cleanup follows intent and ownership. AgenTeX is not a runtime prerequisite. External delivery uses optional M12 adapters only when authorized.
+Use the canonical automate-test skill and [automation procedure](docs/PIPELINE.md): load a neutral local source or explicitly configured ADO source, preserve its assertions, explore through shared runtimes, generate/reuse POM code, obtain an independent review, and earn two independent scoped green runs. Three cumulative repair rounds are available. Catalogs, helpers and fixed inline definitions are peers. Cleanup follows intent and ownership. AgenTeX is not a runtime prerequisite. External delivery uses optional Azure DevOps adapters only when authorized.
 
 Read only the specific current run's registered evidence when preparing its generation handoff. Do not mine unrelated run artifacts for context.

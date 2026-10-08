@@ -1,37 +1,21 @@
-# Current harness architecture: sanitized research baseline
+# Documentation moved
 
-The input package contained 79 files, 13 skills, nine MJS scripts and 18 TypeScript
-examples. Before M1, one checker draft and two research documents had been added.
-The recovery/accounting record is private and excluded from publication.
+Read the [current guide](../architecture.md) or browse the
+[documentation hub](../README.md). The
+[original document](../archive/research/current-harness-architecture.md) is preserved as dated history.
 
-## Responsibilities
+<a id="current-harness-architecture-sanitized-research-baseline"></a>
 
-| Component | Current responsibility | Later boundary |
-|---|---|---|
-| Convention skills | POM architecture and layer-specific rules | Shared canonical instructions |
-| Automation skill | Agent-led refinement, exploration, generation and verification | Shared lifecycle policy |
-| Claude instructions/hooks | Discovery and advisory workflow feedback | Thin host adapter |
-| ADO scripts | Retrieval, result/work-item updates and delivery | Optional integration adapters |
-| Example utilities | HTTP, SQL Server, assertions and technical helpers | Preserve sound reusable behavior |
-| Tracker/knowledge | Consumer progress and application observations | Consumer-owned reviewed state |
+**Current harness architecture: sanitized research baseline** — [Current guide](../architecture.md) · [Archived section](../archive/research/current-harness-architecture.md#current-harness-architecture-sanitized-research-baseline)
 
-Current exploration depends on AgenTeX. Generated regression uses Playwright Test.
-Several scripts derive consumer paths from installation paths. Mutable tracking state
-resides beneath skills. These are documented migration seams, not M1 refactoring work.
+<a id="responsibilities"></a>
 
-## Preserved doctrine
+**Responsibilities** — [Current guide](../architecture.md) · [Archived section](../archive/research/current-harness-architecture.md#responsibilities)
 
-Strict POM responsibilities; no base classes; reuse before creation; source-intent
-preservation; independent review; bounded repair; two scoped green runs; no weakened
-assertions; deliberate delivery. Services/helpers and inline parameterized operations
-remain valid automation sources; catalogs are reusable assets rather than permissions.
+<a id="preserved-doctrine"></a>
 
-## Research limits
+**Preserved doctrine** — [Current guide](../architecture.md) · [Archived section](../archive/research/current-harness-architecture.md#preserved-doctrine)
 
-Original checks established syntax and selected self-test behavior, not host parity
-or complete execution support. Original examples produced 11 convention warnings.
-Original zero-scope checks could incorrectly succeed. M1 results supersede those
-baseline observations in [the validation record](../M1-VALIDATION.md).
+<a id="research-limits"></a>
 
-No private application names, incidents, endpoints, credentials or machine paths are
-needed to explain these findings. See [the current reference](../HARNESS.md).
+**Research limits** — [Current guide](../architecture.md) · [Archived section](../archive/research/current-harness-architecture.md#research-limits)

@@ -1,207 +1,25 @@
-# M14 reporting and Allure
+# Documentation moved
 
-Reporting presents results already decided by the execution core or generation
-verifier. It never infers a verdict from HTTP status, row counts, native test totals
-or cleanup observations. Required cleanup failures and reliable assertion failures
-remain visible; intentional retention is a normal lifecycle disposition. A recovered
-PASS remains PASS with `stability=recovered` and its complete attempt history.
+Read the [current guide](reporting.md) or browse the
+[documentation hub](README.md). The
+[original document](archive/milestones/M14-REPORTING.md) is preserved as dated history.
 
-## Validated execution reports
+<a id="m14-reporting-and-allure"></a>
 
-Use `scripts/lib/reporting/index.mjs` with an in-process `assessRun` or runtime
-`finish()` result. These immutable results carry a process-local validation mark;
-fabricated or deserialized claimed verdicts are refused. This is an API misuse
-guard, not isolation from trusted automation code. The core verdict algorithm and
-serialized result format are unchanged.
+**M14 reporting and Allure** — [Current guide](reporting.md) · [Archived section](archive/milestones/M14-REPORTING.md#m14-reporting-and-allure)
 
-```js
-import {writeReports} from 'playwright-pom-harness/scripts/lib/reporting/index.mjs';
-const delivery = writeReports(roots, result);
-// Inspect delivery.status independently of result.status.
-```
+<a id="validated-execution-reports"></a>
 
-For saved runs, reconstruct frozen inputs and reassess original observations and
-artifact bytes through the CLI. A stored `result.json` is never trusted as proof:
+**Validated execution reports** — [Current guide](reporting.md) · [Archived section](archive/milestones/M14-REPORTING.md#validated-execution-reports)
 
-```text
-npx --no pom-harness render-results --snapshot .harness/runs/<run-id>/inputs.json --run-root .harness/runs/<run-id> --output reports/harness/<new-name>
-```
+<a id="generated-playwright-tests-and-allure"></a>
 
-The output defaults to a fresh `reports/harness/<run-id>-<unique-id>/` directory.
-An explicit output must also be a fresh consumer-relative directory under `reports/`.
-Existing output, source paths and links outside the consumer are refused. The manifest
-is written last, recording all three artifact lengths and SHA256 hashes; a partial
-directory without its manifest is incomplete. There is no automatic overwrite or
-deletion of previous reports.
+**Generated Playwright tests and Allure** — [Current guide](reporting.md) · [Archived section](archive/milestones/M14-REPORTING.md#generated-playwright-tests-and-allure)
 
-| File | Purpose |
-|---|---|
-| `result.json` | Sanitized report view, exact recorded status/stability/counts and report fingerprint |
-| `report.md` | Escaped readable view of phases, attempts, effects, assertions, resources and outputs |
-| `index.html` | Self-contained responsive static view; no script or network dependency |
-| `manifest.json` | Successful delivery receipt with relative artifacts and integrity metadata |
+<a id="links-and-protection-boundaries"></a>
 
-Every view includes operation source/version/fingerprint and evidence associations.
-Evidence paths are relative to the original run directory; report bundles contain
-the inventory, not raw artifact bodies. Keep that run when original evidence is
-needed. Selected public output values are JSON-encoded for display and explicitly
-clipped above 4096 characters. Sensitive values are redacted; protected restoration
-and output references, inputs and operation definitions are omitted. Public values
-still require correct sensitivity classification by the producing automation.
-HTML/Markdown escape consumer text; HTML also restricts active content with CSP.
+**Links and protection boundaries** — [Current guide](reporting.md) · [Archived section](archive/milestones/M14-REPORTING.md#links-and-protection-boundaries)
 
-Reporting delivers `WRITTEN` or `FAILED`, independently of the recorded test verdict.
-The CLI exits 0 for successful delivery even when the report describes FAIL; invalid
-inputs exit 2 and output failure exits 1. CI must use validated execution outcomes
-for its test gate and report delivery status for its reporting gate. Do not interpret
-a report command's successful exit as a test pass.
+<a id="validation-and-limits"></a>
 
-## Generated Playwright tests and Allure
-
-In a consumer technical step, attach the validated execution result with:
-
-```js
-const delivery = await attachResult(test, result);
-```
-
-Import it from `scripts/lib/reporting/index.mjs`. It uses the current native
-`test.info().attach()` and stable names `Harness execution result` (JSON) and
-`Harness execution report` (HTML). Call inside the operation's `test.step` so Allure
-nests the attachments under that technical operation. `ATTACHED`, `NOT_IN_TEST` and
-`FAILED` are presentation outcomes; inspect them without changing the test verdict.
-The generated RuntimeActions fixture demonstrates this shared API/DB integration.
-
-For reviewed generation verification:
-
-```text
-npx --no pom-harness generate verify --id <source-id> --allure
-npx --no pom-harness generate-allure --input reports/generation/<verification-id>
-```
-
-Run the second command after verification returns. Repeat verification in a new
-process for the required second green. Optional reporting failure does not grant or
-revoke a green. The M13 gate still requires independent approval, exact source
-assertions and two fresh successful processes for the same frozen candidate.
-
-The concrete adapter uses separately installed `allure-playwright` **3.13.0** and
-the Node-based `allure` **3.19.1** generator. `allure-js-commons` remains **3.13.0**.
-Java is not required. Keep consumer dependency
-declarations/lockfiles accurate. Other versions fail explicitly as unavailable until
-validated. Configuration follows the official [Playwright configuration reference](https://allurereport.org/docs/playwright-configuration/):
-`resultsDir`, `detail` and `suiteTitle`. Native reporter interfaces were also checked
-against the installed version. No reporter registry or copied Allure implementation
-is included. `AllureReport.ts` appends the public `TestStep.params.locator` to native
-action/assertion titles using a private method and stable step views, without changing
-native events. Scoped reporting reuses the consumer's maintained class for capture
-only, without calling its `onExit`. Consumers without this class retain official
-capture; adopting the updated class enables locator titles.
-The example uses one `src/utils/AllureReport.ts` reporter, extending the official
-reporter with locator titles and accepting its existing options. Its `onExit`
-generates after every reporter's `onEnd`, including environment metadata. Keep it
-before the HTML reporter, whose viewer can block `onExit` in local terminal runs.
-Preserve consumer customizations when adopting this wiring. Test bodies, POM actions,
-validations, `allure.step` and attachment calls require no migration. Do not copy
-the unsupported `outputFolder` key into Allure reporter configurations.
-
-For existing consumer reports, merge the updated `examples/src/utils/AllureReport.ts`
-into your utility.
-Replace the separate `allure-playwright` and generator entries with one
-`['./src/utils/AllureReport.ts', existingAllureOptions]` entry before the HTML reporter.
-Apply the `Expects.ts` count-comparison message update to show actual and reference
-locators. New starters include this wiring; setup does not overwrite existing code.
-
-The explicit package `allurerc.json` selects the Awesome UI, embeds report assets
-in one HTML file and groups existing epic/feature/story labels. It disables Allure's
-agent output and remote publishing. Ambient consumer configuration is not loaded
-by the harness generator. Known-issue reclassification, quality gates, reruns and
-history aggregation are not enabled. Allure remains a reporter, not an execution
-or verdict owner. The example's timestamped HTML archive remains an archive;
-it is not Allure 3's separate JSONL trend-history mechanism.
-
-For ordinary native tests outside generation verification, configure the concrete
-`scripts/lib/reporting/allure-reporter.mjs` reporter by its resolved installed path.
-Its optional `directory` must be a fresh consumer `reports/` directory; otherwise
-it uses `reports/allure/<unique-id>/`. It does not forward Allure test-plan filtering
-or return status overrides. Native scope stays with Playwright. Generation always
-uses its own mandatory verification reporter plus this optional adapter.
-
-| Consumer location | Content and authority |
-|---|---|
-| `reports/generation/<verification-id>/allure-results/` | Native Allure result files and attachments, one invocation only |
-| Same folder's `capture.json` | Post-flush capture status, test count, native status and artifact hashes |
-| Same folder's `verification.json` | Reference to the recorded generation verification outcome |
-| Same folder's `index.html` | Recorded verifier status and link to explicitly native detail |
-| Same folder's `allure-report/index.html` | Official generated single-file Allure report |
-| Same folder's `generation.json` | Separate report job receipt and generated artifact hashes |
-
-Allure generation checks the captured file inventory and count, rejects empty,
-changed or incomplete capture, and rereads the hash-linked verification history and
-review artifact for generation captures. A missing verification reference fails
-closed. The generation landing page shows that recorded verifier outcome above
-native details. For example, a helper may catch a failed assertion so native
-Playwright reports passed while the case-assertion verifier records FAIL. The
-landing page preserves FAIL; it never promotes native status to readiness. Each
-embedded harness execution report similarly retains its own core verdict.
-
-Node generation is a separate bounded job after reporter flush. It passes arguments
-without a shell and never opens a browser. Fresh output is required; failure returns
-`FAILED` with its stage, leaves test history unchanged and writes no success receipt.
-Raw diagnostics are withheld. `capture.json` and `generation.json` are completeness
-and integrity records, not tamper-proof attestations against the filesystem owner.
-The generation receipt records the generator version and configuration hash.
-Allure 3.19.1 embeds analytics in its Awesome template without a configuration
-opt-out. A content security policy is added to the generated HTML before hashing,
-blocking outbound scripts/connections while allowing embedded assets and attachments.
-The upstream implementation is not vendored or modified. Direct user-followed links
-are not a publishing workflow. Upstream references: [migration](https://allurereport.org/docs/v3/migrate/)
-and [configuration](https://allurereport.org/docs/v3/configure/).
-
-These report directories are consumer runtime artifacts and stay ignored. Native
-Playwright/Allure also records consumer test titles, logs, errors and attachments;
-the harness does not promise a general sanitizer for arbitrary third-party test
-code. Keep secrets out of those sources, use existing redacting utilities and review
-artifacts before sharing. Nothing here publishes or automatically exports artifacts.
-
-## Links and protection boundaries
-
-Write known case/bug IDs directly in metadata calls and await asynchronous public
-APIs. Local scenarios retain their local case identity; include issue links only for
-associated real bugs. Configure existing reporter `links.tms` and `links.issue`
-templates from real coordinates or explicit destinations, preserving unrelated options.
-No PAT or network request is needed to format a destination. Separate case/bug
-destinations, encoded project names, modern/legacy ADO and on-prem collections are
-supported. The starter has no active placeholder destinations.
-
-Scoped capture reads literal string templates from the candidate configuration with
-the existing tokenizer and validates them before internal transport. Explicit adapter
-reporter options take precedence. The verification reporting record distinguishes
-configured, absent, placeholder and unresolved links. Dynamic templates stay valid in
-normal Allure configuration but cannot be statically extracted: scoped capture reports
-a clear diagnostic and retains raw IDs without changing the verdict or rewriting config.
-
-Existing API/DB utilities redact selected credential headers and structured keys.
-URLs, arbitrary strings, copied errors, native action/assertion data, traces,
-screenshots, videos and underlying Allure artifacts are not comprehensively sanitized.
-Value-free assertion titles protect titles only. Prefer disposable credentials, keep
-unnecessary sensitive attachments out of tests, and restrict artifact access and
-retention. No consumer telemetry interceptor, credential registry, private Playwright
-patch or telemetry-driven version pin is introduced. Broader redaction is outside
-this change.
-
-New generation receipts use the case-assertions gate. Reports never claim every source
-expectation executed; independent review assesses semantic coverage. Historical v1
-receipts retain their original interpretation.
-
-## Validation and limits
-
-`test:reporting` covers report contracts and integrity failures; `test:generation`
-includes real native reporter captures. `probe:reporting` extends the owned live
-consumer proof with reports and two Allure generations, waiting for an actual
-independent review before generated tests execute. It is interactive development
-validation, not an unattended CI command. The small native failure control can also
-run with `HARNESS_ALLURE_HTML_PROOF=1` and the `Allure capture preserves` test-name
-filter; this uses Node-based Allure 3 and validates actual FAIL landing-page generation.
-
-See [actual M14 validation](M14-VALIDATION.md) for passed, failed and unperformed
-checks. Full sequential host workflow parity is M15, bounded parallel execution
-is M16 and installed cross-platform/CI readiness is M17. Sequential remains default.
+**Validation and limits** — [Current guide](reporting.md) · [Archived section](archive/milestones/M14-REPORTING.md#validation-and-limits)

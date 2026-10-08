@@ -7,7 +7,7 @@ latest release tag and download both files from that tag ([Get started](../READM
 The npm package stays private and is never published to the registry.
 
 Tagging, pushing the tag and creating the release require the owner's explicit
-authorization. A green workflow is not that authorization ([M17](M17-CI.md#acceptance-and-release-boundary)).
+authorization. A green workflow is not that authorization ([contributing and validation](contributing.md)).
 
 ## 1. Prepare the version on a feature branch
 

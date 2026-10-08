@@ -1,10 +1,13 @@
-# Automation pipeline
+<a id="automation-pipeline"></a>
 
-This guide lists the phases that turn a scenario suite into reviewed Playwright POM
-automation, in execution order. Each phase gives its inputs, outputs, commands and the
-milestone document that defines its contract. Those documents remain authoritative;
-this guide summarizes them and links to the detail. The phase names are labels for
-this guide; the milestone documents number their steps instead.
+# Automation workflow
+
+Turn a local scenario source or Azure DevOps cases into durable Playwright POM
+automation. This is the current generation procedure: each phase below describes
+its inputs, outputs, commands and gates. Start with [getting started](getting-started.md)
+and [configuration](configuration.md) before using these command-level interfaces.
+The [canonical conventions](../.agents/skills/pom-architecture/references/design-conventions.md)
+and owning specialist skills govern the authored code.
 
 Agents run the pipeline through the
 [automate-test skill](../.agents/skills/automate-test/SKILL.md):
@@ -15,9 +18,10 @@ Agents run the pipeline through the
 /automate-test local <source.json> on <environment>
 ```
 
-All sources follow the same pipeline below. [M15](M15-WORKFLOW-PARITY.md)
-proves the complete sequential route through both native hosts; see its
-[validation status](M15-VALIDATION.md).
+All three source routes follow the same workflow. Standalone
+[manual execution](manual-execution.md) is a separate ADO-only workflow that
+produces reports without generating POM code. Dated native-host proof and limits
+are retained in the [validation archive](archive/milestones/M15-VALIDATION.md).
 
 ```text
 SOURCE → REFINE → EXPLORE → PREPARE → AUTHOR → CANDIDATE → REVIEW → VERIFY ×2 → READY → DELIVER
@@ -25,36 +29,37 @@ SOURCE → REFINE → EXPLORE → PREPARE → AUTHOR → CANDIDATE → REVIEW �
                                         └─ repair (max 3) ───┴────────┘
 ```
 
-| Phase | Purpose | Main output | Command or interface | Contract |
+| Phase | Purpose | Main output | Command or interface | Further reading |
 |---|---|---|---|---|
-| [SOURCE](#1-source) | Load scenarios unchanged | Loader record with source fingerprint | `load-local-source.mjs`, `fetch-ado-suite.mjs`, `fetch-ado-story.mjs` | [M3](M3-ADOPTION.md), [M12](M12-ADO.md) |
-| [REFINE](#2-refine) | Make steps executable without changing what they prove | Frozen refinement artifact | Agent work | [M15](M15-WORKFLOW-PARITY.md) |
-| [EXPLORE](#3-explore) | Run against the configured application | Run snapshot, observations, evidence | Runtime libraries | [M5](M5-EXECUTION-CORE.md)–[M10](M10-POSTGRESQL.md), [M16](M16-PARALLEL.md) |
-| [PREPARE](#4-prepare) | Bind each source expectation to an observation | Generation history | `generate-tests.mjs prepare` | [M13](M13-GENERATION.md) |
-| [AUTHOR](#5-author) | Write or reuse POM code | Page, service, spec and data files | Layer skills | [M13](M13-GENERATION.md) |
-| [CANDIDATE](#6-candidate) | Map each scenario to one native test | Candidate revision | `generate-tests.mjs candidate` | [M13](M13-GENERATION.md) |
-| [REVIEW](#7-review) | Independent attempt to refute the candidate | Recorded verdict | `generate-tests.mjs review` | [M13](M13-GENERATION.md) |
-| [VERIFY](#8-verify) | Two scoped green processes | Verification receipts | `generate-tests.mjs verify` | [M13](M13-GENERATION.md), [M14](M14-REPORTING.md) |
-| [READY](#9-ready) | Confirm readiness | Status | `generate-tests.mjs status` | [M13](M13-GENERATION.md) |
-| [DELIVER](#10-deliver-optional) | Optional, authorized delivery | PR, published outcomes | `ado-pr.mjs`, `publish-ado-results.mjs` | [M12](M12-ADO.md) |
+| [SOURCE](#1-source) | Load scenarios unchanged | Loader record with source fingerprint | `load-local-source.mjs`, `fetch-ado-suite.mjs`, `fetch-ado-story.mjs` | [Configuration](configuration.md), [Azure DevOps](azure-devops.md) |
+| [REFINE](#2-refine) | Make steps executable without changing what they prove | Frozen refinement artifact | Agent work | [Refinement](../.agents/skills/execute-test/references/refinement.md) |
+| [EXPLORE](#3-explore) | Run against the configured application | Run snapshot, observations, evidence | Runtime libraries | [Execution model](reference/execution-model.md) |
+| [PREPARE](#4-prepare) | Bind each source expectation to an observation | Generation history | `generate-tests.mjs prepare` | [Library interfaces](#generation-library-interfaces) |
+| [AUTHOR](#5-author) | Write or reuse POM code | Page, service, spec and data files | Layer skills | [POM architecture](architecture.md) |
+| [CANDIDATE](#6-candidate) | Map each scenario to one native test | Candidate revision | `generate-tests.mjs candidate` | [Mapping](#candidate-mapping) |
+| [REVIEW](#7-review) | Independent attempt to refute the candidate | Recorded verdict | `generate-tests.mjs review` | [Framework review](../.agents/skills/framework-review/SKILL.md) |
+| [VERIFY](#8-verify) | Two scoped green processes | Verification receipts | `generate-tests.mjs verify` | [Compatibility](#verification-compatibility-and-integrity), [Reporting](reporting.md) |
+| [READY](#9-ready) | Confirm readiness | Status | `generate-tests.mjs status` | [Verification](#8-verify) |
+| [DELIVER](#10-deliver-optional) | Optional, authorized delivery | PR, published outcomes | `ado-pr.mjs`, `publish-ado-results.mjs` | [Azure DevOps](azure-devops.md) |
 
 ## Before you start
 
 - Adopt the package into a separate consumer and select its environment profile
-  deliberately ([M3 adoption](M3-ADOPTION.md)). Node 24 is the supported runtime.
+  deliberately ([getting started](getting-started.md)). Node 24 is the supported runtime.
 - Configure the targets the scenarios need in `.harness/project.json` and
-  `.harness/targets.json`: browser ([M6](M6-BROWSER.md#installation-and-targets)),
-  API ([M7](M7-API.md)), SQL Server ([M8](M8-SQLSERVER.md)) or PostgreSQL
-  ([M10](M10-POSTGRESQL.md)). The `environmentMode` (`test`, `protected` or `custom`)
+  `.harness/targets.json`: browser ([browser runtime](reference/browser.md)),
+  API ([API runtime](reference/api.md)), SQL Server ([database runtimes](reference/databases.md)) or PostgreSQL
+  ([database runtimes](reference/databases.md)). The `environmentMode` (`test`, `protected` or `custom`)
   decides which operations are allowed. In `test`, ordinary permitted mutations need
   no per-operation approval.
-- For browser work, install the pinned official Playwright CLI as described in
-  [M4](M4-PLAYWRIGHT-CLI.md).
+- The release dependency supplies the pinned official Playwright CLI. Browser
+  binaries and host readiness are checked separately; see the
+  [browser runtime](reference/browser.md).
 - For verification, the consumer needs Playwright Test **1.63.0**. TypeScript consumers
   enable `allowJs: true`, `checkJs: false` and `maxNodeModuleJsDepth: 1` while keeping
-  `strict: true` ([M13](M13-GENERATION.md#two-independent-scoped-green-runs)).
+  `strict: true` ([automation workflow](PIPELINE.md#8-verify)).
 - ADO is needed only for ADO sources or delivery. Configure it in
-  `.harness/integrations.json` ([M12](M12-ADO.md#consumer-configuration)).
+  `.harness/integrations.json` ([Azure DevOps](azure-devops.md)).
 - Work on a feature branch, following the branch rule that setup adds to the project's
   `CLAUDE.md` and `AGENTS.md`: for example `automation/<source-id>-<slug>` for
   generated suites, delivered through a pull request.
@@ -71,7 +76,7 @@ Load the scenarios to automate without changing them. A source is a neutral loca
 file, or an ADO plan/suite or user story exported to that format.
 
 - **Inputs:** a local source file, for example `.harness/sources/<name>.json` (format in
-  [M3](M3-ADOPTION.md#local-scenario-sources)), or an ADO plan/suite or story ID with
+  [local source format](configuration.md)), or an ADO plan/suite or story ID with
   ADO configured.
 - **Outputs:** a loader record (`--out`) holding the source's relative path and SHA-256
   fingerprint, with status `LOADED` and `executed: false`. An ADO fetch also writes
@@ -85,7 +90,7 @@ file, or an ADO plan/suite or user story exported to that format.
   must be refined into the neutral format explicitly.
 
 Existing `test/ado-suite-*` and `test/ado-story-*` folders need a one-time manual
-move; see [fetch storage and migration](M12-ADO.md#compatibility-commands).
+move; see [fetch storage and migration](azure-devops.md).
 
 ```text
 npx --no pom-harness load-source --source .harness/sources/<name>.json --environment <env> --out .harness/runs/source.json
@@ -93,9 +98,8 @@ npx --no pom-harness fetch-suite --plan <planId> --suite <suiteId> --source-out 
 npx --no pom-harness fetch-story --story <storyId> --source-out .harness/sources/<name>.json
 ```
 
-Details: [M3 local sources](M3-ADOPTION.md#local-scenario-sources),
-[M12 commands](M12-ADO.md#compatibility-commands),
-[story retrieval](M12-ADO.md#story-scoped-retrieval).
+Details: [local source format](configuration.md) and
+[ADO suite/story retrieval](azure-devops.md).
 
 ## 2. REFINE
 
@@ -122,8 +126,8 @@ There is no command; the agent refines with native file tools. Section 2 of the
 the detailed allowed and forbidden list. Its file layout (a `## Refinement log` in each
 fetched spec) is the legacy ADO one.
 
-Details: [M15 lifecycle](M15-WORKFLOW-PARITY.md#complete-sequential-lifecycle),
-[M3 local sources](M3-ADOPTION.md#local-scenario-sources).
+Details: [reviewed knowledge](configuration.md),
+[refinement procedure](../.agents/skills/execute-test/references/refinement.md).
 
 ## 3. EXPLORE
 
@@ -143,17 +147,17 @@ and record what actually happens before any code is written.
   may remain. Knowledge candidates need review before promotion.
 
 Standalone manual execution uses the [execute-test skill](../.agents/skills/execute-test/SKILL.md)
-and [M19 host](M19-EXECUTE.md), with no code generation. Automation exploration
+and [manual execution](manual-execution.md), with no code generation. Automation exploration
 continues to use these library interfaces:
 
 | Need | Interface | Contract |
 |---|---|---|
-| Freeze scope, environment, definitions, expectations and limits | `createRun` | [M5](M5-EXECUTION-CORE.md) |
-| Browser steps through the official Playwright CLI skill | `runBrowserScenario` | [M6](M6-BROWSER.md#using-the-library) |
-| API operations | `defineApiOperation`, `createApiRuntime` | [M7](M7-API.md) |
-| SQL Server or PostgreSQL operations | `defineDatabaseOperation`, `createDatabaseRuntime` | [M8](M8-SQLSERVER.md), [M10](M10-POSTGRESQL.md) |
-| One scenario mixing UI, API and DB (`setup`, `exercise`, `verify`, `cleanup`) | `runSequentialScenario` | [M9](M9-SEQUENTIAL.md) |
-| Opt-in bounded batch of independent scenarios (default concurrency 1) | `runScenarioBatch` | [M16](M16-PARALLEL.md#calling-the-dispatcher) |
+| Freeze scope, environment, definitions, expectations and limits | `createRun` | [execution model](reference/execution-model.md) |
+| Browser steps through the official Playwright CLI skill | `runBrowserScenario` | [browser runtime](reference/browser.md) |
+| API operations | `defineApiOperation`, `createApiRuntime` | [API runtime](reference/api.md) |
+| SQL Server or PostgreSQL operations | `defineDatabaseOperation`, `createDatabaseRuntime` | [database runtimes](reference/databases.md) |
+| One scenario mixing UI, API and DB (`setup`, `exercise`, `verify`, `cleanup`) | `runSequentialScenario` | [execution model](reference/execution-model.md) |
+| Opt-in bounded batch of independent scenarios (default concurrency 1) | `runScenarioBatch` | [execution model](reference/execution-model.md) |
 
 To render a saved run as JSON, Markdown and HTML reports (optional; output defaults to
 a fresh `reports/harness/` directory):
@@ -162,7 +166,7 @@ a fresh `reports/harness/` directory):
 npx --no pom-harness render-results --snapshot .harness/runs/<run-id>/inputs.json --run-root .harness/runs/<run-id>
 ```
 
-Details: [M14 execution reports](M14-REPORTING.md#validated-execution-reports).
+Details: [reporting execution reports](reporting.md).
 
 ## 4. PREPARE
 
@@ -184,8 +188,7 @@ Bind every source expectation to an observed result and open the generation hist
 npx --no pom-harness generate prepare --input .harness/state/<preparation>.json
 ```
 
-Details: [M13 steps 3–4](M13-GENERATION.md#from-source-to-a-reviewed-candidate),
-[command inputs](M13-GENERATION.md#local-command-interfaces).
+Details: [generation library interfaces](#generation-library-interfaces).
 
 ## 5. AUTHOR
 
@@ -219,8 +222,8 @@ registration invalidates the candidate, so fix check failures before registering
 npx --no pom-harness check-conventions
 ```
 
-Details: [M13 steps 4 and 6](M13-GENERATION.md#from-source-to-a-reviewed-candidate),
-[assertion coverage](M13-GENERATION.md#shared-deterministic-operations-and-assertion-coverage).
+Details: [POM architecture](architecture.md) and
+[candidate mapping](#candidate-mapping).
 
 ## 6. CANDIDATE
 
@@ -231,7 +234,7 @@ Playwright test.
   `{scenarioId, spec, project, titlePath, mapping}`. `titlePath` is the complete chain of
   describe and test titles. `project` is explicit, with an empty name for an unnamed
   project. Map every source step and expectation exactly once to action/validation
-  references using the [M13 mapping shape](M13-GENERATION.md#shared-deterministic-operations-and-assertion-coverage).
+  references using the [candidate mapping](#candidate-mapping).
   Add `repair` for repairs or `migration: 'case-assertions'` for the one-time legacy
   transition (see [Repairs](#repairs)).
 - **Outputs:** a frozen candidate revision covering consumer files, configured targets
@@ -242,7 +245,50 @@ Playwright test.
 npx --no pom-harness generate candidate --id <source-id> --input .harness/state/<candidate>.json
 ```
 
-Details: [M13 step 5](M13-GENERATION.md#from-source-to-a-reviewed-candidate).
+### Candidate mapping
+
+The candidate JSON names the consumer's Playwright configuration and one native
+test per source scenario. For example:
+
+```json
+{
+  "config": "playwright.config.ts",
+  "tests": [
+    {
+      "scenarioId": "scenario-1",
+      "spec": "tests/ConfirmationTests.spec.ts",
+      "project": "",
+      "titlePath": ["Confirmation", "confirms the request"],
+      "mapping": [
+        {
+          "step": 1,
+          "actions": ["ConfirmationPage.submitRequest"],
+          "expectations": [
+            {
+              "key": "<actual source expectation key>",
+              "validations": ["ConfirmationPage.verifyConfirmation"]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
+
+Use the source's one-based step numbers and actual expectation keys. Every step
+and expectation appears exactly once, and every expectation has a nonempty
+validation reference. Each step has an action or validation reference; composed
+methods and one method covering several expectations are allowed. These are
+review references, not a direct-call or lexical-resolution requirement. The
+reviewer checks actual semantic coverage rather than trusting these names.
+
+Await public Allure metadata with literal real identities: `allure.testCaseId`
+for local scenarios and `allure.tms` for externally supplied case IDs. Source
+keys belong to this mapping, not business parameters or tracing-only test data.
+Use ordinary business validations and the existing assertion facades. The old
+`sourceExpectation(test, key, callback)` helper is a deprecated pass-through;
+new automation does not use it. See [reporting](reporting.md) for link templates.
 
 ## 7. REVIEW
 
@@ -269,7 +315,7 @@ their own work, and a self-review cannot release verification.
 npx --no pom-harness generate review --id <source-id> --input .harness/state/<review>.json
 ```
 
-Details: [M13 steps 6–7](M13-GENERATION.md#from-source-to-a-reviewed-candidate).
+Details: [framework review procedure](../.agents/skills/framework-review/references/procedure.md).
 
 ## 8. VERIFY
 
@@ -306,8 +352,8 @@ npx --no pom-harness generate verify --id <source-id> --allure
 npx --no pom-harness generate-allure --input reports/generation/<verification-id>
 ```
 
-Details: [M13 verification](M13-GENERATION.md#two-independent-scoped-green-runs),
-[M14 Allure](M14-REPORTING.md#generated-playwright-tests-and-allure).
+Details: [verification compatibility](#verification-compatibility-and-integrity)
+and [Allure reporting](reporting.md).
 
 ### Repairs
 
@@ -326,12 +372,54 @@ checks and register a new candidate with `repair` set to `script-defect`,
   its `STARTED` record, reported as `NEEDS_REVIEW`. A stale writer lock needs an
   operator to inspect it; there is no automatic takeover.
 
-A legacy candidate may use the [one-time migration](M13-GENERATION.md#one-time-migration-from-the-legacy-gate)
+A legacy candidate may use the [one-time migration](#legacy-candidate-migration)
 without charging a repair round, including at round three. It preserves scope and
 history, requires fresh review and two v2 greens, and cannot be reused. Unrelated
 repairs still need a classification and available repair budget.
 
-Details: [M13 verification](M13-GENERATION.md#two-independent-scoped-green-runs).
+Details: [verification compatibility and integrity](#verification-compatibility-and-integrity).
+
+### Verification compatibility and integrity
+
+The verifier requires Playwright Test **1.63.0**, separately from the exploration
+CLI's dependency pin. Other versions fail explicitly until validated. TypeScript
+consumers of installed JavaScript runtime libraries use `allowJs: true`,
+`checkJs: false` and `maxNodeModuleJsDepth: 1` with `strict: true`, or reviewed
+consumer declarations. Runtime validation still applies; this does not claim
+complete static typing of the JavaScript libraries.
+
+The candidate snapshot covers consumer behavior files and additions/deletions,
+configured targets and knowledge, dependency declarations and shared runtime
+version/content. A change invalidates the candidate. Installed dependency bytes,
+arbitrary environment variables and secret files are not independently attested;
+review external references and verify lockfile installation in CI. Secret values
+are never copied into the snapshot. Consumer behavior links are rejected;
+installed package links remain read-only dependencies.
+
+Verification receipts use version 2 and the harness-derived `case-assertions`
+gate. Expected failures, skips, flaky retries, extra/missing tests and nonzero
+exits cannot earn a green. Hook/fixture assertions earn no passing credit, while
+genuine failures in them still fail verification. History detects accidental
+edits and gaps; it is not tamper-proof against its filesystem owner. Reviewer
+identities are attestations, not authentication or proof that a review occurred.
+
+### Legacy candidate migration
+
+To continue an eligible legacy candidate, register the existing configuration
+and native test identities with the new mapping and
+`migration: "case-assertions"`. Eligibility requires no case-level candidate
+anywhere in that source's history. Preserve the source, handoff, configuration
+path and scenario-to-test identities.
+
+```text
+npx --no pom-harness generate candidate --id <source-id> --input .harness/state/migration.json
+```
+
+This exception is usable once and does not charge a repair round, including at
+round three. It preserves all old history, requires a fresh independent review
+and two fresh version-2 greens, and does not reuse old approvals. Invalid inputs
+consume nothing. Unrelated repairs still require a repair classification and
+available repair budget. Setup does not rewrite customized consumer test code.
 
 ## 9. READY
 
@@ -347,7 +435,7 @@ integrity-checked again when status is requested. `READY` does not authorize del
 The hash-linked history detects accidental edits and gaps; it is not tamper-proof
 against the filesystem's owner.
 
-Details: [M13 verification](M13-GENERATION.md#two-independent-scoped-green-runs).
+Details: [verification compatibility and integrity](#verification-compatibility-and-integrity).
 
 ## 10. DELIVER (optional)
 
@@ -368,8 +456,8 @@ npx --no pom-harness pr --source <branch> --title "<title>" --description-file <
 npx --no pom-harness publish-results --suite <suiteId>
 ```
 
-Details: [M12 commands](M12-ADO.md#compatibility-commands),
-[publication and linking](M12-ADO.md#publication-and-linking).
+Details: [Azure DevOps](azure-devops.md),
+[publication and linking](azure-devops.md).
 
 ## Where state lives
 
@@ -385,7 +473,30 @@ Details: [M12 commands](M12-ADO.md#compatibility-commands),
 | `reports/generation/<verification-id>/` | Allure capture from `verify --allure` |
 
 All of this belongs to the consumer; the installed package stays unchanged. See
-[consumer-owned state](M3-ADOPTION.md#consumer-owned-state).
+[consumer-owned state](getting-started.md).
+
+## Generation library interfaces
+
+Agents normally use the CLI commands above. Integration code can use
+`scripts/lib/generation/index.mjs` from the installed package:
+
+| Operation | Interface |
+|---|---|
+| Bind unchanged source expectations to reassessed observations | `createGenerationHandoff(source, executions, bindings)` |
+| Open consumer history | `beginGeneration(roots, handoff, author)` |
+| Freeze a candidate and its mapping | `registerCandidate(roots, sourceId, candidate)` |
+| Record the independent verdict and review artifact | `recordGenerationReview(roots, sourceId, review)` |
+| Run one scoped verification process | `verifyGeneration(roots, sourceId)` |
+
+An in-process handoff uses actual run, roots and observation records. CLI
+preparation instead reconstructs them from consumer-relative `snapshot` and
+`runRoot` paths and reassesses registered evidence bytes. Neither route trusts
+a saved claimed verdict. Catalogs, deterministic helpers and fixed parameterized
+inline operations remain peers; imported team libraries are derive-only.
+
+Promote observations into `.harness/knowledge/` only after review and
+sanitization. Active-run inputs remain frozen; promoted knowledge does not
+silently alter a run or a reviewed candidate.
 
 ## Legacy ADO phase names
 

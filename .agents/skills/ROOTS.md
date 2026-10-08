@@ -26,8 +26,9 @@ requires review and sanitization; observations do not silently update reviewed f
 
 Reuse the ongoing feature branch and add commits; do not create a branch per milestone.
 External delivery still requires authorization. Host permissions remain host-specific.
-Configured environment profiles do not bypass host controls. M3 loads and validates
-configuration and local sources; it does not execute browser, API or database operations.
+Configured environment profiles do not bypass host controls. Configuration and
+source loading validate inputs; execution happens through the configured browser,
+API and database runtimes.
 
 Command examples using `node scripts/<name>.mjs` refer to the installed package
 script, not a consumer copy. From the consumer, run them as

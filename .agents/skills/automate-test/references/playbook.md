@@ -1,6 +1,6 @@
 # Local input route
 
-For current neutral generation, [M13](../../../../docs/M13-GENERATION.md) owns the
+For current neutral generation, [the automation workflow](../../../../docs/PIPELINE.md) owns the
 candidate mapping, case-level assertion gate and explicit legacy migration. The ADO
 traceability artifact below applies to legacy layouts only. Generated business code
 uses ordinary validation parameters, built-in isolated fixtures by default and direct
@@ -26,7 +26,7 @@ execution is separately implemented and validated.
 
 ## Compatibility scope
 
-This document preserves historical ADO artifacts and conventions. For current execution, generation, repair budgets and verification use [M13](../../../../docs/M13-GENERATION.md). AgenTeX, catalog migration, automatic restoration and parallel execution are not prerequisites. Current environment capabilities authorize ordinary permitted operations.
+This document preserves historical ADO artifacts and conventions. For current execution, generation, repair budgets and verification use [automation workflow](../../../../docs/PIPELINE.md). AgenTeX, catalog migration, automatic restoration and parallel execution are not prerequisites. Current environment capabilities authorize ordinary permitted operations.
 
 The phases in execution order. Each phase states its **inputs**, **exact
 commands**, **outputs**, and **failure handling**. State lives on disk (§8), so any
@@ -50,7 +50,7 @@ phase can be re-entered idempotently.
 The PAT needs **Work Items: Read & Write**, **Test Management: Read & Write** (both
 verified in this project), and **Code: Read & Write** for PR creation.
 For EXPLORE, follow the configured native-runtime readiness and handoff checks in
-[M13](../../../../docs/M13-GENERATION.md).
+[automation workflow](../../../../docs/PIPELINE.md).
 
 ### 0b. Triage — depth from blast radius × reversibility
 
@@ -210,16 +210,16 @@ Two refinement assists:
 
 ## 3. EXPLORE — shared native runtimes
 
-Use the current [M13 exploration and handoff](../../../../docs/M13-GENERATION.md). Browser, API and DB observations enter the execution-core evidence boundary. Preserve source-to-assertion bindings and lifecycle dispositions for generation. Do not weaken an expectation to fit an observed defect.
+Use the current [automation workflow exploration and handoff](../../../../docs/PIPELINE.md). Browser, API and DB observations enter the execution-core evidence boundary. Preserve source-to-assertion bindings and lifecycle dispositions for generation. Do not weaken an expectation to fit an observed defect.
 
-For standalone manual execution with no code generation, route to [execute-test](../../execute-test/SKILL.md) and [M19](../../../../docs/M19-EXECUTE.md). That route produces reports and defects without changing POM code or tracker state. It is not the automation pipeline's exploration handoff.
+For standalone manual execution with no code generation, route to [execute-test](../../execute-test/SKILL.md) and [manual execution](../../../../docs/manual-execution.md). That route produces reports and defects without changing POM code or tracker state. It is not the automation pipeline's exploration handoff.
 
 ---
 
 ## 4. GENERATE — skill-first POM automation
 
 Inputs: the source cases and refinement from phase 2, the assessed exploration and
-frozen generation handoff described in [M13](../../../../docs/M13-GENERATION.md), the git-tracked
+frozen generation handoff described in [automation workflow](../../../../docs/PIPELINE.md), the git-tracked
 `.harness/knowledge/ui/` (selector, landmark, and rendered-string authority proven by
 earlier runs), and the existing framework code as the living style reference.
 
@@ -531,7 +531,7 @@ with no intervening edit violates the workflow; the current hook is advisory.
 | BRANCH | current branch is `automation/ado-suite-<suiteId>-*` (never master) |
 | FETCH | `execution-tests/ado-suite-<suiteId>/_suite.json` exists (with ≥1 case) |
 | REFINE | every spec in the suite folder ends with a `## Refinement log` section, and every prose precondition is resolved per [prerequisite-dictionary.md](prerequisite-dictionary.md) (seed steps, GUI-chain expansion, or NEEDS-FIXTURE) |
-| EXPLORE | Assessed exploration has a verified frozen [M13 generation handoff](../../../../docs/M13-GENERATION.md), preserving each source expectation and its evidence; missing evidence requires scoped exploration before generation |
+| EXPLORE | Assessed exploration has a verified frozen [automation workflow generation handoff](../../../../docs/PIPELINE.md), preserving each source expectation and its evidence; missing evidence requires scoped exploration before generation |
 | GENERATE | every file in `_suite.json.resolvedSpecFiles` exists and, across them, every manifest tms id appears in an `allure.tms` call (grep `tests/*.spec.ts` before declaring a partial), AND the framework-review verdict is APPROVE |
 | VERIFY | `_verify-state.json` shows every case green with `greens ≥ 2` (two consecutive passing runs — the rerun-reusability gate) or terminally classified; a fresh session with no such file runs the spec (twice when green) to establish state |
 | DELIVER | PR exists for the branch (`_suite.json.pr` records its id/url); outcomes published when the user opted in; `--mark-automated` run only after merge |
@@ -544,7 +544,7 @@ changed in ADO, and redo REFINE only for changed cases). `refine` forces phase 2
 over the existing fetch.
 
 M12 compatibility: configure the optional ADO adapter in the consumer; see
-[ADO configuration and receipts](../../../../docs/M12-ADO.md). All external writes
+[ADO configuration and receipts](../../../../docs/azure-devops.md). All external writes
 require authorized `--execute`, and incomplete receipts require reconciliation.
 Unknown/pending verification states, missing points and stale source fingerprints
 refuse publication. Do not use `--all` to bypass verification.

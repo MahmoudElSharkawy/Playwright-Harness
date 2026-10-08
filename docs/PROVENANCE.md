@@ -65,7 +65,7 @@ M12 adds project-authored optional ADO adapters and local synthetic contract fix
 The compatibility Steps parser/renderer is adapted from the owner-cleared supplied
 harness. Official Microsoft REST documentation informed request shapes; no upstream
 implementation was copied and no dependency or third-party notice changed. See
-[the adapter guide](M12-ADO.md) for the specific documentation references.
+[the adapter guide](azure-devops.md) for the specific documentation references.
 
 The ADO story retrieval follow-up is project-authored and reuses the M12 transport,
 ownership checks and case reader. Official Microsoft link-type and work-item type

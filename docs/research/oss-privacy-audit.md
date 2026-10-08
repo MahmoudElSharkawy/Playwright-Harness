@@ -1,34 +1,17 @@
-# OSS privacy audit: sanitized remediation record
+# Documentation moved
 
-The supplied baseline included populated private review/prerequisite material,
-historical delivery references, private configuration examples and a historical
-plaintext credential. The original material is not a publication artifact.
+Read the [current guide](../../SECURITY.md) or browse the
+[documentation hub](../README.md). The
+[original document](../archive/research/oss-privacy-audit.md) is preserved as dated history.
 
-## Required treatment
+<a id="oss-privacy-audit-sanitized-remediation-record"></a>
 
-| Category | Treatment |
-|---|---|
-| Private incident/review history | Replace with an empty review ledger; retain abstract rules only |
-| Private prerequisite workflows | Replace with a structural consumer template |
-| Credential in historical prose | Remove; obtain owner revocation/rotation status without testing validity |
-| Private endpoints, coordinates and identifiers | Replace examples with environment references or synthetic data |
-| Private runtime/source artifacts | Exclude from publication and source control |
-| Machine paths and identities | Use repository-relative references in publishable documentation |
-| Uncertain source rights | Keep publication blocked pending clearance or replacement |
+**OSS privacy audit: sanitized remediation record** — [Current guide](../../SECURITY.md) · [Archived section](../archive/research/oss-privacy-audit.md#oss-privacy-audit-sanitized-remediation-record)
 
-M1 created a verified encrypted recovery copy with restricted access and protected
-the original archive. This is recovery material, not source or release content.
-No credential value is repeated in this record or used in a test fixture.
-At the owner's request, credential-bearing review/prerequisite history was then
-replaced with clean templates in both the recovery material and the supplied archive.
-The archive hash changed intentionally; historical accounting hashes describe the
-original input, not a retained byte-for-byte backup. Credential revocation/rotation
-was later confirmed by the owner on 2026-10-01; the value was not tested or
-reproduced. The original unresolved status remains documented in the M1 record.
+<a id="required-treatment"></a>
 
-## Verification
+**Required treatment** — [Current guide](../../SECURITY.md) · [Archived section](../archive/research/oss-privacy-audit.md#required-treatment)
 
-Use the privacy, secret, provenance and publication checks together. A regex scan
-does not certify absence of all private information; review the candidate contents.
-Diagnostics report categories and locations, never matching secret values.
-Current acceptance and owner-dependent items are in [M1 validation](../M1-VALIDATION.md).
+<a id="verification"></a>
+
+**Verification** — [Current guide](../../SECURITY.md) · [Archived section](../archive/research/oss-privacy-audit.md#verification)

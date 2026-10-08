@@ -13,7 +13,7 @@ checklist lives in its §6. This README itself is a descriptive index: on any co
 design-conventions and the owning playbook win (doctrine-ownership ruling, 2026-09-01).
 
 The library preserves conventions and illustrative examples from earlier framework
-audits. Current package boundaries are described in the [harness reference](../../docs/HARNESS.md);
+audits. Current package boundaries are described in the [harness reference](../../docs/architecture.md);
 open convention decisions remain in design-conventions.
 
 For standalone ADO manual runs use [execute-test](execute-test/SKILL.md); automation generation stays with automate-test.

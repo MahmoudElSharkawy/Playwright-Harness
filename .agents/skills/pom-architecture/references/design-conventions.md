@@ -317,7 +317,7 @@ never copy that key into new configs. Any path change lands in lockstep across
 `playwright.config.ts` + global-setup/teardown + the README report table + the CI
 artifact steps, in the same MR.
 
-For the sequential shared-runtime and generation workflow, follow [M14 reporting](../../../../docs/M14-REPORTING.md). Its fresh consumer report directories and Allure `resultsDir` keep invocations isolated without changing the retained example paths. Report validated verdicts; keep report delivery failures separate. Native Allure detail does not replace the source-coverage verifier or two-green readiness gate.
+For the sequential shared-runtime and generation workflow, follow [reporting](../../../../docs/reporting.md). Its fresh consumer report directories and Allure `resultsDir` keep invocations isolated without changing the retained example paths. Report validated verdicts; keep report delivery failures separate. Native Allure detail does not replace the source-coverage verifier or two-green readiness gate.
 
 ## Repo shell & README
 
@@ -358,7 +358,9 @@ For the sequential shared-runtime and generation workflow, follow [M14 reporting
 - [ ] Report-facing behavior preserved (step nesting, attachment names) — checked in Allure
 - [ ] Code formatted; only what the current tests need was built
 
-## M3 package and consumer clarification
+<a id="m3-package-and-consumer-clarification"></a>
+
+## Package and consumer clarification
 
 Canonical instructions are immutable package content; consumer state and reviewed
 knowledge follow [the shared root contract](../../ROOTS.md). New observations remain
