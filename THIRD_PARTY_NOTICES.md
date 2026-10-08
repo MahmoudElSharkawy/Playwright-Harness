@@ -85,7 +85,7 @@ development/testing under Microsoft's terms, with explicit EULA acceptance. It i
 not MIT software and is not bundled, published or cleared for redistribution here.
 The pinned Node Linux client image is also an independent upstream distribution.
 See [Microsoft's container guide](https://learn.microsoft.com/en-us/sql/linux/install-upgrade/quickstart-install-docker?view=sql-server-ver17)
-and [the M8 guide](docs/M8-SQLSERVER.md) for the intended local validation use.
+and [the archived SQL Server guide](docs/archive/milestones/M8-SQLSERVER.md) for the intended local validation use.
 
 M10 consumes [node-postgres](https://node-postgres.com/) (`pg` 8.23.1, MIT) as a
 separately installed runtime dependency. It adds 14 packages: `pg`, `pg-cloudflare`,
@@ -103,4 +103,4 @@ The local M10 proof uses a pinned official PostgreSQL 16 container. PostgreSQL u
 [the PostgreSQL License](https://www.postgresql.org/about/licence/); its container
 OS and supporting software have their own terms. The image is not bundled,
 published or cleared for redistribution by this source-only audit. Consult the
-[M10 guide](docs/M10-POSTGRESQL.md) for the validation scope.
+[archived PostgreSQL guide](docs/archive/milestones/M10-POSTGRESQL.md) for the validation scope.

@@ -4,9 +4,11 @@ These documents retain the implementation scope, research and validation recorde
 during earlier milestones. Their capability descriptions and prerequisites may be
 superseded. Start with the [current documentation](../README.md) for adoption and use.
 
-Original file URLs remain as compatibility pages, including historical heading
-anchors. Archived relative links have been adjusted for their new location; dated
-claims and results have not been rewritten. The generation validation record's
+The historical documents and their heading anchors are preserved here. The old
+entry points have been removed from the main documentation directory; use the
+coverage map below to find each archived record and its current topic guide.
+Archived relative links have been adjusted for their new location; dated claims
+and results have not been rewritten. The generation validation record's
 multiline code span was reflowed so its placeholder does not hide later headings
 as an HTML block; its words and recorded results are unchanged.
 
