@@ -90,8 +90,8 @@ and checks each operation against its target and runtime support.
 
 ## Secrets and readiness
 
-Target references use `env:UPPERCASE_KEY`. Setup adds empty keys to the ignored `.env`;
-you fill the values locally. Never put values into targets, scenario JSON, test data,
+Target references use `env:UPPERCASE_KEY`. Add empty keys to the ignored `.env`,
+then fill the values locally. Never put values into targets, scenario JSON, test data,
 knowledge, review artifacts or reports. API targets may omit credentials when none
 are required. Browser credentials are needed only for selected login steps; API/DB-only
 manual runs do not need unrelated browser users.
@@ -99,10 +99,19 @@ manual runs do not need unrelated browser users.
 An API variable holds a bearer token; a database connection variable holds JSON
 with `user` and `password` fields. ADO's optional integration uses a bare variable
 name instead; see [Azure DevOps](azure-devops.md#configure-the-connection).
-To prepare empty keys for the default environment and ADO settings:
+To prepare missing API/database credential keys for the default environment and
+the ADO credential key:
 
 ```sh
 npx --no pom-harness check --add-env-keys
+```
+
+The command does not add browser login keys. For the browser user in the example
+above, add these empty entries to `.env` yourself, then fill their values locally:
+
+```dotenv
+QA_USERNAME=
+QA_PASSWORD=
 ```
 
 Run `npx --no pom-harness check` after configuration. Readiness, successful parsing

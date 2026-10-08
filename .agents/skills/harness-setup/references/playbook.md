@@ -153,8 +153,10 @@ keys. Then run:
 npx --no pom-harness check --add-env-keys
 ```
 
-This appends an empty `NAME=` line for every secret that the default environment's
-targets and the Azure DevOps configuration name. It never reads or prints values.
+This appends empty `NAME=` lines for missing API/database credential references in
+the default environment and the Azure DevOps credential reference. Browser login
+references are not included: add empty keys for the configured users' `usernameRef`
+and `passwordRef` yourself, removing the `env:` prefix. Never read or print secret values.
 Tell the user which keys to fill in `.env`; the file stays git-ignored.
 
 ### 2.5 Report readiness

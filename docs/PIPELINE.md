@@ -477,8 +477,10 @@ All of this belongs to the consumer; the installed package stays unchanged. See
 
 ## Generation library interfaces
 
-Agents normally use the CLI commands above. Integration code can use
-`scripts/lib/generation/index.mjs` from the installed package:
+Agents normally use the CLI commands above. Integration code imports the handoff,
+history, candidate and review functions from
+`playwright-pom-harness/scripts/lib/generation/index.mjs`. Import `verifyGeneration`
+from `playwright-pom-harness/scripts/lib/generation/verify.mjs`.
 
 | Operation | Interface |
 |---|---|
