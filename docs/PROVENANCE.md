@@ -61,6 +61,8 @@ digests remain unchanged. The pinned PostgreSQL image was pulled from the cache
 and verified to have the same manifest digest and image ID as the Docker Hub copy.
 Cached pulls do not consume Docker Hub's pull quota; uncached images fall back to
 Docker Hub. This configures only the disposable CI runner's Docker daemon.
+CI pulls those public image pins before fixture creation so registry failures
+are visible without exposing private fixture logs or generated credentials.
 
 M11 adds project-authored semantic comparison, thin hook payload translation and
 fixed native-host proof fixtures. Official OpenAI and Anthropic hook documentation

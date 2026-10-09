@@ -68,6 +68,20 @@ jobs:
           fi
           sudo install -m 600 "$task_config" /etc/docker/daemon.json
           sudo systemctl restart docker
+      - name: Pull the pinned native database images
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import {execFileSync} from 'node:child_process';
+          import {readFileSync} from 'node:fs';
+          import {join} from 'node:path';
+          import {pathToFileURL} from 'node:url';
+          const paths = JSON.parse(readFileSync(join(process.env.RUNNER_TEMP, 'harness-installed/paths.json'), 'utf8'));
+          const {images} = await import(pathToFileURL(join(paths.installedRoot, 'harness-tests/fixtures/host-databases.mjs')));
+          for (const image of Object.values(images)) execFileSync('docker', ['pull', image], {stdio: 'inherit'});
+          NODE
       - name: Prove API, SQL Server, PostgreSQL and bounded execution on Linux
         if: runner.os == 'Linux'
         run: node scripts/ci/native.mjs "${{ runner.temp }}/harness-installed" parallel
