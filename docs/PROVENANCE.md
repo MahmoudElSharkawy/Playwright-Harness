@@ -63,6 +63,8 @@ Cached pulls do not consume Docker Hub's pull quota; uncached images fall back t
 Docker Hub. This configures only the disposable CI runner's Docker daemon.
 CI pulls those public image pins before fixture creation so registry failures
 are visible without exposing private fixture logs or generated credentials.
+Those downloads use an isolated Docker client configuration with no stored login
+and at most three bounded attempts per image. Native proof failures are not retried.
 
 M11 adds project-authored semantic comparison, thin hook payload translation and
 fixed native-host proof fixtures. Official OpenAI and Anthropic hook documentation
