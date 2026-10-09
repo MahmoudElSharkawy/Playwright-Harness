@@ -7,6 +7,8 @@
 - Separate ordinary CI validation from on-demand release builds. A manually prepared
   version PR and dispatched release workflow validate one archive across every
   platform and create a draft GitHub release; publication remains manual.
+- Retain sanitized failure stages and source coordinates for the native parallel
+  CI proof, including startup failures whose cleanup also fails.
 
 ## 3.3.0 — Execution test folder
 

@@ -6,6 +6,42 @@ import {join, dirname} from 'node:path';
 import {validateInstalledGraph, clearedOverrides} from '../scripts/ci/distribution.mjs';
 import {checkContracts} from '../scripts/ci/contracts.mjs';
 import {testCounts, completeTests, completeChecks, requiredChecks, completeNativeProof, browserDiagnostics, executeDiagnostics, testFailureLocations, testFailureDiagnostics, nativeSummaryFields} from '../scripts/ci/results.mjs';
+import {parallelDiagnostic, parallelFailureDiagnostic, parallelLogDiagnostic} from '../scripts/probes/parallel-diagnostics.mjs';
+
+test('parallel failure diagnostics retain fixed stages and source coordinates while excluding private values', () => {
+  const value = {stage: 'database-fixtures', code: 'EREQUEST', exitCode: 1, reason: 'private-reason',
+    location: {file: 'host-databases.mjs', line: 65, column: 7, path: 'private-path'}, message: 'private-message', credentials: 'private-credentials', query: 'private-query'};
+  assert.deepEqual(parallelDiagnostic(value), {stage: 'database-fixtures', code: 'EREQUEST', exitCode: 1, location: {file: 'host-databases.mjs', line: 65, column: 7}});
+  assert.equal(parallelDiagnostic({...value, stage: 'private-stage'}), undefined);
+  assert.deepEqual(parallelDiagnostic({...value, code: 'private-code', exitCode: -1, location: {file: 'private-file', line: 1, column: 1}}), {stage: 'database-fixtures'});
+  assert.deepEqual(parallelDiagnostic({...value, location: {file: 'parallel.mjs', line: 9007199254740992, column: 1}, exitCode: 256}), {stage: 'database-fixtures', code: 'EREQUEST'});
+  assert(!JSON.stringify(parallelDiagnostic(value)).includes('private'));
+});
+
+test('parallel startup diagnostics preserve the original Docker category when cleanup also fails', () => {
+  const startup = Object.assign(new Error('private-message'), {status: 125, stderr: 'toomanyrequests: private-detail', stack: 'Error: private-message\n    at docker (C:\\private-user\\host-databases.mjs:33:35)'});
+  const combined = new AggregateError([startup, new Error('private-cleanup')], 'private-aggregate');
+  const diagnostic = parallelFailureDiagnostic('database-fixtures', combined);
+  assert.deepEqual(diagnostic, {stage: 'database-fixtures', causes: [{exitCode: 125, reason: 'image-rate-limit', location: {file: 'host-databases.mjs', line: 33, column: 35}}, {}]});
+  assert(!JSON.stringify(diagnostic).includes('private'));
+  assert.equal(parallelDiagnostic({...diagnostic, causes: Array(9).fill(diagnostic.causes[0])}).causes.length, 3);
+});
+
+for (const [message, reason] of [['manifest unknown: private-image', 'image-unavailable'], ['Cannot connect to the Docker daemon: private-socket', 'docker-unavailable'], ['no space left on device: private-path', 'disk-space'], ['Native database startup failed.', 'database-startup']]) test(`parallel fixture diagnostics classify ${reason} without retaining the error message`, () => {
+  assert.deepEqual(parallelFailureDiagnostic('database-fixtures', new Error(message)), {stage: 'database-fixtures', reason});
+});
+
+test('parallel process diagnostics expose startup import errors and known frames without raw log content', () => {
+  const output = 'Error [ERR_MODULE_NOT_FOUND]: private-module\n    at import (file:///private-user/scripts/probes/parallel.mjs:14:4)\n';
+  assert.deepEqual(parallelLogDiagnostic(output), {stage: 'process-exit', code: 'ERR_MODULE_NOT_FOUND', location: {file: 'parallel.mjs', line: 14, column: 4}});
+  assert.deepEqual(parallelLogDiagnostic("code: 'private-code'\n    at private (/private-user/private-file.mjs:1:1)"), {stage: 'process-exit'});
+});
+
+test('parallel failure summaries retain diagnostics while incomplete proofs continue to fail', () => {
+  const summary = nativeSummaryFields('parallel', undefined, undefined, {stage: 'batch-1', code: 'ERR_ASSERTION', message: 'private-message', location: {file: 'parallel-live.mjs', line: 205, column: 9}});
+  assert.deepEqual(summary, {checks: [], failure: {stage: 'batch-1', code: 'ERR_ASSERTION', location: {file: 'parallel-live.mjs', line: 205, column: 9}}});
+  assert.equal(completeNativeProof('parallel', {status: 'FAIL'}, {complete: true}, summary), false);
+});
 
 test('U3: CI native summary allow-lists numeric metrics and cleanup flags', () => {
   assert.deepEqual(nativeSummaryFields('execute', {diagnosticsLatencyMs: {end: 1, 'per-step': 2, unexpected: 'private'}}), {diagnosticsLatencyMs: {end: 1, 'per-step': 2}});

@@ -54,13 +54,13 @@ jobs:
       - name: Validate the supplied release archive and its installed dependencies
         if: inputs.archive_artifact != ''
         run: node scripts/ci/release.mjs installed "${{ runner.temp }}/release-candidate" "${{ runner.temp }}/harness-installed"
+      - name: Prove API, SQL Server, PostgreSQL and bounded execution on Linux
+        if: runner.os == 'Linux'
+        run: node scripts/ci/native.mjs "${{ runner.temp }}/harness-installed" parallel
       - name: Prove native browser behavior from the installed archive
         run: node scripts/ci/native.mjs "${{ runner.temp }}/harness-installed" browser
       - name: Prove manual execution and recovery from the installed archive
         run: node scripts/ci/native.mjs "${{ runner.temp }}/harness-installed" execute
-      - name: Prove API, SQL Server, PostgreSQL and bounded execution on Linux
-        if: runner.os == 'Linux'
-        run: node scripts/ci/native.mjs "${{ runner.temp }}/harness-installed" parallel
       - name: Prove cleanup after cooperative and forced timeouts
         run: node "${{ runner.temp }}/harness-installed/installation/node_modules/playwright-pom-harness/scripts/ci/timeout-proof.mjs" "${{ runner.temp }}/harness-timeout" ${{ runner.os == 'Linux' && 'mixed' || 'browser' }}
       # Last, so the timing-sensitive native proofs above run before its hundreds of npm and git processes.

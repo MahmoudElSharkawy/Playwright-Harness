@@ -80,5 +80,8 @@ export async function hostDatabases({signal, recordOwnership = () => {}, dockerH
       environment[reference] = JSON.stringify({user: 'harness_runner', password: runner});
     }
     return {targets, environment, versions, images, close};
-  } catch (error) {await close(); throw error;}
+  } catch (error) {
+    try {await close();} catch (cleanupError) {throw new AggregateError([error, cleanupError], 'Native database startup and cleanup failed.');}
+    throw error;
+  }
 }

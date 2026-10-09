@@ -14,6 +14,7 @@ import {compareExecutions} from '../lib/host-parity.mjs';
 import {hostDatabases} from '../../harness-tests/fixtures/host-databases.mjs';
 import {executeParallelCases} from '../../harness-tests/fixtures/parallel-live.mjs';
 import {proofSignal} from './cancellation.mjs';
+import {parallelFailureDiagnostic} from './parallel-diagnostics.mjs';
 
 if (process.argv.length !== 3) throw new Error('Provide a new external consumer directory for the fixed M16 proof.');
 const projectRoot = resolve(process.argv[2]);
@@ -25,17 +26,20 @@ if (process.platform === 'win32') {
 }
 const save = (name, value) => writeFileSync(join(projectRoot, name), JSON.stringify(value, null, 2), {flag: 'wx', mode: 0o600});
 const snapshot = () => inventory(packageRoot).files.map(file => [file, createHash('sha256').update(readFileSync(join(packageRoot, file))).digest('hex')]);
-const before = snapshot(), databases = await hostDatabases({signal: proofSignal,
-  recordOwnership: record => writeFileSync(join(projectRoot, 'infrastructure-ownership.jsonl'), JSON.stringify(record) + '\n', {flag: 'a', mode: 0o600})});
-console.log(JSON.stringify({projectRoot, status: 'FIXTURES_READY'}));
-let accepted = false;
+let stage = 'package-snapshot', databases, failure, accepted = false;
 try {
+  const before = snapshot(); stage = 'database-fixtures';
+  databases = await hostDatabases({signal: proofSignal,
+    recordOwnership: record => writeFileSync(join(projectRoot, 'infrastructure-ownership.jsonl'), JSON.stringify(record) + '\n', {flag: 'a', mode: 0o600})});
+  console.log(JSON.stringify({projectRoot, status: 'FIXTURES_READY'}));
   const batches = [];
   for (const concurrency of [1, 2]) {
+    stage = `batch-${concurrency}`;
     proofSignal.throwIfAborted();
     const run = await executeParallelCases(projectRoot, databases, concurrency, proofSignal);
     // Verify retained rows using independent native driver queries before the owned
     // fixture infrastructure is discarded. Retention itself is a successful outcome.
+    stage = `retained-rows-${concurrency}`;
     for (const {recordId, engine, intent} of run.facts.databases) {
       const target = databases.targets[engine], credential = JSON.parse(databases.environment[target.connectionRef.slice(4)]);
       let connection;
@@ -54,15 +58,29 @@ try {
     save(`cases-${concurrency}.json`, run.cases); save(`facts-${concurrency}.json`, run.facts); batches.push(run);
     console.log(JSON.stringify({concurrency, cases: run.cases.length, status: 'VALIDATED'}));
   }
+  stage = 'comparison';
   const comparison = compareExecutions(batches[0].cases, batches[1].cases, batches[0].cases.map(item => item.id));
   assert.equal(comparison.status, 'PASS');
+  stage = 'package-immutability';
   const packageUnchanged = JSON.stringify(snapshot()) === JSON.stringify(before); assert(packageUnchanged);
   const counts = batches.map(({cases}) => ({scenarios: cases.length, attempts: cases.reduce((sum, item) => sum + item.result.scenarios[0].attempts.length, 0),
     assertions: cases.reduce((sum, item) => sum + item.result.scenarios[0].counts.required, 0), evidence: cases.reduce((sum, item) => sum + item.result.evidence.length, 0),
     statuses: Object.fromEntries(['PASS', 'FAIL', 'NEEDS_REVIEW'].map(status => [status, cases.filter(item => item.result.status === status).length]))}));
   save('assessment.json', {status: 'PASS', platform: process.platform, node: process.version, comparison, counts, packageUnchanged, databases: {versions: databases.versions, images: databases.images}});
   accepted = true;
+} catch (error) {
+  failure = error;
 } finally {
-  await databases.close(); save('cleanup.json', {ownedDatabasesRemoved: true, fixtureServersClosed: true});
+  if (databases) try {
+    await databases.close(); save('cleanup.json', {ownedDatabasesRemoved: true, fixtureServersClosed: true});
+  } catch (error) {
+    if (failure) failure = new AggregateError([failure, error], 'Native parallel proof and cleanup failed.');
+    else {failure = error; stage = 'fixture-cleanup';}
+  }
+}
+if (failure) {
+  // The original failure also reaches the private process log if diagnostic storage fails.
+  try {save('failure.json', parallelFailureDiagnostic(stage, failure));} catch {}
+  throw failure;
 }
 assert(accepted); console.log(readFileSync(join(projectRoot, 'assessment.json'), 'utf8'));
