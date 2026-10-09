@@ -54,6 +54,20 @@ jobs:
       - name: Validate the supplied release archive and its installed dependencies
         if: inputs.archive_artifact != ''
         run: node scripts/ci/release.mjs installed "${{ runner.temp }}/release-candidate" "${{ runner.temp }}/harness-installed"
+      - name: Use the Google Docker Hub cache for native fixtures
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          task_config="$RUNNER_TEMP/harness-docker-daemon.json"
+          if [ -f /etc/docker/daemon.json ]; then
+            sudo cat /etc/docker/daemon.json | jq '.["registry-mirrors"] = (["https://mirror.gcr.io"] + ((.["registry-mirrors"] // []) | map(select(. != "https://mirror.gcr.io"))))' > "$task_config"
+          else
+            jq -n '{"registry-mirrors": ["https://mirror.gcr.io"]}' > "$task_config"
+          fi
+          sudo install -m 600 "$task_config" /etc/docker/daemon.json
+          sudo systemctl restart docker
       - name: Prove API, SQL Server, PostgreSQL and bounded execution on Linux
         if: runner.os == 'Linux'
         run: node scripts/ci/native.mjs "${{ runner.temp }}/harness-installed" parallel

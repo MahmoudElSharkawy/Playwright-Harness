@@ -55,6 +55,13 @@ The pinned PostgreSQL development container is a separate upstream distribution,
 not bundled or relicensed under the harness MIT license. See
 [third-party notices](../THIRD_PARTY_NOTICES.md).
 
+Linux GitHub CI configures the [Google-managed Docker Hub cache](https://docs.cloud.google.com/artifact-registry/docs/pull-cached-dockerhub-images)
+for native fixtures to avoid anonymous Docker Hub pull limits. Container image
+digests remain unchanged. The pinned PostgreSQL image was pulled from the cache
+and verified to have the same manifest digest and image ID as the Docker Hub copy.
+Cached pulls do not consume Docker Hub's pull quota; uncached images fall back to
+Docker Hub. This configures only the disposable CI runner's Docker daemon.
+
 M11 adds project-authored semantic comparison, thin hook payload translation and
 fixed native-host proof fixtures. Official OpenAI and Anthropic hook documentation
 informed those adapters; no upstream source was copied and no dependency was added.

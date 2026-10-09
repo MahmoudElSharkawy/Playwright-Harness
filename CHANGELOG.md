@@ -9,6 +9,8 @@
   platform and create a draft GitHub release; publication remains manual.
 - Retain sanitized failure stages and source coordinates for the native parallel
   CI proof, including startup failures whose cleanup also fails.
+- Use the Google Docker Hub cache for Linux CI fixtures with unchanged image
+  digests to avoid anonymous image pull limits.
 
 ## 3.3.0 — Execution test folder
 
