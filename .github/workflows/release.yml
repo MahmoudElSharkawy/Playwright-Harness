@@ -1,0 +1,91 @@
+name: Harness release
+run-name: Draft harness ${{ inputs.version }} from main
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version already merged through a release PR (X.Y.Z, without v).
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: harness-release
+  cancel-in-progress: false
+
+jobs:
+  candidate:
+    name: Prepare release candidate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      CI: '1'
+      NO_UPDATE_NOTIFIER: '1'
+      RELEASE_VERSION: ${{ inputs.version }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Check main, the version PR and version availability; pack with npm 11
+        run: node scripts/ci/release.mjs prepare "$RUNNER_TEMP/release-candidate"
+      - name: Share the candidate for validation
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-candidate
+          path: ${{ runner.temp }}/release-candidate/
+          if-no-files-found: error
+          retention-days: 7
+
+  validation:
+    name: Validate release candidate
+    needs: candidate
+    permissions:
+      contents: read
+    uses: ./.github/workflows/validation.yml
+    with:
+      archive_artifact: release-candidate
+
+  draft:
+    name: Create draft release
+    needs: [candidate, validation]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Download the candidate
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-candidate
+          path: ${{ runner.temp }}/release-candidate
+      - name: Download installed-package evidence
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: installed-summary-*
+          path: ${{ runner.temp }}/release-evidence
+      - name: Download npm 12 consumer evidence
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: npm12-consumer-flow-*
+          path: ${{ runner.temp }}/release-evidence
+      - name: Verify complete evidence and attach the exact archive to a draft
+        run: node scripts/ci/release.mjs draft "$RUNNER_TEMP/release-candidate" "$RUNNER_TEMP/release-evidence"

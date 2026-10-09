@@ -73,6 +73,7 @@
     "THIRD_PARTY_NOTICES.md",
     "npm-shrinkwrap.json",
     ".github/workflows/validation.yml",
+    ".github/workflows/release.yml",
     ".env.example",
     ".gitignore",
     "scripts",

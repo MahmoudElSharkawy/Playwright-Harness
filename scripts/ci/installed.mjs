@@ -1,17 +1,21 @@
 #!/usr/bin/env node
 // Install an actual npm archive into a fresh owned directory; never copy source/node_modules.
 import assert from 'node:assert/strict';
-import {mkdirSync, readFileSync, writeFileSync, realpathSync} from 'node:fs';
+import {mkdirSync, readFileSync, writeFileSync, realpathSync, copyFileSync, constants} from 'node:fs';
 import {join, resolve, dirname, basename} from 'node:path';
 import {pathToFileURL} from 'node:url';
-import {command, npmPath, hash} from './process.mjs';
+import {parseArgs} from 'node:util';
+import {command, npmPath} from './process.mjs';
 import {packageRoot} from '../lib/consumer-paths.mjs';
 import {within, realFuture} from '../lib/skill-roots.mjs';
 import {snapshotInstalledPackage} from '../lib/host-proof-files.mjs';
 import {validateInstalledGraph, clearedOverrides} from './distribution.mjs';
+import {inspectArchive} from './archive.mjs';
 
-if (process.argv.length !== 3) throw new Error('Supply a new directory outside the source package for installed validation.');
-const workspace = join(realpathSync.native(dirname(resolve(process.argv[2]))), basename(process.argv[2])); assert(!within(realpathSync.native(packageRoot), realFuture(workspace)), 'Keep installed validation outside the source package.');
+const {positionals, values} = parseArgs({allowPositionals: true, options: {archive: {type: 'string'}, sha256: {type: 'string'}}});
+assert(positionals.length === 1 && Boolean(values.archive) === Boolean(values.sha256), 'Use <new external workspace> [--archive <file> --sha256 <digest>].');
+const workspace = join(realpathSync.native(dirname(resolve(positionals[0]))), basename(positionals[0])); assert(!within(realpathSync.native(packageRoot), realFuture(workspace)), 'Keep installed validation outside the source package.');
+const supplied = values.archive ? inspectArchive(resolve(values.archive), packageRoot, values.sha256) : undefined;
 const expectedLock = JSON.parse(readFileSync(join(packageRoot, 'npm-shrinkwrap.json'), 'utf8')), overrides = clearedOverrides(expectedLock);
 mkdirSync(workspace, {mode: 0o700});
 const env = {npm_config_cache: join(workspace, 'cache')}, npm = npmPath(); let sequence = 0;
@@ -19,9 +23,14 @@ function run(args, cwd) {
   const result = command(args, {cwd, env, log: join(workspace, `install-${++sequence}.log`), timeout: 600000});
   assert.equal(result.status, 'PASS', `Installation step ${sequence} failed; inspect its private log.`); return result.stdout;
 }
-const packed = JSON.parse(run([npm, 'pack', '--json', '--ignore-scripts', '--pack-destination', workspace], packageRoot));
-assert.equal(packed.length, 1); assert(packed[0].files.some(file => file.path === 'npm-shrinkwrap.json'), 'The distributed dependency lock is required.');
-const archive = join(workspace, packed[0].filename), install = join(workspace, 'installation'); mkdirSync(install);
+let archive;
+if (supplied) {
+  archive = join(workspace, supplied.name); copyFileSync(resolve(values.archive), archive, constants.COPYFILE_EXCL);
+} else {
+  const packed = JSON.parse(run([npm, 'pack', '--json', '--ignore-scripts', '--pack-destination', workspace], packageRoot));
+  assert.equal(packed.length, 1); archive = join(workspace, packed[0].filename);
+}
+const archiveMetadata = inspectArchive(archive, packageRoot, supplied?.sha256), install = join(workspace, 'installation'); mkdirSync(install);
 writeFileSync(join(install, 'package.json'), JSON.stringify({name: 'harness-installed-validation', version: '1.0.0', private: true, overrides}), {flag: 'wx'});
 run([npm, 'install', '--ignore-scripts', '--no-audit', '--no-fund', '--install-strategy=nested', archive], install);
 const installedRoot = realpathSync.native(join(install, 'node_modules/playwright-pom-harness'));
@@ -35,7 +44,7 @@ const {runChecks} = await import(pathToFileURL(join(installedRoot, 'scripts/ci/c
 const checks = runChecks(installedRoot, join(workspace, 'checks'));
 const packageUnchanged = JSON.stringify(snapshotInstalledPackage(install)) === JSON.stringify(before);
 const result = {version: 1, status: checks.status === 'PASS' && packageUnchanged ? 'PASS' : 'FAIL', platform: process.platform, node: process.version,
-  archive: {name: packed[0].filename, sha256: hash(readFileSync(archive)), integrity: packed[0].integrity, files: packed[0].files.length}, dependencies,
+  archive: archiveMetadata, dependencies,
   installedEntries: before.length, packageUnchanged, checks};
 writeFileSync(join(workspace, 'installed.json'), JSON.stringify(result, null, 2), {flag: 'wx', mode: 0o600});
 writeFileSync(join(workspace, 'paths.json'), JSON.stringify({workspace, installedRoot, archive}, null, 2), {flag: 'wx', mode: 0o600});

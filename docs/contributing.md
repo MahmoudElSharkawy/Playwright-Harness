@@ -84,7 +84,8 @@ the shrinkwrap from archives. Consumer npm 12 adoption flows are supported; read
 reports when shrinkwrap comparison is unavailable. See [getting started](getting-started.md).
 
 CI runs main pushes, PRs and dispatch with read-only repository permissions and
-commit-pinned actions. Windows/Linux check clean installs and the native browser;
+commit-pinned actions. It retains sanitized summaries, not harness release archives;
+temporary archives remain part of installed-package validation. Windows/Linux check clean installs and the native browser;
 Linux adds real SQL Server/PostgreSQL/sequential/parallel API fixtures. Uploaded summaries
 are sanitized, excluding credentials, auth, raw transcripts and traces. Native commands:
 
@@ -163,5 +164,8 @@ outcomes with exact counts, prerequisites, omitted gates and independent finding
 Use [provenance](PROVENANCE.md), [security](../SECURITY.md) and required notices for
 dependency/package/artifact changes. Local validation does not authorize external
 delivery. The npm package remains private. Tagging/publishing/releases require owner
-authorization. Follow [releasing](RELEASING.md), attaching only archive/checksum from
-a passing main workflow release-archive artifact. Green checks alone do not authorize release.
+authorization. Prepare a manual version PR, merge it, then dispatch `Harness release`
+on `main` as described in [releasing](RELEASING.md). That dispatch authorizes a version
+tag and draft containing the one archive/checksum pair validated by every required
+job. Only the draft job has repository write permission. Publish the reviewed draft
+with the owner's authorization; green ordinary CI does not create or publish a release.

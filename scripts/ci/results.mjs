@@ -69,6 +69,7 @@ export function completeNativeProof(kind, proof, recovery, assessment, cleanup) 
       cleanup?.ownedDatabasesRemoved === true && cleanup?.fixtureServersClosed === true);
 }
 export const requiredChecks = Object.freeze(['syntax', 'json', 'links', 'privacy', 'secrets', 'provenance', 'publication', 'contracts', 'conventions', 'generation-conventions', 'workflow-conventions', 'types', 'fetch', 'tests']);
+export const requiredConsumerFlows = Object.freeze(['C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'C7', 'C8', 'C9', 'F1', 'F2', 'F3']);
 export function testCounts(output) {
   return Object.fromEntries(['tests', 'pass', 'fail', 'cancelled', 'skipped', 'todo'].map(name => [name, Number(output.match(new RegExp(`^# ${name} (\\d+)$`, 'm'))?.[1] ?? NaN)]));
 }

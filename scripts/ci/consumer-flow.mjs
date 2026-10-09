@@ -8,6 +8,7 @@ import {join, resolve, dirname, basename} from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {gunzipSync} from 'node:zlib';
 import {command, npmPath, hash} from './process.mjs';
+import {requiredConsumerFlows} from './results.mjs';
 import {packageRoot} from '../lib/consumer-paths.mjs';
 import {within, realFuture} from '../lib/skill-roots.mjs';
 import {snapshotInstalledPackage} from '../lib/host-proof-files.mjs';
@@ -259,7 +260,7 @@ flow('C8', 'An empty folder under a parent package.json needs an explicit projec
   assert.equal(check(root).exit, 0);
 });
 
-const expected = ['C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'C7', 'C8', 'C9', 'F1', 'F2', 'F3'];
+const expected = requiredConsumerFlows;
 const status = flows.length === expected.length && flows.every(item => item.status === 'PASS') ? 'PASS' : 'FAIL';
 const result = {version: 1, status, platform: process.platform, node: process.version, npm: npmVersion, archive: {name, sha256: hash(readFileSync(archive))}, flows};
 writeFileSync(join(workspace, 'consumer-flow.json'), JSON.stringify(result, null, 2) + '\n', {flag: 'wx', mode: 0o600});

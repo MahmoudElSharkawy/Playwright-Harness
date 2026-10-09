@@ -1,39 +1,47 @@
 # Releasing
 
-A release publishes one file pair on GitHub: `playwright-pom-harness-<version>.tgz` and
-`playwright-pom-harness-<version>.tgz.sha256`. They are exactly the archive and checksum
-that the `Harness validation` workflow validated on `main`. Users and AIs resolve the
-latest release tag and download both files from that tag ([Get started](../README.md#get-started)).
+Ordinary `Harness validation` runs check temporary packages and retain sanitized
+summaries. They do not upload harness archives, bump versions, tag commits or create
+releases. Merge changes as they become ready; collect pending changelog entries under
+`## Unreleased` until a release is needed.
+
+Manually dispatched `Harness release` builds one npm 11 archive on `main`, validates
+those exact bytes on Windows and Linux, and creates a **draft** GitHub release with
+`playwright-pom-harness-<version>.tgz` and its `.tgz.sha256` file. Users and AIs continue
+downloading both files from one published tag ([Get started](../README.md#get-started)).
 The npm package stays private and is never published to the registry.
 
-Tagging, pushing the tag and creating the release require the owner's explicit
-authorization. A green workflow is not that authorization ([contributing and validation](contributing.md)).
+Dispatching `Harness release` authorizes creating the version tag and draft. It does
+not publish the draft. Publication requires the owner's explicit authorization;
+green validation alone is not publication authorization ([contributing](contributing.md)).
 
-## 1. Prepare the version on a feature branch
+## 1. Prepare a release PR on the ongoing feature branch
 
 - Set the new version in `VERSION`, `package.json`, `.claude-plugin/plugin.json`, and
   the root `version` fields of `npm-shrinkwrap.json`.
-- Add `## <version> — <title>` to `CHANGELOG.md`, with an `### Upgrade actions` list.
+- Move pending changes into `## <version> — <title>` in `CHANGELOG.md`, with an
+  `### Upgrade actions` list (at least one item, even when no action is needed).
   Setup shows that list to everyone who updates from an earlier version.
 - If the managed instruction block changed, add its digest to `scripts/managed-digests.json`,
   so later versions can replace it.
 - `npm run check:contracts` enforces the version, the upgrade actions and the block digest.
+- Regular development PRs do not need a version bump.
 - Pack with npm 11, the npm bundled with Node 24. npm 12 leaves `npm-shrinkwrap.json` out of
   the archive, and the release needs it. CI packs the release archive with npm 11.
 
-## 2. Validate locally
+## 2. Validate and merge
 
 ```sh
 npm run check:ci
-npm run test:installed -- <new external folder>
 ```
 
-The consumer flows are optional locally. The release pull request's `Harness validation`
+Installed validation and consumer flows are optional locally. The release pull request's `Harness validation`
 run executes all of them on Windows and Linux with npm 11 and npm 12; when it passes, a
 local run only repeats them. Run them locally when CI is unavailable, or to check a
 change to setup, adoption or packaging before pushing:
 
 ```sh
+npm run test:installed -- <new external folder>
 node scripts/ci/consumer-flow.mjs <new external folder>
 ```
 
@@ -44,7 +52,38 @@ old layout, stop on a preflight conflict, recover from a failure after install, 
 CI pipeline, and adopt a folder under a parent `package.json`. They need registry access
 and about 2 GB of free disk space, and skip browser downloads.
 
-## 3. Pre-publication checklist
+Merge the reviewed release PR and wait for every `Harness validation` job on `main`
+to pass: Windows/Linux installed-package and native checks, and npm 11/npm 12 consumer
+flows. Missing or unexpectedly skipped checks are incomplete.
+
+## 3. Run the release build
+
+In **Actions → Harness release → Run workflow**, select `main` and enter the merged
+version as `X.Y.Z`, without `v`. The dispatch commit stays fixed even if `main` moves.
+CLI equivalent:
+
+```sh
+gh workflow run release.yml --ref main -f version=<version>
+```
+
+The workflow rejects other branches, inconsistent versions, missing upgrade actions,
+and existing version tags/releases before packing. It verifies npm major 11; npm 12
+is used for consumer compatibility checks, not release packing. Every release check
+uses the same candidate archive.
+
+The `release-candidate` artifact and sanitized summaries are retained for seven days.
+A candidate from a failed run is not a validated release. The draft job requires all
+four matrix jobs plus complete, matching evidence before it creates a tag or draft.
+Raw logs, credentials, native transcripts and traces are not uploaded.
+
+## 4. Review the draft and publish
+
+Open the draft URL in the workflow summary. Confirm the version, source commit,
+workflow link, changelog notes and two assets. Download both files and verify:
+
+```sh
+sha256sum -c playwright-pom-harness-<version>.tgz.sha256
+```
 
 From [provenance](PROVENANCE.md):
 
@@ -54,27 +93,18 @@ From [provenance](PROVENANCE.md):
 - Resolve outstanding security remediation.
 - Obtain the owner's explicit publication authorization.
 
-## 4. Merge and wait for `main`
+With the owner's publication authorization, publish the existing draft in GitHub
+after the release workflow finishes successfully, and mark the stable release as
+latest. Never rebuild or replace its validated archive.
 
-Merge the pull request. On `main`, `Harness validation` must pass every job: installed
-package and consumer flows on Windows and Linux, and the npm 12 consumer flows. Treat
-unavailable or skipped checks as failures.
+If draft creation or an upload fails, rerun the **failed jobs** in the same workflow
+run while its artifacts are available. Missing uploads can finish when the run,
+commit and existing asset bytes match; conflicting files are never overwritten and
+published releases are never modified. A full new run stops if the version tag/draft
+already exists. Resolve conflicting or expired partial drafts explicitly; the
+workflow does not delete tags or releases automatically.
 
-## 5. Publish the validated files
-
-Download the `release-archive` artifact from that `main` run, verify the checksum, then,
-with the owner's go-ahead, tag the validated commit and attach exactly those files:
-
-```sh
-sha256sum -c playwright-pom-harness-<version>.tgz.sha256
-git tag v<version> <validated commit> && git push origin v<version>
-gh release create v<version> --verify-tag --latest --title "<version>" --notes-file <release notes> \
-  playwright-pom-harness-<version>.tgz playwright-pom-harness-<version>.tgz.sha256
-```
-
-Use the CHANGELOG section as the release notes. Never rebuild the archive for the release.
-
-## 6. Verify the published release
+## 5. Verify the published release
 
 - From an empty folder, follow "Without AI" in the README with the published assets.
 - Manual check for each release: in that project, Claude Code and Codex each discover
