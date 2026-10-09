@@ -1,5 +1,5 @@
-import {existsSync, readFileSync, readdirSync, appendFileSync} from 'node:fs';
-import {join} from 'node:path';
+import {existsSync, readFileSync, readdirSync, appendFileSync, realpathSync} from 'node:fs';
+import {join, relative} from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {consumerRoots, consumerPath} from './consumer-paths.mjs';
 import {discoveryEntry} from './skill-roots.mjs';
@@ -28,15 +28,30 @@ export function runCheck({projectRoot, packageRoot, addEnvKeys = false}) {
   const manifest = existsSync(join(projectRoot, 'package.json')) ? readJson(join(projectRoot, 'package.json')) : {};
   const lock = existsSync(join(projectRoot, 'package-lock.json')) ? readJson(join(projectRoot, 'package-lock.json')) : undefined;
 
-  // Skills: every listed link resolves into this installation.
+  // Skills: validate declared managed links; setup can intentionally retain legacy folders.
   const linksFile = consumerPath(roots, LINKS_FILE);
   if (!existsSync(linksFile)) feature('skills (Claude and Codex)', UNAVAILABLE, 'setup has not run in this project');
   else {
-    const broken = readJson(linksFile).links.filter(rel => {
-      const entry = discoveryEntry(join(projectRoot, rel)), skill = join(packageRoot, '.agents/skills', rel.split('/').pop());
-      return entry.kind !== 'link' || !entry.live || !existsSync(join(skill, 'SKILL.md'));
-    });
-    feature('skills (Claude and Codex)', broken.length ? UNAVAILABLE : READY, broken.length ? `${broken.length} links missing or broken; run setup` : undefined);
+    let links;
+    try {
+      const record = readJson(linksFile);
+      // Keep the version-1 contract used by adoption, including partial manifests.
+      if (record?.version !== 1 || !Array.isArray(record.links) || record.links.some(path => typeof path !== 'string' || !/^\.(?:agents|claude)\/skills\/[a-z][a-z0-9-]*$/.test(path))) throw new Error();
+      links = record.links;
+    } catch {
+      errors.push(`${LINKS_FILE} is invalid; review the harness link record and run setup.`);
+      feature('skills (Claude and Codex)', UNAVAILABLE, 'invalid harness link record; run setup');
+    }
+    if (links) {
+      const broken = links.filter(rel => {
+        try {
+          const entry = discoveryEntry(join(projectRoot, rel)), skill = join(packageRoot, '.agents/skills', rel.split('/').pop());
+          // relative compares resolved paths with the platform's casing rules.
+          return entry.kind !== 'link' || !entry.live || !existsSync(join(skill, 'SKILL.md')) || relative(realpathSync(skill), realpathSync(entry.target)) !== '';
+        } catch {return true;}
+      });
+      feature('skills (Claude and Codex)', broken.length ? UNAVAILABLE : READY, broken.length ? `${broken.length} links missing or broken; run setup` : undefined);
+    }
   }
 
   // The committed archive: present, matching the lockfile, tracked so teammates and CI can install it.
