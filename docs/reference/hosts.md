@@ -23,6 +23,24 @@ Discovery alone is not behavioral proof. A host must actually load/read the cano
 skill and references, execute the requested task and leave package content unchanged.
 Final prose claiming reads does not replace successful native receipts with contents.
 
+## Optional Graphify evaluation
+
+A consumer project may evaluate standalone Graphify for cross-file relationship
+questions that remain costly with focused source search. Compare the same real tasks:
+find a business method to reuse, identify callers affected by a change, and trace a
+test through its business methods to utilities. Check source references, missed
+relationships, setup effort and graph refresh effort.
+
+For an evaluation, follow the
+[official setup guidance](https://github.com/Graphify-Labs/graphify#install), selecting
+project-scoped registration and reviewing its instruction and hook changes. Verify
+graph results against current files. Generated indexes are not approved knowledge;
+review and sanitization are required before promoting any facts. POM conventions and
+review/execution gates continue to apply.
+
+Graphify's absence never affects harness installation or readiness. Harness setup
+does not install Graphify or configure an adapter or hooks for it.
+
 ## Optional hooks and permissions
 
 [host.mjs](../../scripts/hooks/host.mjs) translates native events into the advisory
