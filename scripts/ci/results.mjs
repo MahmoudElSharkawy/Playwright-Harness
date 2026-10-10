@@ -1,6 +1,7 @@
 // CI evidence checks only. These never compute a scenario verdict.
 import {completeBrowserChecks, requiredBrowserChecks} from '../probes/browser-checks.mjs';
 import {completeExecuteChecks, requiredExecuteChecks, retryProbeDiagnostic} from '../probes/execute-checks.mjs';
+import {parallelDiagnostic} from '../probes/parallel-diagnostics.mjs';
 
 export function browserDiagnostics(assessment) {
   return Array.isArray(assessment?.checks) ? assessment.checks
@@ -14,11 +15,12 @@ export function executeDiagnostics(assessment) {
     return result;
   }) : [];
 }
-export function nativeSummaryFields(kind, assessment, cleanup) {
+export function nativeSummaryFields(kind, assessment, cleanup, failure) {
   const numeric = (input, names) => Object.fromEntries(names.filter(name => Number.isFinite(input?.[name]) && input[name] >= 0).map(name => [name, input[name]]));
   if (kind === 'execute') return {diagnosticsLatencyMs: numeric(assessment?.diagnosticsLatencyMs, ['end', 'per-step'])};
   if (kind !== 'parallel') return {};
-  return {checks: (assessment?.counts ?? []).slice(0, 2).map(item => numeric(item, ['scenarios', 'assertions', 'evidence'])),
+  const diagnostic = parallelDiagnostic(failure);
+  return {checks: (assessment?.counts ?? []).slice(0, 2).map(item => numeric(item, ['scenarios', 'assertions', 'evidence'])), ...(diagnostic ? {failure: diagnostic} : {}),
     ...(cleanup ? {cleanup: {ownedDatabasesRemoved: cleanup.ownedDatabasesRemoved === true, fixtureServersClosed: cleanup.fixtureServersClosed === true}} : {})};
 }
 /** Only known source filenames and numeric locations leave the private TAP log. */
@@ -69,6 +71,7 @@ export function completeNativeProof(kind, proof, recovery, assessment, cleanup) 
       cleanup?.ownedDatabasesRemoved === true && cleanup?.fixtureServersClosed === true);
 }
 export const requiredChecks = Object.freeze(['syntax', 'json', 'links', 'privacy', 'secrets', 'provenance', 'publication', 'contracts', 'conventions', 'generation-conventions', 'workflow-conventions', 'types', 'fetch', 'tests']);
+export const requiredConsumerFlows = Object.freeze(['C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'C7', 'C8', 'C9', 'F1', 'F2', 'F3']);
 export function testCounts(output) {
   return Object.fromEntries(['tests', 'pass', 'fail', 'cancelled', 'skipped', 'todo'].map(name => [name, Number(output.match(new RegExp(`^# ${name} (\\d+)$`, 'm'))?.[1] ?? NaN)]));
 }

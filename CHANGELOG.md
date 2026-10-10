@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+### Changes
+
+- Separate ordinary CI validation from on-demand release builds. A manually prepared
+  version PR and dispatched release workflow validate one archive across every
+  platform and create a draft GitHub release; publication remains manual.
+- Stop stale release candidates when workflow files differ from the current default
+  branch, with a fresh-run instruction. Create the draft before its tag so a rejected
+  draft request cannot leave an orphan version tag; preserve matching upload retries.
+- Retain sanitized failure stages and source coordinates for the native parallel
+  CI proof, including startup failures whose cleanup also fails.
+- Use the Google Docker Hub cache for Linux CI fixtures with unchanged image
+  digests to avoid anonymous image pull limits.
+
 ## 3.3.0 — Execution test folder
 
 ### Upgrade actions

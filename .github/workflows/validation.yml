@@ -5,6 +5,13 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      archive_artifact:
+        description: Same-run release candidate artifact; empty for ordinary validation.
+        required: false
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -30,19 +37,71 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
+          ref: ${{ github.sha }}
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: '24'
           package-manager-cache: false
-      - name: Validate the distributed archive and its installed dependencies
+      - name: Download the release candidate
+        if: inputs.archive_artifact != ''
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ${{ inputs.archive_artifact }}
+          path: ${{ runner.temp }}/release-candidate
+      - name: Validate a temporary archive and its installed dependencies
+        if: inputs.archive_artifact == ''
         run: node scripts/ci/installed.mjs "${{ runner.temp }}/harness-installed"
+      - name: Validate the supplied release archive and its installed dependencies
+        if: inputs.archive_artifact != ''
+        run: node scripts/ci/release.mjs installed "${{ runner.temp }}/release-candidate" "${{ runner.temp }}/harness-installed"
+      - name: Use the Google Docker Hub cache for native fixtures
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          task_client="$RUNNER_TEMP/harness-docker-client"
+          mkdir "$task_client"
+          printf '{"auths":{}}\n' > "$task_client/config.json"
+          printf 'DOCKER_CONFIG=%s\n' "$task_client" >> "$GITHUB_ENV"
+          task_config="$RUNNER_TEMP/harness-docker-daemon.json"
+          if [ -f /etc/docker/daemon.json ]; then
+            sudo cat /etc/docker/daemon.json | jq '.["registry-mirrors"] = (["https://mirror.gcr.io"] + ((.["registry-mirrors"] // []) | map(select(. != "https://mirror.gcr.io"))))' > "$task_config"
+          else
+            jq -n '{"registry-mirrors": ["https://mirror.gcr.io"]}' > "$task_config"
+          fi
+          sudo install -m 600 "$task_config" /etc/docker/daemon.json
+          sudo systemctl restart docker
+      - name: Pull the pinned native database images
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import {execFileSync} from 'node:child_process';
+          import {readFileSync} from 'node:fs';
+          import {join} from 'node:path';
+          import {pathToFileURL} from 'node:url';
+          import {setTimeout as pause} from 'node:timers/promises';
+          const paths = JSON.parse(readFileSync(join(process.env.RUNNER_TEMP, 'harness-installed/paths.json'), 'utf8'));
+          const {images} = await import(pathToFileURL(join(paths.installedRoot, 'harness-tests/fixtures/host-databases.mjs')));
+          const mirrors = JSON.parse(execFileSync('docker', ['info', '--format', '{{json .RegistryConfig.Mirrors}}'], {encoding: 'utf8'}));
+          assert(Array.isArray(mirrors) && mirrors.some(mirror => mirror === 'https://mirror.gcr.io' || mirror === 'https://mirror.gcr.io/'), 'Docker must load the configured public cache.');
+          for (const image of Object.values(images)) {
+            for (let attempt = 1; attempt <= 3; attempt++) {
+              try {execFileSync('docker', ['pull', image], {stdio: 'inherit', timeout: 180000}); break;}
+              catch (error) {if (attempt === 3) throw error; await pause(attempt * 5000);}
+            }
+          }
+          NODE
+      - name: Prove API, SQL Server, PostgreSQL and bounded execution on Linux
+        if: runner.os == 'Linux'
+        run: node scripts/ci/native.mjs "${{ runner.temp }}/harness-installed" parallel
       - name: Prove native browser behavior from the installed archive
         run: node scripts/ci/native.mjs "${{ runner.temp }}/harness-installed" browser
       - name: Prove manual execution and recovery from the installed archive
         run: node scripts/ci/native.mjs "${{ runner.temp }}/harness-installed" execute
-      - name: Prove API, SQL Server, PostgreSQL and bounded execution on Linux
-        if: runner.os == 'Linux'
-        run: node scripts/ci/native.mjs "${{ runner.temp }}/harness-installed" parallel
       - name: Prove cleanup after cooperative and forced timeouts
         run: node "${{ runner.temp }}/harness-installed/installation/node_modules/playwright-pom-harness/scripts/ci/timeout-proof.mjs" "${{ runner.temp }}/harness-timeout" ${{ runner.os == 'Linux' && 'mixed' || 'browser' }}
       # Last, so the timing-sensitive native proofs above run before its hundreds of npm and git processes.
@@ -62,14 +121,6 @@ jobs:
             ${{ runner.temp }}/harness-consumers/consumer-flow.json
           if-no-files-found: error
           retention-days: 7
-      - name: Retain the validated release archive and its checksum
-        if: runner.os == 'Linux'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: release-archive
-          path: ${{ runner.temp }}/harness-consumers/release/
-          if-no-files-found: error
-          retention-days: 30
 
   npm12:
     name: Consumer flows on npm 12 (${{ matrix.os }})
@@ -90,16 +141,27 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
+          ref: ${{ github.sha }}
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: '24'
           package-manager-cache: false
       # Releases are packed with npm 11; this job checks that consumers on npm 12 can use them.
       - name: Pack the archive with the bundled npm 11
+        if: inputs.archive_artifact == ''
         run: |
           mkdir -p "$RUNNER_TEMP/harness-archive"
           npm --version
           npm pack --ignore-scripts --pack-destination "$RUNNER_TEMP/harness-archive"
+      - name: Download the release candidate
+        if: inputs.archive_artifact != ''
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ${{ inputs.archive_artifact }}
+          path: ${{ runner.temp }}/harness-archive
+      - name: Verify the candidate identity and checksum
+        if: inputs.archive_artifact != ''
+        run: node scripts/ci/release.mjs verify "$RUNNER_TEMP/harness-archive"
       - name: Install npm 12 beside the bundled npm
         run: npm install --prefix "$RUNNER_TEMP/npm12" --no-audit --no-fund npm@12
       - name: Install, update, clone, roll back and fail in fresh consumer projects with npm 12

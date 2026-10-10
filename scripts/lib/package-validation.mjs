@@ -9,7 +9,7 @@ const ROOT_FILES = new Set(['README.md', 'AGENTS.md', 'CHANGELOG.md', 'VERSION',
 const SOURCE_ONLY_FILES = new Set(['CLAUDE.md', '.claude/settings.json']);
 const SOURCE_ONLY_PREFIXES = ['.claude/skills/'];
 const PUBLIC_PREFIXES = ['scripts/', 'harness-tests/', 'docs/', 'examples/', '.agents/skills/'];
-const EXTRA_FILES = new Set(['.claude-plugin/plugin.json', '.github/workflows/validation.yml', 'resources/Queries/README.md', 'resources/apisCollections/README.md']);
+const EXTRA_FILES = new Set(['.claude-plugin/plugin.json', '.github/workflows/validation.yml', '.github/workflows/release.yml', 'resources/Queries/README.md', 'resources/apisCollections/README.md']);
 
 export function inventory(root) {
   root = realpathSync(root);
@@ -98,6 +98,8 @@ export function secretFindings(file, text) {
 const PUBLIC_HOSTS = new Set(['github.com', 'api.github.com', 'raw.githubusercontent.com', 'playwright.dev', 'nodejs.org', 'www.npmjs.com', 'registry.npmjs.org', 'learn.microsoft.com', 'code.claude.com', 'learn.chatgpt.com', 'developers.openai.com', 'json.schemastore.org', 'www.w3.org', 'www.typescriptlang.org', 'allurereport.org', 'mit-license.org', 'opensource.org', 'aka.ms', 'go.microsoft.com', 'node-postgres.com', 'www.postgresql.org']);
 // Reviewed upstream funding links present in the dependency lockfile; no host-wide exception.
 const PUBLIC_METADATA_URLS=new Set(['https://www.patreon.com/feross','https://feross.org/support','https://dotenvx.com/','https://opencollective.com/fastify','https://opencollective.com/express','https://opencollective.com/preact','https://paulmillr.com/funding/']);
+// Reviewed Google-managed CI cache and its official documentation; no host-wide exception.
+const PUBLIC_CI_URLS = new Set(['https://mirror.gcr.io', 'https://mirror.gcr.io/', 'https://docs.cloud.google.com/artifact-registry/docs/pull-cached-dockerhub-images']);
 export function privacyFindings(file, text) {
   const findings = [];
   const push = (line, rule) => findings.push({ file, line, rule });
@@ -121,7 +123,7 @@ export function privacyFindings(file, text) {
       if (host === 'dev.azure.com') {
         const organization=value.replace(/^https?:\/\/[^/]+\//,'').split('/')[0];
         if (!organization.startsWith('${') && !/^(?:your-org|example-org)$/.test(organization)) push(n, 'organization-url');
-      } else if (!synthetic && !PUBLIC_HOSTS.has(host) && !PUBLIC_METADATA_URLS.has(url.href)) push(n, 'unreviewed-url');
+      } else if (!synthetic && !PUBLIC_HOSTS.has(host) && !PUBLIC_METADATA_URLS.has(url.href) && !PUBLIC_CI_URLS.has(value)) push(n, 'unreviewed-url');
     }
   });
   if (/\.jsonl$/.test(file) && text.trim()) push(1, 'populated-runtime-history');

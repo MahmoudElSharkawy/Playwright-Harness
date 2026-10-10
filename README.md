@@ -78,7 +78,7 @@ Playwright-Harness/
 ├── examples/                       # Starter source and illustrative POM code
 ├── resources/                      # Team-library contracts
 ├── docs/                           # Task guides, references and historical archive
-├── .github/workflows/              # Harness validation CI
+├── .github/workflows/              # Automatic validation and on-demand draft releases
 ├── AGENTS.md / CLAUDE.md            # Repository and agent instructions
 ├── package.json / npm-shrinkwrap.json # Package interface and locked dependencies
 └── VERSION / CHANGELOG.md          # Release version and upgrade actions

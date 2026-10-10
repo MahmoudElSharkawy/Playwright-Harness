@@ -10,22 +10,15 @@ import {NATIVE_CLI_PIN} from '../lib/browser/native-cli.mjs';
 import {INSTRUCTION_BLOCK} from '../lib/adoption.mjs';
 import {workflowCases} from '../../harness-tests/fixtures/workflow.mjs';
 import {generationCases} from '../../harness-tests/fixtures/generation.mjs';
+import {checkVersionContracts} from './version.mjs';
 
 export function checkContracts(root = resolve(import.meta.dirname, '../..')) {
   const json = path => JSON.parse(readFileSync(join(root, path), 'utf8'));
-  const pkg = json('package.json'), lock = json('npm-shrinkwrap.json'), plugin = json('.claude-plugin/plugin.json');
-  assert.equal(pkg.version, readFileSync(join(root, 'VERSION'), 'utf8').trim()); assert.equal(plugin.version, pkg.version);
-  assert.equal(lock.version, pkg.version); assert.equal(lock.packages[''].version, pkg.version); assert.deepEqual(lock.packages[''].dependencies, pkg.dependencies);
-  assert.equal(pkg.private, true, 'Release requires a separate explicit decision.'); assert.deepEqual(plugin.skills, ['./.agents/skills/']);
+  const {pkg, lock} = checkVersionContracts(root);
   // One pinned native CLI graph: the runtime check, the package dependency, the example framework and the development spike.
   const examples = json('examples/package.json'), spike = json('scripts/spikes/playwright-cli/package.json');
   for (const pinned of [pkg.dependencies['@playwright/cli'], examples.devDependencies['@playwright/cli'], spike.dependencies['@playwright/cli']]) assert.equal(pinned, NATIVE_CLI_PIN.cli, 'The native CLI pin differs between package manifests.');
   for (const name of ['playwright', 'playwright-core']) assert.equal(lock.packages[`node_modules/${name}`]?.version, NATIVE_CLI_PIN.playwright, 'The locked native Playwright graph differs from the runtime pin.');
-  // The newest released version tells upgraders what to do; setup shows that list.
-  const changelog = readFileSync(join(root, 'CHANGELOG.md'), 'utf8').replaceAll('\r\n', '\n');
-  const newest = changelog.match(/^## (\d+\.\d+\.\d+)\b.*\n([\s\S]*?)(?=^## \d+\.\d+\.\d+\b|(?![\s\S]))/m);
-  assert.equal(newest?.[1], pkg.version, 'The newest CHANGELOG version heading must be the package version.');
-  assert.match(newest[2], /^### Upgrade actions\n+- \S/m, 'The newest CHANGELOG version needs an "### Upgrade actions" list.');
   // A later version can replace this block only if its digest is recorded as released.
   assert(json('scripts/managed-digests.json').instructionBlocks.includes(createHash('sha256').update(INSTRUCTION_BLOCK).digest('hex')),
     'Record the current managed instruction block in scripts/managed-digests.json.');

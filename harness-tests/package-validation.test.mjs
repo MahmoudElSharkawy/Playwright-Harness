@@ -69,6 +69,18 @@ test('privacy distinguishes public references from private coordinates',()=>{
  assert.equal(privacyFindings('guide.md','https://playwright.dev/docs/intro https://example.test/demo').length,0);
  for(const text of [['https:','','dev.azure.com','private-organization','project'].join('/'),'10.'+'25.30.40','C:'+'\\Users\\LocalOwner\\project']) assert(privacyFindings('guide.md',text).length>0);
 });
+test('reviewed CI cache references do not exempt other upstream coordinates',()=>{
+ const mirror='https://mirror.gcr.io', documentation='https://docs.cloud.google.com/artifact-registry/docs/pull-cached-dockerhub-images';
+ for(const url of [mirror, `${mirror}/`, documentation]) assert.deepEqual(privacyFindings('guide.md',url),[]);
+ for(const url of [
+  `${mirror}/unreviewed`, `${mirror}?namespace=unreviewed`, `${documentation}/unreviewed`, `${documentation}?project=unreviewed`, new URL('/unreviewed',documentation).href,
+  `${mirror}:8443?namespace=unreviewed`, documentation.replace('.com/', '.com:8443/'), `${mirror}/unreviewed/..`, `${mirror}/unreviewed/%2e%2e`
+ ]) {
+  assert(privacyFindings('guide.md',url).some(f=>f.rule==='unreviewed-url'));
+ }
+ const authenticated=new URL(mirror);authenticated.username='synthetic-user';
+ assert(privacyFindings('guide.md',authenticated.href).some(f=>f.rule==='url-userinfo'));
+});
 test('empty runtime histories pass but populated histories fail',()=>{
  assert.equal(privacyFindings('events.jsonl','\n').length,0);assert.equal(privacyFindings('events.jsonl','{"event":"run"}').length,1);
 });
