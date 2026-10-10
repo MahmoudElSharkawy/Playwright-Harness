@@ -12,7 +12,7 @@ import {command} from '../scripts/ci/process.mjs';
 import {requiredChecks, requiredConsumerFlows} from '../scripts/ci/results.mjs';
 import {requiredBrowserChecks} from '../scripts/probes/browser-checks.mjs';
 import {requiredExecuteChecks} from '../scripts/probes/execute-checks.mjs';
-import {releaseContext, releaseVersion, preflightRelease, prepareCandidate, readCandidate, verifyReleaseEvidence, ensureDraft, createDraft} from '../scripts/ci/release.mjs';
+import {releaseContext, releaseVersion, checkWorkflowCompatibility, preflightRelease, prepareCandidate, readCandidate, verifyReleaseEvidence, ensureDraft, createDraft} from '../scripts/ci/release.mjs';
 
 function temporary(t) {
   const base = realpathSync(tmpdir()), root = mkdtempSync(join(base, 'harness-release-'));
@@ -157,10 +157,18 @@ test('release evidence requires all four jobs and the complete native and consum
 });
 
 function fakeGithub() {
-  const state = {ref: undefined, release: undefined, assets: [], writes: [], failUpload: false, releases: undefined};
+  const state = {ref: undefined, release: undefined, assets: [], writes: [], failUpload: false, releases: undefined,
+    head: context.commit, workflowTree: '3'.repeat(40), defaultBranch: 'main'};
   const client = {
     request(method, endpoint, body) {
       if (method !== 'GET') state.writes.push({method, endpoint, body});
+      if (endpoint === `repos/${context.repository}`) return {default_branch: state.defaultBranch};
+      if (endpoint.includes('/git/ref/heads/')) return {object: {type: 'commit', sha: state.head}};
+      if (endpoint.includes('/git/trees/')) {
+        const ref = endpoint.split('/').at(-1), candidateTree = ref === context.commit || ref === '4'.repeat(40);
+        return {truncated: false, tree: [{path: [context.commit, state.head].includes(ref) ? '.github' : 'workflows', type: 'tree',
+          sha: [context.commit, state.head].includes(ref) ? (candidateTree ? '4'.repeat(40) : '5'.repeat(40)) : candidateTree ? '3'.repeat(40) : state.workflowTree}]};
+      }
       if (endpoint.includes('/releases?')) return state.releases ?? (state.release ? [structuredClone(state.release)] : []);
       if (endpoint.includes('/git/ref/tags/')) return structuredClone(state.ref);
       if (method === 'POST' && endpoint.endsWith('/git/refs')) {state.ref = {object: {type: 'commit', sha: body.sha}}; return state.ref;}
@@ -193,8 +201,69 @@ test('draft creation tags the exact commit, uploads only validated bytes and nev
   assert.deepEqual(state.assets.map(asset => asset.name), [candidate.archive.name, `${candidate.archive.name}.sha256`]);
   assert.equal(sha256(join(directory, candidate.archive.name)), result.sha256);
   assert.equal(state.writes.filter(write => write.method === 'POST').length, 2);
+  assert.deepEqual(state.writes.filter(write => write.method === 'POST').map(write => write.endpoint), [`repos/${context.repository}/releases`, `repos/${context.repository}/git/refs`]);
   assert(state.writes.every(write => !['PATCH', 'DELETE'].includes(write.method)));
   state.writes.length = 0; ensureDraft(candidate, directory, releaseVersion(packageRoot, version), client); assert.deepEqual(state.writes, []);
+});
+
+test('workflow changes on the default branch reject stale candidates before packing or GitHub mutations', () => {
+  const {state, client} = fakeGithub(); state.head = '2'.repeat(40); state.workflowTree = '6'.repeat(40);
+  assert.throws(() => preflightRelease(packageRoot, version, context, client), /Start a fresh Harness release run on main/);
+  assert.throws(() => ensureDraft(candidate, directory, 'Synthetic notes.', client), /Workflow files differ/);
+  assert.equal(state.ref, undefined); assert.equal(state.release, undefined); assert.deepEqual(state.writes, []);
+});
+
+test('ordinary default branch changes preserve the validated commit and archive', () => {
+  const {state, client} = fakeGithub(); state.head = '2'.repeat(40);
+  ensureDraft(candidate, directory, 'Synthetic notes.', client);
+  assert.equal(state.ref.object.sha, context.commit); assert.equal(state.release.target_commitish, context.commit);
+  assert.equal(state.assets[0].bytes.compare(readFileSync(join(directory, candidate.archive.name))), 0);
+});
+
+test('workflow inspection fails closed on truncated, malformed or missing candidate trees', () => {
+  for (const tree of [{truncated: true, tree: []}, {truncated: false}, {truncated: false, tree: []},
+    {truncated: false, tree: [{path: '.github', type: 'blob', sha: '4'.repeat(40)}]}]) {
+    const {state, client} = fakeGithub(); state.head = '2'.repeat(40); const request = client.request;
+    client.request = (method, endpoint, body) => endpoint.includes('/git/trees/') ? tree : request(method, endpoint, body);
+    assert.throws(() => ensureDraft(candidate, directory, 'Synthetic notes.', client)); assert.deepEqual(state.writes, []);
+  }
+});
+
+test('workflow compatibility inspects the actual default branch with an encoded ref name', () => {
+  const {state, client} = fakeGithub(); state.defaultBranch = 'release/main'; const requests = [], request = client.request;
+  client.request = (method, endpoint, body) => {requests.push(endpoint); return request(method, endpoint, body);};
+  checkWorkflowCompatibility(context, client); assert(requests.includes(`repos/${context.repository}/git/ref/heads/release%2Fmain`));
+});
+
+test('a rejected draft request leaves no new tag and allows a fresh preflight', () => {
+  const {state, client} = fakeGithub(), request = client.request;
+  client.request = (method, endpoint, body) => {
+    if (method === 'POST' && endpoint.endsWith('/releases')) throw new Error('Synthetic GitHub permission denial.');
+    return request(method, endpoint, body);
+  };
+  assert.throws(() => ensureDraft(candidate, directory, 'Synthetic notes.', client), /permission denial/);
+  assert.equal(state.ref, undefined); assert.equal(state.release, undefined); assert.deepEqual(state.writes, []);
+  assert.match(preflightRelease(packageRoot, version, context, client), /Upgrade actions/);
+});
+
+test('workflow drift during draft creation stops before tag creation', () => {
+  const {state, client} = fakeGithub(), request = client.request;
+  client.request = (method, endpoint, body) => {
+    const result = request(method, endpoint, body);
+    if (method === 'POST' && endpoint.endsWith('/releases')) {state.head = '2'.repeat(40); state.workflowTree = '6'.repeat(40);}
+    return result;
+  };
+  assert.throws(() => ensureDraft(candidate, directory, 'Synthetic notes.', client), /Start a fresh Harness release run on main/);
+  assert.equal(state.ref, undefined); assert.equal(state.release.draft, true);
+  assert.deepEqual(state.writes.map(write => write.endpoint), [`repos/${context.repository}/releases`]);
+});
+
+test('matching draft uploads can resume after default branch workflows change', () => {
+  const {state, client} = fakeGithub(); state.failUpload = true;
+  assert.throws(() => ensureDraft(candidate, directory, 'Synthetic notes.', client), /lost upload response/);
+  state.head = '2'.repeat(40); state.workflowTree = '6'.repeat(40); state.writes.length = 0;
+  ensureDraft(candidate, directory, 'Synthetic notes.', client);
+  assert.equal(state.assets.length, 2); assert.deepEqual(state.writes.map(write => write.method), ['UPLOAD']);
 });
 test('a failed upload can resume the same draft without overwriting its first asset', () => {
   const {state, client} = fakeGithub(); state.failUpload = true;

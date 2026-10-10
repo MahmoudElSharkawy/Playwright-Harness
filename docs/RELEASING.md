@@ -60,6 +60,12 @@ flows. Missing or unexpectedly skipped checks are incomplete.
 
 In **Actions → Harness release → Run workflow**, select `main` and enter the merged
 version as `X.Y.Z`, without `v`. The dispatch commit stays fixed even if `main` moves.
+Ordinary code changes can continue while validation runs. If `.github/workflows/`
+differs from the current default branch, the workflow stops before creating a tag
+and tells you to start a fresh release run on `main` after reconciling those changes.
+GitHub requires workflow modification permission for that release target, which
+the built-in `GITHUB_TOKEN` cannot receive. The workflow checks this before packing
+and again before creating a draft or tag; it never substitutes an unvalidated commit.
 CLI equivalent:
 
 ```sh
@@ -74,6 +80,7 @@ uses the same candidate archive.
 The `release-candidate` artifact and sanitized summaries are retained for seven days.
 A candidate from a failed run is not a validated release. The draft job requires all
 four matrix jobs plus complete, matching evidence before it creates a tag or draft.
+It creates the draft before the tag, so a rejected draft request leaves no new tag.
 Raw logs, credentials, native transcripts and traces are not uploaded.
 
 ## 4. Review the draft and publish
@@ -103,6 +110,10 @@ commit and existing asset bytes match; conflicting files are never overwritten a
 published releases are never modified. A full new run stops if the version tag/draft
 already exists. Resolve conflicting or expired partial drafts explicitly; the
 workflow does not delete tags or releases automatically.
+If workflow files change during the draft request, an owned draft can exist without
+a tag. Review and remove that partial draft explicitly before starting a fresh run;
+retrying the pinned candidate cannot add the permission GitHub requires. Existing
+matching drafts with their tags can still finish missing uploads after `main` moves.
 
 ## 5. Verify the published release
 

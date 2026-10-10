@@ -56,10 +56,31 @@ function findRelease(endpoint, tag, client) {
   throw new Error('The release list could not be completely inspected.');
 }
 
+// Compare immutable subtree identities, including nested files, additions and removals.
+// GITHUB_TOKEN cannot create releases whose workflow files differ from the default branch.
+export function checkWorkflowCompatibility(context, client = githubClient) {
+  const endpoint = `repos/${context.repository}`, repository = client.request('GET', endpoint);
+  assert(typeof repository.default_branch === 'string' && repository.default_branch, 'GitHub did not return the default branch.');
+  const head = client.request('GET', `${endpoint}/git/ref/heads/${encodeURIComponent(repository.default_branch)}`);
+  assert(head.object?.type === 'commit' && /^[a-f0-9]{40}$/.test(head.object.sha), 'GitHub did not return the default branch commit.');
+  if (head.object.sha === context.commit) return;
+  const directory = (ref, name) => {
+    const tree = client.request('GET', `${endpoint}/git/trees/${ref}`);
+    assert(tree.truncated === false && Array.isArray(tree.tree), 'GitHub did not return a complete workflow tree.');
+    const entries = tree.tree.filter(entry => entry.path === name); assert(entries.length <= 1, 'GitHub returned an ambiguous workflow tree.');
+    if (!entries.length) return undefined;
+    assert(entries[0].type === 'tree' && /^[a-f0-9]{40}$/.test(entries[0].sha), 'GitHub did not return a workflow directory.'); return entries[0].sha;
+  };
+  const workflows = commit => {const github = directory(commit, '.github'); return github ? directory(github, 'workflows') : undefined;};
+  const candidate = workflows(context.commit); assert(candidate, 'The release candidate has no workflow directory.');
+  assert.equal(workflows(head.object.sha), candidate, 'Workflow files differ from the current default branch. Start a fresh Harness release run on main after reconciling workflow changes; rerunning this pinned candidate cannot grant GITHUB_TOKEN workflow-write permission.');
+}
+
 export function preflightRelease(root, version, context, client = githubClient) {
   const notes = releaseVersion(root, version), endpoint = `repos/${context.repository}`, tag = `v${version}`;
   assert(!client.request('GET', `${endpoint}/git/ref/tags/${tag}`, undefined, true), 'This version tag already exists.');
   assert(!findRelease(endpoint, tag, client), 'This version release already exists.');
+  checkWorkflowCompatibility(context, client);
   return notes;
 }
 
@@ -138,12 +159,16 @@ export function ensureDraft(candidate, directory, notes, client = githubClient) 
   if (release) ownedDraft(release);
   const ref = client.request('GET', `${endpoint}/git/ref/tags/${tag}`, undefined, true);
   if (ref) assert(ref.object?.type === 'commit' && ref.object.sha === candidate.commit, 'An existing tag points to another commit.');
-  else {
-    if (release) ownedDraft(client.request('GET', `${endpoint}/releases/${release.id}`));
-    client.request('POST', `${endpoint}/git/refs`, {ref: `refs/tags/${tag}`, sha: candidate.commit});
-  }
+  if (!release || !ref) checkWorkflowCompatibility(candidate, client);
+  // A rejected draft request must not leave a tag that blocks a fresh dispatch.
   if (!release) release = client.request('POST', `${endpoint}/releases`, {tag_name: tag, target_commitish: candidate.commit, name: candidate.version, body, draft: true, prerelease: false});
   assert(Number.isSafeInteger(release.id) && release.id > 0 && release.draft === true, 'GitHub did not return a draft release.');
+  ownedDraft(release);
+  if (!ref) {
+    checkWorkflowCompatibility(candidate, client);
+    ownedDraft(client.request('GET', `${endpoint}/releases/${release.id}`));
+    client.request('POST', `${endpoint}/git/refs`, {ref: `refs/tags/${tag}`, sha: candidate.commit});
+  }
   const names = [candidate.archive.name, `${candidate.archive.name}.sha256`];
   let assets = client.request('GET', `${endpoint}/releases/${release.id}/assets?per_page=100`);
   assert(Array.isArray(assets) && assets.length <= names.length && assets.every(asset => names.includes(asset.name)) && new Set(assets.map(asset => asset.name)).size === assets.length, 'The draft contains unexpected assets.');
