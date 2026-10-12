@@ -1,10 +1,10 @@
 # Changelog
 
-## 3.3.1 — Reliable releases and page guidance
+## 3.4.0 — Reliable releases and page guidance
 
 ### Upgrade actions
 
-- Re-run setup from the 3.3.1 archive in each project, then reload Claude Code skills or restart Codex so the updated guidance is discovered. Existing customized code and configuration remain subject to review.
+- Re-run setup from the 3.4.0 archive in each project, then reload Claude Code skills or restart Codex so the updated guidance is discovered. Existing customized code and configuration remain subject to review.
 - Review directly routable page classes for a public async `navigate()` action and move direct `page.goto()` calls into the owning action. Preserve link/menu/redirect journeys and authentication prerequisites; document shared or flow-only exceptions. New navigation checks are advisory unless `--fail-on-warn` is enabled.
 - When targeting a specific list record, use observed suitable search where available and verify the exact row identity before acting. Preserve scenarios that intentionally test browsing, pagination or ordering; do not infer search support from a generic input.
 
