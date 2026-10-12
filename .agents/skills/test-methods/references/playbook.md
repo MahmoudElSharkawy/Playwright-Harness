@@ -133,11 +133,16 @@ whichever side is wrong:
 of a page class (`pages/`), `Apis<Domain>` (`apis/`), or `Dbs<Domain>` (`dbs/`) —
 plus the minimal `const` glue of practice 6 and assignment of a fresh cleanup candidate
 before creation under §4a. No `page.locator()`, no `page.goto()`
-with raw URLs, no `request.fetch()`, no `expect()` calls, no loops, no `if`, no
+(including configured URLs), no `request.fetch()`, no `expect()` calls, no loops, no `if`, no
 `try`/`catch` (§1 "Specs orchestrate, never implement"; §4 iron laws 3 and 4).
 
 **Why:** The test reads as the business scenario; mechanics live one layer down where
 they are step-wrapped and reusable.
+
+A direct-entry step calls the owning page's `navigate()` with explicit route inputs;
+preserve authentication/data prerequisites and the existing context. Steps testing
+links, menus, redirects or other journeys keep those interactions and validations under
+[page-classes practice 3](../../page-classes/references/playbook.md#3-every-directly-routable-page-exposes-navigate).
 
 ✅ `tests/LoginTests.spec.ts` — every line is a business call:
 
@@ -354,6 +359,7 @@ This skill does NOT cover:
 - [ ] Title is a descriptive sentence; `Test Case N:` prefix where the catalog applies; no channel/layer markers (`(Ui & Api)`)
 - [ ] `allure.feature(…)` + `allure.tms('<id>')` are the first lines of the body; feature matches the `describe` title; tms id(s) are the test's own — one per test, or one per covered case in an E2E journey; never shared across tests (data rows of one parameterized case share theirs by design)
 - [ ] Body orchestrates business-method calls, owned runtime generation and retention of attempted cleanup identity — no locators, `expect`, loops, `if`, or `try`/`catch`
+- [ ] Direct entry calls the owning `navigate()` with explicit route inputs; no raw `goto` in the spec, and intentional link/menu/redirect journeys and prerequisites remain intact (page-classes practice 3)
 - [ ] Every GUI step of the verified journey is in the test body — hooks prepare only invisible state via API/DB (GUI only when no lower-layer path exists — test-classes playbook practice 7)
 - [ ] At least one validation call, positioned to close the scenario's arc
 - [ ] Local `const`s are consumed downstream or by cleanup; owned disposable generation follows §4a and unique composition follows practice 7; no arbitrary transformations or `console.log`

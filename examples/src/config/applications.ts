@@ -3,9 +3,9 @@ import { appUrl } from './targets';
 
 /**
  * All applications under test — one named entry per app; specs and page classes
- * pick what they need:
+ * pick what they need for the owning page's route:
  *
- *   await page.goto(applications.app.url);
+ *   readonly url: string = `${applications.app.url}/login`;
  *
  * Addresses come from the browser target of the same name in .harness/targets.json,
  * shared with the harness runtime (see targets.ts for the per-machine override).

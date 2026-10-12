@@ -40,6 +40,10 @@ const cases=[
  ['allure-link-templates',null,'',''],
  ['no-expect-in-spec',spec,'import { test, expect } from "@playwright/test";','import { test } from "@playwright/test";'],
  ['no-locator-in-spec',spec,'page.getByRole("button");','await examplePage.submit();'],
+ ['no-goto-in-spec',spec,'await page.goto(configuredUrl);','await examplePage.navigate();'],
+ ['page-navigation-action',page,"export class ExamplePage { readonly page: Page; readonly url = '/example'; }","export class ExamplePage { readonly page: Page; readonly url = '/example'; async navigate() {} }"],
+ ['page-navigation-url',page,"export class ExamplePage { readonly page: Page; async navigate() { await this.page.goto('/example'); } }","export class ExamplePage { readonly page: Page; readonly url = '/example'; async navigate() { await this.page.goto(this.url); } }"],
+ ['page-goto-owner',page,"export class ExamplePage { readonly page: Page; readonly url = '/example'; async open() { await this.page.goto(this.url); } }","export class ExamplePage { readonly page: Page; readonly url = '/example'; async navigate() { await this.page.goto(this.url); } }"],
  ['no-raw-request-in-spec',spec,'request.patch("/record");','await api.updateRecord();'],
  ['no-id-engine-prefix',page,'page.locator("id=submit");','page.locator("#submit");'],
  ['no-console-log',spec,'console.log("debug");','await test.step("Observe", async()=>{});'],
@@ -67,7 +71,91 @@ const cases=[
 
 test('fixtures cover every registered rule exactly once',()=>{
  const r=spawnSync(process.execPath,[checker,'--list-rules'],{encoding:'utf8'});assert.equal(r.status,0);
- assert.deepEqual(cases.map(c=>c[0]).sort(),Object.values(JSON.parse(r.stdout)).flat().sort());assert.equal(cases.length,34);
+ assert.deepEqual(cases.map(c=>c[0]).sort(),Object.values(JSON.parse(r.stdout)).flat().sort());assert.equal(cases.length,38);
+});
+
+const navigationRules = new Set(['no-goto-in-spec', 'page-navigation-action', 'page-navigation-url', 'page-goto-owner']);
+const navigationFindings = result => findings(result).filter(hit => navigationRules.has(hit.rule));
+
+test('navigation diagnostics require a public instance async method on the owning class', t => {
+ const f=fixture(t);
+ for (const declaration of ['private async navigate()', 'protected async navigate()', 'static async navigate()', 'navigate()']) {
+  f.put(page,`export class ExamplePage { readonly page: Page; readonly url = '/example'; ${declaration} { await this.page.goto(this.url); } }`);
+  assert(navigationFindings(f.run()).some(hit=>hit.rule==='page-navigation-action'),declaration);
+ }
+ f.put(page,"export class OtherPage { async navigate() {} }\nexport class ExamplePage { readonly page: Page; readonly url = '/example'; }");
+ assert(navigationFindings(f.run()).some(hit=>hit.rule==='page-navigation-action'));
+ f.put(page,"export class ExamplePage { readonly page: Page; readonly url = '/example'; public async navigate(): Promise<void> { await step('Navigate to Example', async () => { await this.page.goto(this.url); }); } }");
+ assert.deepEqual(navigationFindings(f.run()),[]);
+});
+
+test('fixed routes belong immediately after page, including the configured application root', t => {
+ const f=fixture(t);
+ for(const url of ["''", "'/'", 'applications.app.url', 'applications.otherApp.url']) {
+  f.put(page,`export class ExamplePage { readonly page: Page; readonly url: string = ${url}; async navigate() { await this.page.goto(this.url); } }`);
+  assert.deepEqual(navigationFindings(f.run()),[],url);
+ }
+ f.put(page,"export class ExamplePage { readonly url = '/example'; readonly page: Page; async navigate() { await this.page.goto(this.url); } }");
+ assert(navigationFindings(f.run()).some(hit=>hit.rule==='page-navigation-url'));
+ f.put(page,"export class ExamplePage { readonly page: Page; readonly item_button: Locator; readonly url = '/example'; async navigate() { await this.page.goto(this.url); } }");
+ assert(navigationFindings(f.run()).some(hit=>hit.rule==='page-navigation-url'));
+});
+
+test('navigation reads conventional semicolon-free members and ignores non-page URL helpers', t => {
+ const f=fixture(t);
+ f.put(page,"export class ExamplePage {\n readonly page: Page\n readonly url = '/example'\n public async navigate(): Promise<void> {\n  await this.page.goto(this.url)\n }\n}\nclass UrlHelper { readonly url = 'https://example.test'; }");
+ assert.deepEqual(navigationFindings(f.run()),[]);
+});
+
+test('navigation retains multiline static modifiers and accepts typed class headers', t => {
+ const f=fixture(t);
+ for(const modifiers of ['static\n async', 'private static\n async']) {
+  f.put(page,`export class ExamplePage { readonly page: Page; readonly url = '/example'; ${modifiers} navigate(page: Page) { await page.goto('/example'); } }`);
+  assert(navigationFindings(f.run()).some(hit=>hit.rule==='page-navigation-action'),modifiers);
+ }
+ for(const header of ['implements PageEntry', '<RecordType>', '<RecordType extends {id: string}> implements PageEntry', "<RecordType extends {operator: '>'}> implements PageEntry", "<RecordType extends {operator: '<'; brace: '{'}> implements PageEntry"]) {
+  f.put(page,`export class ExamplePage ${header} { readonly page: Page; readonly url = '/example'; public async navigate(): Promise<void> { await this.page.goto(this.url); } }`);
+  assert.deepEqual(navigationFindings(f.run()),[],header);
+ }
+});
+
+test('typed parameterized navigation and link journeys need no navigation workaround', t => {
+ const f=fixture(t);
+ f.put(page,"export class ExamplePage { readonly page: Page; readonly url = '/records'; public async navigate(recordId: string): Promise<void> { await step(`Navigate to record ${recordId}`, async () => { await this.page.goto(`${this.url}/${encodeURIComponent(recordId)}`); }); } async followRecordLink() { await this.record_link.click(); } }");
+ f.put(spec,'await examplePage.navigate(recordId); await examplePage.followRecordLink();');
+ f.put('resources/testData/ExampleTestJsonFile.json','{}');
+ assert.deepEqual(navigationFindings(f.run()),[]);
+});
+
+test('routeless shared areas and documented flow-only URLs are exempt without invented navigation', t => {
+ const f=fixture(t);
+ f.put(page,'// Routeless shared area, reached through its rendering page.\nexport class ExamplePage { readonly page: Page; async followLink() { await this.link.click(); } }');
+ assert.deepEqual(navigationFindings(f.run()),[]);
+ f.put(page,"export class ExamplePage {\n readonly page: Page;\n readonly url = '/confirmation'; // conventions-ok: Flow-only confirmation requires transient checkout state; no supported direct entry.\n async verifyArrival() { await expectToHaveURL('the confirmation page', this.page, this.url); }\n}");
+ assert.deepEqual(navigationFindings(f.run()),[]);
+});
+
+test('navigation warnings locate constructor, action and spec-hook goto without reading strings or comments', t => {
+ const f=fixture(t);
+ f.put(page,"export class ExamplePage {\n readonly page: Page;\n readonly url = '/example';\n constructor(page: Page) { page.goto(this.url); }\n async navigate() { await this.page.goto(this.url); }\n async login() { await this.page\n .goto(this.url); }\n}");
+ assert.deepEqual(navigationFindings(f.run()).filter(hit=>hit.rule==='page-goto-owner').map(hit=>hit.line),[4,6]);
+ f.put(spec,"test.beforeEach(async ({page}) => {\n await page\n .goto(configuredUrl);\n});");
+ f.put('resources/testData/ExampleTestJsonFile.json','{}');
+ assert(navigationFindings(f.run()).some(hit=>hit.rule==='no-goto-in-spec' && hit.line===2));
+ f.put(page,"// readonly url='/fake'; page.goto('/fake');\nconst documentation = 'page.goto(\"/fake\")';\nconst pattern = /page.goto/;\nexport class ExamplePage { readonly page: Page; }");
+ f.put(spec,"const documentation = 'page.goto(\"/fake\")';\n// page.goto('/fake');\nawait examplePage.navigate();");
+ assert.deepEqual(navigationFindings(f.run()),[]);
+});
+
+test('navigation warnings retain advisory exits and reviewed line exemptions', t => {
+ const f=fixture(t);
+ f.put(page,"export class ExamplePage { readonly page: Page; readonly url = '/example'; }");
+ const warning=f.run(); assert.equal(warning.status,0); assert.equal(navigationFindings(warning)[0]?.severity,'warn');
+ assert.equal(f.run('--fail-on-warn').status,1);
+ f.put(page,"export class ExamplePage { readonly page: Page; readonly url = '/example'; } // conventions-ok: Reviewed legacy entry contract.");
+ assert.deepEqual(navigationFindings(f.run()),[]);
+ f.put(page,"export class ExamplePage { readonly page: Page; readonly url = '/example'; } const fake = '// conventions-ok';");
+ assert(navigationFindings(f.run()).some(hit=>hit.rule==='page-navigation-action'));
 });
 for(const [rule,file,bad,good] of cases) for(const violating of [true,false]) test(`${rule}: ${violating?'detect':'accept'}`,t=>{
  const f=fixture(t);

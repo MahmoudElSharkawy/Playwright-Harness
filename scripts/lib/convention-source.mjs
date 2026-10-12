@@ -129,6 +129,84 @@ function expressionEnd(tokens, start) {
   return -1;
 }
 
+/** Conventional page members and direct page.goto calls only; route eligibility and unusual syntax need review. */
+export function pageNavigationFindings(text, {spec = false} = {}) {
+  const tokens = sourceTokens(text), findings = [], gotos = [], navigations = [];
+  const add = (rule, token) => findings.push({rule, start: token.start});
+  for (let index = 0; index < tokens.length; index++) {
+    if (tokens[index].kind === 'identifier' && tokens[index].value === 'page'
+      && tokens[index + 1]?.value === '.' && tokens[index + 2]?.value === 'goto'
+      && tokens[index + 3]?.value === '(') gotos.push({index, token: tokens[index], argument: tokens[index + 4]});
+  }
+  if (spec) return gotos.map(({token}) => ({rule: 'no-goto-in-spec', start: token.start}));
+
+  const modifiers = new Set(['public', 'private', 'protected', 'readonly', 'async', 'static', 'override', 'abstract', 'declare', 'get', 'set']);
+  for (let index = 0; index < tokens.length; index++) {
+    if (tokens[index].kind !== 'identifier' || tokens[index].value !== 'class'
+      || tokens[index + 1]?.kind !== 'identifier') continue;
+    let start = index + 2, genericDepth = 0;
+    for (; start < tokens.length; start++) {
+      if (tokens[start].kind !== 'punctuation') continue;
+      const value = tokens[start].value;
+      if (value === '<') genericDepth++;
+      else if (value === '>') genericDepth--;
+      else if (genericDepth === 0 && ['{', ';'].includes(value)) break;
+    }
+    if (tokens[start]?.value !== '{') continue;
+    const end = expressionEnd(tokens, start);
+    if (end < 0) continue;
+    const members = [];
+    let memberStart = start + 1;
+    for (let cursor = memberStart; cursor < end; cursor++) {
+      const token = tokens[cursor];
+      // Conventional semicolon-free fields end before the next member modifier.
+      if (cursor > memberStart && token.kind === 'identifier' && modifiers.has(token.value)
+        && /\n/.test(text.slice(tokens[cursor - 1].end, token.start))
+        && tokens.slice(memberStart, cursor).some(item => !modifiers.has(item.value))) memberStart = cursor;
+      const prefix = tokens.slice(memberStart, cursor);
+      if (token.kind === 'punctuation' && token.value === ';') { memberStart = cursor + 1; continue; }
+      const member = token.kind === 'identifier' && prefix.every(item => item.kind === 'identifier' && modifiers.has(item.value));
+      if (member && [':', '=', '?', '!'].includes(tokens[cursor + 1]?.value)) members.push({name: token.value, token, kind: 'field'});
+      if (member && tokens[cursor + 1]?.value === '(') {
+        const parametersEnd = expressionEnd(tokens, cursor + 1);
+        if (parametersEnd < 0) break;
+        let bodyStart = parametersEnd + 1;
+        while (bodyStart < end && !['{', ';'].includes(tokens[bodyStart].value)) bodyStart++;
+        if (tokens[bodyStart]?.value === '{') {
+          const bodyEnd = expressionEnd(tokens, bodyStart);
+          if (bodyEnd < 0) break;
+          members.push({name: token.value, token, kind: 'method', modifiers: prefix.map(item => item.value), bodyStart, bodyEnd});
+          cursor = bodyEnd; memberStart = bodyEnd + 1; continue;
+        }
+        cursor = parametersEnd;
+      } else if (token.kind === 'punctuation' && ['{', '(', '['].includes(token.value)) {
+        const nestedEnd = expressionEnd(tokens, cursor);
+        if (nestedEnd < 0) break;
+        cursor = nestedEnd;
+      }
+    }
+    const pageIndex = members.findIndex(member => member.kind === 'field' && member.name === 'page');
+    const urlIndex = members.findIndex(member => member.kind === 'field' && member.name === 'url');
+    const url = members[urlIndex], calls = gotos.filter(call => call.index > start && call.index < end);
+    if (pageIndex < 0 && !calls.length) { index = end; continue; }
+    const navigation = members.find(member => member.kind === 'method' && member.name === 'navigate'
+      && member.modifiers.includes('async') && !member.modifiers.some(modifier => ['private', 'protected', 'static'].includes(modifier)));
+    if ((url || calls.length) && !navigation) add('page-navigation-action', url?.token ?? calls[0].token);
+    if (url && (pageIndex < 0 || urlIndex !== pageIndex + 1)) add('page-navigation-url', url.token);
+    if (navigation) {
+      navigations.push(navigation);
+      for (const call of calls.filter(call => call.index > navigation.bodyStart && call.index < navigation.bodyEnd)) {
+        if (call.argument?.kind === 'string') add('page-navigation-url', call.token);
+      }
+    }
+    index = end;
+  }
+  for (const call of gotos) {
+    if (!navigations.some(navigation => call.index > navigation.bodyStart && call.index < navigation.bodyEnd)) add('page-goto-owner', call.token);
+  }
+  return findings;
+}
+
 function fields(tokens) {
   if (tokens[0]?.value !== '{' || expressionEnd(tokens, 0) !== tokens.length - 1) return undefined;
   const result = new Map();

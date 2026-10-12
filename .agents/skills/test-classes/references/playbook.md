@@ -214,7 +214,8 @@ Do not add business readiness assertions to setup or hide scenario checks in fix
 ## 11. Zero logic, zero exception handling, zero Playwright plumbing in the spec
 
 No scenario branching, loops, `try`/`catch`, raw `page.locator()` or `request.fetch()`
-in specs (iron laws 3–4). Small lifecycle guards for partial initialization are allowed. A spec is a straight-line
+in specs (iron laws 3–4). Direct navigation in bodies or hooks calls the owning page's
+`navigate()` under [page-classes practice 3](../../page-classes/references/playbook.md#3-every-directly-routable-page-exposes-navigate); no raw `page.goto()`. Small lifecycle guards for partial initialization are allowed. A spec is a straight-line
 sequence of business calls. If you feel the need to branch or retry, push it down:
 business variation → an intent-named method on the page/service class; technical
 complexity → `utils/` ([utility-classes](../../utility-classes/SKILL.md)).

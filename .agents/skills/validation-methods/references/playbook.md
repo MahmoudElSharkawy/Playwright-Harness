@@ -128,8 +128,11 @@ expect(text).toBe(expectedMessage);
 
 **Arrival checks** ("user landed on the right page") assert
 `await expectToHaveURL(this.page, this.url)` — against the page class's own `url`
-field, the same field `navigate()` consumes: one source of truth for navigation and
-validation. Never a string literal inside the validation, and never a URL smuggled in
+field, shared with `navigate()` on directly routable pages. A flow-only page may use
+the field solely for arrival validation under the documented
+[page-classes practice-3 exception](../../page-classes/references/playbook.md#3-every-directly-routable-page-exposes-navigate). Parameterized arrival checks use the owning route construction with explicit typed
+identifiers; do not compare a detail URL to its route prefix alone.
+Never a string literal inside the validation, and never a URL smuggled in
 from test data — the `url` field is the recorded iron-law-5 exception
 (design-conventions, Decision records). Semantics: with `baseURL` configured, a
 relative `url` field resolves against it; use a RegExp when query params vary. Wrap it
