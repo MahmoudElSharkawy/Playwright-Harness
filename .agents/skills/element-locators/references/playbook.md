@@ -231,6 +231,8 @@ return this.page.locator('a[href="/product_details/' + productId + '"]');
 
 In new page classes declare these methods `private`, same as fields (practice 2).
 
+For list-record targeting under [§4b](../../pom-architecture/references/design-conventions.md#4b-record-targeting-on-list-pages), a string `hasText` filter is only a partial match. Anchor an exact literal comparison to the identity cell inside the row/card (escape regex metacharacters when using an anchored `hasText` regex), and scope known secondary identifiers to that same container. Do not interpolate raw text into XPath/CSS or weaken strictness with `.first()`/`.nth()`. Hidden or unmaterialized virtual rows do not count as search coverage.
+
 ## 7. Match on text only in the two allowed cases
 
 Text is copy — it changes with wording, localization, and whitespace. The SOP allows

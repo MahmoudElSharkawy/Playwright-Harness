@@ -179,6 +179,8 @@ async verifyThatUserIsNavigatedToLoginPage() {
 conditions in one step title. Split by business condition so the Allure report shows
 which one failed.
 
+For list-record checks, follow [§4b](../../pom-architecture/references/design-conventions.md#4b-record-targeting-on-list-pages): after the query-specific refresh completes, use web-first checks for the unique exact row/card and its identifying fields before acting. Expected counts/statuses remain explicit data parameters. A zero visible-row count proves absence only within the observed search scope; current-page filters, hidden/virtualized rows and permissions cannot establish global absence. Report unresolved duplicate identities instead of selecting the first match. Keep GUI checks only where the GUI proves the scenario's expected result (practice 12).
+
 ## 7. Expected values are always parameters, fed from test data
 
 Iron law 5: no hardcoded expected values inside a validation method — messages, titles,

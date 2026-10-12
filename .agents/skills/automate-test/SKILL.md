@@ -39,6 +39,7 @@ Source → refinement → observed execution → durable POM generation
   knowledge are distinct. Never weaken assertions or silently promote runtime candidates.
 - Browser mechanics use the official Playwright CLI skill through the existing browser
   ownership/evidence boundary. API/DB operations use the shared deterministic runtimes.
+- For specific list records, apply [search-first targeting (§4b)](../pom-architecture/references/design-conventions.md#4b-record-targeting-on-list-pages) during exploration and generation. Observe supported keys, scope and asynchronous completion before choosing search; reuse page business methods, verify exact row identity and uniqueness, and define scoped absence/ambiguity or a documented fallback. Preserve every frozen pagination, sorting or browsing journey; never insert raw selectors, waits or lookup loops into specs.
 - Follow configured environment capabilities. Catalogs, deterministic helpers and fixed
   inline parameterized definitions are peers. Imported team libraries are derive-only.
   Ordinary permitted mutations need no repeated harness approval.

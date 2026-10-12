@@ -1,0 +1,8 @@
+{
+  "tcOffPage": {"query": "ORD-300", "number": "ORD-300", "customer": "C-300", "status": "Shipped", "matches": 1, "firstPage": "1"},
+  "tcAbsent": {"query": "ORD-MISSING", "matches": 0},
+  "tcAmbiguous": {"query": "ORD-DUP", "number": "ORD-DUP", "customer": "C-402", "matches": 2},
+  "tcDisambiguated": {"query": "ORD-DUP", "number": "ORD-DUP", "customer": "C-401", "status": "Paid", "matches": 1},
+  "tcSpecial": {"staleQuery": "ORD-MISSING", "query": "ORD-'[.*]", "number": "ORD-'[.*]", "customer": "C-500", "status": "Paid", "matches": 1},
+  "tcPagination": {"firstPage": "1", "nextPage": "2", "number": "ORD-300", "customer": "C-300", "status": "Shipped", "matches": 1}
+}

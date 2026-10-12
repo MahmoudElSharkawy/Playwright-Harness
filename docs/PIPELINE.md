@@ -146,6 +146,14 @@ and record what actually happens before any code is written.
   cleaned up, required restorations are explicit, and intentionally persistent outcomes
   may remain. Knowledge candidates need review before promotion.
 
+For a specific record on a list page, apply
+[search-first targeting](../.agents/skills/pom-architecture/references/design-conventions.md#4b-record-targeting-on-list-pages).
+Observe the real control, supported identifiers, match semantics and search scope;
+demonstrate off-page coverage when needed. Record asynchronous completion, stale
+filter/sort state, permission or virtualization limits and any justified fallback.
+A generic input or zero current-page matches is insufficient evidence. Keep frozen
+pagination, sorting and browsing steps and expectations unchanged.
+
 Standalone manual execution uses the [execute-test skill](../.agents/skills/execute-test/SKILL.md)
 and [manual execution](manual-execution.md), with no code generation. Automation exploration
 continues to use these library interfaces:
@@ -210,6 +218,16 @@ adding new ones.
   deletion. Catalogs, deterministic helpers and fixed inline definitions remain peers;
   imported team libraries are derive-only.
   Directly routable pages follow [the navigation contract](../.agents/skills/page-classes/references/playbook.md#3-every-directly-routable-page-exposes-navigate); preserve source journeys and prerequisites and document unsupported direct-entry exceptions.
+
+For record targeting, reuse intent-named search, row action and validation methods
+under the [list-record rule](../.agents/skills/pom-architecture/references/design-conventions.md#4b-record-targeting-on-list-pages).
+Wait for the observed query-specific refresh, verify exact identity and a unique
+match inside the row/card, then act. Define scoped absence and unresolved ambiguity;
+current-page/no-search alternatives need documented evidence and scenario compatibility.
+Keep selectors, technical iteration and waits out of specs, protect confidential terms,
+and avoid a generic list framework. The
+[runnable orders example](../harness-tests/fixtures/list-search-consumer/README.md)
+shows targeting and the pagination exception.
 
 ```ts
 await expectToHaveText('the confirmation message', this.confirmation_msg, expected);
@@ -304,6 +322,11 @@ their own work, and a self-review cannot release verification.
   values, operation scope, cleanup and retention, imported dependencies and external
   environment references. Mapping completeness and assertion counts do not prove
   semantic equivalence or that every source expectation executed.
+  Refute search-first record targeting against its observed scope and completion:
+  reject first-row selection, current-page filters presented as global search,
+  stale-result absence checks, unjustified fallbacks and altered pagination/sorting/
+  browsing journeys. Confirm exact same-row identity, ambiguity handling and term
+  protection through the owning specialist guidance.
 - **Outputs:** a consumer-relative Markdown review artifact and a review JSON file with
   the revision, a reviewer identity different from the author's, the verdict
   (`APPROVE` or `CHANGES-REQUIRED`) and findings. Each finding has an ID, a blocking

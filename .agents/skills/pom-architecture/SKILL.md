@@ -17,6 +17,8 @@ convention question is answered by one authority chain:
 3. The actual project files are the living style reference — when in doubt, read the
    closest existing sibling (e.g. a new page class starts from [LoginPage.ts](../../../examples/src/pages/LoginPage.ts))
 
+For a specific item on a list page, follow [record targeting (§4b)](references/design-conventions.md#4b-record-targeting-on-list-pages): observe suitable search and its scope, verify the exact row identity before acting, and preserve scenario-intent exceptions. Do not infer search capability from a generic input.
+
 ## Layer map
 
 ```

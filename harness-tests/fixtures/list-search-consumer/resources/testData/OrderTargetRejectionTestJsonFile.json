@@ -1,0 +1,5 @@
+{
+  "tcAbsent": {"query": "ORD-MISSING", "number": "ORD-MISSING", "customer": "C-999"},
+  "tcAmbiguous": {"query": "ORD-DUP", "number": "ORD-DUP", "customer": "C-402"},
+  "tcLimited": {"query": "ORD-300", "number": "ORD-300", "customer": "C-300", "status": "Shipped", "matches": 1}
+}
