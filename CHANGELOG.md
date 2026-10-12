@@ -1,6 +1,12 @@
 # Changelog
 
-## Unreleased
+## 3.4.0 — Reliable releases and page guidance
+
+### Upgrade actions
+
+- Re-run setup from the 3.4.0 archive in each project, then reload Claude Code skills or restart Codex so the updated guidance is discovered. Existing customized code and configuration remain subject to review.
+- Review directly routable page classes for a public async `navigate()` action and move direct `page.goto()` calls into the owning action. Preserve link/menu/redirect journeys and authentication prerequisites; document shared or flow-only exceptions. New navigation checks are advisory unless `--fail-on-warn` is enabled.
+- When targeting a specific list record, use observed suitable search where available and verify the exact row identity before acting. Preserve scenarios that intentionally test browsing, pagination or ordering; do not infer search support from a generic input.
 
 ### Changes
 
@@ -14,6 +20,12 @@
   CI proof, including startup failures whose cleanup also fails.
 - Use the Google Docker Hub cache for Linux CI fixtures with unchanged image
   digests to avoid anonymous image pull limits.
+
+- Validate declared skill links against the current installed package and report invalid link manifests through controlled readiness errors. Preserve legacy adoption omissions and readiness exit behavior.
+- Require page-owned navigation for supported direct routes, with explicit parameters, configured URL ownership and documented shared/flow-only exceptions. Add advisory navigation checks and align generation and review guidance.
+- Prefer observed suitable search when targeting specific list records, with search-scope checks, exact-row identity and scenario-intent exceptions.
+- Clarify README navigation, workflow phases, focused source lookup and reviewed knowledge reuse; document optional project-level Graphify evaluation.
+- Stabilize Windows lifecycle and shared cleanup deadline tests, retain assertion failure diagnostics, and install the example browser before fresh package checks.
 
 ## 3.3.0 — Execution test folder
 
