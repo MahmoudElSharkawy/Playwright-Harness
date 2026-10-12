@@ -1,5 +1,8 @@
 # Documentation
 
+For a quick introduction, see the [harness workflow and phases](../README.md#harness-workflow-and-phases)
+in the main README.
+
 Start with [getting started](getting-started.md) to install and configure the
 Playwright POM Harness in your own project. The [architecture guide](architecture.md)
 explains how the harness and the automation it helps you author fit together.

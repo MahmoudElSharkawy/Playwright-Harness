@@ -12,6 +12,9 @@ and organizes UI, API and database testing into clear layers. Azure DevOps is
 optional for local automation. Version: [VERSION](VERSION); changes and upgrade
 actions: [CHANGELOG.md](CHANGELOG.md).
 
+[Get started](#get-started) · [Workflow and phases](#harness-workflow-and-phases) ·
+[Documentation](#documentation) · [Validation and releases](#validation-and-releases)
+
 ## Expected automation structure
 
 This is the POM structure the harness helps you author in **your project**. Names
@@ -117,6 +120,26 @@ See [getting started](docs/getting-started.md) for installation details, readine
 conflict recovery and rollback.
 
 <a id="how-automation-works"></a>
+
+## Harness workflow and phases
+
+After installation and configuration, automation follows these phases. Local
+scenarios and configured ADO suites or stories use the same workflow.
+
+| Phases | What happens |
+|---|---|
+| **SOURCE → REFINE** | Load the scenarios and clarify executable steps while preserving every expectation. |
+| **EXPLORE** | Run the scenarios against the application through UI, API or DB runtimes and capture evidence. |
+| **PREPARE → AUTHOR** | Connect expectations to observations, then write or reuse POM code and paired test data. |
+| **CANDIDATE → REVIEW** | Map scenarios to tests and obtain an independent review of the candidate. |
+| **VERIFY ×2 → READY** | Pass two separate scoped Playwright runs of the same reviewed candidate. |
+| **DELIVER (optional)** | With explicit authorization, deliver a PR or publish ADO outcomes. |
+
+Review or verification failures return to authoring, with three cumulative repair
+rounds per source batch. See the [automation workflow](docs/PIPELINE.md) for the
+full phase contracts. [Manual execution](docs/manual-execution.md) follows its own
+prepare, refine, freeze, execute and report flow without generating POM code.
+
 <a id="capabilities"></a>
 
 ## Choose your first workflow
@@ -129,10 +152,9 @@ Generate durable automation from local scenarios or configured ADO cases:
 /automate-test story <id> on qa
 ```
 
-The [automation workflow](docs/PIPELINE.md) preserves scenario expectations through
-exploration, POM authoring, independent review and two separate scoped green runs.
-Required cleanup follows scenario intent and ownership. Repairs have three cumulative
-rounds per source batch; PR delivery or ADO publication needs explicit authorization.
+Required cleanup follows scenario intent and ownership. The
+[automation workflow](docs/PIPELINE.md) covers the commands and gates behind
+the phases above.
 
 For live manual execution of ADO cases:
 
@@ -144,13 +166,14 @@ For live manual execution of ADO cases:
 The [manual execution guide](docs/manual-execution.md) covers verified dashboards,
 evidence and defect lists, with optional bug filing and suite outcome publication.
 
-<a id="package-validation-and-release"></a>
-
 ## Documentation
 
 | Need | Guide |
 |---|---|
+| Install, check readiness, update or roll back | [Getting started](docs/getting-started.md) |
+| Understand POM layers and project ownership | [Architecture](docs/architecture.md) |
 | Configure environments, targets, secrets and knowledge | [Configuration](docs/configuration.md) |
+| Generate automation or execute manual cases | [Automation workflow](docs/PIPELINE.md) · [Manual execution](docs/manual-execution.md) |
 | Connect ADO, retrieve cases or deliver results | [Azure DevOps](docs/azure-devops.md) |
 | Find reports, Allure and plan progress | [Reporting](docs/reporting.md) |
 | Understand shared runtimes or develop the harness | [Documentation hub](docs/README.md) · [Contributing](docs/contributing.md) |
@@ -158,6 +181,15 @@ evidence and defect lists, with optional bug filing and suite outcome publicatio
 
 See [security](SECURITY.md), [provenance](docs/PROVENANCE.md), and the
 [license](LICENSE) for protection and distribution guidance.
+
+<a id="package-validation-and-release"></a>
+
+### Validation and releases
+
+Use [Contributing](docs/contributing.md) for package checks and harness regression
+tests, and [Releasing](docs/RELEASING.md) for the validated archive and release
+procedure. The [latest release](https://github.com/MahmoudElSharkawy/Playwright-Harness/releases/latest)
+contains the install archive and its checksum.
 
 ## For AI agents
 
