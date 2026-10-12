@@ -212,6 +212,8 @@ Two refinement assists:
 
 Use the current [automation workflow exploration and handoff](../../../../docs/PIPELINE.md). Browser, API and DB observations enter the execution-core evidence boundary. Preserve source-to-assertion bindings and lifecycle dispositions for generation. Do not weaken an expectation to fit an observed defect.
 
+For a specific list record, observe suitable search, supported identifiers, actual coverage and a query-specific completion signal under [§4b](../../pom-architecture/references/design-conventions.md#4b-record-targeting-on-list-pages). Record limitations/fallbacks and preserve pagination, sorting or browsing intent; generation consumes this evidence through intent-named page methods and exact row identity checks.
+
 For standalone manual execution with no code generation, route to [execute-test](../../execute-test/SKILL.md) and [manual execution](../../../../docs/manual-execution.md). That route produces reports and defects without changing POM code or tracker state. It is not the automation pipeline's exploration handoff.
 
 ---

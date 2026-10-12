@@ -228,6 +228,9 @@ modal the method rightly dismisses too — one intent, "add product to cart".
 Then the name states the intent, not the first click: `addProductToCart()`,
 not the demo's `clickOnAddToCartButton()`, which hides the second interaction.
 
+A list search is an intent-named business service (for example `searchOrders(query)`)
+under [§4b](../../pom-architecture/references/design-conventions.md#4b-record-targeting-on-list-pages). It replaces the term, submits using the observed control and waits for the observed query-specific refresh signal. Keep identity/uniqueness checks in a separate `verify*` method before a strict row-scoped action such as `openOrder(orderNumber, customerId)`. Reuse existing services; do not fuse search and pagination traversal into a silent lookup loop. Search terms/identifiers may be confidential, so practice 3 applies to their titles too.
+
 ## 8. Reuse before creating — repo-wide; duplicate intent, not implementation
 
 Before adding ANY action — and the same gate applies to validation methods

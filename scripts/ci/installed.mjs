@@ -39,6 +39,8 @@ for (const prefix of ['examples', 'scripts/spikes/playwright-cli']) run([npm, 'c
 const lock = JSON.parse(readFileSync(join(installedRoot, 'npm-shrinkwrap.json'), 'utf8'));
 assert.deepEqual(lock, expectedLock, 'Distributed dependency lock differs from the packed source.');
 const dependencies = validateInstalledGraph(install, lock);
+// POM browser regressions use the example runner's browser, independently of the native CLI pin.
+run([join(installedRoot, 'examples/node_modules/playwright/cli.js'), 'install', '--with-deps', 'chromium'], install);
 const before = snapshotInstalledPackage(install);
 const {runChecks} = await import(pathToFileURL(join(installedRoot, 'scripts/ci/checks.mjs')).href);
 const checks = runChecks(installedRoot, join(workspace, 'checks'));

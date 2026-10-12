@@ -238,6 +238,51 @@ documented exceptions. Direct entry and link/menu journeys follow
   dependencies; semantic schema ownership, dynamic sources and credential provenance
   require independent review, never filename/property-name guesses.
 
+## 4b. Record targeting on list pages
+
+When a scenario needs a specific item or record on a list page, prefer the page's
+observed search before scanning the list or traversing pagination, **only when the
+search supports the available identifier and preserves scenario intent**.
+
+- Observe the actual search control, accepted keys, match semantics and coverage.
+  Distinguish all accessible/server results, a loaded/virtualized subset and a
+  current-page filter. Demonstrate off-page coverage when the target requires it;
+  a generic input, its label or one successful first-page search is not proof.
+  Record relevant permission limits, active filters/sort state and the completion
+  signal with the exploration evidence; keep private values in protected evidence.
+- Preserve frozen source steps, assertions and expectations. Search may arrange or
+  target a record when compatible with the scenario. A pagination, sorting or browsing
+  journey keeps every original interaction and checkpoint. Search never replaces the
+  behavior under test or changes the validation layer selected under §6.
+- Choose an appropriate identifying value, preferably a unique record key. Reuse or
+  extend existing intent-named page methods before adding search, record action or
+  `verify*` methods. Select by an exact identity field inside the matching row/card;
+  verify the row's identity and unique match before acting. Duplicate labels require
+  additional known identifiers in that same container, never an arbitrary first row.
+  Preserve strictness if results change between validation and action.
+- Wait for the observed completion signal tied to the submitted query and refreshed
+  results before checking identities/counts. Replace stale search terms and establish
+  the required filter/sort/page state through business methods. Use native auto-waiting
+  and web-first assertions; neither a transient empty list nor a completed request
+  alone proves the UI has published the new result set. No arbitrary sleeps, silent
+  retries or pagination loops.
+- Zero completed matches proves absence **only within the observed supported search
+  scope**. A current-page filter cannot find an off-page record or prove global absence;
+  hidden rows, virtualization and permission-filtered records further limit DOM counts.
+  Multiple exact matches are ambiguity: refine with known identifiers or report the
+  unresolved target and stop before acting. Do not pick `.first()`/`.nth()`.
+- If search is absent, unsuitable for the available key or limited to the current
+  page, expose the limitation and use only an observed, documented fallback compatible
+  with the source: supported direct record entry for arrangement, an API/DB lookup at
+  the proper layer, or bounded browsing through existing page methods. Do not invent
+  routes, drop expectations or add a generic list/pagination framework.
+- Selectors, mechanics and necessary technical iteration stay out of specs. Each
+  page action/validation has one business-readable Allure step. Search terms and
+  identifying values follow §4.7 and utility-classes §20: omit confidential values
+  from authored titles/annotations and protect native artifacts; redaction is limited.
+
+See the runnable [search-first orders example](../../../../harness-tests/fixtures/list-search-consumer/README.md).
+
 ## 5. Java → Playwright/TS adaptation decisions
 
 The team's original conventions were written for Java/Selenium/TestNG. These mappings
@@ -347,6 +392,7 @@ For the sequential shared-runtime and generation workflow, follow [reporting](..
 - [ ] Class anatomy follows §3 (order, banners, spacing)
 - [ ] Directly routable pages expose public async `navigate()` under page-classes §3; fixed/dynamic routes use the correct configured application, exceptions are documented, and source navigation journeys/prerequisites are preserved
 - [ ] Locators encapsulated, reliable, and built per the element-locators skill
+- [ ] Specific list records follow §4b: observed suitable search/scope/completion, exact row identity and unique targeting, explicit absence/ambiguity, justified limited-search fallback, and unchanged pagination/sorting/browsing journeys
 - [ ] Ordinary actions contain no assertions; validations start with `verify` and sit last; lifecycle cleanup guards/postconditions follow §4a
 - [ ] Every action/validation wrapped in a business-titled Allure step; no secrets in titles
 - [ ] Every assertion goes through the `src/utils/Expects.ts` wrappers with a business subject phrase (`Expect <subject> to <verb>[ <value>]` step titles); business classes carry no direct expect() — secret values use the facade's secret variants (validation-methods §13)

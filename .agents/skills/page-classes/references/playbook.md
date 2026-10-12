@@ -207,6 +207,9 @@ Make dynamic locator methods `private` in new classes — same encapsulation rul
 locator fields (§4.2). ❌ An `async` dynamic locator, or a public one a spec calls
 directly: locators never leave their page class.
 
+For list-record targeting, the rendering page owns the observed search action,
+row/card locator and identity validations under [§4b](../../pom-architecture/references/design-conventions.md#4b-record-targeting-on-list-pages). Reuse existing methods; a new generic list/base class is unnecessary. Keep the exact identity and any known disambiguating fields in one container, with mechanics hidden from the spec.
+
 ## 6. No base classes — compose, don't inherit
 
 Never create a `BasePage` or `extends` between page classes (§1). Each class declares its
