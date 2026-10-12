@@ -48,6 +48,8 @@ Source → refinement → observed execution → durable POM generation
 - Generation follows [test-data ownership and disposable inputs (§4a)](../pom-architecture/references/design-conventions.md#4a-test-data-ownership-method-contracts-and-disposable-inputs).
 - Route generation through [pom-architecture](../pom-architecture/SKILL.md), then only the
   specialist skills needed by the changed layers. Reuse existing business methods first.
+  Classify page entry and require public async `navigate()` on directly routable pages
+  under [page-classes practice 3](../page-classes/references/playbook.md#3-every-directly-routable-page-exposes-navigate); preserve source link/menu journeys and prerequisites.
   Generated services can call shared API/DB library interfaces without loading an AI host.
 - Freeze the candidate and dispatch a fresh independent reviewer following
   [framework-review](../framework-review/SKILL.md), prompted to REFUTE. Resolve findings or

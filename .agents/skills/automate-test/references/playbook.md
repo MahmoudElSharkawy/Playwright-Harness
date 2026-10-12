@@ -286,10 +286,10 @@ independent framework-review re-checks every new method against the inventory.
    (beforeEach login vs storage state) is a test-classes decision — surface the
    choice to the user when the suite is login-gated.
 
-Environment note: the generated spec runs against `playwright.config.ts`'s `baseURL`.
-If that differs from the environment the cases target (`_suite.json.target`), page
-navigation must go through the page-class URL fields — raise the mismatch to the user
-rather than hardcoding URLs in tests.
+Environment note: page navigation resolves through the owning application's configured
+URL, or the runner's `baseURL` when the project uses relative routes. Follow
+[page-classes practice 3](../../page-classes/references/playbook.md#3-every-directly-routable-page-exposes-navigate); preserve source link/menu journeys. If configuration differs from the cases' target
+(`_suite.json.target`), raise that mismatch rather than hardcoding URLs in specs.
 
 Before leaving this phase, the diff must pass an **independent framework review**:
 invoke the `framework-review` skill with a fresh subagent as the reviewer (never the

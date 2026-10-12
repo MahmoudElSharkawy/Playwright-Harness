@@ -13,6 +13,9 @@ area. It owns that page's locators, actions, and validations behind intent-named
 no base classes, no exception handling, no logic. The existing files in `pages/`
 (`LoginPage.ts`, `HomePage.ts`, `HeaderPage.ts`) are the living style reference.
 
+Every directly routable page exposes public async `navigate()`; classify supported
+entry and document shared/flow-only exceptions under [playbook practice 3](references/playbook.md#3-every-directly-routable-page-exposes-navigate).
+
 Work in this order:
 
 1. Read the shared law: [design-conventions](../pom-architecture/references/design-conventions.md)

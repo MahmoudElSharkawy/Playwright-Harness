@@ -23,7 +23,7 @@ import { resolve, join, relative, basename, dirname, isAbsolute } from 'node:pat
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { secretFindings } from './lib/package-validation.mjs';
-import { sourceReferences, sourceTokens, consumerConventionFindings, allureLinkTemplates, allureLinkUsage } from './lib/convention-source.mjs';
+import { sourceReferences, sourceTokens, consumerConventionFindings, pageNavigationFindings, allureLinkTemplates, allureLinkUsage } from './lib/convention-source.mjs';
 
 const CLI_ARGS = process.argv.slice(2);
 const rootIndex = CLI_ARGS.indexOf('--root');
@@ -65,9 +65,9 @@ function exemptionAt(text, line) {
   return /\/\/\s*conventions-ok/.test(comments.split(/\r?\n/)[line - 1] ?? '');
 }
 
-const sourceRule = rule => (file, text) => {
+const sourceRule = (rule, reader = consumerConventionFindings) => (file, text) => {
   if (!/\.[cm]?[jt]sx?$/.test(file)) return [];
-  return consumerConventionFindings(text, {business: ['pages', 'apis', 'dbs', 'utils'].includes(layerOf(file))})
+  return reader(text, {business: ['pages', 'apis', 'dbs', 'utils'].includes(layerOf(file)), spec: layerOf(file) === 'tests'})
     .filter(hit => hit.rule === rule).map(hit => ({line: text.slice(0, hit.start).split('\n').length, excerpt: rule}))
     .filter(hit => rule === 'playwright-private-api' || !exemptionAt(text, hit.line));
 };
@@ -103,6 +103,18 @@ const RULES = [
   { id: 'no-locator-in-spec', dirs: ['tests'], severity: 'fail',
     why: 'specs orchestrate, never locate — locators belong in page classes (iron law 1)',
     check: grepRule(/\bpage\.locator\s*\(|\bpage\.getBy[A-Z]\w*\s*\(/) },
+  { id: 'no-goto-in-spec', dirs: ['tests'], severity: 'warn',
+    why: 'direct navigation in specs and hooks calls the owning page.navigate(); preserve prerequisites and link/menu journeys (page-classes §3, test-methods §4)',
+    check: sourceRule('no-goto-in-spec', pageNavigationFindings) },
+  { id: 'page-navigation-action', dirs: ['pages'], severity: 'warn',
+    why: 'url/goto evidence requires a public instance async navigate(); document flow-only exceptions with a reviewed line exemption, and review ambiguous routes (page-classes §3)',
+    check: sourceRule('page-navigation-action', pageNavigationFindings) },
+  { id: 'page-navigation-url', dirs: ['pages'], severity: 'warn',
+    why: 'declare the fixed route once as url immediately after page and consume it in navigate(); use existing application/base URL configuration (page-classes §3)',
+    check: sourceRule('page-navigation-url', pageNavigationFindings) },
+  { id: 'page-goto-owner', dirs: ['pages'], severity: 'warn',
+    why: 'page.goto belongs only inside the owning public async navigate(), never a constructor, another action or validation (page-classes §3–4)',
+    check: sourceRule('page-goto-owner', pageNavigationFindings) },
   { id: 'no-raw-request-in-spec', dirs: ['tests'], severity: 'fail',
     why: 'specs never call the network — Apis<Domain> classes own endpoints (iron law 1)',
     check: grepRule(/\brequest\.(get|post|put|patch|delete|head|options|fetch)\s*\(/) },

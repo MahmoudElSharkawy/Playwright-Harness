@@ -209,6 +209,7 @@ adding new ones.
   retaining a fresh attempted identity before creation and proving ownership before
   deletion. Catalogs, deterministic helpers and fixed inline definitions remain peers;
   imported team libraries are derive-only.
+  Directly routable pages follow [the navigation contract](../.agents/skills/page-classes/references/playbook.md#3-every-directly-routable-page-exposes-navigate); preserve source journeys and prerequisites and document unsupported direct-entry exceptions.
 
 ```ts
 await expectToHaveText('the confirmation message', this.confirmation_msg, expected);

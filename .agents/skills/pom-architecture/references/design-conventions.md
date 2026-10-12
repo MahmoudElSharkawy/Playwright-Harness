@@ -102,6 +102,12 @@ methods and section banners exactly as written:
 Existing files with a stray `/////////Assertions` banner are legacy; fold those methods
 under `///// Validations` when you next touch the file.
 
+Every directly routable page exposes a public async `navigate()` action. Fixed routes
+belong to `url` immediately after `page`; configured application/base URLs supply the
+environment. Routeless shared areas and screens with no supported direct entry have
+documented exceptions. Direct entry and link/menu journeys follow
+[page-classes practice 3](../../page-classes/references/playbook.md#3-every-directly-routable-page-exposes-navigate).
+
 ## 4. Iron laws
 
 1. **Separation:** business code (what the user/system does) in `pages/`, `apis/`,
@@ -289,6 +295,7 @@ Rulings recorded by the team; specialists implement them — a future change her
 | 2026-10-05 | Spec-schema ownership and disposable credentials | Each spec owns its JSON and complete local schema; business contracts describe operations, with small explicit parameters preferred. Externally provisioned access uses env/CI secrets; disposable credentials may be generated once per account per attempt and retained in test scope, with failure cleanup and report protection. Fixed synthetic/invalid values remain in paired JSON. Mechanical checks use dependency evidence; semantic ownership remains independently reviewed. | test-data, action-methods, validation-methods, service-classes, test-classes, test-methods, automate-test, framework-review, convention checker |
 | 2026-10-06 | Simple consumer lifecycle and case-level verification | §4a is the canonical lifecycle rule: built-in isolated fixtures, optional attempted identities before creation, proven ownership and ordinary domain cleanup before disposal. Public fixtures need a concrete benefit, not a dated ruling or resource-count threshold. New candidates use review mappings and the case-assertions gate; no source-key business parameters, private interception, registries or replacement wrappers. Historical receipts remain valid history; explicit migration preserves repair counts and requires fresh review/two runs. | test-classes, test-data, service-classes, automate-test, framework-review |
 | 2026-10-06 | Reporting and focused enforcement | Redaction protects selected headers/structured keys only; value-free titles do not sanitize native artifacts. Await asynchronous metadata with literal real IDs and configure reporter links. Confirmed private Playwright API usage fails without suppression; fixture/import, marker, metadata and link diagnostics are review warnings that alone do not block ordinary CI. | utility-classes §20, harness-setup, test-methods, convention checker |
+| 2026-10-12 | Direct page entry | Every directly routable page owns a public async `navigate()` action, a fixed `url` immediately after `page` when applicable, and configured environment resolution. Route parameters are explicit typed inputs; `goto` stays in the owning navigation action, with one business Allure step and separate arrival validations. Shared areas and unsupported transient entry have documented exceptions; source link/menu/redirect journeys and prerequisites are preserved. Detectable ownership violations are advisory warnings; route eligibility and ambiguous/customized methods require independent review. | page-classes §3, action-methods, test-methods, automate-test, framework-review, convention checker |
 
 **Doctrine-ownership map (2026-09-01)** — the canonical homes of the big cross-cutting rules; consult the home before editing any citer:
 
@@ -302,6 +309,7 @@ Rulings recorded by the team; specialists implement them — a future change her
 | Legacy fix-when-touched | §2 legacy note | scripts/conventions-baseline.json (linter baseline) |
 | Validation layer selection | 2026-09-01 row above | validation-methods playbook |
 | Assertion-message grammar | 2026-09-08 row above | utility-classes playbook §18 (facade) + validation-methods playbook §13 (call sites) |
+| Direct page entry | 2026-10-12 row above | page-classes playbook §3 |
 
 Still open: raw request/context field retention in service classes; getBy* stance; test-title grammar;
 the assertion-message poll check accepts a `message:` token anywhere inside the balanced call
@@ -337,6 +345,7 @@ For the sequential shared-runtime and generation workflow, follow [reporting](..
 - [ ] New code sits in the correct layer and folder; dependencies point downward only
 - [ ] Names follow §2 (classes, methods, locator postfixes, file names)
 - [ ] Class anatomy follows §3 (order, banners, spacing)
+- [ ] Directly routable pages expose public async `navigate()` under page-classes §3; fixed/dynamic routes use the correct configured application, exceptions are documented, and source navigation journeys/prerequisites are preserved
 - [ ] Locators encapsulated, reliable, and built per the element-locators skill
 - [ ] Ordinary actions contain no assertions; validations start with `verify` and sit last; lifecycle cleanup guards/postconditions follow §4a
 - [ ] Every action/validation wrapped in a business-titled Allure step; no secrets in titles

@@ -18,6 +18,9 @@ not how (design-conventions §2). Start with a verb; use real words, no acronyms
 abbreviations (`delUsr()`), or names promising more than the body does
 (`loginAndVerify()` — see practice 5).
 
+Direct page entry uses public async `navigate()` under
+[page-classes practice 3](../../page-classes/references/playbook.md#3-every-directly-routable-page-exposes-navigate), with its ordinary action step/return contract; link/menu actions preserve the journey being tested.
+
 ## 2. Wrap the entire body in exactly one Allure step
 
 Iron law §4.6: every action method opens exactly ONE Allure step of its own,
@@ -389,6 +392,7 @@ This skill does NOT cover:
 ## Review checklist — action methods
 
 - [ ] Name is a camelCase verb phrase stating the intent, not the first click (§2)
+- [ ] Direct-entry navigation follows page-classes practice 3; existing navigation is reused, `goto` stays in its owning action, and arrival assertions remain separate
 - [ ] Entire body wrapped in exactly one Allure step of its own; nothing
       executes outside it except a no-candidate cleanup guard under §4a; sub-steps come only from composed public actions
       (intended nesting) — never two sibling steps opened by one method

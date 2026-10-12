@@ -72,34 +72,87 @@ files. A banner is a claim about what follows — review its **contents**, not i
 presence: ❌ (illustrative counterexample) `ProductsPage` files `clickOnBrand()`, an action, under its
 `//// Validations` banner.
 
-## 3. Declare the route as a `url` field; `navigate()` is the only `goto`
+## 3. Every directly routable page exposes `navigate()`
 
-A page that owns a route declares it once as a field and exposes one navigation action;
-the URL is relative and resolves against `baseURL` in `playwright.config.ts`:
+Classify the page from the supported application entry points: directly routable,
+parameterized, or routeless/flow-only. Every page with a supported direct URL exposes
+one **public async `navigate()`** action, including pages the current scenario reaches
+through a link. Implicit TypeScript public visibility is valid. Reuse an existing
+navigation action and preserve its custom behavior; reconcile a nonstandard name and
+its callers during review rather than adding a duplicate entry action.
+
+A fixed route is declared once as `readonly url`, immediately after `page` (§3).
+Environment coordinates come from the existing application configuration. The shipped
+example uses an absolute URL because its runner has no `baseURL`:
 
 ```ts
 // src/pages/LoginPage.ts
-readonly url: string = '/login';
+readonly page: Page;
+readonly url: string = `${applications.app.url}/login`;
 ...
-async navigate() {
+async navigate(): Promise<void> {
   await step(`Navigate to Login Page`, async () => {
     await this.page.goto(this.url);
   });
 }
 ```
 
-The field is named exactly `url` and sits immediately after `page` (§3) — and it is
-declared only when a method consumes it. Two consumers qualify: `navigate()`, and an
-arrival validation asserting `toHaveURL(this.url)` for a page reached mid-flow rather
-than by direct navigation (a confirmation page, say) — assertion rules in
-[validation-methods](../../validation-methods/SKILL.md). A `url` field no method reads
-is still dead code (practice 13). ❌ (illustrative counterexample) `CreatedAccountPage` declares the
-misnamed `createdtAccountPage_url` that no method ever reads.
+Keep the project's existing URL style. If the runner configures `baseURL` for the
+owning application, a relative `url` is valid; root routes may use `''` or `'/'` under
+that configuration. Without `baseURL`, a root page uses the configured application URL
+itself. For multiple applications, select the owning application's config entry; never
+silently resolve a second application's route against the first application's base.
+Do not introduce a routing service or change application configuration for this rule.
 
-Skeleton-area classes own no route: `src/pages/HeaderPage.ts` has no `url` field and no
-`navigate()` — it is reached through whatever page renders it. Note: `src/pages/HomePage.ts`
-inlines `page.goto('')` without a `url` field; §3 puts `url` in the field list, so hoist
-it if you are already editing that file — don't rewrite it just for this.
+A parameterized route receives required identifiers explicitly with useful types.
+Keep route construction in one owning place, normally `navigate()`; use an existing
+route builder when one already owns it. Do not read an identifier from another test,
+global mutable state or hidden default. For an observed `/records/:recordId` route:
+
+```ts
+readonly page: Page;
+readonly url: string = `${applications.app.url}/records`;
+...
+async navigate(recordId: string): Promise<void> {
+  await step(`Navigate to record ${recordId}`, async () => {
+    await this.page.goto(`${this.url}/${encodeURIComponent(recordId)}`);
+  });
+}
+```
+
+Ordinary action return rules apply (practice 7); do not return `this`, another page,
+or an unused navigation response. Navigation owns exactly one business-readable Allure
+step. Constructors only initialize (practice 4); arrival, redirects and missing/deleted
+record outcomes are checked separately in `verify*` methods. A supported route that
+requires authentication is still directly routable: preserve authentication/data
+prerequisites and existing page/context ownership before calling `navigate()`.
+
+`page.goto()` belongs only inside the owning navigation action, never in a spec,
+hook, constructor, another action, or validation. A direct-entry step calls that page's
+`navigate()` with its route inputs. A step testing a link, menu, redirect or multi-page
+journey keeps the original business interaction and checkpoints; do not bypass it by
+calling the destination's navigation action.
+
+**Explicit exceptions:** shared skeleton areas (header/footer/menu) have no independent
+route and are reached through the page that renders them. Flow-only screens requiring
+transient state with no supported direct entry are reached through their owning journey.
+Document the reason on the class; never invent a route or an empty `navigate()`.
+A flow-only screen may own a `url` used solely by an arrival validation. If the checker
+reports that detectable route, use its existing reviewed line exemption:
+
+```ts
+// Flow-only confirmation: reached after checkout, with no supported direct entry.
+readonly page: Page;
+readonly url: string = '/confirmation'; // conventions-ok: Transient checkout state is required; arrival validation only.
+```
+
+The checker reports conventional `url` fields without public async navigation,
+misordered fields or fixed `goto` literals, and direct `page.goto` outside navigation
+or in specs/hooks. These are advisory warnings; `--fail-on-warn` remains opt-in.
+Unusual/computed/arrow members, aliased page handles, dynamic route typing, supported
+entry and Allure semantics require independent review. A URL or `<Name>Page` name
+alone does not establish that direct entry is supported. Keep any live URL/record
+evidence private. An unread `url` remains dead code (practice 13).
 
 ## 4. Constructor wires and initializes — nothing else
 
@@ -222,6 +275,9 @@ Build only what the test in front of you needs (§4.11):
 Start a new class by copying the shape of the closest sibling in `pages/`, then apply the
 canonical forms below.
 
+Once a directly routable page is justified, its `navigate()` is part of the required
+page contract even when the current scenario arrives through a link (practice 3).
+
 ## 11. Small pages, full anatomy
 
 A one-message-one-button confirmation page (`/account_created`, `/account_deleted`) still
@@ -230,6 +286,9 @@ smallness exempts nothing: same §3 member order, `// Locators` comment, `///// 
 and `///// Validations` banners, step-wrapped methods. ❌ (illustrative counterexample) the 16-line
 `CreatedAccountPage`: no `step` import, a bare `//Actions` comment, and a step-less
 `clickOnContinueButton()`.
+
+Direct entry still depends on the supported application contract: a transient
+confirmation without direct entry documents the practice-3 exception.
 
 ## 12. One exported class per file — file name equals class name
 
@@ -286,6 +345,9 @@ This playbook does **not** cover:
 - [ ] Member order per §3: `page` → `url` (if routed) → `// Locators` fields → constructor → dynamic locator methods → `///// Actions` → `///// Validations`
 - [ ] No `extends`, no `BasePage` — shared UI extracted into a skeleton page class, not inherited
 - [ ] Constructor only stores `page` and initializes locators — no navigation, waits, or logic
+- [ ] Each supported direct route has public async `navigate()`; fixed `url` follows `page`, route parameters are explicit and typed, construction is centralized, and the correct configured application/base URL is used
+- [ ] `goto` occurs only in the owning navigation action, wrapped in one Allure step with ordinary return policy; arrival checks are separate `verify*` methods
+- [ ] Routeless/shared and unsupported transient-entry exceptions state their reason; no fabricated URL or no-op navigation; direct-entry steps preserve prerequisites/context and link/menu/redirect scenarios retain their journeys
 - [ ] New locator fields and dynamic locator methods are `private readonly` / `private`; nothing locator-shaped escapes the class
 - [ ] Dynamic locator methods are synchronous, return `Locator`, use the type-suffix naming, and sit before `///// Actions`
 - [ ] No `try`/`catch`, loops, or conditionals anywhere in the class
