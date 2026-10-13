@@ -54,7 +54,7 @@ or weaken rules to hide new violations.
 | Conventions/routing | test:conventions, test:roots, test:skill-proof |
 | Setup/local sources | test:adoption, test:local-source |
 | CLI/core | test:cli-spike, test:core |
-| Runtimes | test:browser, test:api, test:database, test:postgresql, test:sequential, test:parallel |
+| Runtimes | test:browser, test:api, test:database, test:postgresql, test:mysql, test:sequential, test:parallel |
 | Hosts/workflow | test:hosts, test:workflow |
 | ADO | test:integrations, test:fetch |
 | Generation/reporting | test:generation, test:reporting, test:allure |
@@ -86,12 +86,13 @@ reports when shrinkwrap comparison is unavailable. See [getting started](getting
 CI runs main pushes, PRs and dispatch with read-only repository permissions and
 commit-pinned actions. It retains sanitized summaries, not harness release archives;
 temporary archives remain part of installed-package validation. Windows/Linux check clean installs and the native browser;
-Linux adds real SQL Server/PostgreSQL/sequential/parallel API fixtures. Uploaded summaries
+Linux adds real SQL Server/PostgreSQL/MySQL/sequential/parallel API fixtures. Uploaded summaries
 are sanitized, excluding credentials, auth, raw transcripts and traces. Native commands:
 
 ```sh
 node scripts/ci/native.mjs <installed-workspace> browser
 node scripts/ci/native.mjs <installed-workspace> parallel
+node scripts/ci/mysql.mjs <installed-workspace>
 node <installed-package>/scripts/ci/timeout-proof.mjs <new-timeout-workspace> mixed
 ```
 
@@ -106,6 +107,7 @@ database or authenticated-host gates without separate available prerequisites.
 |---|---|
 | probe:cli, probe:browser | Pinned native viability/browser fixtures |
 | probe:database, probe:postgresql | Owned disposable real engines; Docker |
+| probe:mysql | Pinned MySQL 8.4 CRUD, failure and mixed UI/API/DB proof; Docker and browser |
 | probe:mixed | SQL-backed HTTP/UI; Docker and browser |
 | probe:database-neutrality | Same scenarios across engines; optional -- --linux-client |
 | probe:generation, probe:reporting | Live consumer authoring, actual independent review, scoped runs |

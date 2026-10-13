@@ -1,5 +1,16 @@
 # Third-party notices and references
 
+Issue #57 consumes [mysql2](https://github.com/sidorares/node-mysql2) 3.24.5 (MIT)
+as a separately installed runtime dependency. Its eight added packages are mysql2,
+aws-ssl-profiles, generate-function, is-property, long, lru.min, named-placeholders
+and sql-escaper. `long` 5.3.2 declares Apache-2.0; the other seven declare MIT.
+All eight installed distributions include full license files, which must remain
+with redistributed dependencies. Exact versions and integrity values are recorded
+in [the runtime inventory](scripts/runtime-dependency-licenses.json), now 98 records.
+No upstream implementation is copied or relicensed. The pinned official MySQL 8.4
+container used by the development probe is distributed separately under its own
+upstream terms and is not bundled or cleared for redistribution by this source audit.
+
 M17 preserves the root dependency graph in the publishable `npm-shrinkwrap.json`.
 M18 adds the three native CLI packages described below, for 90 package identities;
 the existing identities and notices are unchanged. npm may duplicate or

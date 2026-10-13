@@ -8,10 +8,14 @@ import {databaseCapabilities, validateDatabaseOperation, bindDatabase, select, e
 import {DatabaseFailure, bounded, credentials} from './shared.mjs';
 import * as sqlserver from './sqlserver-driver.mjs';
 import * as postgresql from './postgresql-driver.mjs';
+import * as mysql from './mysql-driver.mjs';
 import {consumerEnvironment} from '../consumer-env.mjs';
 
 export {defineDatabaseOperation, databaseCapabilities} from './definition.mjs';
 const phases = {SETUP: 0, EXERCISE: 1, VERIFY: 2, CLEANUP: 3, RESTORE: 3};
+const drivers = {sqlserver: {validateTarget: sqlserver.validateTarget, execute: sqlserver.executeSqlServer, port: 1433},
+  postgresql: {validateTarget: postgresql.validateTarget, execute: postgresql.executePostgresql, port: 5432},
+  mysql: {validateTarget: mysql.validateTarget, execute: mysql.executeMysql, port: 3306}};
 const sensitiveKey = name => /(?:password|passwd|pwd|secret|token|authorization|cookie|api.?key|connectionstring)/i.test(name);
 const overlaps = (a, b) => a.from === b.from && a.path.slice(0, Math.min(a.path.length, b.path.length)).every((part, i) => String(part) === String(b.path[i]));
 // The shell environment wins; a name it lacks falls back to the consumer's ignored .env.
@@ -108,7 +112,8 @@ export function createDatabaseRuntime(run, inputRoots, {signal, resolveCredentia
             if (controller.signal.aborted) throw new DatabaseFailure(controller.signal.reason === 'TIMEOUT' ? 'TIMEOUT' : 'CANCELLED');
             const target = run.inputs.environment.targets.databases[operation.target];
             requireThat((d.engine ?? 'sqlserver') === target.engine, 'Database definition and configured target engines differ.');
-            const driver = target.engine === 'sqlserver' ? sqlserver : postgresql;
+            requireThat(target.engine !== 'mysql' || phase !== 'RESTORE', 'MySQL version-based restoration is unsupported.');
+            const driver = drivers[target.engine];
             driver.validateTarget(target);
             if (!resolvedBindings) {
               const bindings = new Map();
@@ -126,10 +131,10 @@ export function createDatabaseRuntime(run, inputRoots, {signal, resolveCredentia
             }
             const request = bindDatabase(d, resolvedBindings);
             if (!authCache.has(operation.target)) {
-              const auth = credentials(await bounded(() => resolveCredential({reference: target.connectionRef, target: operation.target, destination: {server: target.server, port: target.port ?? (target.engine === 'sqlserver' ? 1433 : 5432), database: target.database, schema: target.schema}, signal: controller.signal}), controller.signal));
+              const auth = credentials(await bounded(() => resolveCredential({reference: target.connectionRef, target: operation.target, destination: {server: target.server, port: target.port ?? driver.port, database: target.database, schema: target.schema}, signal: controller.signal}), controller.signal));
               remember(auth.user); remember(auth.password); authCache.set(operation.target, auth);
             }
-            response = await (target.engine === 'sqlserver' ? driver.executeSqlServer : driver.executePostgresql)(target, authCache.get(operation.target), request, {signal: controller.signal, timeoutMs: budget, maxRows: d.maxRows ?? 1000, maxResponseBytes: d.maxResponseBytes ?? 1048576});
+            response = await driver.execute(target, authCache.get(operation.target), request, {signal: controller.signal, timeoutMs: budget, maxRows: d.maxRows ?? 1000, maxResponseBytes: d.maxResponseBytes ?? 1048576});
             current.effect.certainty = operation.capability === 'dbSelect' ? 'none' : response.affectedRows === undefined ? 'uncertain' : response.affectedRows === 0 ? 'none' : 'confirmed';
             if (operation.capability === 'dbDml' && response.affectedRows !== undefined) current.effect.affectedRows = {actual: response.affectedRows, ...(d.affectedRows ? {expected: d.affectedRows} : {})};
             const responseId = evidence(current, 'response', {rowCount: response.rowCount, rowsAffected: response.rowsAffected, bytes: response.bytes});
