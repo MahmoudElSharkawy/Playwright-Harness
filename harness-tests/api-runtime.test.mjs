@@ -8,6 +8,144 @@ import {defineApiOperation, createApiRuntime} from '../scripts/lib/api/index.mjs
 import {defineOperation} from '../scripts/lib/execution-core/index.mjs';
 import {fixture, operation, statusCheck, readEffects, writeEffects} from './fixtures/api.mjs';
 
+for (const kind of ['catalog', 'helper', 'inline', 'exploration']) test(`${kind} sends exact form bytes with scalar bindings and separate query fields`, async t => {
+  const op = operation('form', {method: 'POST', kind, request: {method: 'POST', path: '/items', query: {label: 'query only'}, form: {
+    label: {$input: 'label'}, empty: '', zero: {$input: 'zero'}, flag: {$input: 'flag'}, number: 1.5, enabled: true, 'a &+=/%': '雪 café', encoded: '%2F+%20'
+  }}, checks: [statusCheck('status', 201), {id: 'label', select: {from: 'json', path: ['label']}, equals: {$input: 'label'}}],
+  extract: [{name: 'recordId', type: 'string', sensitivity: 'public', select: {from: 'json', path: ['id']}}]});
+  const f = await fixture(t, ({request, reply}) => reply(201, {id: 'form-1', label: request.form?.label}), [op], {values: [['label', 'a b+c&d=e/%'], ['zero', 0], ['flag', false]]});
+  const attempt = await f.call(op, {inputs: f.run.inputs.values}); f.runtime.selectOutput(attempt, 'recordId');
+  const result = f.runtime.finish(), request = f.requests[0];
+  assert.equal(result.status, 'PASS'); assert.equal(result.operations[0].source.kind, kind); assert.equal(op.capability, 'apiMutations');
+  assert.equal(result.scenarios[0].outputs[0].value, 'form-1'); assert.equal(f.requests.length, 1);
+  const expected = 'label=a+b%2Bc%26d%3De%2F%25&empty=&zero=0&flag=false&number=1.5&enabled=true&a+%26%2B%3D%2F%25=%E9%9B%AA+caf%C3%A9&encoded=%252F%2B%2520';
+  assert.deepEqual(request.rawBody, Buffer.from(expected, 'utf8'));
+  assert.equal(request.headers['content-type'], 'application/x-www-form-urlencoded'); assert.equal(request.headers['content-length'], String(Buffer.byteLength(expected)));
+  assert.equal(request.path, '/items?label=query+only');
+  assert.deepEqual(request.form, {label: 'a b+c&d=e/%', empty: '', zero: '0', flag: 'false', number: '1.5', enabled: 'true', 'a &+=/%': '雪 café', encoded: '%2F+%20'});
+  assert(!f.allText().includes(expected));
+});
+
+for (const method of ['PUT', 'PATCH', 'DELETE']) test(`${method} supports an explicitly empty form`, async t => {
+  const op = operation('empty-form', {method, request: {method, path: '/items', form: {}}});
+  const f = await fixture(t, ({reply}) => reply(200), [op]); await f.call(); assert.equal(f.runtime.finish().status, 'PASS');
+  assert.equal(f.requests[0].rawBody.length, 0); assert.deepEqual(f.requests[0].form, {});
+  assert.equal(f.requests[0].headers['content-type'], 'application/x-www-form-urlencoded'); assert.equal(f.requests[0].headers['content-length'], '0');
+});
+
+test('JSON and absent bodies retain their existing wire format', async t => {
+  const json = operation('json', {method: 'POST', request: {method: 'POST', path: '/items', json: {text: 'a b+&雪', zero: 0, flag: false, empty: null}}});
+  const absent = operation('absent', {checks: [statusCheck('absent-status', 200)]}); const f = await fixture(t, ({reply}) => reply(200), [json, absent]);
+  await f.call(json); await f.call(absent); assert.equal(f.runtime.finish().status, 'PASS');
+  assert.equal(f.requests[0].rawBody.toString('utf8'), '{"text":"a b+&雪","zero":0,"flag":false,"empty":null}');
+  assert.equal(f.requests[0].headers['content-type'], 'application/json'); assert.equal(f.requests[1].rawBody.length, 0);
+  assert.equal(f.requests[1].headers['content-type'], undefined); assert.equal(f.requests[1].headers['content-length'], undefined);
+});
+
+test('form definitions reject conflicting bodies, GET bodies and unsupported shapes', () => {
+  for (const request of [
+    {method: 'POST', form: {}, json: {}}, {method: 'POST', form: {}, json: null}, {method: 'GET', form: {}},
+    ...[null, undefined, [], 'a=b', {$input: 'wholeBody'}, {field: null}, {field: undefined}, {field: {}}, {field: []}, {field: NaN}, {field: Infinity}, {field: {$input: 'value', extra: true}}].map(form => ({method: 'POST', form}))
+  ]) assert.throws(() => operation('invalid-form', {method: request.method, request: {path: '/items', ...request}}));
+});
+
+for (const contentType of ['application/x-www-form-urlencoded', 'application/x-www-form-urlencoded; charset=utf-8', 'Application/X-Www-Form-Urlencoded; Charset="UTF-8"']) test(`form accepts static and bound Content-Type ${contentType}`, async t => {
+  for (const bound of [false, true]) {
+    const op = operation('form', {method: 'POST', request: {method: 'POST', path: '/items', form: {value: 'ok'}, headers: {'content-type': bound ? {$input: 'mediaType'} : contentType}}});
+    const f = await fixture(t, ({reply}) => reply(200), [op], {values: [['mediaType', contentType]]});
+    await f.call(op, {inputs: f.run.inputs.values}); assert.equal(f.runtime.finish().status, 'PASS'); assert.equal(f.requests[0].headers['content-type'], contentType);
+  }
+});
+
+for (const contentType of ['', 'application/json', 'multipart/form-data', 'application/x-www-form-urlencoded; charset=latin1', 'application/x-www-form-urlencoded; charset=utf8', 'application/x-www-form-urlencoded; boundary=x', 'application/x-www-form-urlencoded; charset=utf-8; charset=utf-8']) test(`form refuses incompatible static or bound Content-Type ${contentType || '(empty)'}`, async t => {
+  assert.throws(() => operation('invalid-form', {method: 'POST', request: {method: 'POST', path: '/items', form: {}, headers: {'content-type': contentType}}}), /Content-Type/);
+  const op = operation('form', {method: 'POST', request: {method: 'POST', path: '/items', form: {}, headers: {'content-type': {$input: 'mediaType'}}}});
+  const f = await fixture(t, ({reply}) => reply(200), [op], {values: [['mediaType', contentType]]});
+  const attempt = await f.call(op, {inputs: f.run.inputs.values}); assert.equal(attempt.effect.certainty, 'not-executed');
+  assert.notEqual(f.runtime.finish().status, 'PASS'); assert.equal(f.requests.length, 0);
+});
+
+for (const [label, value] of [['null', null], ['array', ['x']], ['object', {x: 1}], ['missing', undefined]]) test(`form refuses ${label} input before dispatch`, async t => {
+  const op = operation('form', {method: 'POST', request: {method: 'POST', path: '/items', form: {field: {$input: 'datum'}}}});
+  const f = await fixture(t, ({reply}) => reply(200), [op], {values: value === undefined ? [] : [['datum', value]]});
+  const attempt = await f.call(op, {inputs: f.run.inputs.values}); assert.equal(attempt.effect.certainty, 'not-executed'); assert.equal(attempt.failureClass, 'EXECUTOR');
+  assert.notEqual(f.runtime.finish().status, 'PASS'); assert.equal(f.requests.length, 0);
+});
+
+for (const value of [undefined, null, [], {}, NaN, Infinity, false]) test(`form refuses unsupported or mistyped protected binding ${String(value)}`, async t => {
+  const op = operation('form', {method: 'POST', request: {method: 'POST', path: '/items', form: {field: {$input: 'datum'}}}});
+  const f = await fixture(t, ({reply}) => reply(200), [op], {sensitiveValues: [['datum', 'string', 'protected:datum']], runtime: {resolveSensitive: () => value}});
+  const attempt = await f.call(op, {inputs: f.run.inputs.values}); assert.equal(attempt.effect.certainty, 'not-executed');
+  assert.notEqual(f.runtime.finish().status, 'PASS'); assert.equal(f.requests.length, 0);
+});
+
+test('form body limit applies to final encoded bytes, including field names', async t => {
+  for (const extra of ['', 'x']) {
+    const op = operation('form', {method: 'POST', request: {method: 'POST', path: '/items', form: {'雪': {$input: 'datum'}}}});
+    // Encoded name plus '=' consumes 10 bytes; each Unicode character consumes 9.
+    const value = '雪'.repeat(116507) + 'abc' + extra;
+    const f = await fixture(t, ({reply}) => reply(200), [op], {limits: {maxValueBytes: 524288}, values: [['datum', value]]});
+    const attempt = await f.call(op, {inputs: f.run.inputs.values}), result = f.runtime.finish();
+    if (extra) {assert.notEqual(result.status, 'PASS'); assert.equal(attempt.effect.certainty, 'not-executed'); assert.equal(f.requests.length, 0);}
+    else {assert.equal(result.status, 'PASS'); assert.equal(f.requests[0].rawBody.length, 1048576); assert.equal(f.requests[0].headers['content-length'], '1048576'); assert.equal(f.requests[0].form['雪'], value);}
+  }
+});
+
+test('sensitive form fields require protected bindings', async t => {
+  const literal = randomUUID();
+  assert.throws(() => operation('form', {method: 'POST', request: {method: 'POST', path: '/items', form: {password: literal}}}), /protected reference/);
+  assert.throws(() => operation('form', {method: 'POST', request: {method: 'POST', path: '/items', form: {client_secret: literal}}}), /protected input|credential-like literal/);
+  assert.throws(() => operation('form', {method: 'POST', request: {method: 'POST', path: '/items', form: {password_hint: 0}}}), /protected input/);
+  const op = operation('form', {method: 'POST', request: {method: 'POST', path: '/items', form: {password: {$input: 'datum'}}}});
+  const f = await fixture(t, ({reply}) => reply(200), [op], {values: [['datum', 'synthetic']]});
+  await assert.rejects(f.call(op, {inputs: f.run.inputs.values}), /protected input/); assert.equal(f.requests.length, 0);
+});
+
+for (const formBody of [false, true]) for (const from of ['text', 'json', 'header', 'json-key']) test(`form-encoded protected echoes cannot enter ${from} evidence or public outputs (${formBody ? 'form' : 'bodyless'})`, async t => {
+  const privateValue = "synthetic A+B&=/%雪!'()~", encoded = 'synthetic+A%2BB%26%3D%2F%25%E9%9B%AA%21%27%28%29%7E';
+  const select = {from: from === 'json-key' ? 'json' : from, path: from === 'json' ? ['echo'] : from === 'header' ? ['x-echo'] : []};
+  // Bodyless operation also proves the shared screening independently of form validation.
+  const op = operation('echo', {...(formBody ? {method: 'POST', request: {method: 'POST', path: '/items', form: {password: {$input: 'datum'}}}} : {}), checks: [statusCheck('status', 200), {id: 'echo', select, equals: null}],
+    extract: [{name: 'echo', type: from === 'json-key' ? 'object' : 'string', sensitivity: 'public', select}]});
+  const f = await fixture(t, ({reply, res}) => {
+    if (from === 'text') {res.writeHead(200, {'content-type': 'text/plain'}); res.end(`field=${encoded}`);}
+    else reply(200, from === 'json-key' ? {[encoded]: 'value'} : {echo: encoded}, {'x-echo': encoded});
+  }, [op], {sensitiveValues: [['datum', 'string', 'protected:datum']], runtime: {resolveSensitive: () => privateValue}});
+  const attempt = await f.call(op, {inputs: f.run.inputs.values}); assert.equal(f.runtime.finish().status, 'FAIL');
+  if (formBody) assert.equal(f.requests[0].form.password, privateValue);
+  assert.equal(attempt.outputs.length, 0); assert(!f.allText().includes(privateValue)); assert(!f.allText().includes(encoded));
+});
+
+test('form idempotent replay preserves exact protected bytes and cleans up the owned mutation', async t => {
+  let resolutions = 0; const seen = new Set();
+  const create = operation('form', {method: 'POST', request: {method: 'POST', path: '/items', form: {payload: {$input: 'datum'}}},
+    checks: [statusCheck('created', 200)],
+    recovery: {idempotency: {contractRef: 'fixture-deduplication', input: 'requestKey'}},
+    extract: [{name: 'recordId', type: 'string', sensitivity: 'public', select: {from: 'json', path: ['id']}}]});
+  const remove = operation('remove', {method: 'DELETE', path: '/items/{recordId}', checks: [statusCheck('removed', 200)]});
+  const f = await fixture(t, ({req, request, requests, reply, items, effect}) => {
+    if (request.method === 'DELETE') {items.delete('row-1'); reply(200); return;}
+    const key = request.headers['idempotency-key']; if (!seen.has(key)) {seen.add(key); items.set('row-1', request.form); effect();}
+    if (requests.length === 1) req.socket.destroy(); else reply(200, {id: 'row-1'});
+  }, [create, remove], {sensitiveValues: [['datum', 'string', 'protected:datum'], ['requestKey', 'string', 'protected:request-key']], runtime: {
+    resolveSensitive: reference => {resolutions++; return reference.endsWith('datum') ? `synthetic ${resolutions}+!雪` : randomUUID();}
+  }});
+  const created = await f.call(create, {phase: 'SETUP', inputs: f.run.inputs.values, resource: {id: 'row', output: 'recordId', ownership: 'harness', intent: 'temporary'}});
+  await f.call(remove, {phase: 'CLEANUP', inputs: created.outputs, lifecycle: {resourceId: 'row'}});
+  const result = f.runtime.finish(); assert.equal(result.status, 'PASS'); assert.equal(result.stability, 'recovered');
+  assert.equal(f.effects(), 1); assert.equal(resolutions, 2); assert.equal(f.items.size, 0); assert.equal(result.scenarios[0].requiredLifecycleComplete, true);
+  assert.deepEqual(f.requests[0].rawBody, Buffer.from('payload=synthetic+1%2B%21%E9%9B%AA'));
+  assert.deepEqual(f.requests[0].rawBody, f.requests[1].rawBody); assert.equal(f.requests[0].headers['idempotency-key'], f.requests[1].headers['idempotency-key']);
+  assert(!f.allText().includes('synthetic+1%2B%21%E9%9B%AA')); assert(!f.allText().includes('synthetic 1+!雪'));
+});
+
+for (const cancel of [false, true]) test(`lost form mutation ${cancel ? 'with cancellation' : 'without recovery contract'} is uncertain and never replayed`, async t => {
+  const controller = new AbortController(), op = operation('form', {method: 'POST', request: {method: 'POST', path: '/items', form: {field: 'value'}}});
+  const f = await fixture(t, ({req, effect}) => {effect(); if (cancel) controller.abort(); else req.socket.destroy();}, [op], {runtime: {signal: controller.signal}});
+  await f.call(); const result = f.runtime.finish(); assert.equal(result.status, 'NEEDS_REVIEW'); assert.equal(f.requests.length, 1); assert.equal(f.effects(), 1);
+  assert.equal(result.scenarios[0].attempts[0].effect.certainty, 'uncertain');
+});
+
 test('known confidential values cannot become public JSON member names', async t => {
   const value = `synthetic-"${randomUUID()}\\key`, op = operation('key', {extract: [{name: 'payload', type: 'object', sensitivity: 'public', select: {from: 'json', path: []}}]});
   const f = await fixture(t, ({reply}) => reply(200, {[value]: 'public'}), [op], {auth: true, runtime: {resolveCredential: () => ({'x-api-key': value})}});

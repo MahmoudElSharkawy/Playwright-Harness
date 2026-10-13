@@ -108,7 +108,8 @@ export function publicValue(state, value) {
   function inspect(item, depth = 0) {
     requireThat(++nodes <= 20000 && depth <= 32, 'Public data exceeds structural limits.');
     if (typeof item === 'string') {
-      requireThat(![...state.secrets].some(secret => item.includes(String(secret)) || item.includes(encodeURIComponent(String(secret)))), 'Sensitive content cannot be a public output.');
+      requireThat(![...state.secrets].some(secret => item.includes(String(secret)) || item.includes(encodeURIComponent(String(secret)))
+        || item.includes(new URLSearchParams([['', String(secret)]]).toString().slice(1))), 'Sensitive content cannot be a public output.');
       const parsed = decoded(item); if (parsed !== undefined) inspect(parsed, depth + 1);
     } else if (typeof item === 'number' || typeof item === 'boolean') requireThat(!state.secrets.has(item), 'Sensitive content cannot be a public output.');
     else if (item && typeof item === 'object') for (const [name, child] of Object.entries(item)) {

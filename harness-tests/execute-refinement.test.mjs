@@ -7,6 +7,20 @@ import {writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {writeJson, readBounded, EXECUTION_DOCUMENT, ownedFile} from '../scripts/lib/execute/storage.mjs';
 
+test('form requests validate during freeze and remain covered by the operation fingerprint', async t => {
+  const f = await executionFixture(t), step = f.apiStep(); step.capability = 'mutations'; delete step.readOnlyContract;
+  step.operation.request = {method: 'POST', path: '/items', form: {field: 'original'}};
+  step.operation.effects = {confirmedStatuses: [200], contractRef: 'fixture-form'};
+  for (const patch of [{json: {}}, {method: 'GET'}, {form: {field: []}}, {headers: {'content-type': 'application/json'}}]) {
+    const request = step.operation.request; step.operation.request = {...request, ...patch}; assert.throws(f.freeze); step.operation.request = request;
+  }
+  f.freeze(); const loaded = readFrozen(f.roots, f.executionId);
+  assert.deepEqual(loaded.freeze.scenarios[0].steps[0].operation.definition.request.form, {field: 'original'});
+  loaded.freeze.scenarios[0].steps[0].operation.definition.request.form.field = 'changed';
+  f.put(`.harness/runs/${f.executionId}/freeze.json`, loaded.freeze);
+  assert.throws(() => readFrozen(f.roots, f.executionId), /receipt changed/); assert.equal(f.requests.length, 0);
+});
+
 test('S4 S5 V7: freeze reports scoped readiness and resolves expected values from consumer .env', async t => {
   const f = await executionFixture(t); f.apiStep();
   writeFileSync(join(f.projectRoot, '.env'), 'EXECUTE_EXPECTED_STATUS=200\n');
