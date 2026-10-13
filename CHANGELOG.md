@@ -1,5 +1,19 @@
 # Changelog
 
+## 3.6.0 — MySQL execution and URL-encoded API forms
+
+### Upgrade actions
+
+- Re-run setup from the 3.6.0 archive in each project, then reload Claude Code skills or restart Codex to discover the updated guidance. Existing customized code and configuration remain subject to review. Existing JSON API definitions and SQL Server/PostgreSQL targets need no migration.
+- For MySQL execution, configure an explicit `engine: "mysql"` target and operation definitions, use MySQL 8.4 with a dedicated scoped principal, and follow [the database guide](docs/reference/databases.md). Schema must match the database; verified TLS requires a DNS server name. Guarded restoration and generated MySQL POM services remain unsupported.
+- For URL-encoded API requests, use `form` instead of `json`, bind sensitive fields through protected inputs, and follow [the API guide](docs/reference/api.md). Forms accept scalar fields only; JSON and form bodies are mutually exclusive.
+
+### Changes
+
+- Add native MySQL execution through the pinned `mysql2` driver, including typed parameter bindings, scoped privilege checks, read-only SELECT transactions, bounded cancellation, protected outputs and identity-bound cleanup. Preserve uncertain mutation effects when a COMMIT reply is lost; refuse unsupported SQL and guarded restoration.
+- Add installed-archive MySQL proofs on Linux for CRUD, native types, privilege rejection, lock waits, COMMIT uncertainty, cleanup and a mixed browser/API/database scenario. Record dependency licenses and provenance.
+- Support `application/x-www-form-urlencoded` API bodies in standalone, sequential and manual execution. Validate field types and Content-Type before dispatch, enforce the request limit after encoding, and screen known form-encoded secrets from evidence. Existing timeout, cancellation and mutation recovery contracts remain in force.
+
 ## 3.5.0 — Test maintenance and blocked-case recovery
 
 ### Upgrade actions
