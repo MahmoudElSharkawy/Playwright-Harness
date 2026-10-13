@@ -49,6 +49,56 @@ checked again only for bug/result delivery, in batches of at most 200; reports s
 the saved check's timestamp and executed/current revisions without another remote read.
 Changed cases are excluded from publication unless `--include-changed` is selected.
 
+### Form API steps
+
+For an endpoint requiring `application/x-www-form-urlencoded`, refine its API step
+with `operation.request.form`. For a source action that submits a record with
+parameter `label` and expects **Status is 201**, the step can be:
+
+```json
+{
+  "id": "s001", "phase": "EXERCISE", "family": "api",
+  "target": "qa-api", "capability": "mutations", "sourceSteps": [1],
+  "inputs": [
+    {"name": "label", "source": "parameter:label"},
+    {"name": "credential", "source": "env:FORM_CLIENT_SECRET"}
+  ],
+  "expectations": [{
+    "key": "<source-key>",
+    "conditions": [{
+      "text": "Status is 201", "predicate": "equals", "subject": "page",
+      "expected": {"source": "source-text", "value": 201},
+      "precondition": false, "exact": false, "ambiguous": false
+    }]
+  }],
+  "operation": {
+    "request": {
+      "method": "POST", "path": "/records",
+      "form": {"label": {"$input": "label"}, "client_secret": {"$input": "credential"}, "enabled": true}
+    },
+    "effects": {"confirmedStatuses": [201], "contractRef": "record-create-contract"},
+    "checks": [{"id": "created", "select": {"from": "status", "path": []}, "equals": 201}],
+    "extract": [{"name": "recordId", "type": "string", "sensitivity": "public", "select": {"from": "json", "path": ["id"]}}]
+  },
+  "checkProvenance": [{"check": "created", "key": "<source-key>", "condition": 1}]
+}
+```
+
+Use the actual source expectation key from the draft in both `<source-key>` slots;
+retain its action, text, parameter and target. Declare effect statuses from the
+endpoint's established contract. Provision `FORM_CLIENT_SECRET` through the existing
+consumer environment/CI mechanism; its value is never part of refinement or freeze.
+If the scenario creates a temporary owned record, add the existing `creates`
+declaration and a CLEANUP step whose input uses `output:recordId`. Intentional
+persistence follows the usual lifecycle rules.
+
+Freeze validates the form schema and includes it in the operation fingerprint.
+`begin-step` executes the API operation and records its mapped source assertions
+and typed outputs. The same step works in API-only and mixed scenarios. Form values
+are decoded scalars, encoded once; headers, unsupported shapes and encoded-byte
+limits follow the [API form contract](reference/api.md#url-encoded-form-bodies).
+Changing Content-Type on a `json` body does not convert it into a form.
+
 ## Observe and verify
 
 Follow the [verdict rules](../.agents/skills/execute-test/references/verdicts.md).

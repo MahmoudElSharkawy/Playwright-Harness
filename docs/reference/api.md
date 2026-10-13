@@ -46,7 +46,7 @@ GETs need `apiMutations`. Target/catalog names grant no permission. See
 ## Request and binding contracts
 
 Requests specify `method`, target-relative `path`, optional scalar `query`,
-allowlisted `headers` and JSON body. Path `{recordId}` binds/encodes an input;
+allowlisted `headers` and an optional `json` or `form` body. Path `{recordId}` binds/encodes an input;
 `{$input: 'recordId'}` structurally binds query/body/header/expected values. Inputs
 come from frozen values or earlier outputs with type, sensitivity and provenance
 intact. Sensitive fields require sensitive input references, not literals. Concrete
@@ -62,8 +62,67 @@ come through a separate resolver.
 Checks compare exact typed status/JSON/text/header values and match frozen expectation
 IDs. Non-2xx responses can be expected. Missing differs from null. Required extraction
 declares type/sensitivity; missing/mistyped output cannot pass. Reliable assertion
-failures never retry to green. Transport uses bounded JSON requests and buffered
+failures never retry to green. Transport uses bounded JSON/form requests and buffered
 text/JSON responses, without multipart, streaming, automatic decompression or custom TLS.
+
+### URL-encoded form bodies
+
+Use `request.form` for `application/x-www-form-urlencoded` endpoints. The same
+definition works in catalog, helper, inline and enabled exploration sources:
+
+```js
+const submit = defineApiOperation({
+  id: 'submit-record', target: 'qa-api',
+  source: {kind: 'inline', reference: 'record-service', version: '1.0.0'},
+  request: {
+    method: 'POST', path: '/records', query: {view: 'summary'},
+    form: {label: {$input: 'label'}, count: 0, enabled: false, note: ''}
+  },
+  effects: {confirmedStatuses: [201], contractRef: 'record-create-contract'},
+  checks: [{id: 'created', select: {from: 'status', path: []}, equals: 201}],
+  extract: [{name: 'recordId', type: 'string', sensitivity: 'public',
+    select: {from: 'json', path: ['id']}}]
+});
+```
+
+Bind `label` through the invocation's existing typed `inputs`. A value `a b+c&d`
+produces `label=a+b%2Bc%26d&count=0&enabled=false&note=`; `view=summary` stays in
+the URL query. Values are decoded input: `%2F` is literal text and becomes `%252F`,
+not a slash. Native `URLSearchParams` encodes field names and values as UTF-8,
+spaces as `+`, literal `+` as `%2B`, and reserved characters with percent escapes.
+
+The form must be a flat field object. Each value is a string, finite number,
+boolean, or `{$input: 'name'}` resolving to one of those types. Numbers and booleans
+convert explicitly to text; empty strings, zero and false are retained. An empty
+`form: {}` sends a zero-byte body with the form Content-Type and Content-Length 0.
+Omitting both body fields leaves the body absent. JSON definitions need no migration.
+
+`json` and `form` are mutually exclusive. GET bodies remain unsupported; POST,
+PUT, PATCH and DELETE accept forms and retain mutation capability classification.
+Null, undefined, non-finite numbers, nested objects, arrays, whole-form binding
+slots, missing/mistyped inputs, duplicate names and multi-valued fields are
+unsupported. A repeated field requires another API contract, not an array or a
+comma-joined value. The shared execution-data restrictions on object keys still apply.
+
+The default `content-type` is `application/x-www-form-urlencoded`. An explicit
+header may use the same media type, case-insensitively, with an optional
+`charset=utf-8` (also `charset="UTF-8"`). Conflicting media types, other charsets,
+extra parameters and repeated charset declarations fail, including after header
+binding. The **1 MiB (1,048,576-byte)** request limit applies after encoding field
+names and values; percent expansion counts. Content-Length uses the final byte
+count. Existing definition, input and metadata limits apply separately and may
+reject a value earlier. Invalid definitions/bindings are refused before dispatch.
+
+Sensitive fields such as `password` and `client_secret` must use protected input
+bindings. Keep credentials in the existing target resolver or protected storage;
+do not put them in form literals or public values. Known form-encoded secret echoes
+are screened from comparisons and public outputs as well as ordinary URI-encoded
+echoes. Raw request bytes remain in memory. Forms retain destination, timeout,
+cancellation, retry/idempotency and cleanup contracts; a lost mutation response
+still requires existing recovery proof before replay. This adds no OAuth flow,
+token cache, multipart upload, raw-body mode or form-response parser.
+
+For a frozen manual step, see [form API steps](../manual-execution.md#form-api-steps).
 
 ## Credentials and evidence
 
@@ -83,6 +142,7 @@ host process limits.
 Credentials/raw payloads remain in memory. Evidence contains screened bounded
 transport/comparison facts and explicit typed public outputs. Known credentials,
 decoded Basic components, cookies and sensitive selectors are protected, including
+their URI-encoded and form-encoded representations,
 overlapping JSON paths, case-insensitive headers and whole-body text. The caller must
 classify domain-sensitive fields; heuristics cannot detect every encoding/value.
 Raw errors, URLs and payloads are omitted from diagnostics.

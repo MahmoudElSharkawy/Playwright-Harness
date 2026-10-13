@@ -22,8 +22,10 @@ export async function fixture(t, handler, definitions, options = {}) {
   const requests = [], items = new Map(); let effects = 0;
   const server = createServer(async (req, res) => {
     const chunks = []; for await (const chunk of req) chunks.push(chunk);
-    let body; try {body = JSON.parse(Buffer.concat(chunks).toString());} catch { /* Bodies are optional. */ }
-    const request = {method: req.method, path: req.url, headers: req.headers, body}; requests.push(request);
+    const rawBody = Buffer.concat(chunks); let body, form;
+    try {body = JSON.parse(rawBody.toString('utf8'));} catch { /* JSON bodies are optional. */ }
+    if (/^application\/x-www-form-urlencoded(?:;|$)/i.test(req.headers['content-type'] ?? '')) form = Object.fromEntries(new URLSearchParams(rawBody.toString('utf8')));
+    const request = {method: req.method, path: req.url, headers: req.headers, body, form, rawBody}; requests.push(request);
     const reply = (status, value = {}, headers = {}) => {res.writeHead(status, {'content-type': 'application/json', ...headers}); res.end(JSON.stringify(value));};
     const context = {req, res, request, requests, reply, items, effect: () => effects++};
     try { await handler(context); } catch { if (!res.destroyed) {res.writeHead(500); res.end();} }

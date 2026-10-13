@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {join} from 'node:path';
-import {mkdirSync, rmSync, writeFileSync, existsSync} from 'node:fs';
+import {mkdirSync, rmSync, writeFileSync, existsSync, readdirSync, readFileSync} from 'node:fs';
 import {randomUUID} from 'node:crypto';
 import {executionFixture} from './fixtures/execute.mjs';
 import {startScenario, runHostedScenario, runInput} from '../scripts/lib/execute/host.mjs';
@@ -36,6 +36,70 @@ async function waitForHost(directory, expected, timeoutMs) {
   assert.equal(host?.state, expected, `Host must reach ${expected} before its test deadline.`);
   return host;
 }
+
+for (const browser of [false, true]) test(`frozen form mutation in ${browser ? 'mixed browser/API' : 'API-only'} hosted execution preserves checks, outputs and cleanup`, async t => {
+  const wire = [], items = new Map(), privateValue = "synthetic A+B&=/%雪!'()~";
+  const f = await executionFixture(t, {browser, steps: [
+    {action: 'Submit form record', expected: 'Status is 201 and label is café + &'},
+    ...(browser ? [{action: '', expected: 'Save is disabled'}] : []),
+    {action: 'Delete owned form record', expected: 'Status is 200'}
+  ], handler: async (req, res) => {
+    const chunks = []; for await (const chunk of req) chunks.push(chunk);
+    const rawBody = Buffer.concat(chunks), fields = Object.fromEntries(new URLSearchParams(rawBody.toString('utf8')));
+    wire.push({method: req.method, path: req.url, headers: req.headers, rawBody, fields});
+    if (req.method === 'POST') {items.set('form-1', fields); res.writeHead(201, {'content-type': 'application/json'}); res.end(JSON.stringify({id: 'form-1', label: fields.label}));}
+    else {items.delete(req.url.slice('/items/'.length)); res.writeHead(200, {'content-type': 'application/json'}); res.end('{}');}
+  }}), runId = 'run-form';
+  writeFileSync(join(f.projectRoot, '.env'), `FORM_LABEL=café + &\nFORM_PRIVATE=${privateValue}\n`);
+  f.refinement.references.formLabel = {env: 'FORM_LABEL'};
+  const create = f.apiStep(), cleanup = f.apiStep(browser ? 2 : 1);
+  create.phase = 'SETUP'; create.capability = 'mutations'; delete create.readOnlyContract;
+  create.inputs = [{name: 'label', source: 'reference:formLabel'}, {name: 'datum', source: 'env:FORM_PRIVATE'}];
+  const expectation = create.expectations[0], condition = expectation.conditions[0];
+  expectation.conditions = [{...condition, text: 'Status is 201', expected: {source: 'source-text', value: 201}},
+    {...condition, text: 'and label is café + &', expected: {source: 'source-text', value: 'café + &'}}];
+  create.operation = {request: {method: 'POST', path: '/items', query: {view: 'form only'}, form: {label: {$input: 'label'}, password: {$input: 'datum'}, count: 0, enabled: false}},
+    effects: {confirmedStatuses: [201], contractRef: 'fixture-form-create'}, checks: [{id: 'status-0', select: {from: 'status', path: []}, equals: 201}, {id: 'label', select: {from: 'json', path: ['label']}, equals: 'café + &'}],
+    extract: [{name: 'recordId', type: 'string', sensitivity: 'public', select: {from: 'json', path: ['id']}}]};
+  create.checkProvenance.push({check: 'label', key: expectation.key, condition: 2});
+  create.creates = [{resource: 'form-row', identityOutput: 'recordId', intent: 'temporary', cleanupStep: cleanup.id}];
+  cleanup.phase = 'CLEANUP'; cleanup.capability = 'mutations'; delete cleanup.readOnlyContract;
+  cleanup.inputs = [{name: 'recordId', source: 'output:recordId'}]; cleanup.cleanupResource = 'form-row';
+  cleanup.operation.request = {method: 'DELETE', path: '/items/{recordId}'};
+  cleanup.operation.effects = {confirmedStatuses: [200], contractRef: 'fixture-form-remove'};
+  if (browser) {
+    const step = f.refinement.scenarios[0].steps[1]; step.capability = 'reads'; step.readOnlyContract = {reason: 'Observe the Save button only.'};
+    Object.assign(step.expectations[0].conditions[0], {predicate: 'state:disabled', subject: {element: {role: 'button', name: 'Save'}}});
+  }
+  const inventory = async () => [{pid: process.pid, identity: 'form-host'}], {owner, scenario} = await hostedFixture(f, runId, {inventory});
+  const queue = [['begin-step', create.id], ...(browser ? [['begin-step', 's002'], ['check', scenario.steps[1].contracts[0].key, '--read', 'state e1'], ['end-step', '--effect', 'none']] : []), ['begin-step', cleanup.id]];
+  const state = {}, replies = [], native = fakeNative();
+  const mailboxFactory = () => ({state, save(patch) {Object.assign(state, patch);}, take() {
+    return state.state === 'READY' && queue.length && (queue[0][0] === 'begin-step' ? state.step === queue[0][1] && !state.active : state.active) ? {args: queue.shift()} : null;
+  }, reply(request, result) {replies.push(result);}});
+  const runtime = (run, roots, options, callbacks) => runSequentialScenario(run, roots, {...options, ...(browser ? {browser: {...options.browser, nativeSession: native.factory}} : {})}, callbacks);
+  await runHostedScenario(f.roots, f.executionId, runId, owner.nonce, {inventory, runtime, mailboxFactory});
+  assert.equal(state.state, 'FINISHED'); assert.equal(queue.length, 0); assert.equal(await lockStatus(f.roots), null);
+  const view = collectExecution(f.roots, f.executionId), result = view.runs[0].result, actual = result.scenarios[0];
+  assert.equal(view.scenarios[0].status, 'PASS', JSON.stringify(replies)); assert.equal(actual.requiredLifecycleComplete, true); assert.equal(items.size, 0);
+  const created = actual.attempts.find(attempt => attempt.identity.invocationId === create.id);
+  assert.equal(actual.resources.find(resource => resource.id === 'form-row').lifecycle.status, 'completed'); assert.equal(created.outputs[0].value, 'form-1');
+  assert.equal(created.operationFingerprint, scenario.steps[0].operation.fingerprint);
+  assert.deepEqual(created.assertions.map(check => check.id), scenario.steps[0].contracts.map(contract => contract.id));
+  assert(created.assertions.every(check => check.status === 'PASS' && check.reliable && check.evidenceIds.length > 0));
+  assert.equal(wire.length, 2); assert.equal(wire[0].path, '/items?view=form+only'); assert.equal(wire[1].path, '/items/form-1');
+  const encoded = 'synthetic+A%2BB%26%3D%2F%25%E9%9B%AA%21%27%28%29%7E';
+  const bytes = Buffer.from(`label=caf%C3%A9+%2B+%26&password=${encoded}&count=0&enabled=false`);
+  assert.deepEqual(wire[0].rawBody, bytes); assert.equal(wire[0].headers['content-type'], 'application/x-www-form-urlencoded'); assert.equal(wire[0].headers['content-length'], String(bytes.length));
+  assert.deepEqual(wire[0].fields, {label: 'café + &', password: privateValue, count: '0', enabled: 'false'});
+  assert.equal(native.sessions.length, browser ? 1 : 0);
+  const report = writeExecutionReport(f.roots, f.executionId); assert.equal(report.status, 'WRITTEN');
+  const saved = [JSON.stringify(replies), JSON.stringify(report)];
+  for (const directory of [join(f.projectRoot, '.harness', 'runs', f.executionId), join(f.projectRoot, 'reports')]) {
+    for (const entry of readdirSync(directory, {recursive: true, withFileTypes: true})) if (entry.isFile()) saved.push(readFileSync(join(entry.parentPath, entry.name), 'utf8'));
+  }
+  for (const text of saved) {assert(!text.includes(privateValue)); assert(!text.includes(encoded)); assert(!text.includes(bytes.toString()));}
+});
 
 test('H1: a policy-denied browser begin settles without entering its callback or retaining the lock', {timeout: 15000}, async t => {
   const f = await executionFixture(t, {browser: true}), runId = 'run-policy-denied';

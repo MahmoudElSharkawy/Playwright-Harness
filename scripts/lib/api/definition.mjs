@@ -6,8 +6,20 @@ export const apiCapabilities = Object.freeze(['apiReads', 'apiMutations']);
 const METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'];
 const HEADERS = new Set(['accept', 'content-type', 'if-match', 'if-none-match', 'idempotency-key']);
 const scalar = value => value === null || ['string', 'number', 'boolean'].includes(typeof value);
+const formScalar = value => typeof value === 'string' || typeof value === 'boolean' || typeof value === 'number' && Number.isFinite(value);
 const slot = value => value && typeof value === 'object' && Object.hasOwn(value, '$input');
 const capability = definition => definition.request?.method === 'GET' && definition.effects?.readOnlyContract ? 'apiReads' : 'apiMutations';
+
+function form(value, allowSlots = false) {
+  requireThat(value && typeof value === 'object' && !Array.isArray(value) && !slot(value), 'API form must be a field object.');
+  for (const [name, item] of Object.entries(value)) {
+    requireThat(formScalar(item) || allowSlots && slot(item), 'API form values must be strings, finite numbers or booleans.');
+    if (allowSlots) requireThat(!/(?:password|passwd|pwd|secret|token|authorization|cookie|api.?key|connectionstring)/i.test(name) || slot(item), 'Sensitive form fields require protected input bindings.');
+  }
+}
+function formContentType(value) {
+  requireThat(typeof value === 'string' && /^[\t ]*application\/x-www-form-urlencoded[\t ]*(?:;[\t ]*charset[\t ]*=[\t ]*(?:utf-8|"utf-8")[\t ]*)?$/i.test(value), 'Form Content-Type must be application/x-www-form-urlencoded with optional UTF-8 charset.');
+}
 
 function selector(value) {
   keys(value, ['from', 'path'], 'API selector'); oneOf(value.from, ['status', 'json', 'text', 'header']);
@@ -21,7 +33,7 @@ function template(value) {
   else if (value && typeof value === 'object') Object.values(value).forEach(template);
 }
 function request(value, readOnly = false) {
-  keys(value, ['method', 'path', 'query', 'headers', 'json'], 'API request');
+  keys(value, ['method', 'path', 'query', 'headers', 'json', 'form'], 'API request');
   oneOf(value.method, readOnly ? ['GET'] : METHODS);
   requireThat(typeof value.path === 'string' && value.path.startsWith('/') && !value.path.startsWith('//') && !/[\\?#\s]/.test(value.path), 'Use a target-relative API path without query or fragment.');
   for (const [name, item] of Object.entries(value.headers ?? {})) {
@@ -31,7 +43,14 @@ function request(value, readOnly = false) {
   keys(value.headers ?? {}, [...HEADERS], 'API headers');
   for (const item of Object.values(value.query ?? {})) requireThat(scalar(item) || slot(item), 'API query values must be scalar or input slots.');
   requireThat(value.query === undefined || (value.query && typeof value.query === 'object' && !Array.isArray(value.query)), 'API query must be an object.');
-  requireThat(value.method !== 'GET' || value.json === undefined, 'GET bodies are not supported.'); template(value);
+  const hasForm = Object.hasOwn(value, 'form');
+  requireThat(!hasForm || !Object.hasOwn(value, 'json'), 'API JSON and form bodies are mutually exclusive.');
+  requireThat(value.method !== 'GET' || value.json === undefined && !hasForm, 'GET bodies are not supported.');
+  if (hasForm) {
+    form(value.form, true);
+    if (typeof value.headers?.['content-type'] === 'string') formContentType(value.headers['content-type']);
+  }
+  template(value);
 }
 function statuses(value) { unique(value, 'HTTP statuses'); value.forEach(status => requireThat(integer(status, 100, 599), 'Invalid HTTP status.')); }
 
@@ -105,7 +124,12 @@ export function buildRequest(target, definition, bindings, idempotency) {
   if (idempotency) {
     const value = bindings.get(idempotency.input); requireThat(typeof value === 'string' && value.length > 0 && value.length <= 256 && !/[\r\n\0]/.test(value), 'Idempotency contract needs a bound key.'); headers['idempotency-key'] = value;
   }
-  const body = definition.json === undefined ? undefined : Buffer.from(JSON.stringify(bind(definition.json, bindings)));
+  let body;
+  if (Object.hasOwn(definition, 'form')) {
+    const fields = bind(definition.form, bindings); form(fields);
+    headers['content-type'] ??= 'application/x-www-form-urlencoded'; formContentType(headers['content-type']);
+    body = Buffer.from(new URLSearchParams(Object.entries(fields).map(([name, value]) => [name, String(value)])).toString(), 'utf8');
+  } else if (definition.json !== undefined) body = Buffer.from(JSON.stringify(bind(definition.json, bindings)));
   requireThat(!body || body.length <= 1048576, 'API request body exceeds 1 MiB.');
   if (body) headers['content-type'] ??= 'application/json';
   requireThat(Buffer.byteLength(url.href) <= 16384 && Buffer.byteLength(JSON.stringify(headers)) <= 16384, 'API request metadata exceeds its limit.');
