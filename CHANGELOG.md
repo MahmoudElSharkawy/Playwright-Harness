@@ -13,7 +13,7 @@
 - Add native MySQL execution through the pinned `mysql2` driver, including typed parameter bindings, scoped privilege checks, read-only SELECT transactions, bounded cancellation, protected outputs and identity-bound cleanup. Preserve uncertain mutation effects when a COMMIT reply is lost; refuse unsupported SQL and guarded restoration.
 - Add installed-archive MySQL proofs on Linux for CRUD, native types, privilege rejection, lock waits, COMMIT uncertainty, cleanup and a mixed browser/API/database scenario. Record dependency licenses and provenance.
 - Support `application/x-www-form-urlencoded` API bodies in standalone, sequential and manual execution. Validate field types and Content-Type before dispatch, enforce the request limit after encoding, and screen known form-encoded secrets from evidence. Existing timeout, cancellation and mutation recovery contracts remain in force.
-- Update and pin runtime dependencies to `@azure/identity` 4.14.0, `open` 11.0.4 and `wsl-utils` 1.0.1. Refresh the dependency lock and license inventory; validate consumer setup and `npm ci` with an independent older identity dependency.
+- Update and pin runtime dependencies to `@azure/identity` 4.14.0, `open` 11.0.4 and `wsl-utils` 1.0.1. Refresh the dependency lock and license inventory. Use nested installation to preserve independent consumer dependencies, and validate setup and `npm ci` with an older identity dependency.
 
 ## 3.5.0 — Test maintenance and blocked-case recovery
 

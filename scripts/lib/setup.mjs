@@ -122,7 +122,7 @@ export function setupFromArchive({projectRoot, archive, environment, mode, skipB
   journal.modules(existsSync(join(projectRoot, 'node_modules')));
   if (!existsSync(join(projectRoot, 'package.json'))) writeFileSync(join(projectRoot, 'package.json'), JSON.stringify({name: npmName(projectRoot), version: '1.0.0', private: true, type: 'commonjs', engines: {node: '>=24 <25'}, scripts: {test: 'playwright test'}}, null, 2) + '\n');
   if (resolve(file) !== resolve(vendorPath)) {journal.file(vendored, existsSync(vendorPath) ? readFileSync(vendorPath) : null); mkdirSync(dirname(vendorPath), {recursive: true}); copyFileSync(file, vendorPath);}
-  const installed = npm(['install', '--save-dev', '--save-exact', '--no-audit', '--no-fund', `file:${vendored}`, ...dependencies.install]);
+  const installed = npm(['install', '--save-dev', '--save-exact', '--no-audit', '--no-fund', '--install-strategy=nested', `file:${vendored}`, ...dependencies.install]);
   if (installed.status !== 0) {
     const restore = restoreJournal(roots, journal, {npm, modules: false});
     return {status: 'FAILED', warnings, stops: ['npm install did not complete; its last output is shown below.'], output: installed.output.trim().split('\n').slice(-12).join('\n'),
