@@ -7,6 +7,7 @@ import {mkdirSync, readFileSync, writeFileSync, copyFileSync, existsSync, readdi
 import {join, resolve, dirname, basename} from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {gunzipSync} from 'node:zlib';
+import {createRequire} from 'node:module';
 import {command, npmPath, hash} from './process.mjs';
 import {requiredConsumerFlows} from './results.mjs';
 import {packageRoot} from '../lib/consumer-paths.mjs';
@@ -258,6 +259,37 @@ flow('C8', 'An empty folder under a parent package.json needs an explicit projec
   const done = setup(root, tgz, ['--project-root', '.']); assert.equal(done.status, 'DONE', stops(done));
   assert.equal(readFileSync(join(parent, 'package.json'), 'utf8'), parentManifest); assert(!existsSync(join(parent, 'node_modules')), 'npm installed into the parent.');
   assert.equal(check(root).exit, 0);
+});
+
+flow('C10', 'Consumer dependencies retain their own versions through setup and npm ci', () => {
+  const root = project('c10-independent', {'package.json': manifestText('independent-app', {dependencies: {'@azure/identity': '4.13.3'},
+    devDependencies: {'@playwright/test': '1.63.0'}}), 'playwright.config.ts': 'export default {testDir: "./tests"};\n'});
+  const dependency = (parent, name) => {
+    let directory = dirname(createRequire(join(parent, 'package.json')).resolve(name));
+    for (;;) {
+      const file = join(directory, 'package.json'), metadata = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : {};
+      if (metadata.name === name) return {directory, version: metadata.version};
+      const outer = dirname(directory); assert.notEqual(outer, directory, `Cannot locate ${name}'s metadata.`); directory = outer;
+    }
+  };
+  const versions = parent => {
+    const identity = dependency(parent, '@azure/identity'), open = dependency(identity.directory, 'open'), wsl = dependency(open.directory, 'wsl-utils');
+    return {'@azure/identity': identity.version, open: open.version, 'wsl-utils': wsl.version};
+  };
+  assert.equal(run([npm, 'install'], root).status, 'PASS', 'Installing the independent consumer failed.');
+  const before = versions(root); assert.equal(before['@azure/identity'], '4.13.3');
+  const cleared = JSON.parse(readFileSync(join(packageRoot, 'npm-shrinkwrap.json'), 'utf8')).packages;
+  const expected = Object.fromEntries(Object.keys(before).map(name => [name, cleared[`node_modules/${name}`].version]));
+  const verify = () => {
+    assert.deepEqual(versions(root), before, 'The independent consumer graph changed.');
+    const tedious = dependency(join(root, 'node_modules/playwright-pom-harness'), 'tedious');
+    assert.deepEqual(versions(tedious.directory), expected, 'The harness dependency graph drifted.');
+    assert.equal(run([npm, 'ls', '--all'], root).status, 'PASS', 'npm reports an invalid dependency tree.');
+    const report = check(root); assert.equal(report.exit, 0, report.errors.join(' ')); noDrift(report);
+  };
+  const result = setup(root, download(root)); assert.equal(result.status, 'DONE', stops(result)); verify();
+  assert.equal(run([npm, 'ci'], root).status, 'PASS', 'npm ci failed.'); verify();
+  return {consumer: before, harness: expected};
 });
 
 const expected = requiredConsumerFlows;
