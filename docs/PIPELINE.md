@@ -48,7 +48,7 @@ SOURCE → REFINE → EXPLORE → PREPARE → AUTHOR → CANDIDATE → REVIEW �
   deliberately ([getting started](getting-started.md)). Node 24 is the supported runtime.
 - Configure the targets the scenarios need in `.harness/project.json` and
   `.harness/targets.json`: browser ([browser runtime](reference/browser.md)),
-  API ([API runtime](reference/api.md)), SQL Server ([database runtimes](reference/databases.md)) or PostgreSQL
+  API ([API runtime](reference/api.md)), or SQL Server/PostgreSQL/MySQL
   ([database runtimes](reference/databases.md)). The `environmentMode` (`test`, `protected` or `custom`)
   decides which operations are allowed. In `test`, ordinary permitted mutations need
   no per-operation approval.
@@ -163,7 +163,7 @@ continues to use these library interfaces:
 | Freeze scope, environment, definitions, expectations and limits | `createRun` | [execution model](reference/execution-model.md) |
 | Browser steps through the official Playwright CLI skill | `runBrowserScenario` | [browser runtime](reference/browser.md) |
 | API operations | `defineApiOperation`, `createApiRuntime` | [API runtime](reference/api.md) |
-| SQL Server or PostgreSQL operations | `defineDatabaseOperation`, `createDatabaseRuntime` | [database runtimes](reference/databases.md) |
+| SQL Server, PostgreSQL or MySQL operations | `defineDatabaseOperation`, `createDatabaseRuntime` | [database runtimes](reference/databases.md) |
 | One scenario mixing UI, API and DB (`setup`, `exercise`, `verify`, `cleanup`) | `runSequentialScenario` | [execution model](reference/execution-model.md) |
 | Opt-in bounded batch of independent scenarios (default concurrency 1) | `runScenarioBatch` | [execution model](reference/execution-model.md) |
 

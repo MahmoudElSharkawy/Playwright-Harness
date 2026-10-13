@@ -102,8 +102,9 @@ Add each destination to `.harness/targets.json`, then list its id in the environ
 - Ids start with a letter or digit and use letters, digits, `_` and `-`.
 - Browser origins are bare origins, with no path. API base URLs carry no credentials,
   query or fragment.
-- `engine` is `sqlserver` or `postgresql`. Optional: `schema`, `encrypt`,
-  `trustServerCertificate`.
+- `engine` is `sqlserver`, `postgresql` or `mysql`. Optional: `schema`, `encrypt`,
+  `trustServerCertificate`. MySQL supports 8.4, defaults to port 3306, and uses
+  `database` as its schema; omit `schema` or make it identical.
 - References are `env:NAME` with an uppercase name. An API variable holds a bearer token.
   A database variable holds `{"user":"<user>","password":"<password>"}` JSON.
 

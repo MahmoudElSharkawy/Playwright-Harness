@@ -4,6 +4,12 @@
   "publicationAuthorized": false,
   "sources": [
     {
+      "scope": "Issue 57 MySQL execution",
+      "status": "Project-authored MySQL runtime, syntax and synthetic proof fixtures; official MySQL documentation and mysql2 interfaces informed the adapter. mysql2 3.24.5 is consumed as an exact separately installed runtime dependency; no upstream implementation copied.",
+      "targetLicense": "MIT",
+      "thirdPartyCodeCopied": false
+    },
+    {
       "scope": "M19 manual execution",
       "status": "Project-authored live host, condition ledger, reports, ADO delivery and fixtures, reusing existing runtimes. Official Microsoft REST contracts informed metadata, validateOnly and paging. No third-party implementation copied or new dependency.",
       "targetLicense": "MIT",

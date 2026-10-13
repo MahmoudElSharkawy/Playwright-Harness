@@ -11,6 +11,14 @@ The original source is the supplied version 3.0.0 package. M1 sanitizes that mat
 and adds project-specific validation code. Protected recovery/accounting records are
 excluded from publication; no original private incident is republished as research.
 
+Issue #57 adds project-authored MySQL execution and synthetic proof fixtures.
+Official MySQL documentation and mysql2 interfaces informed the adapter; no upstream
+implementation was copied. The exact `mysql2` 3.24.5 dependency adds eight packages
+with MIT/Apache-2.0 licenses; the runtime inventory now has 98 records. All eight
+installed packages include full license files. Preserve these upstream notices
+with installed dependencies. The pinned MySQL 8.4 development image is a separate
+upstream distribution, not bundled or relicensed under the harness MIT license.
+
 M2 relocates one owner-cleared skill and adds project-specific root/proof tooling.
 Official Codex and Claude documentation informed native discovery and packaging;
 no upstream implementation was copied. The local Claude test CLI and Python skill

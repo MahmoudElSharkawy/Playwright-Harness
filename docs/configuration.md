@@ -64,10 +64,11 @@ and references must agree; unknown fields, duplicate references and unknown targ
 Browser origins are explicit HTTP(S) origins without paths, wildcards or embedded
 credentials. Optional `startUrl` must belong to an allowed origin. User handles map
 to `usernameRef`/`passwordRef`, not values. API base URLs cannot embed credentials,
-query strings or fragments. Database engines are `sqlserver` or `postgresql`; optional
+query strings or fragments. Database engines are `sqlserver`, `postgresql` or `mysql`; optional
 destination fields include `server`, `port`, `database`, `schema`, `encrypt` and
 `trustServerCertificate`. Engine support and query boundaries are in the
-[database reference](reference/databases.md).
+[database reference](reference/databases.md). MySQL supports 8.4 with default port 3306;
+omit `schema` or set it equal to `database`.
 
 ## Operation modes
 
