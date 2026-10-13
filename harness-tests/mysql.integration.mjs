@@ -168,7 +168,7 @@ test('real MySQL refuses administrative credentials and wrong passwords without 
 test('real MySQL TLS rejects a trusted certificate with the wrong hostname and allows explicit fixture trust', async t => {
   const ca = readFileSync(process.env.HARNESS_MYSQL_CA_PATH);
   const native = await mysql.createConnection({...config,...credential,host:'localhost',ssl:{ca,rejectUnauthorized:true,verifyIdentity:false}});
-  try {const [[row]] = await native.execute('SELECT 1 AS alive'); assert.equal(row.alive,1);} finally {await native.end();}
+  try {const [[row]] = await native.execute("SELECT 'alive' AS status"); assert.equal(row.status,'alive');} finally {await native.end();}
   const verified = live(t,[op('verified')],{target:{server:'localhost',encrypt:true}}); const rejected = await verified.call();
   assert.equal(rejected.effect.certainty,'not-executed'); assert.equal(verified.runtime.finish().status,'BLOCKED');
   const fixtureTrust = live(t,[op('fixture-trust')],{target:{encrypt:true,trustServerCertificate:true}}); await fixtureTrust.call(); assert.equal(fixtureTrust.runtime.finish().status,'PASS');
@@ -217,21 +217,34 @@ test('MySQL cancellation and unsupported RESTORE fail before resolving credentia
 
 async function lock(t) {
   await admin.execute('INSERT INTO Items (Id,Label) VALUES (?,?)',[1,'initial']);
-  const blocker = await mysql.createConnection(config); await blocker.beginTransaction(); await blocker.execute('UPDATE Items SET Label=Label WHERE Id=1');
-  let released = false; const release = async () => {if (!released) {released = true; await blocker.rollback(); await blocker.end();}}; t.after(release); return release;
+  const blocker = await mysql.createConnection(config), [[{id}]] = await blocker.query('SELECT CONNECTION_ID() AS id');
+  let released = false; const release = async () => {if (!released) {released = true; await blocker.rollback(); await blocker.end();}}; t.after(release);
+  await blocker.beginTransaction(); const [changed] = await blocker.execute('UPDATE Items SET Label=? WHERE Id=1',['held by fixture']); assert.equal(changed.changedRows,1);
+  return {release,blockerId:id};
 }
-async function waitForLock() {
+async function waitForLock(blockerId, completed) {
   for (let i=0;i<150;i++) {
-    const [waiting] = await admin.query("SELECT 1 FROM information_schema.INNODB_TRX t JOIN information_schema.PROCESSLIST p ON p.ID=t.trx_mysql_thread_id WHERE p.USER='harness_runner' AND t.trx_state='LOCK WAIT'");
-    if (waiting.length) return; await pause(20);
+    const [waiting] = await admin.execute(`SELECT 1 FROM performance_schema.data_lock_waits waits
+      JOIN performance_schema.threads requesting ON requesting.THREAD_ID=waits.REQUESTING_THREAD_ID
+      JOIN performance_schema.threads blocking ON blocking.THREAD_ID=waits.BLOCKING_THREAD_ID
+      WHERE requesting.PROCESSLIST_USER='harness_runner' AND blocking.PROCESSLIST_ID=?`,[blockerId]);
+    if (waiting.length) return;
+    if (completed()) throw new Error('MySQL operation completed before its lock wait was observed.');
+    await pause(20);
   }
   throw new Error('Expected real MySQL lock wait was not observed.');
 }
 for (const cancel of [false,true]) test(`real MySQL mutation ${cancel?'cancellation':'timeout'} stays uncertain without replay`, async t => {
-  const release = await lock(t), controller = new AbortController();
+  const {release,blockerId} = await lock(t), controller = new AbortController();
   const change = op('change',{sql:'UPDATE Items SET Label=? WHERE Id=1',parameters:[param('label','text',{length:100})],checks:[check('changed','affectedRows')],timeoutMs:cancel?5000:1500});
-  const f = live(t,[change],{values:[['label','changed']],runtime:{signal:controller.signal}}), pending = f.call();
-  await waitForLock(); if (cancel) controller.abort(); const attempted = await pending; await release();
+  const f = live(t,[change],{values:[['label','changed']],runtime:{signal:controller.signal}}); let attempted;
+  const pending = f.call().then(value=>{attempted=value; return value;});
+  try {await waitForLock(blockerId,()=>attempted); if (cancel) controller.abort(); await pending;}
+  catch (error) {
+    controller.abort(); await pending.catch(()=>{});
+    console.log(JSON.stringify({probe:'mysql-lock',mode:cancel?'cancellation':'timeout',outcome:attempted?.outcome,failureClass:attempted?.failureClass,effect:attempted?.effect.certainty}));
+    throw error;
+  } finally {await release();}
   assert.equal(attempted.effect.certainty,'uncertain'); assert.equal(attempted.failureClass,cancel?'CANCELLED':'TIMEOUT');
   const result = f.runtime.finish(); assert.equal(result.status,'NEEDS_REVIEW'); assert.equal(result.scenarios[0].attempts.length,1); assert.equal((await rows())[0].Label,'initial');
 });
@@ -245,10 +258,18 @@ test('required MySQL cleanup still uses its captured identity after cancellation
 });
 
 test('losing a real MySQL COMMIT reply preserves an actually committed write as uncertain without replay', async t => {
+  function commandText(body, queryAttributes) {
+    if (body[0] === 0x16 || body[0] === 0x03 && !queryAttributes) return body.subarray(1).toString();
+    // The pinned driver sends zero query attributes and one parameter set.
+    if (body[0] === 0x03 && body[1] === 0 && body[2] === 1) return body.subarray(3).toString();
+  }
+  assert.equal(commandText(Buffer.from('\x03COMMIT'),false),'COMMIT');
+  assert.equal(commandText(Buffer.from('\x03\x00\x01COMMIT'),true),'COMMIT');
+  assert.equal(commandText(Buffer.from('\x16COMMIT'),true),'COMMIT');
   const sockets = new Set(); let commitCount = 0, observedCommit = false;
   const proxy = createServer(front => {
     const back = connect({host:target.server,port:target.port}); sockets.add(front); sockets.add(back);
-    let preparingCommit = false, commitStatement, awaitingCommit = false;
+    let preparingCommit = false, commitStatement, awaitingCommit = false, handshakeSeen = false, queryAttributes = false;
     function relay(source,destination,observe) {
       let pending = Buffer.alloc(0);
       source.on('data',chunk=>{
@@ -260,8 +281,9 @@ test('losing a real MySQL COMMIT reply preserves an actually committed write as 
       });
     }
     relay(front,back,(body,sequence)=>{
+      if (!handshakeSeen && sequence === 1 && body.length >= 32) {queryAttributes = !!(body.readUInt32LE(0) & 0x08000000); handshakeSeen = true; return;}
       if (sequence !== 0) return;
-      if ([0x03,0x16].includes(body[0]) && /^COMMIT\s*;?$/i.test(body.subarray(1).toString())) {
+      if (/^COMMIT\s*;?$/i.test(commandText(body,queryAttributes) ?? '')) {
         if (body[0] === 0x16) preparingCommit = true; else {awaitingCommit = true; commitCount++;}
       } else if (body[0] === 0x17 && body.length >= 5 && body.readUInt32LE(1) === commitStatement) {awaitingCommit = true; commitCount++;}
     });
