@@ -5,7 +5,7 @@ import {projectArgument} from './lib/consumer-paths.mjs';
 import {readJson} from './lib/project-config.mjs';
 import {createRun} from './lib/execution-core/index.mjs';
 import {requireThat, keys} from './lib/execution-core/data.mjs';
-import {createGenerationHandoff, beginGeneration, registerCandidate, recordGenerationReview, generationStatus} from './lib/generation/index.mjs';
+import {createGenerationHandoff, beginGeneration, registerCandidate, reviseGeneration, recordGenerationReview, generationStatus} from './lib/generation/index.mjs';
 import {verifyGeneration} from './lib/generation/verify.mjs';
 import {relativeFile} from './lib/generation/storage.mjs';
 
@@ -18,9 +18,9 @@ try {
     i += 2;
   }
   let result;
-  if (command === 'prepare') {
-    requireThat(options['--input'] && !options['--id'], 'Prepare requires --input.');
-    const input = readJson(relativeFile(roots, options['--input'])); keys(input, ['source', 'author', 'executions', 'bindings'], 'generation preparation');
+  if (['prepare', 'revise'].includes(command)) {
+    requireThat(options['--input'] && (command === 'revise' ? options['--id'] : !options['--id']), 'Prepare requires --input; revise also requires the existing --id.');
+    const input = readJson(relativeFile(roots, options['--input'])); keys(input, ['source', 'executions', 'bindings', command === 'prepare' ? 'author' : 'candidate'], 'generation preparation');
     const source = readJson(relativeFile(roots, input.source));
     const executions = input.executions.map(item => {
       keys(item, ['snapshot', 'runRoot'], 'observed execution');
@@ -31,7 +31,12 @@ try {
       return {run, roots: {...roots, runRoot}, observations: readJson(join(runRoot, 'observations.json'))};
     });
     const handoff = createGenerationHandoff(source, executions, input.bindings);
-    await beginGeneration(roots, handoff, input.author); result = {status: 'PREPARED', sourceId: source.id, expectations: handoff.expectations.length};
+    if (command === 'prepare') {
+      await beginGeneration(roots, handoff, input.author); result = {status: 'PREPARED', sourceId: source.id, expectations: handoff.expectations.length};
+    } else {
+      const candidate = await reviseGeneration(roots, options['--id'], handoff, input.candidate);
+      result = {status: 'NEEDS_REVIEW', sourceId: source.id, revision: candidate.revision, sourceFingerprint: candidate.sourceFingerprint};
+    }
   } else {
     requireThat(options['--id'], 'Generation command requires --id.');
     if (['candidate', 'review'].includes(command)) {

@@ -44,7 +44,7 @@ export async function beginGeneration(roots, handoffInput, author) {
 }
 
 function candidateInput(roots, state, input) {
-  const checked = data(input); keys(checked, ['config', 'tests', 'repair', 'migration'], 'generation candidate'); relativeFile(roots, checked.config);
+  const checked = data(input); keys(checked, ['config', 'tests', 'repair', 'migration', 'change'], 'generation candidate'); relativeFile(roots, checked.config);
   requireThat(Array.isArray(checked.tests) && checked.tests.length === state.handoff.source.scenarios.length, 'Candidate must cover exactly the source scenarios.');
   unique(checked.tests.map(t => t.scenarioId), 'candidate scenarios');
   unique(checked.tests.map(t => fingerprint([t.spec, t.project, t.titlePath])), 'candidate tests');
@@ -55,33 +55,62 @@ function candidateInput(roots, state, input) {
     for (const title of [test.project, ...test.titlePath]) requireThat(typeof title === 'string' && (title === test.project || title.trim().length > 0) && !/[\r\n›<>\[\]]/.test(title) && title.trim() === title, 'Test identity cannot be represented unambiguously in a native test list.');
     validateMapping(test, state.handoff);
   }
-  if (checked.repair !== undefined) requireThat(['script-defect', 'environment', 'review-findings'].includes(checked.repair), 'Classify the repair; preserve application failures rather than weakening assertions.');
+  if (checked.repair !== undefined) requireThat(['script-defect', 'environment', 'review-findings', 'application-change', 'requirement-change'].includes(checked.repair), 'Classify the repair; preserve application failures rather than weakening assertions.');
+  if (['application-change', 'requirement-change'].includes(checked.repair)) {
+    requireThat(checked.change && !checked.migration, 'A maintenance change needs evidence and cannot use the legacy migration.');
+    keys(checked.change, ['previousSourceFingerprint', 'artifact'], 'maintenance change');
+    requireThat(typeof checked.change.previousSourceFingerprint === 'string', 'Bind the previously assessed source.');
+    checked.change.artifact = reviewArtifact(roots, checked.change.artifact);
+  } else requireThat(checked.change === undefined, 'Change evidence requires a maintenance classification.');
   if (checked.migration !== undefined) requireThat(checked.migration === CASE_GATE, 'Unknown generation migration.');
   return checked;
 }
 
-/** One legacy gate transition is free; ordinary repairs retain the cumulative budget. */
+/** One legacy gate transition is free; all repairs/revisions share the same budget. */
+function appendCandidate(roots, state, input, previousHandoff) {
+  requireThat((input.repair === 'requirement-change') === Boolean(previousHandoff), 'Use generate revise with an accepted source change.');
+  const checked = candidateInput(roots, state, input), current = snapshot(roots);
+  if (checked.change) requireThat(checked.change.previousSourceFingerprint === (previousHandoff ?? state.handoff).fingerprint, 'The source changed since maintenance was assessed.');
+  requireThat(current.files.some(f => f.path === checked.config) && checked.tests.every(t => current.files.some(f => f.path === t.spec)), 'Config and specs must be in the frozen consumer snapshot.');
+  if (checked.migration) {
+    const previous = state.candidates.at(-1);
+    requireThat(previous && previous.gate === undefined && !state.candidates.some(c => c.gate === CASE_GATE), 'The legacy gate migration is available only once.');
+    requireThat(nativeScope(previous) === nativeScope(checked), 'Gate migration must preserve the source and native test scope.');
+  }
+  if ((state.candidates.length || previousHandoff) && (!checked.migration || checked.repair)) {
+    requireThat(checked.repair && state.rounds < 3, 'Three cumulative repair rounds maximum; classify a repair before continuing.'); state.rounds++;
+  } else if (!state.candidates.length) requireThat(!checked.repair && !checked.migration, 'Initial generation is not a repair or migration.');
+  const candidate = {...checked, gate: CASE_GATE, revision: `revision-${randomUUID()}`, sourceFingerprint: state.handoff.fingerprint, snapshot: current, round: state.rounds};
+  state.candidates.push(candidate); return candidate;
+}
+
 export async function registerCandidate(roots, sourceId, input) {
   return transaction(roots, sourceId, (state, save) => {
     requireThat(state, 'Begin from a validated handoff.');
-    const checked = candidateInput(roots, state, input), current = snapshot(roots);
-    requireThat(current.files.some(f => f.path === checked.config) && checked.tests.every(t => current.files.some(f => f.path === t.spec)), 'Config and specs must be in the frozen consumer snapshot.');
-    if (checked.migration) {
-      const previous = state.candidates.at(-1);
-      requireThat(previous && previous.gate === undefined && !state.candidates.some(c => c.gate === CASE_GATE), 'The legacy gate migration is available only once.');
-      requireThat(nativeScope(previous) === nativeScope(checked), 'Gate migration must preserve the source and native test scope.');
-    }
-    if (state.candidates.length && (!checked.migration || checked.repair)) {
-      requireThat(checked.repair && state.rounds < 3, 'Three cumulative repair rounds maximum; classify a repair before continuing.'); state.rounds++;
-    } else if (!state.candidates.length) requireThat(!checked.repair && !checked.migration, 'Initial generation is not a repair or migration.');
-    const candidate = {...checked, gate: CASE_GATE, revision: `revision-${randomUUID()}`, snapshot: current, round: state.rounds};
-    state.candidates.push(candidate); save(state); return frozen(candidate);
+    const candidate = appendCandidate(roots, state, input); save(state); return frozen(candidate);
+  });
+}
+
+/** Atomic source/candidate revision. Prior handoffs remain in the immutable history snapshots.
+ * The artifact records acceptance; an independent reviewer must verify the actual owner decision.
+ */
+export async function reviseGeneration(roots, sourceId, handoffInput, input) {
+  const handoff = validateHandoff(handoffInput);
+  return transaction(roots, sourceId, (state, save) => {
+    requireThat(state && handoff.source.id === sourceId, 'Revise the same source with existing generation history.');
+    requireThat(fingerprint(state.handoff.source) !== fingerprint(handoff.source), 'Revision requires a changed source; use candidate for an unchanged requirement.');
+    const previousHandoff = state.handoff; state.handoff = handoff;
+    const candidate = appendCandidate(roots, state, input, previousHandoff);
+    state.sourceChange = candidate.change; save(state); return frozen(candidate);
   });
 }
 
 export function currentCandidate(roots, state) {
   const candidate = state?.candidates.at(-1); requireThat(candidate, 'No generated candidate.');
   requireThat(candidate.gate === CASE_GATE, 'Register the legacy gate migration before new verification.');
+  requireThat(candidate.sourceFingerprint === undefined || candidate.sourceFingerprint === state.handoff.fingerprint, 'Candidate source changed; register and review the revised candidate.');
+  if (state.sourceChange) requireThat(fingerprint(reviewArtifact(roots, state.sourceChange.artifact.path)) === fingerprint(state.sourceChange.artifact), 'Source acceptance evidence changed; reassess the accepted revision.');
+  if (candidate.change) requireThat(fingerprint(reviewArtifact(roots, candidate.change.artifact.path)) === fingerprint(candidate.change.artifact), 'Maintenance change evidence changed; review a new candidate.');
   requireThat(snapshot(roots).fingerprint === candidate.snapshot.fingerprint, 'Consumer files changed; register and review a repair before verification.');
   return candidate;
 }
@@ -112,7 +141,7 @@ export function approvedCandidate(roots, state) {
 export async function generationStatus(roots, sourceId) {
   return transaction(roots, sourceId, state => {
     requireThat(state, 'Generation has not started.');
-    let candidate; try {candidate = approvedCandidate(roots, state);} catch {return frozen({status: 'NEEDS_REVIEW', rounds: state.rounds, greens: 0});}
+    let candidate; try {candidate = approvedCandidate(roots, state);} catch {return frozen({status: 'NEEDS_REVIEW', rounds: state.rounds, greens: 0, sourceFingerprint: state.handoff.fingerprint});}
     const runs = state.runs.filter(r => r.revision === candidate.revision);
     for (const run of runs.filter(r => r.status === 'PASS')) {
       try {

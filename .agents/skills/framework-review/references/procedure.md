@@ -4,6 +4,14 @@
 
 ## Neutral generation review
 
+For maintenance, inspect the old/current source diff and caller impact, every blocker
+condition and its current evidence, and the cumulative repair history. For
+`requirement-change`, verify the actual owner acceptance and revised expectation
+coverage; for `application-change`, verify the external fix against unchanged
+expectations. An artifact or closed bug alone proves neither. Refute budget resets,
+lost failures, unsupported flake classifications, and `done` based only on unblocking.
+Use the [maintenance contract](../../../../docs/maintenance.md).
+
 For generated automation, review the frozen handoff, candidate file hashes, source-to-observation bindings and candidate step/expectation review mappings described in the [automation workflow](../../../../docs/PIPELINE.md). The legacy ADO traceability table below applies to legacy ADO artifacts. Neutral local cases carry `allure.testCaseId`; external cases retain their real `allure.tms` links. Require the actual assertions to preserve source intent, and review operation definitions and lifecycle dispositions. A reviewer identity field alone is not evidence of independent review. User-authorized branch and delivery choices take precedence over template defaults.
 
 Inputs: a diff scope (default: `git diff master...HEAD` plus unstaged changes,

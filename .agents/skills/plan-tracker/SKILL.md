@@ -75,6 +75,12 @@ event (one event, note = "imported <name>'s export of <date>").
 
 ## Boundaries
 
+- Reassessing blocked or failed cases uses [maintain-test](../maintain-test/SKILL.md).
+  Verified unblocking permits resumed work (`doing`), never `done` by itself.
+  Neutral generation uses an explicit history event from current generation
+  receipts; `--sync` reads only legacy `_verify-state.json`. Preserve unresolved
+  blockers, exhausted repair budgets and manual rulings.
+
 - Suite-level pipeline state and NEEDS-HUMAN queue → `scripts/harness-metrics.mjs`
   (reads the same `_verify-state.json`; this skill renders the plan-scope view).
 - Filing the ADO bug itself is out of scope; this skill only registers the filed
