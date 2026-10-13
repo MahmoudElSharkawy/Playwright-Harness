@@ -84,11 +84,11 @@
     },
     {
       "path": "node_modules/@azure/identity",
-      "version": "4.13.3",
+      "version": "4.14.0",
       "license": "MIT",
       "optional": false,
-      "resolved": "https://registry.npmjs.org/@azure/identity/-/identity-4.13.3.tgz",
-      "integrity": "sha512-zGQPtqvXPgSA8yfV2CkIQ1qirqk0p9AIVpC5uEkdXQYcKl07QHvyaGYRnZOk0AsQUmxNb4wfkcwY5di8Z5xa9A=="
+      "resolved": "https://registry.npmjs.org/@azure/identity/-/identity-4.14.0.tgz",
+      "integrity": "sha512-8utCLdTZn14CiAe0HW4JbtzUMsc0mdDwnjUvStFMrR4IxQP8S2eL9zVAdplpfORVJGYmidZElpeXRYjJQ4UyUw=="
     },
     {
       "path": "node_modules/@azure/keyvault-common",
@@ -371,6 +371,14 @@
       "integrity": "sha512-eljcgEDlEns/7AXFosB5K/2nCM4P7FQPkGc/DWLy5rmFEWvZayGrik1d9/QIY5nJ4f9YsVvBkA6kJpHn9rISdQ=="
     },
     {
+      "path": "node_modules/is-in-ssh",
+      "version": "1.0.0",
+      "license": "MIT",
+      "optional": false,
+      "resolved": "https://registry.npmjs.org/is-in-ssh/-/is-in-ssh-1.0.0.tgz",
+      "integrity": "sha512-jYa6Q9rH90kR1vKB6NM7qqd1mge3Fx4Dhw5TVlK1MUBqhEOuCagrEHMevNuCcbECmXZ0ThXkRm+Ymr51HwEPAw=="
+    },
+    {
       "path": "node_modules/is-inside-container",
       "version": "1.0.0",
       "license": "MIT",
@@ -540,11 +548,11 @@
     },
     {
       "path": "node_modules/open",
-      "version": "10.2.0",
+      "version": "11.0.4",
       "license": "MIT",
       "optional": false,
-      "resolved": "https://registry.npmjs.org/open/-/open-10.2.0.tgz",
-      "integrity": "sha512-YgBpdJHPyQ2UE5x+hlSXcnejzAvD0b22U2OuAP+8OnlJT+PjWPxtgmGqKKc+RgTM63U9gN0YzrYc71R2WT/hTA=="
+      "resolved": "https://registry.npmjs.org/open/-/open-11.0.4.tgz",
+      "integrity": "sha512-++Zlftm0kVLPmzC06t6epuWmcRMDbI4z5P3NNX979WA/k23+NtSOynEGzsVfZwguKw2mi5umVgnBlJQMwRz4Pg=="
     },
     {
       "path": "node_modules/pg",
@@ -657,6 +665,14 @@
       "optional": false,
       "resolved": "https://registry.npmjs.org/postgres-interval/-/postgres-interval-1.2.0.tgz",
       "integrity": "sha512-9ZhXKM/rw350N1ovuWHbGxnGh/SNJ4cnxHiM0rxE4VN41wsg8P8zWn9hv/buK00RP4WvlOyr/RBDiptyxVbkZQ=="
+    },
+    {
+      "path": "node_modules/powershell-utils",
+      "version": "0.2.1",
+      "license": "MIT",
+      "optional": false,
+      "resolved": "https://registry.npmjs.org/powershell-utils/-/powershell-utils-0.2.1.tgz",
+      "integrity": "sha512-C+y9x90UElAddDZmV4qOx9W53B61PO7cIqWz2dQsWlwswuq4mr8NEwytdGKboYbQlGZ3awrkTeNvcZiZNHnQ8A=="
     },
     {
       "path": "node_modules/process",
@@ -772,11 +788,11 @@
     },
     {
       "path": "node_modules/wsl-utils",
-      "version": "0.1.0",
+      "version": "1.0.1",
       "license": "MIT",
       "optional": false,
-      "resolved": "https://registry.npmjs.org/wsl-utils/-/wsl-utils-0.1.0.tgz",
-      "integrity": "sha512-h3Fbisa2nKGPxCpm89Hk33lBLsnaGBvctQopaBSOW/uIs6FTe1ATyAnKFJrzVs9vpGdsTe73WF3V4lIsk4Gacw=="
+      "resolved": "https://registry.npmjs.org/wsl-utils/-/wsl-utils-1.0.1.tgz",
+      "integrity": "sha512-c16PKLIRxBYpR3jSWsdS7SFp0COm5SOQdiFjY818dYFHJbMGuLBszpF07LBWmOS1uzrHa9VGdynsEgoeKy0oOQ=="
     },
     {
       "path": "node_modules/xtend",

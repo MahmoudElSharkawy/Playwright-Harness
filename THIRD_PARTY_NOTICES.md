@@ -6,10 +6,16 @@ aws-ssl-profiles, generate-function, is-property, long, lru.min, named-placehold
 and sql-escaper. `long` 5.3.2 declares Apache-2.0; the other seven declare MIT.
 All eight installed distributions include full license files, which must remain
 with redistributed dependencies. Exact versions and integrity values are recorded
-in [the runtime inventory](scripts/runtime-dependency-licenses.json), now 98 records.
+in [the runtime inventory](scripts/runtime-dependency-licenses.json), then 98 records.
 No upstream implementation is copied or relicensed. The pinned official MySQL 8.4
 container used by the development probe is distributed separately under its own
 upstream terms and is not bundled or cleared for redistribution by this source audit.
+
+Release 3.6.0 updates `@azure/identity` to 4.14.0, `open` to 11.0.4 and
+`wsl-utils` to 1.0.1, and adds `is-in-ssh` 1.0.0 and `powershell-utils` 0.2.1.
+These distributions declare MIT and include full license files. Preserve those
+files with redistributed dependencies. The runtime inventory now has 100 records;
+the source package does not bundle their implementations or replace their notices.
 
 M17 preserves the root dependency graph in the publishable `npm-shrinkwrap.json`.
 M18 adds the three native CLI packages described below, for 90 package identities;
