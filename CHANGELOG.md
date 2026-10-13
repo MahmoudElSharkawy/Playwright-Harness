@@ -1,5 +1,18 @@
 # Changelog
 
+## 3.5.0 — Test maintenance and blocked-case recovery
+
+### Upgrade actions
+
+- Re-run setup from the 3.5.0 archive in each project, then reload Claude Code skills or restart Codex to discover `/maintain-test` and the updated workflow guidance. Existing customized code and configuration remain subject to review.
+- Use `/maintain-test` to reassess failed, flaky, changed or blocked cases. Preserve existing evidence and repair counts. For an accepted requirement revision, follow `generate revise` in [the maintenance guide](docs/maintenance.md); repaired automation requires fresh independent review and two independent scoped green runs.
+
+### Changes
+
+- Add a maintenance skill that classifies failures with evidence, compares source revisions and affected callers, verifies every unblock condition, and resumes the appropriate execution or automation stage. Cover cases without generated specs, partial recovery, unclear requirements and exhausted repair budgets.
+- Add atomic `generate revise` registration for accepted requirement changes and evidence-backed `application-change` candidates for external fixes. Retain source identity, failure history, prior candidates and the cumulative three-round repair budget.
+- Integrate maintenance with the existing execution, generation, framework-review and plan-tracker workflows. Unresolved blockers remain recorded; restoring a prerequisite alone never marks a case done.
+
 ## 3.4.0 — Reliable releases and page guidance
 
 ### Upgrade actions
