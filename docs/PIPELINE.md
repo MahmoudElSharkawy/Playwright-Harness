@@ -381,6 +381,14 @@ and [Allure reporting](reporting.md).
 
 ### Repairs
 
+For failed, flaky, changed or blocked cases, start with
+[maintenance](maintenance.md). It records diagnosis, source/caller impact and
+verified unblock conditions before resuming these gates. An external application
+fix with unchanged requirements uses an evidence-backed `application-change`
+candidate. An accepted source revision uses `generate revise` with reassessed
+observations and acceptance evidence. Both preserve the source ID/history, consume
+the same cumulative repair budget, and require fresh review and two green runs.
+
 After a failed verification or a `CHANGES-REQUIRED` review, fix the code, rerun the
 checks and register a new candidate with `repair` set to `script-defect`,
 `environment` or `review-findings`. Then go through REVIEW and VERIFY again.
@@ -511,6 +519,7 @@ from `playwright-pom-harness/scripts/lib/generation/verify.mjs`.
 | Bind unchanged source expectations to reassessed observations | `createGenerationHandoff(source, executions, bindings)` |
 | Open consumer history | `beginGeneration(roots, handoff, author)` |
 | Freeze a candidate and its mapping | `registerCandidate(roots, sourceId, candidate)` |
+| Continue an accepted source revision in the same history | `reviseGeneration(roots, sourceId, handoff, candidate)` |
 | Record the independent verdict and review artifact | `recordGenerationReview(roots, sourceId, review)` |
 | Run one scoped verification process | `verifyGeneration(roots, sourceId)` |
 

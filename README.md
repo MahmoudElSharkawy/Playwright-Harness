@@ -144,6 +144,11 @@ prepare, refine, freeze, execute and report flow without generating POM code.
 
 ## Choose your first workflow
 
+Maintain existing failed, flaky, changed or blocked cases with
+`/maintain-test cases <ids> from <run-or-report> on qa`, or select a local source,
+suite or story. The [maintenance workflow](docs/maintenance.md) diagnoses causes,
+reassesses blockers and resumes existing execution/automation with preserved history.
+
 Generate durable automation from local scenarios or configured ADO cases:
 
 ```text

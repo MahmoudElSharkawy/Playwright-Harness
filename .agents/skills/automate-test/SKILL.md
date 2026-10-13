@@ -8,6 +8,10 @@ description: Automate test cases from a user story, an ADO suite or local scenar
 Resolve this skill to its real path and read [package and consumer boundaries](../ROOTS.md).
 Mutable state and generated code belong to the consumer; installed skills stay immutable.
 
+For existing failed, flaky, changed or blocked cases, start with
+[maintain-test](../maintain-test/SKILL.md) to diagnose and resume this workflow
+without resetting source history or repair counts.
+
 Choose the source explicitly:
 
 ```text

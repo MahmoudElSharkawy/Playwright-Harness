@@ -1,0 +1,117 @@
+{
+  "purpose": "Synthetic inputs for an independent maintain-test behavioral exercise. These observations are fixture facts, not live-system evidence.",
+  "environment": "qa",
+  "consumerCommit": "synthetic-maintenance-fixture",
+  "cases": [
+    {
+      "id": "701",
+      "request": "Maintain this consistently failing case.",
+      "source": {"revision": 1, "action": "Submit a valid order", "expected": "Order is accepted"},
+      "evidence": {"attempts": ["API POST returns 500 with a valid payload", "UI submits the same valid payload and shows server error"], "requestReview": "Required fields and environment match the unchanged source"},
+      "generation": {"exists": true, "rounds": 1, "status": "FAIL"},
+      "tracker": "doing"
+    },
+    {
+      "id": "702",
+      "request": "Repair this failing automation.",
+      "source": {"revision": 1, "action": "Submit a valid order", "expected": "Order is accepted"},
+      "evidence": {"trace": "Locator times out before submitting", "observedUI": "Accessible button name is Submit order; clicking it accepts the order", "pageCode": "OrderPage.submit uses getByRole('button', {name: 'Save order', exact: true})", "callers": ["CreateOrderTests", "AmendOrderTests"]},
+      "generation": {"exists": true, "rounds": 0, "status": "FAIL"},
+      "tracker": "doing"
+    },
+    {
+      "id": "703",
+      "request": "Investigate intermittent results.",
+      "source": {"revision": 1, "expected": "Order is accepted"},
+      "evidence": {"attempts": ["FAIL: order remains pending", "PASS: order accepted", "FAIL: order remains pending"], "conditions": "Same build/source/environment; no causal timing or server evidence retained"},
+      "generation": {"exists": true, "rounds": 1, "status": "FAIL"},
+      "tracker": "doing"
+    },
+    {
+      "id": "704",
+      "request": "Maintain a case that could not reach the application.",
+      "source": {"revision": 1, "expected": "Order is accepted"},
+      "evidence": {"attempts": ["Target DNS lookup fails before any request or assertion"], "readiness": "The selected QA target remains unreachable"},
+      "generation": {"exists": true, "rounds": 1, "status": "BLOCKED"},
+      "tracker": "blocked"
+    },
+    {
+      "id": "705",
+      "request": "Update the case for the approved requirement revision.",
+      "source": {"executedRevision": 1, "currentRevision": 2, "oldExpected": "Discount is 10 percent", "newExpected": "Discount is 15 percent", "ownerDecision": "Synthetic product-owner acceptance A-705 explicitly approves revision 2 for retail orders only"},
+      "evidence": {"observation": "QA build 2 returns 15 percent for retail orders", "implementation": "DiscountPage.verifyDiscount receives the expected value from paired test data", "callers": ["RetailOrderTests", "WholesaleOrderTests"], "wholesaleExpectation": "Still 10 percent"},
+      "generation": {"exists": true, "sourceId": "discounts", "rounds": 1, "status": "FAIL"},
+      "tracker": "doing"
+    },
+    {
+      "id": "706",
+      "request": "Reassess this case blocked by an application defect.",
+      "source": {"revision": 1, "expected": "Order is accepted"},
+      "evidence": {"oldAttempt": "FAIL: backend returned 500", "deployment": "QA build 3 includes the linked application fix", "retest": "Observed valid submission is accepted on QA build 3; expected outcome unchanged"},
+      "generation": {"exists": true, "rounds": 1, "status": "FAIL"},
+      "blockers": [{"reason": "Application defect", "condition": "Valid submission is accepted"}],
+      "tracker": "blocked"
+    },
+    {
+      "id": "707",
+      "request": "Resume after the QA environment was restored.",
+      "source": {"revision": 1, "expected": "Order is accepted"},
+      "evidence": {"oldAttempt": "BLOCKED before dispatch because target was unavailable", "readiness": "Selected target is reachable and required read-only operation succeeds"},
+      "generation": {"exists": true, "rounds": 1, "status": "BLOCKED"},
+      "blockers": [{"reason": "Environment outage", "condition": "Target operation succeeds"}],
+      "tracker": "blocked"
+    },
+    {
+      "id": "708",
+      "request": "Continue automating this blocked case.",
+      "source": {"revision": 1, "action": "Amend an approved order", "expected": "Changes are saved"},
+      "evidence": {"fixture": "Owned synthetic approved order was seeded and its state verified", "cleanup": "Existing reviewed API cleanup available"},
+      "generation": {"exists": false, "spec": null, "stage": "observed execution"},
+      "blockers": [{"reason": "Missing approved-order fixture", "condition": "Approved order exists"}],
+      "tracker": "blocked"
+    },
+    {
+      "id": "709",
+      "request": "Maintain this case after application behavior changed.",
+      "source": {"executedRevision": 1, "currentRevision": 2, "oldExpected": "Discount is 10 percent", "newExpected": "Discount is 15 percent", "ownerDecision": null},
+      "evidence": {"observation": "UI now displays 15 percent", "workItem": "Acceptance discussion is unresolved"},
+      "generation": {"exists": true, "rounds": 1, "status": "FAIL"},
+      "blockers": [{"reason": "Unclear requirement", "condition": "Owner accepts the new expectation"}],
+      "tracker": "blocked"
+    },
+    {
+      "id": "710",
+      "request": "Reassess the case's blockers.",
+      "source": {"revision": 1, "expected": "Order is accepted"},
+      "evidence": {"fixture": "Required record exists and was verified", "collection": "Required payment operation is still absent from the team API collection; no approved alternative exists"},
+      "generation": {"exists": false, "stage": "refinement"},
+      "blockers": [{"reason": "Missing fixture", "condition": "Required record exists"}, {"reason": "Missing API collection operation", "condition": "Required operation is available"}],
+      "tracker": "blocked"
+    },
+    {
+      "id": "711",
+      "request": "Retry this case now the application fix is deployed.",
+      "source": {"revision": 1, "expected": "Order is accepted"},
+      "evidence": {"deployment": "Application fix is present", "retest": "Scoped diagnostic observed acceptance"},
+      "generation": {"exists": true, "sourceId": "orders", "rounds": 3, "status": "FAIL"},
+      "blockers": [{"reason": "Exhausted cumulative repair budget", "condition": "Owner decision within existing gate"}],
+      "tracker": "blocked"
+    },
+    {
+      "id": "712",
+      "request": "Find the cause of last week's failure.",
+      "source": {"revision": 1, "expected": "Order is accepted"},
+      "evidence": {"oldRun": "Only a failure label remains; trace and assertion receipts are unavailable", "currentObservation": "No reproduction performed"},
+      "generation": {"exists": true, "rounds": 0, "status": "FAIL"},
+      "tracker": "doing"
+    },
+    {
+      "id": "713",
+      "request": "Update the outcome after this manual retest.",
+      "source": {"revision": 1, "expected": "Order is accepted"},
+      "evidence": {"manualExecution": "Same frozen execution contains an earlier valid FAIL and a later valid PASS", "blocker": "Previously missing access has been restored"},
+      "generation": {"exists": false, "spec": null, "stage": "manual report"},
+      "tracker": "blocked"
+    }
+  ]
+}

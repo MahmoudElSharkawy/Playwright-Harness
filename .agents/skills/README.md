@@ -37,6 +37,7 @@ For standalone ADO manual runs use [execute-test](execute-test/SKILL.md); automa
 |---|---|
 | [automate-test](automate-test/SKILL.md) | Turning story-linked cases, ADO suites or local scenarios into reviewed POM automation with two scoped green runs |
 | [execute-test](execute-test/SKILL.md) | Running ADO manual cases through live UI/API/DB runtimes and producing verified reports without generating POM code |
+| [maintain-test](maintain-test/SKILL.md) | Diagnosing failed/flaky/changed tests and resuming blocked cases while preserving evidence and repair budgets |
 | [framework-review](framework-review/SKILL.md) | Reviewing a change against the conventions and producing a verdict |
 | [plan-tracker](plan-tracker/SKILL.md) | Recording a tracked plan's progress and regenerating its report |
 | [harness-setup](harness-setup/SKILL.md) | Installing, updating, configuring or rolling back the harness in a project |

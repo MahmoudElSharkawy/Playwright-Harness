@@ -8,6 +8,8 @@ description: Execute an ADO suite or story through live browser, API and databas
 Resolve [ROOTS](../ROOTS.md) first. Run the consumer's installed CLI with
 `npx --no pom-harness execute`; use [automate-test](../automate-test/SKILL.md)
 when the request includes durable POM code generation.
+Use [maintain-test](../maintain-test/SKILL.md) to investigate prior failures or
+reassess blocked cases before resuming this execution workflow.
 
 Accept `/execute-test suite <id> [plan <id>] [on <environment>] [checkpoint]`
 or `/execute-test story <id> [on <environment>]`. Execute sequentially, pausing

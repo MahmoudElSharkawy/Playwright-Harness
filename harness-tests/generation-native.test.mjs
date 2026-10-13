@@ -5,7 +5,7 @@ import {join, dirname} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {spawnSync} from 'node:child_process';
 import {fixture} from './fixtures/execution-core.mjs';
-import {sourceExpectations, createGenerationHandoff, beginGeneration, registerCandidate, recordGenerationReview, generationStatus} from '../scripts/lib/generation/index.mjs';
+import {sourceExpectations, createGenerationHandoff, beginGeneration, registerCandidate, reviseGeneration, recordGenerationReview, generationStatus} from '../scripts/lib/generation/index.mjs';
 import {verifyGeneration} from '../scripts/lib/generation/verify.mjs';
 import {packageRoot} from '../scripts/lib/consumer-paths.mjs';
 import {generateAllure} from '../scripts/lib/reporting/allure.mjs';
@@ -40,6 +40,41 @@ test('two separate native scoped invocations are required, excluding a failing u
   await assert.rejects(verifyGeneration(f.roots, f.source.id), /already recorded/);
   const file = join(f.roots.projectRoot, second.receipt.path), receipt = JSON.parse(readFileSync(file, 'utf8')); receipt.tests = []; writeFileSync(file, JSON.stringify(receipt));
   assert.equal((await generationStatus(f.roots, f.source.id)).status, 'NEEDS_REVIEW');
+});
+
+test('maintenance revalidates an application fix and an accepted requirement with fresh native greens', async t => {
+  // An excluded runtime-state file represents an external application response, not a test repair.
+  const f = await nativeFixture(t, `const {readFileSync}=await import('node:fs'); await expect(Number(readFileSync('.harness/state/application-value','utf8'))).toBe(4);`, '', false,
+    {files: {'.harness/state/application-value': '3'}});
+  assert.equal((await verifyGeneration(f.roots, f.source.id)).status, 'FAIL');
+  const old = await transaction(f.roots, f.source.id, state => state);
+  put(f.roots.projectRoot, '.harness/state/application-value', '4');
+  put(f.roots.projectRoot, '.harness/state/fix.md', 'Synthetic deployment and retest evidence: external response restored to four.');
+  const fixed = await registerCandidate(f.roots, f.source.id, {...f.input, repair: 'application-change', change: {
+    previousSourceFingerprint: old.handoff.fingerprint, artifact: '.harness/state/fix.md'}});
+  await assert.rejects(verifyGeneration(f.roots, f.source.id), /approval/);
+  await recordGenerationReview(f.roots, f.source.id, {revision: fixed.revision, reviewer: 'maintenance-fixture-reviewer', verdict: 'APPROVE', findings: [], artifact: '.harness/state/review.md'});
+  assert.equal((await verifyGeneration(f.roots, f.source.id)).status, 'PASS');
+  assert.equal((await generationStatus(f.roots, f.source.id)).greens, 1);
+  assert.equal((await verifyGeneration(f.roots, f.source.id)).status, 'PASS');
+  assert.equal((await generationStatus(f.roots, f.source.id)).status, 'READY');
+
+  const revised = structuredClone(f.source); revised.scenarios[0].steps[0].expected = ['The accepted result is five'];
+  put(f.roots.projectRoot, '.harness/state/acceptance.md', 'Synthetic owner acceptance: expected result changes from four to five.');
+  const spec = join(f.roots.projectRoot, f.input.tests[0].spec);
+  writeFileSync(spec, readFileSync(spec, 'utf8').replace('.toBe(4)', '.toBe(5)'));
+  put(f.roots.projectRoot, '.harness/state/application-value', '5');
+  const handoff = createGenerationHandoff(revised, [{run: f.run, roots: f.roots, observations: f.report}],
+    [{key: sourceExpectations(revised)[0].key, runId: f.run.id, scenarioId: 'case-1', expectationId: 'visible'}]);
+  const changed = await reviseGeneration(f.roots, f.source.id, handoff, {...f.input, repair: 'requirement-change', change: {
+    previousSourceFingerprint: old.handoff.fingerprint, artifact: '.harness/state/acceptance.md'}});
+  assert.equal((await generationStatus(f.roots, f.source.id)).greens, 0);
+  await recordGenerationReview(f.roots, f.source.id, {revision: changed.revision, reviewer: 'revision-fixture-reviewer', verdict: 'APPROVE', findings: [], artifact: '.harness/state/review.md'});
+  for (let count = 0; count < 2; count++) assert.equal((await verifyGeneration(f.roots, f.source.id)).status, 'PASS');
+  assert.equal((await generationStatus(f.roots, f.source.id)).status, 'READY');
+  const final = await transaction(f.roots, f.source.id, state => state);
+  assert.equal(final.rounds, 2); assert.deepEqual(final.runs.map(run => run.status), ['FAIL', 'PASS', 'PASS', 'PASS', 'PASS']);
+  assert.deepEqual(final.candidates[0], old.candidates[0]);
 });
 test('native title-prefix ambiguity is rejected before an unselected test can have effects', async t => {
   const f = await nativeFixture(t, undefined, "test.describe('adds',()=>{test('nested',async()=>{const {writeFileSync}=await import('node:fs');writeFileSync('.harness/state/unselected-ran','unexpected effect');});});");

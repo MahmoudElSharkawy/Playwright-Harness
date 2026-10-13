@@ -80,6 +80,10 @@ manual workflow supports them.
 
 ## Host lifecycle and recovery
 
+Use [maintenance](maintenance.md) to investigate failures or reassess blockers before
+resuming. It preserves this workflow's historical FAIL aggregation and frozen inputs;
+an unblocked prerequisite or later pass does not erase earlier failures.
+
 One owned host runs the sequential runtime once per scenario. Its curated native
 allowlist excludes raw JavaScript and session/global controls. The single-flight
 mailbox uses durable UUID deduplication: wait by sequence, keep a request ID when
