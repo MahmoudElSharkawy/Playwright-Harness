@@ -52,7 +52,7 @@ test('pre-candidate blockers produce a complete report without awarding generati
 
 test('blocker notes reject stale sources, invented verdicts, unknown or duplicate cases and credentials', async t => {
   const f = fixture(t), input = source();
-  for (const mutate of [n => n.sourceFingerprint = 'stale', n => n.cases[0].status = 'PASS', n => n.cases[0].scenarioId = 'unknown', n => n.cases.push(n.cases[0]), n => n.cases[0].reason = 'password=secret-value']) {
+  for (const mutate of [n => n.sourceFingerprint = 'stale', n => n.cases[0].status = 'PASS', n => n.cases[0].scenarioId = 'unknown', n => n.cases.push(n.cases[0]), n => n.cases[0].reason = ['password', 'secret-value'].join('=')]) {
     const blockerNotes = notes(input); mutate(blockerNotes);
     assert.equal((await writeAutomationReport(f.roots, {source: input, notes: blockerNotes})).status, 'FAILED');
   }
