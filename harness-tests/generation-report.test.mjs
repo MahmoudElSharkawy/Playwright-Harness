@@ -50,6 +50,16 @@ test('pre-candidate blockers produce a complete report without awarding generati
   assert(html.includes('id="status-filter"')); assert(html.includes('Complete source · full report'));
 });
 
+test('incomplete source drafts remain reportable while generation preparation stays blocked', async t => {
+  const f = fixture(t), input = source(['incomplete-case', 'complete-case']); input.scenarios[0].steps[0].expected = [];
+  const report = await writeAutomationReport(f.roots, {source: input}); assert.equal(report.status, 'WRITTEN');
+  const view = JSON.parse(readFileSync(join(f.roots.projectRoot, report.directory, 'result.json')));
+  assert.deepEqual(view.cases.map(row => row.status), ['BLOCKED', 'NOT_GENERATED']); assert.equal(view.cases[0].stage, 'REFINE');
+  assert(view.cases[0].reason.includes('expected results')); assert.deepEqual(view.source, input);
+  assert.throws(() => createGenerationHandoff(input, [], []), /incomplete/);
+  assert.equal(view.greens, 0);
+});
+
 test('blocker notes reject stale sources, invented verdicts, unknown or duplicate cases and credentials', async t => {
   const f = fixture(t), input = source();
   for (const mutate of [n => n.sourceFingerprint = 'stale', n => n.cases[0].status = 'PASS', n => n.cases[0].scenarioId = 'unknown', n => n.cases.push(n.cases[0]), n => n.cases[0].reason = ['password', 'secret-value'].join('=')]) {

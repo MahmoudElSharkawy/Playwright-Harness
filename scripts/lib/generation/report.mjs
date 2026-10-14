@@ -1,7 +1,7 @@
 import {readFileSync, writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {randomUUID} from 'node:crypto';
-import {data, digest, fingerprint, frozen, requireThat, integer, id, keys} from '../execution-core/data.mjs';
+import {data, digest, fingerprint, frozen, requireThat, integer, id, keys, unique} from '../execution-core/data.mjs';
 import {validateLocalSource} from '../local-source.mjs';
 import {transaction, relativeFile} from './storage.mjs';
 import {generationStateStatus, currentCandidate, approvedCandidate} from './index.mjs';
@@ -13,6 +13,28 @@ export {renderAutomationHtml};
 
 const identity = test => fingerprint([test.spec, test.project, test.titlePath]);
 const MATCHERS = new Set(['assertion', 'toBe', 'toEqual', 'toStrictEqual', 'toBeTruthy', 'toBeFalsy', 'toContain', 'toMatch', 'toHaveLength', 'toBeVisible', 'toBeHidden', 'toHaveText', 'toContainText', 'toHaveValue', 'toHaveCount', 'toHaveURL', 'toHaveTitle', 'toBeEnabled', 'toBeDisabled', 'toBeChecked']);
+
+/** Reporting may inventory an incomplete draft; generation still requires validateLocalSource. */
+function reportSource(input) {
+  const source = data(input, 2 * 1024 * 1024, {maxNodes: 200000});
+  const text = value => typeof value === 'string' && value.trim();
+  keys(source, ['version', 'id', 'title', 'scenarios'], 'report source'); id(source.id);
+  requireThat(source.version === 1 && text(source.title) && Array.isArray(source.scenarios) && source.scenarios.length > 0 && source.scenarios.length <= 500, 'Report source needs a known case inventory.');
+  unique(source.scenarios.map(row => row.id), 'report source cases');
+  for (const scenario of source.scenarios) {
+    keys(scenario, ['id', 'title', 'steps', 'externalReferences'], 'report source case'); id(scenario.id);
+    requireThat(text(scenario.title) && Array.isArray(scenario.steps) && scenario.steps.length <= 1000, 'Report cases need titles and bounded source steps.');
+    for (const step of scenario.steps) {
+      keys(step, ['action', 'expected'], 'report source step');
+      requireThat(typeof step.action === 'string' && Array.isArray(step.expected) && step.expected.every(value => typeof value === 'string'), 'Report source steps must retain textual actions and expectations.');
+    }
+    if (scenario.externalReferences !== undefined) {
+      requireThat(Array.isArray(scenario.externalReferences), 'Report external references must be an array.');
+      for (const ref of scenario.externalReferences) {keys(ref, ['system', 'id'], 'report external reference'); requireThat(text(ref.system) && text(ref.id), 'Report external references need a system and ID.');}
+    }
+  }
+  return source;
+}
 
 function nativeReceipt(roots, run, candidate) {
   if (!run?.receipt) return null;
@@ -49,7 +71,7 @@ export async function automationReportView(roots, {sourceId, source: sourceInput
     const text = value => typeof value === 'string' && value.trim() && value.length <= 4096;
     requireThat(GENERATION_STAGES.includes(blocker.stage) && text(blocker.reason) && (blocker.nextAction === undefined || text(blocker.nextAction)), 'Command blockers need a known stage and a bounded reason.');
   }
-  const supplied = sourceInput === undefined ? undefined : validateLocalSource(sourceInput);
+  const supplied = sourceInput === undefined ? undefined : reportSource(sourceInput);
   sourceId ??= supplied?.id; id(sourceId);
   requireThat(!supplied || supplied.id === sourceId, 'Report source identity differs from generation.');
   return transaction(roots, sourceId, state => {
@@ -80,6 +102,9 @@ export async function automationReportView(roots, {sourceId, source: sourceInput
         .map(binding => state.handoff.observations.find(run => run.runId === binding.runId)?.scenarios.find(row => row.id === binding.scenarioId)?.status) ?? [];
       let disposition = {status: 'NOT_GENERATED', stage: state ? 'AUTHOR' : 'EXPLORE', reason: 'No generated test candidate exists for this case.', nextAction: state ? 'Author and register the case in a complete source candidate.' : 'Explore the source and prepare its observed generation handoff.'};
       if (note) disposition = {status: 'BLOCKED', stage: note.stage, reason: note.reason, ...(note.nextAction ? {nextAction: note.nextAction} : {}), declaredBlocker: true};
+      else if (!candidate && (!scenario.steps.length || scenario.steps.some(step => !step.action.trim() || step.expected.some(value => !value.trim())) || !scenario.steps.some(step => step.expected.length))) {
+        disposition = {status: 'BLOCKED', stage: 'REFINE', reason: 'The source case has incomplete actions or expected results.', nextAction: 'Clarify the original actions and accepted expected results before preparing generation.'};
+      }
       else if (!candidate && blocker) disposition = {...blocker, status: 'BLOCKED'};
       else if (candidateIssue) disposition = {status: 'NEEDS_REVIEW', ...candidateIssue};
       else if (approved) {
