@@ -21,9 +21,11 @@ const MAPPING = {
   MAPPING_KEYS: 'The candidate mapping is missing or duplicates source expectations.',
   MAPPING_REFERENCES: 'The candidate mapping lacks valid business action or validation references.'
 };
+export const GENERATION_STAGES = Object.freeze(['SOURCE', 'REFINE', 'EXPLORE', 'PREPARE', 'AUTHOR', 'CANDIDATE', 'REVISE', 'REVIEW', 'VERIFY', 'STATUS', 'REPORT', 'PREPARATION', 'COLLECTION', 'EXECUTION', 'ASSERTION_COVERAGE', 'COMMAND']);
 
 /** Only known gate text is public; native errors and input values remain protected. */
 export function generationBlocker(error, stage = 'PREPARE') {
+  stage = GENERATION_STAGES.includes(stage) ? stage : 'COMMAND';
   const known = GATES.get(error?.message);
   if (error?.code === 'MODULE_NOT_FOUND') return {stage, reason: 'A required generation or native-runner module is unavailable in the consumer.', nextAction: 'Restore the configured, pinned consumer dependencies before resuming the named stage.'};
   return {stage, reason: MAPPING[error?.code] ?? known?.[0] ?? 'The named generation stage could not complete. Reason unavailable; investigation is needed.',

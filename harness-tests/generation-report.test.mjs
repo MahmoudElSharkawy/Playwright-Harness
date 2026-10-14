@@ -58,6 +58,14 @@ test('blocker notes reject stale sources, invented verdicts, unknown or duplicat
   }
 });
 
+test('command blocker inputs cannot invent per-case verdicts', async t => {
+  const f = fixture(t), input = source();
+  for (const status of ['PASS', 'FAIL', 'READY']) {
+    const report = await writeAutomationReport(f.roots, {source: input, blocker: {stage: 'PREPARE', reason: 'A prerequisite is unavailable.', status}});
+    assert.equal(report.status, 'FAILED', 'A command blocker must not override a case verdict.');
+  }
+});
+
 test('generation reports preserve binding attribution, failed native outcomes and readiness', async t => {
   const f = await prepared(t); await recorded(f);
   const before = await generationStatus(f.roots, f.source.id), view = await automationReportView(f.roots, {sourceId: f.source.id});

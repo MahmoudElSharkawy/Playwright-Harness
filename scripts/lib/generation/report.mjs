@@ -1,11 +1,11 @@
 import {readFileSync, writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {randomUUID} from 'node:crypto';
-import {data, digest, fingerprint, frozen, requireThat, integer, id} from '../execution-core/data.mjs';
+import {data, digest, fingerprint, frozen, requireThat, integer, id, keys} from '../execution-core/data.mjs';
 import {validateLocalSource} from '../local-source.mjs';
 import {transaction, relativeFile} from './storage.mjs';
 import {generationStateStatus, currentCandidate, approvedCandidate} from './index.mjs';
-import {generationBlocker} from './reasons.mjs';
+import {generationBlocker, GENERATION_STAGES} from './reasons.mjs';
 import {caseNotes} from '../reporting/case-notes.mjs';
 import {reportDirectory} from '../reporting/index.mjs';
 import {renderAutomationHtml} from '../reporting/case-view.mjs';
@@ -44,6 +44,11 @@ function nativeCase(test, run, readiness) {
 
 /** Read existing history only. Blocker notes cannot create verdicts, candidates or greens. */
 export async function automationReportView(roots, {sourceId, source: sourceInput, notes, blocker} = {}) {
+  if (blocker !== undefined) {
+    blocker = data(blocker); keys(blocker, ['stage', 'reason', 'nextAction'], 'generation command blocker');
+    const text = value => typeof value === 'string' && value.trim() && value.length <= 4096;
+    requireThat(GENERATION_STAGES.includes(blocker.stage) && text(blocker.reason) && (blocker.nextAction === undefined || text(blocker.nextAction)), 'Command blockers need a known stage and a bounded reason.');
+  }
   const supplied = sourceInput === undefined ? undefined : validateLocalSource(sourceInput);
   sourceId ??= supplied?.id; id(sourceId);
   requireThat(!supplied || supplied.id === sourceId, 'Report source identity differs from generation.');
@@ -75,7 +80,7 @@ export async function automationReportView(roots, {sourceId, source: sourceInput
         .map(binding => state.handoff.observations.find(run => run.runId === binding.runId)?.scenarios.find(row => row.id === binding.scenarioId)?.status) ?? [];
       let disposition = {status: 'NOT_GENERATED', stage: state ? 'AUTHOR' : 'EXPLORE', reason: 'No generated test candidate exists for this case.', nextAction: state ? 'Author and register the case in a complete source candidate.' : 'Explore the source and prepare its observed generation handoff.'};
       if (note) disposition = {status: 'BLOCKED', stage: note.stage, reason: note.reason, ...(note.nextAction ? {nextAction: note.nextAction} : {}), declaredBlocker: true};
-      else if (!candidate && blocker) disposition = {status: 'BLOCKED', ...blocker};
+      else if (!candidate && blocker) disposition = {...blocker, status: 'BLOCKED'};
       else if (candidateIssue) disposition = {status: 'NEEDS_REVIEW', ...candidateIssue};
       else if (approved) {
         disposition = {status: 'NOT_RUN', stage: 'VERIFY', reason: 'No scoped verification has been recorded for this candidate.', nextAction: 'Run the independently approved candidate through scoped verification.'};
