@@ -2,7 +2,7 @@
 import {existsSync} from 'node:fs';
 import {join} from 'node:path';
 import {pathToFileURL} from 'node:url';
-import {projectArgument} from './lib/consumer-paths.mjs';
+import {projectArgument, consumerPath} from './lib/consumer-paths.mjs';
 import {loadEnvironment} from './lib/project-config.mjs';
 import {loadAdoConfiguration, adoId} from './lib/integrations/config.mjs';
 import {createAdoClient} from './lib/integrations/ado-client.mjs';
@@ -82,7 +82,11 @@ export async function executeMain(roots, args) {
     for (const reference of secretRefs) {const value = environment[reference.slice(4)]; requireThat(!value || !tail.some((arg, index) => arg.includes(value) && !referenceArgument(index)), 'Use the configured native secret name; raw login values cannot enter the mailbox.');}
     return ['FINISHED', 'INTERRUPTED', 'INTEGRITY_FAILURE'].includes(host.state) && tail[0] === 'finish-scenario' ? {status: host.state, runId} : sendCommand(directory, runId, tail, protocol);
   }
-  if (command === 'report') {const {opt} = options(rest.slice(1), [], ['keep-login']); return writeExecutionReport(roots, executionId, {keepLogin: opt['keep-login']});}
+  if (command === 'report') {
+    const {opt, positional} = options(rest.slice(1), ['input'], ['keep-login']); requireThat(!positional.length, 'Unexpected report argument.');
+    try {return writeExecutionReport(roots, executionId, {keepLogin: opt['keep-login'], ...(opt.input ? {notes: readBounded(consumerPath(roots, opt.input))} : {})});}
+    catch {return {status: 'FAILED', executionId, reason: 'Report input, integrity validation or delivery failed; recorded case outcomes are unchanged.'};}
+  }
   if (command === 'login-state') {const {positional} = options(rest.slice(1)); requireThat(positional[0] === 'import' && positional.length === 4, 'login-state <exec> import <target> <user> <file>'); return importLogin(roots, executionId, ...positional.slice(1));}
   if (command === 'file-bugs' || command === 'publish-results') {
     const {opt, positional} = options(rest.slice(1), ['recreate', 'drafts', 'point-map', 'include'], ['execute', 'include-changed', 'new-run']); requireThat(!positional.length, 'Unexpected delivery argument.');
@@ -91,6 +95,6 @@ export async function executeMain(roots, args) {
   throw new Error('Use execute prepare, freeze, next, do, status, resume, stop, report, login-state, file-bugs or publish-results.');
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  try {const {roots, args} = projectArgument(); const result = await executeMain(roots, args); if (result) console.log(JSON.stringify(result, null, 2));}
+  try {const {roots, args} = projectArgument(); const result = await executeMain(roots, args); if (result) console.log(JSON.stringify(result, null, 2)); if (args[0] === 'report' && result?.status === 'FAILED') process.exitCode = 1;}
   catch (error) {console.error(JSON.stringify({status: 'ERROR', reason: String(error.message).slice(0, 4000), ...(error.requestId ? {requestId: error.requestId, seq: error.seq ?? null} : {})})); process.exitCode = 1;}
 }

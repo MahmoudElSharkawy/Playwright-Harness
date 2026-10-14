@@ -5,7 +5,9 @@ import {assessRun} from '../execution-core/index.mjs';
 import {fingerprint, digest, requireThat} from '../execution-core/data.mjs';
 import {reportDirectory, writeReports} from '../reporting/index.mjs';
 import {renderExecutionHtml} from './report-html.mjs';
-import {readFrozen, readBounded, ownedFile, listRunRecords} from './storage.mjs';
+import {readExecution, readFrozen, readBounded, ownedFile, listRunRecords} from './storage.mjs';
+import {scopedReadiness} from './refinement.mjs';
+import {caseNotes} from '../reporting/case-notes.mjs';
 import {restoreRun, deleteLogin} from './host.mjs';
 import {aggregateSourceConditions, ASSERTION_BYTES, compareRead, matchingRead, coverageAllows} from './verdicts.mjs';
 
@@ -82,9 +84,10 @@ function conditionRecords(result, roots, scenario) {
   return {conditions, diagnostics};
 }
 /** Always re-create and reassess. result.json is deliberately never consulted. */
-export function collectExecution(roots, executionId) {
-  const loaded = readFrozen(roots, executionId), runs = [];
-  for (const snapshot of listRunRecords(roots, executionId)) {
+export function collectExecution(roots, executionId, {notes} = {}) {
+  const captured = readExecution(roots, executionId), loaded = captured.execution.freezeFingerprint ? readFrozen(roots, executionId) : {...captured, freeze: null}, runs = [];
+  requireThat(loaded.freeze || !loaded.execution.runs.length, 'Unfrozen execution cannot contain run history.');
+  for (const snapshot of loaded.freeze ? listRunRecords(roots, executionId) : []) {
     const runRoots = {...roots, runRoot: ownedFile(roots, executionId, snapshot.runId)}, observationsFile = join(runRoots.runRoot, 'observations.json');
     let row = {runId: snapshot.runId, scenarioId: snapshot.scenarioId, startedAt: snapshot.input.startedAt, explicitRerun: snapshot.explicitRerun, state: existsSync(runRoots.runRoot) ? 'INTERRUPTED' : 'NOT_RUN'};
     try {
@@ -98,11 +101,16 @@ export function collectExecution(roots, executionId) {
   }
   const runOrder = new Map(loaded.execution.runs.map((run, index) => [run.runId, index]));
   runs.sort((left, right) => (runOrder.get(left.runId) ?? -1) - (runOrder.get(right.runId) ?? -1));
+  const blockers = caseNotes(loaded.source, notes, runs.filter(run => run.state === 'ASSESSED').map(run => run.scenarioId));
   const scenarios = loaded.source.scenarios.map(source => {
     const history = runs.filter(run => run.scenarioId === source.id), valid = history.filter(run => run.state === 'ASSESSED'), latest = history.at(-1), chosen = valid.at(-1);
     const replacement = [...valid].reverse().find(run => run.explicitRerun), unresolvedIntegrity = history.filter(run => run.state === 'INTEGRITY_FAILURE' && (!replacement || history.indexOf(run) >= history.indexOf(replacement)));
-    const status = unresolvedIntegrity.length ? null : valid.some(run => run.result.status === 'FAIL') ? 'FAIL' : latest?.state === 'ASSESSED' ? latest.result.status : latest?.state === 'INTERRUPTED' ? 'BLOCKED' : null;
+    const readiness = loaded.freeze && !history.length ? scopedReadiness(roots, loaded.freeze, source.id) : null;
+    const note = blockers.get(source.id);
+    const reason = note?.reason ?? (readiness && !readiness.ready ? `Required environment references are unavailable: ${readiness.missing.join(', ')}.` : latest?.state === 'INTERRUPTED' ? 'Execution was interrupted before a final assessment was recorded.' : !loaded.freeze ? 'Source refinement has not been frozen; execution has not started.' : undefined);
+    const status = unresolvedIntegrity.length ? null : valid.some(run => run.result.status === 'FAIL') ? 'FAIL' : latest?.state === 'ASSESSED' ? latest.result.status : latest?.state === 'INTERRUPTED' || note || readiness && !readiness.ready ? 'BLOCKED' : null;
     return {id: source.id, caseId: source.caseId, iteration: source.iteration, title: source.title, status, state: unresolvedIntegrity.length ? 'INTEGRITY_FAILURE' : latest?.state ?? 'NOT_RUN', selectedRunId: chosen?.runId ?? null,
+      ...(reason ? {reason, stage: note?.stage ?? (!loaded.freeze ? 'REFINE' : readiness && !readiness.ready ? 'PREPARE' : 'EXECUTE'), nextAction: note?.nextAction ?? (!loaded.freeze ? 'Complete source refinement and freeze before execution.' : readiness && !readiness.ready ? 'Configure the named environment references, then start the case.' : 'Resume or reassess the interrupted case.'), ...(note ? {declaredBlocker: true} : {})} : {}),
       history: history.map(run => ({runId: run.runId, state: run.state, verdict: run.result?.status ?? null, supersededIntegrity: run.state === 'INTEGRITY_FAILURE' && !unresolvedIntegrity.includes(run)})),
       methods: chosen ? Object.fromEntries(['checked', 'observed', 'mixed', 'unresolved'].map(method => [method, aggregateSourceConditions(chosen.conditions).filter(expectation => expectation.method === method).length])) : {checked: 0, observed: 0, mixed: 0, unresolved: 0}};
   });
@@ -144,9 +152,9 @@ export function deliverableDefects(view, include = '') {
   }
   return {defects, skipped};
 }
-export function writeExecutionReport(roots, executionId, {keepLogin = false} = {}) {
+export function writeExecutionReport(roots, executionId, {keepLogin = false, notes} = {}) {
   const reportName = executionId.startsWith('execute-') ? executionId : `execute-${executionId}`;
-  const view = collectExecution(roots, executionId), defects = executionDefects(view), path = `reports/harness/${reportName}-${randomUUID()}`, output = reportDirectory(roots, path), artifacts = [];
+  const view = collectExecution(roots, executionId, {notes}), defects = executionDefects(view), path = `reports/harness/${reportName}-${randomUUID()}`, output = reportDirectory(roots, path), artifacts = [];
   const write = (name, body) => {writeFileSync(join(output, name), body, {flag: 'wx', mode: 0o600, flush: true}); artifacts.push({path: name, sha256: digest(body), bytes: Buffer.byteLength(body)});};
   for (const row of view.runs.filter(run => run.state === 'ASSESSED')) {
     const receipt = writeReports(roots, row.result, {directory: `${path}/runs/${row.runId}`}); requireThat(receipt.status === 'WRITTEN', 'A per-run report could not be written.');
@@ -178,5 +186,5 @@ export function writeExecutionReport(roots, executionId, {keepLogin = false} = {
   write('index.html', renderExecutionHtml(view, {defectCount: defects.length, screenshots, assertionEvidence}));
   const manifest = {version: 1, status: 'WRITTEN', executionId, sourceFingerprint: view.execution.sourceFingerprint, freezeFingerprint: view.execution.freezeFingerprint, revisionCheck: view.revisionCheck, scenarios: view.scenarios, defects: defects.length, artifacts};
   writeFileSync(join(output, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n', {flag: 'wx', mode: 0o600, flush: true});
-  if (!keepLogin) deleteLogin(roots, executionId); return {status: 'WRITTEN', executionId, directory: path, scenarios: view.scenarios, defects: defects.length};
+  if (!keepLogin) deleteLogin(roots, executionId); return {status: 'WRITTEN', executionId, directory: path, html: `${path}/index.html`, scenarios: view.scenarios, defects: defects.length};
 }

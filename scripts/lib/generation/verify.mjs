@@ -9,6 +9,7 @@ import {transaction, relativeFile, snapshot} from './storage.mjs';
 import {approvedCandidate} from './index.mjs';
 import {readJson} from '../project-config.mjs';
 import {allureLinkTemplates} from '../convention-source.mjs';
+import {generationBlocker} from './reasons.mjs';
 
 const reporter = fileURLToPath(new URL('./reporter.cjs', import.meta.url));
 const reportingReporter = fileURLToPath(new URL('../reporting/verification-reporter.mjs', import.meta.url));
@@ -120,13 +121,15 @@ export async function verifyGeneration(roots, sourceId, {timeoutMs = 120000, all
         HARNESS_ALLURE_DIRECTORY: `reports/generation/${invocation.id}`}, timeoutMs);
       const report = data(readJson(runReceipt));
       requireThat(report.version === 2, 'New verification requires case-level assertion receipts.');
+      requireThat(report.invocation === invocation.id && Array.isArray(report.tests), 'Native receipt identity or case inventory changed.');
+      record.receipt = {path: `.harness/state/generation/${sourceId}/${invocation.id}/execution.json`, fingerprint: fingerprint(report)};
       requireThat(!execution.timedOut && snapshot(roots).fingerprint === candidate.snapshot.fingerprint, 'Execution changed files or exceeded its deadline.');
       approvedCandidate(roots, state);
       phase = 'ASSERTION_COVERAGE';
       if (report.tests?.some(t => t.results?.some(r => r.status === 'failed' || r.assertions?.failed > 0))) failureStatus = 'FAIL';
       Object.assign(record, assessVerification(state.handoff, selected, report, invocation.id, execution.exitCode), {runner: native.version,
         receipt: {path: `.harness/state/generation/${sourceId}/${invocation.id}/execution.json`, fingerprint: fingerprint(report)}});
-    } catch {record.status = failureStatus; record.failureClass = phase; record.reason = 'Inspect protected native receipts and the named gate; raw errors are withheld.';}
+    } catch (error) {const blocker = generationBlocker(error, phase); record.status = failureStatus; record.failureClass = phase; record.reason = blocker.reason; record.nextAction = blocker.nextAction;}
     if (allure) {
       try {
         const path = `reports/generation/${invocation.id}`, capture = data(readJson(relativeFile(roots, `${path}/capture.json`)));

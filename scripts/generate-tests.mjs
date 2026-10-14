@@ -8,20 +8,30 @@ import {requireThat, keys} from './lib/execution-core/data.mjs';
 import {createGenerationHandoff, beginGeneration, registerCandidate, reviseGeneration, recordGenerationReview, generationStatus} from './lib/generation/index.mjs';
 import {verifyGeneration} from './lib/generation/verify.mjs';
 import {relativeFile} from './lib/generation/storage.mjs';
+import {writeAutomationReport} from './lib/generation/report.mjs';
+import {generationBlocker} from './lib/generation/reasons.mjs';
+
+let roots, source, sourceId, command;
 
 try {
-  const {roots, args} = projectArgument(), [command, ...rest] = args;
+  const parsed = projectArgument(); roots = parsed.roots;
+  const [selectedCommand, ...rest] = parsed.args; command = selectedCommand;
   const options = {};
   for (let i = 0; i < rest.length;) {
     if (rest[i] === '--allure') {requireThat(command === 'verify' && !options['--allure'], 'Allure capture is available once on verify.'); options['--allure'] = true; i++; continue;}
-    requireThat(['--input', '--id'].includes(rest[i]) && rest[i + 1] && !options[rest[i]], 'Use --input and/or --id once.'); options[rest[i]] = rest[i + 1];
+    requireThat((command === 'report' ? ['--input', '--id', '--source'] : ['--input', '--id']).includes(rest[i]) && rest[i + 1] && !options[rest[i]], 'Use the command-specific input, source and/or id options once.'); options[rest[i]] = rest[i + 1];
     i += 2;
   }
   let result;
-  if (['prepare', 'revise'].includes(command)) {
+  sourceId = options['--id'];
+  if (command === 'report') {
+    requireThat(sourceId || options['--source'], 'Report requires --id or --source.');
+    if (options['--source']) source = readJson(relativeFile(roots, options['--source']));
+    result = await writeAutomationReport(roots, {sourceId, source, ...(options['--input'] ? {notes: readJson(relativeFile(roots, options['--input']))} : {})});
+  } else if (['prepare', 'revise'].includes(command)) {
     requireThat(options['--input'] && (command === 'revise' ? options['--id'] : !options['--id']), 'Prepare requires --input; revise also requires the existing --id.');
     const input = readJson(relativeFile(roots, options['--input'])); keys(input, ['source', 'executions', 'bindings', command === 'prepare' ? 'author' : 'candidate'], 'generation preparation');
-    const source = readJson(relativeFile(roots, input.source));
+    source = readJson(relativeFile(roots, input.source)); sourceId ??= source.id;
     const executions = input.executions.map(item => {
       keys(item, ['snapshot', 'runRoot'], 'observed execution');
       const saved = readJson(relativeFile(roots, item.snapshot));
@@ -50,8 +60,12 @@ try {
       else {requireThat(command === 'status', 'Unknown generation command.'); result = await generationStatus(roots, options['--id']);}
     }
   }
-  console.log(JSON.stringify(result)); if (result.status !== 'PASS' && command === 'verify') process.exitCode = 1;
+  const reporting = command === 'report' ? undefined : await writeAutomationReport(roots, {sourceId, source});
+  console.log(JSON.stringify({...result, ...(reporting ? {reporting} : {})}));
+  if (result.status !== 'PASS' && command === 'verify' || command === 'report' && result.status === 'FAILED') process.exitCode = 1;
 } catch (error) {
   const code = ['MAPPING_STEPS', 'MAPPING_KEYS', 'MAPPING_REFERENCES'].includes(error.code) ? error.code : undefined;
-  console.error(JSON.stringify({status: 'BLOCKED', ...(code ? {code} : {}), reason: 'Generation input, review, scope, integrity or repair-budget gate failed; no source content emitted.'})); process.exitCode = 2;
+  const blocker = generationBlocker(error, (command ?? 'PREPARE').toUpperCase());
+  const reporting = roots && (sourceId || source) ? await writeAutomationReport(roots, {sourceId, source, blocker}) : undefined;
+  console.error(JSON.stringify({status: 'BLOCKED', ...(code ? {code} : {}), reason: blocker.reason, ...(reporting ? {reporting} : {})})); process.exitCode = 2;
 }

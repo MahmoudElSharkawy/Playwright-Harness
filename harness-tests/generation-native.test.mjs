@@ -10,6 +10,7 @@ import {verifyGeneration} from '../scripts/lib/generation/verify.mjs';
 import {packageRoot} from '../scripts/lib/consumer-paths.mjs';
 import {generateAllure} from '../scripts/lib/reporting/allure.mjs';
 import {transaction} from '../scripts/lib/generation/storage.mjs';
+import {writeAutomationReport} from '../scripts/lib/generation/report.mjs';
 const put = (root, path, content) => {mkdirSync(dirname(join(root, path)), {recursive: true}); writeFileSync(join(root, path), content);};
 
 // Real native runner contract tests; generated text here is deliberately a small runner fixture,
@@ -40,6 +41,19 @@ test('two separate native scoped invocations are required, excluding a failing u
   await assert.rejects(verifyGeneration(f.roots, f.source.id), /already recorded/);
   const file = join(f.roots.projectRoot, second.receipt.path), receipt = JSON.parse(readFileSync(file, 'utf8')); receipt.tests = []; writeFileSync(file, JSON.stringify(receipt));
   assert.equal((await generationStatus(f.roots, f.source.id)).status, 'NEEDS_REVIEW');
+});
+
+test('failed native verification has a bound, readable report without exposing raw expected values', async t => {
+  const f = await nativeFixture(t, "await expect('different').toBe('synthetic-private-expectation');");
+  const run = await verifyGeneration(f.roots, f.source.id);
+  assert.equal(run.status, 'FAIL'); assert(run.receipt, 'Failed native receipts must be bound before presentation.');
+  const before = await generationStatus(f.roots, f.source.id), report = await writeAutomationReport(f.roots, {sourceId: f.source.id});
+  assert.equal(report.status, 'WRITTEN', JSON.stringify(report));
+  const view = JSON.parse(readFileSync(join(f.roots.projectRoot, report.directory, 'result.json')));
+  assert.equal(view.cases[0].status, 'FAIL'); assert(view.cases[0].reason.includes('toBe'));
+  const html = readFileSync(join(f.roots.projectRoot, report.html), 'utf8');
+  assert(html.includes('1 native assertion(s) failed')); assert(!html.includes('synthetic-private-expectation'));
+  assert.deepEqual(await generationStatus(f.roots, f.source.id), before);
 });
 
 test('maintenance revalidates an application fix and an accepted requirement with fresh native greens', async t => {

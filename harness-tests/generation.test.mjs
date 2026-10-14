@@ -79,14 +79,14 @@ test('local CLI reconstructs frozen runs and prepares without ADO or an AI host'
   put(f.roots.projectRoot, '.harness/runs/run-1/inputs.json', f.run); put(f.roots.projectRoot, '.harness/runs/run-1/observations.json', f.report);
   put(f.roots.projectRoot, '.harness/state/prepare.json', {source: 'source.json', author: 'cli-author', executions: [{snapshot: '.harness/runs/run-1/inputs.json', runRoot: '.harness/runs/run-1'}], bindings: [{key: sourceExpectations(input)[0].key, runId: f.run.id, scenarioId: 'case-1', expectationId: 'visible'}]});
   const result = spawnSync(process.execPath, [join(f.roots.packageRoot, 'scripts/generate-tests.mjs'), 'prepare', '--project-root', f.roots.projectRoot, '--input', '.harness/state/prepare.json'], {encoding: 'utf8', windowsHide: true});
-  assert.equal(result.status, 0, result.stderr); assert.equal(JSON.parse(result.stdout).expectations, 1);
+  assert.equal(result.status, 0, result.stderr); assert.equal(JSON.parse(result.stdout).expectations, 1); assert.equal(JSON.parse(result.stdout).reporting.status, 'WRITTEN');
 });
 test('CLI rejects fabricated input fingerprints and withholds diagnostic payloads', t => {
   const f = fixture(t); put(f.roots.projectRoot, 'source.json', source());
   put(f.roots.projectRoot, '.harness/runs/run-1/inputs.json', {...f.run, inputFingerprint: 'forged'});
   put(f.roots.projectRoot, '.harness/state/prepare.json', {source: 'source.json', author: 'cli-author', executions: [{snapshot: '.harness/runs/run-1/inputs.json', runRoot: '.harness/runs/run-1'}], bindings: []});
   const result = spawnSync(process.execPath, [join(f.roots.packageRoot, 'scripts/generate-tests.mjs'), 'prepare', '--project-root', f.roots.projectRoot, '--input', '.harness/state/prepare.json'], {encoding: 'utf8', windowsHide: true});
-  assert.equal(result.status, 2); assert(!result.stderr.includes('forged')); assert.equal(JSON.parse(result.stderr).status, 'BLOCKED');
+  assert.equal(result.status, 2); assert(!result.stderr.includes('forged')); assert.equal(JSON.parse(result.stderr).status, 'BLOCKED'); assert.equal(JSON.parse(result.stderr).reporting.status, 'WRITTEN');
 });
 
 function caseReport() {
