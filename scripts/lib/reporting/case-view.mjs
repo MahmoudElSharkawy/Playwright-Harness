@@ -5,7 +5,7 @@ import {REPORT_STYLES, REPORT_SCRIPT} from './case-assets.mjs';
 const OUTCOMES = {
   PASS: {label: 'PASS', className: 'pass', color: '#208052', rank: 60},
   FAIL: {label: 'FAIL', className: 'fail', color: '#b83347', rank: 10},
-  NEEDS_REVIEW: {label: 'NEEDS_REVIEW', className: 'review', color: '#ad740b', rank: 20},
+  NEEDS_REVIEW: {label: 'Needs review', className: 'review', color: '#ad740b', rank: 20},
   BLOCKED: {label: 'BLOCKED', className: 'blocked', color: '#b67b20', rank: 30},
   NOT_RUN: {label: 'NOT_RUN', className: 'neutral', color: '#8693a7', rank: 40},
   NOT_GENERATED: {label: 'NOT GENERATED', className: 'neutral', color: '#8693a7', rank: 40},
