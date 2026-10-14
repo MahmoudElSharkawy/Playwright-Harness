@@ -1,9 +1,11 @@
 // Verification receipt only: no HTML, Allure or verdict recomputation.
 const {writeFileSync} = require('node:fs');
 const {relative} = require('node:path');
+const MATCHERS = ['toBe', 'toEqual', 'toStrictEqual', 'toBeTruthy', 'toBeFalsy', 'toContain', 'toMatch', 'toHaveLength', 'toBeVisible', 'toBeHidden', 'toHaveText', 'toContainText', 'toHaveValue', 'toHaveCount', 'toHaveURL', 'toHaveTitle', 'toBeEnabled', 'toBeDisabled', 'toBeChecked'];
 // Public reporter steps prove case-level assertion execution, not source coverage.
 function assertionEvidence(steps) {
   const assertions = {passed: 0, failed: 0};
+  const failedChecks = [];
   let skippedSteps = 0;
   const skips = nodes => {for (const step of nodes) {
     skippedSteps += (step.annotations ?? []).filter(annotation => annotation.type === 'skip').length;
@@ -16,11 +18,15 @@ function assertionEvidence(steps) {
     // Ordinary helper containers do not hide caught assertion failures.
     const probe = /^Probe(?:\s|$)/.test(step.title) && /(?:^|\/)utils\//.test((step.location?.file ?? '').replaceAll('\\', '/'));
     if (step.duration < 0 || !Number.isFinite(step.duration) || probe) continue;
-    if (step.error) assertions.failed++;
+    if (step.error) {
+      assertions.failed++;
+      // Retain matcher identity only; raw titles/errors may contain confidential values.
+      if (failedChecks.length < 100) failedChecks.push(MATCHERS.find(name => new RegExp(`\\b${name}\\b`).test(step.title)) ?? 'assertion');
+    }
     else if (!inLifecycle) assertions.passed++;
   }};
   skips(steps); visit(steps);
-  return {assertions, skippedSteps};
+  return {assertions, skippedSteps, failedChecks};
 }
 class GenerationReporter {
   constructor() {this.report = {version: 2, invocation: process.env.HARNESS_GENERATION_INVOCATION, tests: [], errors: 0};}

@@ -73,6 +73,17 @@ Source → refinement → observed execution → durable POM generation
 
 Use [reporting](../../../docs/reporting.md) for validated execution reports and optional Allure capture during verification. Keep the recorded verifier outcome visible above native test detail; report generation never grants delivery readiness.
 
+Always finish with `npx --no pom-harness generate report --source <source.json>`
+(optionally `--id <source-id>`), including failed, blocked and partial work. If a case
+stops before a candidate exists, record its actual stage, reason and known next action
+in source-bound notes, then pass `--input <consumer-notes.json>` under the
+[reporting contract](../../../docs/reporting.md#case-results-and-blocker-notes).
+Use existing generation history and bound native receipts for generated cases;
+notes cannot overwrite them or create passes. Link the returned `html` in the final
+response with a brief status/count summary and clear failure/blocker reasons.
+Generation commands also return a separate `reporting` delivery result. Report failure
+must remain visible without changing the workflow verdict, repair count or greens.
+
 Use [Azure DevOps](../../../docs/azure-devops.md) for explicitly authorized external delivery.
 Local sources support the complete generation/review/verification path without ADO.
 Legacy ADO artifact layouts remain documented in [the compatibility playbook](references/playbook.md).

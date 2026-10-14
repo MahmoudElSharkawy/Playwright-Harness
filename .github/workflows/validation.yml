@@ -101,6 +101,8 @@ jobs:
         run: node scripts/ci/native.mjs "${{ runner.temp }}/harness-installed" parallel
       - name: Prove native browser behavior from the installed archive
         run: node scripts/ci/native.mjs "${{ runner.temp }}/harness-installed" browser
+      - name: Prove offline result-report filtering and responsive layout
+        run: node "${{ runner.temp }}/harness-installed/installation/node_modules/playwright-pom-harness/scripts/probes/results-report.mjs" "${{ runner.temp }}/harness-results-report"
       - name: Prove MySQL and mixed browser/API/database execution on Linux
         if: runner.os == 'Linux'
         run: node scripts/ci/mysql.mjs "${{ runner.temp }}/harness-installed"
@@ -119,6 +121,7 @@ jobs:
           path: |
             ${{ runner.temp }}/harness-installed/installed.json
             ${{ runner.temp }}/harness-installed/native-browser.json
+            ${{ runner.temp }}/harness-results-report/results-report-proof.json
             ${{ runner.temp }}/harness-installed/native-execute.json
             ${{ runner.temp }}/harness-installed/native-parallel.json
             ${{ runner.temp }}/harness-installed/native-mysql.json

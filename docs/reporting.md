@@ -11,6 +11,7 @@ metrics summarize consumer progress. Report delivery is separate from test succe
 |---|---|---|
 | Shared execution | `reports/harness/<run-id>-<unique-id>/` | Reassessed observations/evidence |
 | Manual dashboard | `reports/harness/execute-<execution-uuid>-<report-uuid>/` | Assessed cases, attempts and defects |
+| Automation case report | `reports/harness/automation-<report-uuid>/` | Generation history, source-bound blockers and hash-bound native receipts |
 | Generated verification/Allure | `reports/generation/<verification-id>/` | Verifier outcome with separate native detail |
 | Standalone scoped Allure | `reports/allure/<unique-id>/` | Native results |
 | Starter Playwright HTML | `reports/playwright-report/` | Native results |
@@ -70,6 +71,75 @@ CSP permits the generated hashed script for filters/search/sorting/previews, whi
 disclosures work without JavaScript. Verified PNG/JPEG previews cap at 2 MiB each/
 20 MiB total and deduplicate identical bytes; companion links stay relative.
 See [manual execution](manual-execution.md) for selection/staleness/delivery.
+
+## Case results and blocker notes
+
+Both execution and automation finish with an offline HTML case report and a direct
+`html` link. The overview pie/donut chart counts each case once; its textual legend
+shows full-report counts and percentages. Status filters, search and reset apply to
+the case list while the chart remains the full-report overview. Failed and blocked
+case rows show their reason before opening details. Details retain the stage, known
+next action and available attempt/assertion history. Missing reasons explicitly say
+that investigation is needed.
+
+```sh
+npx --no pom-harness execute report <exec> [--input .harness/state/blockers.json]
+npx --no pom-harness generate report --source .harness/sources/<name>.json [--input .harness/state/blockers.json]
+npx --no pom-harness generate report --id <source-id>
+```
+
+Execution can report a captured source before freeze. Missing environment references
+are named for unexecuted frozen cases; their values are omitted. Interrupted attempts
+remain blocked, assessed failures retain their authority, and original history stays
+visible. An explicit blocker note cannot replace an assessed case.
+
+Automation reports work before a candidate exists. Without a recorded blocker,
+such cases are `NOT_GENERATED`, with no inferred execution result. Generation commands
+automatically return a separate `reporting` delivery result when their source is
+known. The final skill response still renders the current report and links its `html`.
+Native outcomes, exploration outcomes and automation readiness appear separately;
+one scoped green cannot become READY through report generation. Current candidate
+drift, missing approval and changed/missing receipts remain visible as review work.
+Failed native receipts are bound to their invocation and fingerprint before supplying
+case results. Older unbound receipts cannot establish a case verdict. Native failure
+summaries retain matcher names and counts, without copying raw errors or expected values.
+
+For an observed blocker before execution or generation, write consumer-owned notes:
+
+```json
+{
+  "version": 1,
+  "sourceFingerprint": "<fingerprint of the captured source>",
+  "cases": [
+    {
+      "scenarioId": "case-1",
+      "stage": "EXPLORE",
+      "reason": "The required customer fixture and QA account are unavailable.",
+      "nextAction": "Provision the fixture and account, then resume exploration."
+    }
+  ]
+}
+```
+
+Compute `fingerprint(source)` with the execution-core helper. For execution, use the
+captured `readExecution(...).source`; for automation, use the validated neutral source
+(or `state.handoff.source`). This is the source fingerprint, not the generation handoff
+fingerprint or a hash of the raw JSON file. Notes must name unique known case IDs,
+use SOURCE/REFINE/EXPLORE/PREPARE/AUTHOR, and contain bounded reasons and optional next
+actions. Each entry records BLOCKED only; there is no status override. Preserve all
+observed obstacles in the reason. Notes for assessed/generated cases, changed sources,
+unknown IDs or credential-like content fail validation. Titles and arbitrary prose
+still require correct classification by the producer.
+
+Automation output contains `result.json` (including the frozen source/notes),
+`index.html`, and a final integrity `manifest.json`. Report delivery is WRITTEN/FAILED
+separately from workflow outcomes; write failure neither resets history nor grants
+greens. Explicit report commands exit nonzero when delivery fails.
+
+The synthetic browser proof is `npm run probe:results-report -- <fresh-directory>`.
+It checks both dashboards locally, status filtering/reset, keyboard use, no external
+requests, five viewport sizes and horizontal reflow from 320 to 3840 pixels. PR
+validation runs the same proof against the installed archive after browser setup.
 
 ## Allure capture and generation
 

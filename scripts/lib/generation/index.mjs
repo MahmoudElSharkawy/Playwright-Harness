@@ -138,8 +138,7 @@ export function approvedCandidate(roots, state) {
   return candidate;
 }
 
-export async function generationStatus(roots, sourceId) {
-  return transaction(roots, sourceId, state => {
+export function generationStateStatus(roots, state) {
     requireThat(state, 'Generation has not started.');
     let candidate; try {candidate = approvedCandidate(roots, state);} catch {return frozen({status: 'NEEDS_REVIEW', rounds: state.rounds, greens: 0, sourceFingerprint: state.handoff.fingerprint});}
     const runs = state.runs.filter(r => r.revision === candidate.revision);
@@ -153,7 +152,10 @@ export async function generationStatus(roots, sourceId) {
     const greens = runs.every(r => r.status === 'PASS') ? runs.length : 0;
     return frozen({status: runs.at(-1)?.status === 'STARTED' ? 'NEEDS_REVIEW' : greens === 2 ? 'READY' : runs.at(-1)?.status ?? 'UNVERIFIED', rounds: state.rounds, greens,
       revision: candidate.revision, sourceFingerprint: state.handoff.fingerprint, runs: runs.map(r => ({id: r.id, status: r.status}))});
-  });
+}
+
+export async function generationStatus(roots, sourceId) {
+  return transaction(roots, sourceId, state => generationStateStatus(roots, state));
 }
 
 /** Historical presentation reads a recorded verdict; it never derives a new one. */

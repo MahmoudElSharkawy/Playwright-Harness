@@ -459,6 +459,7 @@ Check whether the candidate is ready:
 
 ```text
 npx --no pom-harness generate status --id <source-id>
+npx --no pom-harness generate report --source .harness/sources/<name>.json --id <source-id>
 ```
 
 `READY` means the current approved candidate has two scoped greens from distinct

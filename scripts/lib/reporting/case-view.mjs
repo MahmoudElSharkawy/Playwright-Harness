@@ -1,0 +1,53 @@
+import {createHash} from 'node:crypto';
+import {escapeHtml as h} from './render.mjs';
+import {REPORT_STYLES, REPORT_SCRIPT} from './case-assets.mjs';
+
+const OUTCOMES = {
+  PASS: {label: 'PASS', className: 'pass', color: '#208052', rank: 60},
+  FAIL: {label: 'FAIL', className: 'fail', color: '#b83347', rank: 10},
+  NEEDS_REVIEW: {label: 'NEEDS_REVIEW', className: 'review', color: '#ad740b', rank: 20},
+  BLOCKED: {label: 'BLOCKED', className: 'blocked', color: '#b67b20', rank: 30},
+  NOT_RUN: {label: 'NOT_RUN', className: 'neutral', color: '#8693a7', rank: 40},
+  NOT_GENERATED: {label: 'NOT GENERATED', className: 'neutral', color: '#8693a7', rank: 40},
+  PENDING: {label: 'PENDING', className: 'neutral', color: '#647bb6', rank: 45},
+  SKIPPED: {label: 'SKIPPED', className: 'neutral', color: '#8693a7', rank: 50},
+  READY: {label: 'READY', className: 'pass', color: '#208052', rank: 70},
+  INTEGRITY_FAILURE: {label: 'INTEGRITY FAILURE (no verdict)', className: 'integrity', color: '#944666', rank: 0}
+};
+export const outcome = value => OUTCOMES[value] ?? {label: value ?? 'No verdict', className: 'neutral', color: '#8693a7', rank: 45};
+export const caseOutcome = row => row.status ?? row.state ?? 'NOT_RUN';
+export const badge = value => `<span class="badge ${outcome(value).className}">${h(outcome(value).label)}</span>`;
+
+/** Each row is one case; attempts never inflate the chart. */
+export function caseOverview(rows) {
+  const counts = new Map();
+  for (const row of rows) {const status = caseOutcome(row); counts.set(status, (counts.get(status) ?? 0) + 1);}
+  const total = rows.length, passed = counts.get('PASS') ?? 0;
+  return {total, passed, passRate: total ? passed / total * 100 : null,
+    outcomes: [...counts].map(([status, count]) => ({status, count, percentage: count / total * 100}))};
+}
+
+export function renderOutcomeChart(overview, {scope = 'Complete execution', value, caption = 'pass rate'} = {}) {
+  const center = value ?? (overview.passRate === null ? '—' : overview.passRate.toFixed(1) + '%');
+  const circumference = 2 * Math.PI * 42; let offset = 0;
+  const segments = overview.outcomes.map(item => {
+    const length = circumference * item.count / overview.total;
+    const circle = `<circle data-chart-status="${h(item.status)}" data-count="${item.count}" cx="60" cy="60" r="42" fill="none" stroke="${outcome(item.status).color}" stroke-width="12" stroke-dasharray="${length} ${circumference - length}" stroke-dashoffset="${-offset}" transform="rotate(-90 60 60)"></circle>`;
+    offset += length; return circle;
+  }).join('');
+  const description = overview.outcomes.map(item => `${outcome(item.status).label}: ${item.count} cases (${item.percentage.toFixed(1)}%)`).join('; ') || 'No test cases recorded';
+  return `<div class="panel chart-panel"><svg class="donut" viewBox="0 0 120 120" role="img" aria-label="${h(description)}"><circle cx="60" cy="60" r="42" fill="none" stroke="#e6ebf2" stroke-width="12"></circle>${segments}<text class="chart-number" x="60" y="60" text-anchor="middle">${h(center)}</text><text class="chart-caption" x="60" y="76" text-anchor="middle">${h(caption)}</text></svg><div class="chart-content"><h3>Case outcomes</h3><p class="scope">${h(scope)}</p>${overview.total ? `<ul class="legend">${overview.outcomes.map(item => `<li><span class="dot" style="--outcome-color:${outcome(item.status).color}" aria-hidden="true"></span><span>${h(outcome(item.status).label)}</span><strong>${item.count}<span class="legend-percent">${item.percentage.toFixed(1)}%</span></strong><button type="button" class="legend-filter" data-filter-status="${h(item.status)}" aria-pressed="false" aria-label="Filter ${h(outcome(item.status).label)} cases" hidden>View</button></li>`).join('')}</ul>` : '<p class="small muted">No case outcomes to display.</p>'}</div></div>`;
+}
+
+export function renderCaseControls(overview) {
+  return overview.total ? `<div class="panel toolbar" id="result-controls" hidden><div class="control search"><label for="case-search">Search cases or runs</label><input type="search" id="case-search" placeholder="Title, case ID, or run ID" autocomplete="off" aria-controls="case-list"></div><div class="control"><label for="status-filter">Case outcome</label><select id="status-filter" aria-controls="case-list"><option value="">All outcomes</option>${overview.outcomes.map(item => `<option value="${h(item.status)}">${h(outcome(item.status).label)}</option>`).join('')}</select></div><div class="control"><label for="case-sort">Sort results</label><select id="case-sort" aria-controls="case-list"><option value="original">Original order</option><option value="status">Status · attention first</option><option value="title">Title · A to Z</option></select></div><button type="button" class="button clear" id="clear-filters">Clear filters</button></div>` : '';
+}
+
+/** Presentation only; the generation collector supplies readiness and case dispositions. */
+export function renderAutomationHtml(view) {
+  const overview = caseOverview(view.cases), count = status => overview.outcomes.find(item => item.status === status)?.count ?? 0;
+  const rows = view.cases.map((row, index) => `<details class="case-row" id="case-${index}" data-case data-order="${index}" data-rank="${outcome(row.status).rank}" data-status="${h(row.status)}" data-title="${h(row.title)}" data-search="${h([row.id, row.title, row.reason, ...(row.history ?? []).map(item => item.id)].join(' '))}"><summary>${badge(row.status)}<span class="case-main"><span class="case-title">${h(row.title)}</span><span class="case-identifiers"><code>${h(row.id)}</code></span>${row.reason ? `<span class="case-reason">${h(row.reason)}</span>` : ''}</span><span class="case-methods">${h(row.stage)}</span><span class="case-action">Details <span class="chevron" aria-hidden="true">›</span></span></summary><div class="case-body"><h3>Case details</h3><p><strong>Stage:</strong> ${h(row.stage)}</p><p><strong>Reason:</strong> ${h(row.reason || 'Reason unavailable; investigation is needed.')}</p>${row.nextAction ? `<p><strong>Next action:</strong> ${h(row.nextAction)}</p>` : ''}${row.declaredBlocker ? '<p class="scope">Recorded workflow blocker; this is not an executed test verdict.</p>' : ''}<p><strong>Exploration outcome:</strong> ${h(row.observedStatus ?? 'Not recorded')}</p><p><strong>Native outcome:</strong> ${h(row.nativeStatus ?? 'Not run')}</p>${row.assertions ? `<p><strong>Native assertions:</strong> ${row.assertions.passed} passed · ${row.assertions.failed} failed</p>` : ''}${row.expectations?.length ? `<details class="raw"><summary>Source expectations</summary><ul>${row.expectations.map(item => `<li>${h(item)}</li>`).join('')}</ul></details>` : ''}${row.history?.length ? `<details class="raw"><summary>Verification history · ${row.history.length}</summary><ul>${row.history.map(item => `<li><code>${h(item.id)}</code> · ${h(item.status)}${item.failureClass ? ` · ${h(item.failureClass)}` : ''}</li>`).join('')}</ul></details>` : ''}</div></details>`).join('');
+  const hash = createHash('sha256').update(REPORT_SCRIPT).digest('base64');
+  const policy = `default-src 'none'; script-src 'sha256-${hash}'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'`;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="Content-Security-Policy" content="${policy}"><title>${h(view.title)} · Automation results</title><style>${REPORT_STYLES}</style></head><body><main><header class="report-header"><p class="eyebrow">Test automation report</p><h1>${h(view.title)}</h1><p class="execution-id">Source <code>${h(view.sourceId)}</code> · Report <code>${h(view.id)}</code></p><div class="metadata"><span>Generated <time datetime="${h(view.createdAt)}">${h(view.createdAt)} (UTC)</time></span><span>Environment <strong>${h(view.environment ?? 'Not recorded')}</strong></span></div><p><strong>Automation readiness:</strong> ${badge(view.status)} · ${view.greens} / 2 scoped greens · ${view.rounds} / 3 repair rounds</p><p class="scope">Case outcomes and native results are separate from automation readiness. Generating code does not establish a pass.</p>${view.blocker ? `<p class="notice"><strong>${h(view.blocker.stage)} stopped:</strong> ${h(view.blocker.reason)}${view.blocker.nextAction ? `<br><strong>Next action:</strong> ${h(view.blocker.nextAction)}` : ''}</p>` : ''}<nav class="navigation" aria-label="Report navigation"><a href="#overview">Overview</a><a href="#results">Test results</a><a href="result.json">Result data ↗</a></nav></header><section id="overview" aria-labelledby="overview-heading"><div class="section-heading"><h2 id="overview-heading">Automation overview</h2></div><div class="overview-grid"><div class="panel"><dl class="metrics"><div class="metric"><dt>Total test cases</dt><dd data-metric="total">${overview.total}</dd></div><div class="metric fail"><dt>Failed</dt><dd data-metric="failed">${count('FAIL')}</dd></div><div class="metric"><dt>Blocked</dt><dd data-metric="blocked">${count('BLOCKED')}</dd></div><div class="metric pass"><dt>Ready</dt><dd data-metric="ready">${count('READY')}</dd></div></dl><p class="scope overview-note">Full source scope · One row per source case · Attempts are retained in case details.</p></div>${renderOutcomeChart(overview, {scope: 'Complete source · full report', value: overview.total, caption: 'cases'})}</div></section><section class="section" id="results" aria-labelledby="results-heading"><div class="section-heading"><h2 id="results-heading">Test results</h2></div>${renderCaseControls(overview)}<div class="result-meta"><p id="result-count" role="status" aria-live="polite">Showing ${overview.total} of ${overview.total} test cases</p><p class="active-filters" id="active-filters" hidden></p></div><div class="case-list" id="case-list">${rows}</div><div class="panel empty" id="no-results" hidden><h3>No matching test cases</h3><p>Try a shorter search or clear the case outcome filter.</p></div>${overview.total ? '' : '<div class="panel empty"><h3>No test cases recorded</h3><p>The source inventory is unavailable; no case outcome is inferred.</p></div>'}</section><footer class="footer">Source fingerprint <code>${h(view.sourceFingerprint)}</code><br>Recorded generation history and hash-bound native receipts supply the results. This report works offline.</footer></main><script>${REPORT_SCRIPT}</script></body></html>\n`;
+}

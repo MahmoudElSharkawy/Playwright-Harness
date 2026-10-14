@@ -170,6 +170,10 @@ For live manual execution of ADO cases:
 
 The [manual execution guide](docs/manual-execution.md) covers verified dashboards,
 evidence and defect lists, with optional bug filing and suite outcome publication.
+Both execution and automation finish with an offline HTML report: a case-outcome pie
+chart, a status-filtered case list, and visible failure/blocker reasons with known next
+actions. See [case reports](docs/reporting.md#case-results-and-blocker-notes), including
+reports for cases that stop before execution or generated tests exist.
 
 ## Documentation
 

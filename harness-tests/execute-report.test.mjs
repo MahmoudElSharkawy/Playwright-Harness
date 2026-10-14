@@ -7,6 +7,41 @@ import {executionFixture, executeApi} from './fixtures/execute.mjs';
 import {collectExecution, writeExecutionReport, defectFingerprint, diagnosticSignature, executionDefects} from '../scripts/lib/execute/report.mjs';
 import {executionOverview, renderExecutionHtml} from '../scripts/lib/execute/report-html.mjs';
 import {executionReportView, reportCondition} from './fixtures/execute-report.mjs';
+import {readExecution} from '../scripts/lib/execute/storage.mjs';
+import {fingerprint} from '../scripts/lib/execution-core/data.mjs';
+test('collapsed case rows explain failures and blockers without requiring raw logs', () => {
+  const view = executionReportView(['FAIL', 'BLOCKED', 'BLOCKED']);
+  view.scenarios[1].reason = 'Required customer fixture is unavailable.';
+  view.scenarios[1].stage = 'PREPARE';
+  view.scenarios[1].nextAction = 'Provision the customer fixture, then resume.';
+  view.runs[1].conditions = [];
+  view.runs[2].conditions = [];
+  const html = renderExecutionHtml(view);
+  const summaries = [...html.matchAll(/<details class="case-row"[^>]*><summary>([\s\S]*?)<\/summary>/g)].map(match => match[1]);
+  assert(summaries[0].includes('class="case-reason"'), 'Failure reason must be visible in the collapsed case row.');
+  assert(summaries[0].includes('The expected panel is unavailable'));
+  assert(summaries[1].includes('Required customer fixture is unavailable.'));
+  assert(html.includes('Provision the customer fixture, then resume.'));
+  assert(summaries[2].includes('Reason unavailable; investigation is needed.'));
+});
+
+test('captured unfrozen executions report blockers while preserving unexecuted cases', async t => {
+  const f = await executionFixture(t), captured = readExecution(f.roots, f.executionId);
+  const notes = {version: 1, sourceFingerprint: fingerprint(captured.source), cases: [{scenarioId: captured.source.scenarios[0].id, stage: 'REFINE', reason: 'The required fixture is unavailable.', nextAction: 'Provision the fixture before execution.'}]};
+  const report = writeExecutionReport(f.roots, f.executionId, {notes});
+  assert.equal(report.status, 'WRITTEN'); assert.equal(report.scenarios[0].status, 'BLOCKED');
+  assert.equal(Boolean(readExecution(f.roots, f.executionId).execution.freezeFingerprint), false);
+  const html = readFileSync(join(f.roots.projectRoot, report.html), 'utf8'); assert(html.includes(notes.cases[0].reason));
+  assert(!html.includes('NaN')); assert(!html.includes('Infinity'));
+});
+
+test('readiness blockers name missing environment references without reading their values into reports', async t => {
+  const f = await executionFixture(t); f.apiStep();
+  f.refinement.scenarios[0].steps[0].inputs = [{name: 'fixture', source: 'env:REPORT_REQUIRED_FIXTURE'}]; f.freeze();
+  const report = writeExecutionReport(f.roots, f.executionId);
+  assert.equal(report.scenarios[0].status, 'BLOCKED'); assert(report.scenarios[0].reason.includes('REPORT_REQUIRED_FIXTURE'));
+  assert.equal(report.scenarios[0].stage, 'PREPARE'); assert.equal(report.scenarios[0].history.length, 0);
+});
 test('report ignores claimed result JSON, labels integrity failures, and accepts an explicit valid replacement', async t => {
   const f = await executionFixture(t); f.apiStep(); f.freeze(); const first = await executeApi(f);
   writeFileSync(join(first.roots.runRoot, 'result.json'), '{"status":"FAIL"}'); assert.equal(collectExecution(f.roots, f.executionId).scenarios[0].status, 'PASS');
