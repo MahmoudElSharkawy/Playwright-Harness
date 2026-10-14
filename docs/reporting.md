@@ -94,12 +94,11 @@ remain blocked, assessed failures retain their authority, and original history s
 visible. An explicit blocker note cannot replace an assessed case.
 
 Automation reports work before a candidate exists. Without a recorded blocker,
-such cases are `NOT_GENERATED`, with no inferred execution result. Generation commands
-can also report a draft inventory with known IDs/titles and missing actions or
+such cases are `NOT_GENERATED`, with no inferred execution result. Reports can also
+inventory a draft with known IDs/titles and missing actions or
 expectations; incomplete cases appear BLOCKED at REFINE. The original empty slots
 are retained, and generation preparation still rejects the draft.
-Generation commands
-automatically return a separate `reporting` delivery result when their source is
+Generation commands automatically return a separate `reporting` delivery result when their source is
 known. The final skill response still renders the current report and links its `html`.
 Native outcomes, exploration outcomes and automation readiness appear separately;
 one scoped green cannot become READY through report generation. Current candidate
@@ -127,8 +126,7 @@ For an observed blocker before execution or generation, write consumer-owned not
 
 Compute `fingerprint(source)` with the execution-core helper. For execution, use the
 captured `readExecution(...).source`; for automation, use the neutral source or its
-reportable draft inventory
-(or `state.handoff.source`). This is the source fingerprint, not the generation handoff
+reportable draft inventory (or `state.handoff.source`). This is the source fingerprint, not the generation handoff
 fingerprint or a hash of the raw JSON file. Notes must name unique known case IDs,
 use SOURCE/REFINE/EXPLORE/PREPARE/AUTHOR, and contain bounded reasons and optional next
 actions. Each entry records BLOCKED only; there is no status override. Preserve all
