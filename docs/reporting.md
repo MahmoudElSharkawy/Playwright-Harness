@@ -76,9 +76,14 @@ See [manual execution](manual-execution.md) for selection/staleness/delivery.
 
 Both execution and automation finish with an offline HTML case report and a direct
 `html` link. The overview pie/donut chart counts each case once; its textual legend
-shows full-report counts and percentages. Status filters, search and reset apply to
-the case list while the chart remains the full-report overview. Failed and blocked
-case rows show their reason before opening details. Details retain the stage, known
+shows full-report counts and percentages. Select multiple status checkboxes to show
+their combined cases; search narrows that selection. All statuses clears the status
+selection while preserving search, and Clear filters resets both. The chart remains
+the full-report overview. Cases appear in collapsed status groups with compact rows
+and 10 cases per group page. Filtering opens matching groups; expand/collapse controls
+and keyboard navigation support browsing. Without JavaScript, native disclosures
+still expose every case. Light and dark themes use the plan tracker's palette.
+Failed and blocked case rows show their reason before opening details. Details retain the stage, known
 next action and available attempt/assertion history. Missing reasons explicitly say
 that investigation is needed.
 
@@ -140,9 +145,31 @@ separately from workflow outcomes; write failure neither resets history nor gran
 greens. Explicit report commands exit nonzero when delivery fails.
 
 The synthetic browser proof is `npm run probe:results-report -- <fresh-directory>`.
-It checks both dashboards locally, status filtering/reset, keyboard use, no external
-requests, five viewport sizes and horizontal reflow from 320 to 3840 pixels. PR
+It checks both dashboards with 120 synthetic cases each, combined status/search
+filtering, pagination/reset, deep links, keyboard and no-script access, no external
+requests, five viewport sizes in both themes and horizontal reflow from 320 to 3840 pixels. PR
 validation runs the same proof against the installed archive after browser setup.
+
+## Skill report handoff
+
+Share the current HTML report directly with the user after `execute-test` or
+`automate-test` finishes, including failed, blocked and partial work. Include a brief
+case-count summary and the main failure or blocker reasons in the final response.
+
+When the work is delivered through a related PR, also attach the generated report
+directory using the host's supported file-attachment mechanism, archiving it when
+needed to preserve companion-file links. Link the downloadable attachment in the
+PR description with its outcome summary and identify the reported source/run and
+candidate revision where applicable. A local filesystem link in a PR is not a
+shared attachment. If attachment delivery is unavailable or fails, state that
+limitation separately; keep the local report available to the user and do not claim
+it was attached. This handoff does not require a PR for execution-only work.
+
+The case report explains the skill session's scope, outcomes and unfinished work.
+It is not added to the consumer's GitHub Actions test-report uploads. Those runs
+execute existing automated specs and retain their native Playwright and Allure
+reports. Report-browser checks in this harness's validation workflow test the
+report feature itself; they do not publish a consumer session report.
 
 ## Allure capture and generation
 

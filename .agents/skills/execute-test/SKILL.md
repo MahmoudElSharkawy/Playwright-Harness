@@ -34,8 +34,10 @@ given by the user remains in force for ordinary permitted application operations
    notes with `report <exec> --input <consumer-notes.json>` following
    [reporting](../../../docs/reporting.md#case-results-and-blocker-notes).
    Link the returned `html` directly and summarize case counts, failure/blocker reasons,
-   methods, defects and cleanup dispositions. If report delivery fails, state that
-   separately from case outcomes. Report output is ignored consumer storage; never generate
+   methods, defects and cleanup dispositions. Include the report in a related PR
+   when PR delivery is part of the work, following the
+   [report handoff](../../../docs/reporting.md#skill-report-handoff).
+   If report delivery fails, state that separately from case outcomes. Report output is ignored consumer storage; never generate
    framework, tracker or legacy verification files on this route.
 5. Read [delivery](references/delivery.md) only when ADO delivery is requested.
    Preview first. External writes require `--execute`; the request must authorize

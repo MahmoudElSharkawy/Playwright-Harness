@@ -83,7 +83,9 @@ known case IDs/titles and original empty slots for reporting. Never invent an or
 or prepare generation from that incomplete draft.
 Use existing generation history and bound native receipts for generated cases;
 notes cannot overwrite them or create passes. Link the returned `html` in the final
-response with a brief status/count summary and clear failure/blocker reasons.
+response with a brief status/count summary and clear failure/blocker reasons. When
+delivering the work through a PR, also follow the
+[report handoff](../../../docs/reporting.md#skill-report-handoff) to attach its report.
 Generation commands also return a separate `reporting` delivery result. Report failure
 must remain visible without changing the workflow verdict, repair count or greens.
 
