@@ -158,7 +158,10 @@ case-count summary and the main failure or blocker reasons in the final response
 
 When the work is delivered through a related PR, also attach the generated report
 directory using the host's supported file-attachment mechanism, archiving it when
-needed to preserve companion-file links. Link the downloadable attachment in the
+needed to preserve companion-file links. If uploads are unavailable through the
+authorized CLI or connector, include a sanitized report archive as a file in that
+PR, outside installed package or release outputs, and link its immutable revision.
+Keep ordinary generated report storage ignored. Link the downloadable report in the
 PR description with its outcome summary and identify the reported source/run and
 candidate revision where applicable. A local filesystem link in a PR is not a
 shared attachment. If attachment delivery is unavailable or fails, state that
