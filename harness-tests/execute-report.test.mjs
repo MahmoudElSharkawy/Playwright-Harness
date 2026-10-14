@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFileSync, writeFileSync} from 'node:fs';
+import {readFileSync, writeFileSync, unlinkSync} from 'node:fs';
 import {join} from 'node:path';
 import {createHash} from 'node:crypto';
 import {executionFixture, executeApi} from './fixtures/execute.mjs';
@@ -23,6 +23,19 @@ test('collapsed case rows explain failures and blockers without requiring raw lo
   assert(summaries[1].includes('Required customer fixture is unavailable.'));
   assert(html.includes('Provision the customer fixture, then resume.'));
   assert(summaries[2].includes('Reason unavailable; investigation is needed.'));
+});
+
+test('a failed case followed by an interrupted rerun keeps its authoritative failure reason visible', async t => {
+  const f = await executionFixture(t, {handler: (req, res) => {res.writeHead(500); res.end('{}');}});
+  f.apiStep(); f.freeze(); await executeApi(f);
+  const interrupted = await executeApi(f, {explicitRerun: true});
+  unlinkSync(join(interrupted.roots.runRoot, 'observations.json')); // Simulate a missing final assessment after interruption.
+  const report = writeExecutionReport(f.roots, f.executionId), html = readFileSync(join(f.roots.projectRoot, report.html), 'utf8');
+  assert.equal(report.scenarios[0].status, 'FAIL');
+  const summary = html.match(/<details class="case-row"[^>]*><summary>([\s\S]*?)<\/summary>/)[1];
+  assert(summary.includes('Failed check:'), 'The FAIL row must explain the authoritative failed check.');
+  assert(summary.includes('500')); assert(!summary.includes('interrupted'));
+  assert(html.includes('Execution was interrupted before a final assessment was recorded.'));
 });
 
 test('captured unfrozen executions report blockers while preserving unexecuted cases', async t => {

@@ -75,6 +75,22 @@ test('one native green never becomes READY through report generation', async t =
   assert.notEqual(view.cases[0].status, 'READY');
 });
 
+test('case history excludes verification scopes before its source membership and labels retained suite outcomes', async t => {
+  const f = await prepared(t); await recorded(f);
+  await transaction(f.roots, f.source.id, (state, save) => {
+    // Synthetic prior-source metadata: the current case did not belong to that candidate.
+    const previous = structuredClone(state.candidates[0]); previous.revision = 'revision-before-addition'; previous.tests[0].scenarioId = 'earlier-source-case';
+    state.candidates.unshift(previous);
+    state.runs.unshift({id: 'verify-before-addition', revision: previous.revision, status: 'FAIL', reason: 'An earlier source scope failed.'}); save(state);
+  });
+  const view = await automationReportView(f.roots, {sourceId: f.source.id});
+  assert.deepEqual(view.cases[0].history.map(run => run.id), ['verify-report']);
+  assert.equal(view.cases[0].history[0].reason, 'A case assertion failed.');
+  const report = await writeAutomationReport(f.roots, {sourceId: f.source.id});
+  const html = readFileSync(join(f.roots.projectRoot, report.html), 'utf8');
+  assert(html.includes('Scoped verification history')); assert(html.includes('not individual case verdicts'));
+});
+
 test('changed or unbound native receipts cannot supply a case verdict', async t => {
   const f = await prepared(t), saved = await recorded(f);
   const changed = {...saved.receipt, tests: []}; put(f.roots.projectRoot, saved.path, changed);

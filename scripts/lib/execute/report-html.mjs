@@ -44,7 +44,7 @@ function comparisonRecords(condition, row, assertionEvidence) {
 }
 
 function problemFor(scenario, runs, assertionEvidence) {
-  if (scenario.reason) return {row: runs.at(-1), reason: scenario.reason};
+  if (scenario.reason && caseOutcome(scenario) !== 'FAIL') return {row: runs.at(-1), reason: scenario.reason};
   const ordered = caseOutcome(scenario) === 'FAIL' ? runs.filter(row => row.result?.status === 'FAIL')
     : runs.filter(row => row.runId === scenario.selectedRunId);
   for (const row of ordered) {
@@ -64,8 +64,9 @@ function problemFor(scenario, runs, assertionEvidence) {
 /** Explain recorded outcomes; a missing reason remains an explicit unknown. */
 export function executionCaseExplanation(scenario, runs, assertionEvidence = new Map()) {
   const status = caseOutcome(scenario), problem = problemFor(scenario, runs, assertionEvidence);
-  if (scenario.reason) return {reason: scenario.reason, stage: scenario.stage ?? 'EXECUTE', nextAction: scenario.nextAction};
   if (status === 'FAIL' && problem.condition) return {reason: `Failed check: ${problem.condition.condition.text} Recorded result: ${excerpt(problem.reason)}`, stage: 'EXECUTE', nextAction: 'Investigate the failed check using the recorded assertion evidence.'};
+  if (status === 'FAIL') return {reason: 'Failed execution. Reason unavailable; investigation is needed.', stage: 'EXECUTE', nextAction: 'Investigate the original failed attempt and its recorded evidence.'};
+  if (scenario.reason) return {reason: scenario.reason, stage: scenario.stage ?? 'EXECUTE', nextAction: scenario.nextAction};
   if (status === 'BLOCKED') {
     const causes = {POLICY: 'the operation is not permitted by the configured environment or runner', UNAVAILABLE: 'a required runtime or dependency is unavailable', TIMEOUT: 'the operation exceeded its deadline', CANCELLED: 'the operation was cancelled', TRANSPORT: 'the connection or transport failed', EXECUTOR: 'the runtime could not complete the operation', DEPENDENCY: 'a required dependency prevented execution', NOT_SELECTED: 'the operation was not selected'};
     const reasons = runs.flatMap(row => {
@@ -168,7 +169,7 @@ export function renderExecutionHtml(view, {defectCount = 0, screenshots = new Ma
     const caseReason = explanation.reason ? `<span class="case-reason">${h(excerpt(explanation.reason))}</span>` : '';
     const caseContext = explanation.reason ? `<p><strong>Stage:</strong> ${h(explanation.stage)}</p><p><strong>Reason:</strong> ${h(explanation.reason)}</p>${explanation.nextAction ? `<p><strong>Next action:</strong> ${h(explanation.nextAction)}</p>` : ''}` : '';
     const search = [scenario.title, scenario.id, scenario.caseId, explanation.reason, ...runs.map(row => row.runId)].join(' ');
-    return `<details class="case-row" id="case-${index}" data-case data-order="${index}" data-rank="${outcome(status).rank}" data-status="${h(status)}" data-title="${h(scenario.title)}" data-search="${h(search)}"><summary>${badge(status)}<span class="case-main"><span class="case-title">${h(scenario.title)}</span><span class="case-identifiers"><code>${h(scenario.id)}</code>${scenario.caseId !== undefined ? `<span>Case ${h(scenario.caseId)}</span>` : ''}${runs.length > 1 ? `<span>${runs.length} attempts</span>` : ''}</span>${caseReason}</span><span class="case-methods">${h(methods)}</span><span class="case-action">Details <span class="chevron" aria-hidden="true">›</span></span></summary><div class="case-body"><div class="case-context"><h3 id="case-details-${index}" tabindex="-1">Case evidence</h3><p class="scope">${runs.length} run attempt${runs.length === 1 ? '' : 's'} · Case outcome ${h(outcome(status).label)}</p></div>${caseContext}<p class="scope">Verification rollup: ${h(methods)}. Source expectations in the selected run.</p>${runs.map((row, runIndex) => renderRun(row, scenario, index, runIndex, assertionEvidence, images)).join('') || '<p class="muted small">No run attempts recorded.</p>'}</div></details>`;
+    return `<details class="case-row" id="case-${index}" data-case data-order="${index}" data-rank="${outcome(status).rank}" data-status="${h(status)}" data-title="${h(scenario.title)}" data-search="${h(search)}"><summary>${badge(status)}<span class="case-main"><span class="case-title">${h(scenario.title)}</span><span class="case-identifiers"><code>${h(scenario.id)}</code>${scenario.caseId !== undefined ? `<span>Case ${h(scenario.caseId)}</span>` : ''}${runs.length > 1 ? `<span>${runs.length} attempts</span>` : ''}</span>${caseReason}</span><span class="case-methods">${h(methods)}</span><span class="case-action">Details <span class="chevron" aria-hidden="true">›</span></span></summary><div class="case-body"><div class="case-context"><h3 id="case-details-${index}" tabindex="-1">Case evidence</h3><p class="scope">${runs.length} run attempt${runs.length === 1 ? '' : 's'} · Case outcome ${h(outcome(status).label)}</p></div>${caseContext}${status === 'FAIL' && scenario.reason ? `<p class="notice"><strong>Other attempt context:</strong> ${h(scenario.reason)}</p>` : ''}<p class="scope">Verification rollup: ${h(methods)}. Source expectations in the selected run.</p>${runs.map((row, runIndex) => renderRun(row, scenario, index, runIndex, assertionEvidence, images)).join('') || '<p class="muted small">No run attempts recorded.</p>'}</div></details>`;
   }).join('');
   const created = view.execution?.createdAt;
   const date = typeof created === 'number' && Number.isFinite(created) && !Number.isNaN(new Date(created).getTime()) ? new Date(created).toISOString() : null;

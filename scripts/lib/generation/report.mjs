@@ -84,7 +84,8 @@ export async function automationReportView(roots, {sourceId, source: sourceInput
         else if (latest) disposition = {status: latest.status === 'BLOCKED' ? 'BLOCKED' : latest.status === 'STARTED' ? 'PENDING' : 'NEEDS_REVIEW', stage: latest.failureClass ? `VERIFY · ${latest.failureClass}` : 'VERIFY', reason: latest.reason ?? 'A case result is unavailable from the recorded verification.', nextAction: latest.nextAction ?? 'Inspect the original verification and resolve its prerequisite before resuming.'};
       }
       return {id: scenario.id, title: scenario.title, ...disposition, observedStatus: [...new Set(observed.filter(Boolean))].join(', ') || 'Not recorded',
-        expectations: scenario.steps.flatMap(step => step.expected), history: (state?.runs ?? []).map(run => ({id: run.id, revision: run.revision, status: run.status, ...(run.failureClass ? {failureClass: run.failureClass} : {})}))};
+        expectations: scenario.steps.flatMap(step => step.expected), history: (state?.runs ?? []).filter(run => state.candidates.find(item => item.revision === run.revision)?.tests.some(test => test.scenarioId === scenario.id))
+          .map(run => ({id: run.id, revision: run.revision, status: run.status, ...(run.failureClass ? {failureClass: run.failureClass} : {}), ...(run.reason ? {reason: run.reason} : {}), ...(run.nextAction ? {nextAction: run.nextAction} : {})}))};
     });
     return frozen(data({version: 1, id: `automation-${randomUUID()}`, workflow: 'automate-test', sourceId, title: source.title,
       createdAt: new Date().toISOString(), sourceFingerprint: fingerprint(source), status: readiness.status, rounds: readiness.rounds, greens: readiness.greens,
