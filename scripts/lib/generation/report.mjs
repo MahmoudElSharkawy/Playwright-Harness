@@ -8,7 +8,8 @@ import {generationStateStatus, currentCandidate, approvedCandidate} from './inde
 import {generationBlocker, GENERATION_STAGES} from './reasons.mjs';
 import {caseNotes} from '../reporting/case-notes.mjs';
 import {reportDirectory} from '../reporting/index.mjs';
-import {renderAutomationHtml} from '../reporting/case-view.mjs';
+import {renderAutomationHtml, outcome} from '../reporting/case-view.mjs';
+import {markdownText as md, caseReason, stageLabel} from '../reporting/text.mjs';
 export {renderAutomationHtml};
 
 const identity = test => fingerprint([test.spec, test.project, test.titlePath]);
@@ -124,11 +125,21 @@ export async function automationReportView(roots, {sourceId, source: sourceInput
   });
 }
 
+/** Companion text uses the same collected case outcomes; it never files product bugs. */
+export function automationCompanions(view) {
+  const describe = row => `## ${md(row.id)} — ${md(outcome(row.status).label)}\n\n${md(row.title)}\n\nStage: ${md(stageLabel(row.stage))}\n\nReason: ${md(caseReason(row.reason) || 'Reason unavailable; investigation is needed.')}\n\n${row.nextAction ? `Next action: ${md(caseReason(row.nextAction))}\n\n` : ''}`;
+  const attention = view.cases.filter(row => ['FAIL', 'BLOCKED', 'NEEDS_REVIEW', 'INTEGRITY_FAILURE'].includes(row.status));
+  return [
+    ['summary.md', `# ${md(view.title)}\n\n${view.cases.map(describe).join('')}`],
+    ['defects.md', `# Defects and cases needing attention\n\nThese are recorded failures, blockers and review findings, not filed product bugs.\n\n${attention.map(describe).join('') || 'No cases currently need attention.\n'}`]
+  ];
+}
+
 /** Fresh consumer output, with a final integrity manifest and a separate delivery outcome. */
 export async function writeAutomationReport(roots, options = {}) {
   try {
     const view = await automationReportView(roots, options), directory = `reports/harness/${view.id}`, output = reportDirectory(roots, directory);
-    const files = [['result.json', JSON.stringify(view, null, 2) + '\n'], ['index.html', renderAutomationHtml(view)]];
+    const files = [['result.json', JSON.stringify(view, null, 2) + '\n'], ...automationCompanions(view), ['index.html', renderAutomationHtml(view)]];
     const artifacts = files.map(([name, body]) => {writeFileSync(join(output, name), body, {flag: 'wx', mode: 0o600}); return {path: name, bytes: Buffer.byteLength(body), sha256: digest(body)};});
     const manifest = {version: 1, status: 'WRITTEN', sourceId: view.sourceId, sourceFingerprint: view.sourceFingerprint, readiness: view.status, cases: view.cases.length, artifacts};
     writeFileSync(join(output, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n', {flag: 'wx', mode: 0o600, flush: true});

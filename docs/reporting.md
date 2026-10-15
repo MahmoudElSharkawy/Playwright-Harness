@@ -1,6 +1,6 @@
 # Reports, Allure and progress tracking
 
-Execution reports explain validated runtime outcomes; manual dashboards aggregate
+Case reports share one layout for execution and automation. Execution aggregates
 cases/attempts; generation records readiness after independent review and scoped
 verification. Ordinary Playwright/Allure reports show native detail, while tracker/
 metrics summarize consumer progress. Report delivery is separate from test success.
@@ -9,8 +9,8 @@ metrics summarize consumer progress. Report delivery is separate from test succe
 
 | Report | Default consumer location | Authority |
 |---|---|---|
-| Shared execution | `reports/harness/<run-id>-<unique-id>/` | Reassessed observations/evidence |
-| Manual dashboard | `reports/harness/execute-<execution-uuid>-<report-uuid>/` | Assessed cases, attempts and defects |
+| Validated runtime case report | `reports/harness/<run-id>-<unique-id>/` | Reassessed observations/evidence |
+| Execution case report | `reports/harness/execute-<execution-uuid>-<report-uuid>/` | Assessed cases, attempts and defects |
 | Automation case report | `reports/harness/automation-<report-uuid>/` | Generation history, source-bound blockers and hash-bound native receipts |
 | Generated verification/Allure | `reports/generation/<verification-id>/` | Verifier outcome with separate native detail |
 | Standalone scoped Allure | `reports/allure/<unique-id>/` | Native results |
@@ -49,27 +49,43 @@ reports. Existing outputs/source paths/escaping links fail. Nothing is overwritt
 |---|---|
 | result.json | Sanitized status, stability, counts and report fingerprint |
 | report.md | Escaped phases, attempts, effects, assertions, resources and outputs |
-| index.html | Self-contained responsive view without script/network dependency |
+| index.html | Shared case layout with chart, status groups and optional offline filters; native disclosures work without JavaScript |
 | manifest.json | Report delivery/integrity receipt |
 
-Reports inventory original evidence, not raw bodies; retain the run for inspection.
-Source/version/fingerprint and evidence associations remain visible. Public outputs
-are JSON-encoded/clipped above 4,096 characters. Sensitive values are redacted;
+Internal JSON/Markdown adapters retain the evidence inventory, source/version/hash
+associations and selected public outputs for diagnosis; keep the original run for
+inspection. These details are not presented in user-facing HTML. Public outputs
+in those internal records are JSON-encoded/clipped above 4,096 characters. Sensitive values are redacted;
 protected refs, inputs and definitions omitted. Correct classification remains the
 producer's responsibility. HTML/Markdown escape text and HTML uses CSP.
 
 Delivery is WRITTEN/FAILED separately from verdict. render-results exits 0 for a
 written FAIL report, 2 for invalid input, 1 for write failure. Gate tests on assessed
-outcomes, not render success. Cleanup problems, reliable failures, intentional retention
-and recovered stability/history stay visible.
+outcomes, not render success. The internal formats retain lifecycle and stability
+facts; HTML shows relevant cleanup problems as a plain next-action notice.
 
 Manual `execute report <exec>` reassesses every snapshot/evidence file and writes
-dashboard, Summary, grouped Defects, per-run reports and final manifest. Counts use
+one case report, Summary, grouped Defects and final manifest. Case details show
+expected/actual results, reasons, next actions, plain attempt numbers and screenshots.
+Raw JSON, diagnostic inventories, operation provenance, lifecycle counters, internal
+run/attempt/evidence IDs and hashes are excluded from HTML, including expanded details.
+They remain in authoritative execution storage and internal adapters. No separate per-attempt HTML is generated. Counts use
 case summaries; history/attempts remain separate. Rollups count source expectations
 in the selected assessed run. Defects span attempts independently of case counts.
 CSP permits the generated hashed script for filters/search/sorting/previews, while
 disclosures work without JavaScript. Verified PNG/JPEG previews cap at 2 MiB each/
 20 MiB total and deduplicate identical bytes; companion links stay relative.
+Automation reports use the same Summary and Defects navigation and write both
+companions beside `index.html`. Summary covers every case; Defects lists failures,
+blockers and review findings with stage, reason and next action. These findings
+are not a claim that product bugs were filed. Both files are included in the final
+integrity manifest. Keep the complete directory when sharing or attaching a ZIP.
+
+Source cases excluded before execution appear only when present, with readable
+case IDs and reasons. Internal verification-counting guidance is not displayed.
+The validated runtime writer and native Allure attachment APIs keep their existing
+names and delivery receipts, and use the same case layout. Their self-contained
+attachments omit companion-file navigation because attachment files have no siblings.
 See [manual execution](manual-execution.md) for selection/staleness/delivery.
 
 ## Case results and blocker notes
@@ -83,9 +99,16 @@ the full-report overview. Cases appear in collapsed status groups with compact r
 and 10 cases per group page. Filtering opens matching groups; expand/collapse controls
 and keyboard navigation support browsing. Without JavaScript, native disclosures
 still expose every case. Light and dark themes use the plan tracker's palette.
+An icon-only sun/moon switch sits at the top right of the report header, with an
+accessible label and keyboard operation.
 Failed and blocked case rows show their reason before opening details. Details retain the stage, known
-next action and available attempt/assertion history. Missing reasons explicitly say
+next action, expected/actual checks and useful retry outcomes. Automation does not
+display internal verification-scope history, gate counters or report fingerprints. Missing reasons explicitly say
 that investigation is needed.
+Known automation readiness messages and retry instructions use plain wording in the
+report and its companions; original reasons remain in the internal result records.
+Runtime attachments explain recorded timeouts, unavailable dependencies and other
+blockers without displaying their internal classification codes.
 
 ```sh
 npx --no pom-harness execute report <exec> [--input .harness/state/blockers.json]
@@ -140,14 +163,17 @@ unknown IDs or credential-like content fail validation. Titles and arbitrary pro
 still require correct classification by the producer.
 
 Automation output contains `result.json` (including the frozen source/notes),
-`index.html`, and a final integrity `manifest.json`. Report delivery is WRITTEN/FAILED
+`index.html`, `summary.md`, `defects.md`, and a final integrity `manifest.json`. Report delivery is WRITTEN/FAILED
 separately from workflow outcomes; write failure neither resets history nor grants
 greens. Explicit report commands exit nonzero when delivery fails.
 
 The synthetic browser proof is `npm run probe:results-report -- <fresh-directory>`.
-It checks both dashboards with 120 synthetic cases each, combined status/search
+It checks both skill reports with 120 synthetic cases each, combined status/search
 filtering, pagination/reset, deep links, keyboard and no-script access, no external
-requests, five viewport sizes in both themes and horizontal reflow from 320 to 3840 pixels. PR
+requests, five viewport sizes in both themes and horizontal reflow from 320 to 3840 pixels.
+It also checks validated-runtime attachments, the shared case controls and no missing
+companion links. All reports are checked with disclosures open to reject technical
+metadata hidden inside details. PR
 validation runs the same proof against the installed archive after browser setup.
 
 ## Skill report handoff

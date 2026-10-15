@@ -1,38 +1,75 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdirSync, writeFileSync, readFileSync, readdirSync} from 'node:fs';
-import {join, dirname} from 'node:path';
+import {readFileSync, readdirSync} from 'node:fs';
+import {join} from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {fixture} from './fixtures/execution-core.mjs';
+import {source, put, prepared, recorded, productionBlockers} from './fixtures/generation-report.mjs';
 import {fingerprint, digest} from '../scripts/lib/execution-core/data.mjs';
-import {createGenerationHandoff, sourceExpectations, beginGeneration, registerCandidate, recordGenerationReview, generationStatus} from '../scripts/lib/generation/index.mjs';
+import {createGenerationHandoff, generationStatus} from '../scripts/lib/generation/index.mjs';
 import {transaction} from '../scripts/lib/generation/storage.mjs';
 import {automationReportView, writeAutomationReport} from '../scripts/lib/generation/report.mjs';
 
-const source = (ids = ['source-case']) => ({version: 1, id: 'report-suite', title: 'Synthetic report source', scenarios: ids.map(id => ({id, title: id, steps: [{action: 'Read observation', expected: ['The expected observation is visible']}]}))});
-const put = (root, path, value) => {mkdirSync(dirname(join(root, path)), {recursive: true}); writeFileSync(join(root, path), typeof value === 'string' ? value : JSON.stringify(value));};
 const notes = input => ({version: 1, sourceFingerprint: fingerprint(input), cases: [{scenarioId: input.scenarios[0].id, stage: 'EXPLORE', reason: 'The required fixture is unavailable.', nextAction: 'Provision the fixture before exploration.'}]});
 
-async function prepared(t) {
+test('all known production command blockers use plain report explanations and preserve original records', async t => {
   const f = fixture(t), input = source();
-  put(f.roots.projectRoot, 'playwright.config.mjs', 'export default {};');
-  put(f.roots.projectRoot, 'tests/ObservationTests.spec.ts', '// Synthetic report-contract candidate.');
-  const key = sourceExpectations(input)[0].key;
-  await beginGeneration(f.roots, createGenerationHandoff(input, [{run: f.run, roots: f.roots, observations: f.report}], [{key, runId: f.run.id, scenarioId: 'case-1', expectationId: 'visible'}]), 'report-author');
-  const candidate = await registerCandidate(f.roots, input.id, {config: 'playwright.config.mjs', tests: [{scenarioId: 'source-case', spec: 'tests/ObservationTests.spec.ts', project: 'report', titlePath: ['Observation'], mapping: [{step: 1, actions: ['ObservationPage.read'], expectations: [{key, validations: ['ObservationPage.verify']}]}]}]});
-  put(f.roots.projectRoot, '.harness/state/review.md', 'Synthetic report-contract approval; no independent task review claimed.');
-  await recordGenerationReview(f.roots, input.id, {revision: candidate.revision, reviewer: 'report-reviewer', verdict: 'APPROVE', findings: [], artifact: '.harness/state/review.md'});
-  return {...f, source: input, candidate};
-}
+  for (const blocker of productionBlockers()) {
+    const report = await writeAutomationReport(f.roots, {source: input, blocker}); assert.equal(report.status, 'WRITTEN');
+    const view = JSON.parse(readFileSync(join(f.roots.projectRoot, report.directory, 'result.json')));
+    assert.deepEqual(view.blocker, blocker); assert.equal(view.cases[0].reason, blocker.reason);
+    assert.equal(view.cases[0].nextAction, blocker.nextAction); assert.equal(view.cases[0].status, 'BLOCKED');
+    for (const name of ['index.html', 'summary.md', 'defects.md']) {
+      const content = readFileSync(join(f.roots.projectRoot, report.directory, name), 'utf8');
+      assert.doesNotMatch(content, /scoped green|fingerprint|repair classification|repair count|three.round|candidate|receipt|handoff|frozen|native.runner|native test|native verification|assertion counts|pinned consumer|protected diagnostics/i, name);
+      assert(content.includes('Reason') || content.includes('reason'));
+      assert.doesNotMatch(content, /The cases have not been executed yet|after they were reviewed/);
+    }
+  }
+});
 
-async function recorded(f, status = 'FAIL') {
-  // Synthetic native receipt exercises presentation/integrity; real native failure is tested separately.
-  const runId = 'verify-report', path = `.harness/state/generation/${f.source.id}/${runId}/execution.json`;
-  const receipt = {version: 2, invocation: runId, tests: [{...f.candidate.tests[0], results: [{status: status === 'PASS' ? 'passed' : 'failed', retry: 0, errors: status === 'PASS' ? 0 : 1, assertions: {passed: 1, failed: status === 'PASS' ? 0 : 1}, skippedSteps: 0, failedChecks: status === 'PASS' ? [] : ['toBe']}]}]};
-  put(f.roots.projectRoot, path, receipt);
-  await transaction(f.roots, f.source.id, (state, save) => {state.runs.push({id: runId, revision: f.candidate.revision, gate: 'case-assertions', status, failureClass: 'ASSERTION_COVERAGE', reason: 'A case assertion failed.', receipt: {path, fingerprint: fingerprint(receipt)}}); save(state);});
-  return {path, receipt};
-}
+test('automation Summary and Defects navigation points to complete, manifested companions', async t => {
+  const f = fixture(t), input = source(['blocked-case', 'pending-case']), blockerNotes = notes(input);
+  const report = await writeAutomationReport(f.roots, {source: input, notes: blockerNotes});
+  assert.equal(report.status, 'WRITTEN');
+  const html = readFileSync(join(f.roots.projectRoot, report.html), 'utf8');
+  assert.match(html, /<a href="summary.md">Summary/); assert.match(html, /<a href="defects.md">Defects/);
+  const summary = readFileSync(join(f.roots.projectRoot, report.directory, 'summary.md'), 'utf8');
+  const defects = readFileSync(join(f.roots.projectRoot, report.directory, 'defects.md'), 'utf8');
+  for (const body of [summary, defects]) {
+    assert.match(body, /blocked\\-case/); assert.match(body, /Blocked/); assert.match(body, /Exploration/);
+    assert.match(body, /required fixture is unavailable/); assert.match(body, /Provision the fixture/);
+  }
+  assert.match(summary, /pending\\-case/); assert.doesNotMatch(defects, /pending\\-case/);
+  assert.match(defects, /not filed product bugs/);
+  for (const name of ['summary.md', 'defects.md']) {
+    const artifact = report.artifacts.find(file => file.path === name); assert(artifact);
+    const bytes = readFileSync(join(f.roots.projectRoot, report.directory, name));
+    assert.equal(bytes.length, artifact.bytes); assert.equal(digest(bytes), artifact.sha256);
+  }
+});
+
+test('production automation outcomes explain readiness without internal gate wording', async t => {
+  for (const [status, patch, expected] of [
+    ['PASS', {}, 'The test passed. Further verification is needed before automation is ready.'],
+    ['READY', {}, 'Automation is ready. The test passed verification and review.'],
+    ['NEEDS_REVIEW', {assertions: {passed: 0, failed: 0}}, 'Some required checks were not completed. Review this case before using its result.'],
+    ['SKIPPED', {status: 'skipped'}, 'This test was skipped.']
+  ]) {
+    const f = await prepared(t);
+    await recorded(f, 'PASS', 'verification-first', patch);
+    if (status === 'READY') await recorded(f, 'PASS', 'verification-second');
+    const before = await generationStatus(f.roots, f.source.id), view = await automationReportView(f.roots, {sourceId: f.source.id});
+    assert.equal(view.cases[0].status, status);
+    const report = await writeAutomationReport(f.roots, {sourceId: f.source.id});
+    assert.equal(report.status, 'WRITTEN');
+    const html = readFileSync(join(f.roots.projectRoot, report.html), 'utf8');
+    assert(html.includes(expected), `${status} needs a plain explanation`);
+    assert.doesNotMatch(html, /scoped green|verification gate|register and independently review|native test/i);
+    assert.equal(JSON.parse(readFileSync(join(f.roots.projectRoot, report.directory, 'result.json'))).cases[0].reason, view.cases[0].reason);
+    assert.deepEqual(await generationStatus(f.roots, f.source.id), before);
+  }
+});
 
 test('pre-candidate blockers produce a complete report without awarding generation progress', async t => {
   const f = fixture(t), input = source(['blocked-case', 'pending-case']), blockerNotes = notes(input);
@@ -47,7 +84,7 @@ test('pre-candidate blockers produce a complete report without awarding generati
   for (const artifact of manifest.artifacts) assert.equal(digest(readFileSync(join(f.roots.projectRoot, report.directory, artifact.path))), artifact.sha256);
   const html = readFileSync(join(f.roots.projectRoot, report.html), 'utf8');
   assert(html.includes('data-chart-status="BLOCKED" data-count="1"')); assert(html.includes('Provision the fixture before exploration.'));
-  assert(html.includes('id="status-filter"')); assert(html.includes('Complete source · full report'));
+  assert(html.includes('id="status-filter"')); assert(html.includes('All test cases'));
 });
 
 test('incomplete source drafts remain reportable while generation preparation stays blocked', async t => {
@@ -106,7 +143,8 @@ test('case history excludes verification scopes before its source membership and
   assert.equal(view.cases[0].history[0].reason, 'A case assertion failed.');
   const report = await writeAutomationReport(f.roots, {sourceId: f.source.id});
   const html = readFileSync(join(f.roots.projectRoot, report.html), 'utf8');
-  assert(html.includes('Scoped verification history')); assert(html.includes('not individual case verdicts'));
+  assert(!html.includes('Scoped verification history')); assert(!html.includes('verify-before-addition'));
+  assert(!html.includes('verify-report')); assert(html.includes('1 check(s) failed.'));
 });
 
 test('changed or unbound native receipts cannot supply a case verdict', async t => {

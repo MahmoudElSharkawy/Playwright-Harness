@@ -33,10 +33,13 @@ given by the user remains in force for ordinary permitted application operations
    freeze. For blockers not already recorded by execution/readiness, supply source-bound
    notes with `report <exec> --input <consumer-notes.json>` following
    [reporting](../../../docs/reporting.md#case-results-and-blocker-notes).
-   Link the returned `html` directly and summarize case counts, failure/blocker reasons,
-   methods, defects and cleanup dispositions. Include the report in a related PR
+   Link the returned `html` directly and summarize case counts, failure/blocker reasons
+   and next actions. Include the report in a related PR
    when PR delivery is part of the work, following the
    [report handoff](../../../docs/reporting.md#skill-report-handoff).
+   Share this single case report with its Summary and Defects companions. Keep the
+   HTML focused on outcomes, expected/actual results, reasons, actions and screenshots;
+   raw records, internal IDs, hashes and debugging metadata stay in execution storage.
    If report delivery fails, state that separately from case outcomes. Report output is ignored consumer storage; never generate
    framework, tracker or legacy verification files on this route.
 5. Read [delivery](references/delivery.md) only when ADO delivery is requested.

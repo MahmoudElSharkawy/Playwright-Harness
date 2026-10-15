@@ -3,8 +3,9 @@ import {join} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {assessRun} from '../execution-core/index.mjs';
 import {fingerprint, digest, requireThat} from '../execution-core/data.mjs';
-import {reportDirectory, writeReports} from '../reporting/index.mjs';
-import {renderExecutionHtml} from './report-html.mjs';
+import {reportDirectory} from '../reporting/index.mjs';
+import {renderExecutionHtml, executionCaseExplanation} from './report-html.mjs';
+import {outcome} from '../reporting/case-view.mjs';
 import {readExecution, readFrozen, readBounded, ownedFile, listRunRecords} from './storage.mjs';
 import {scopedReadiness} from './refinement.mjs';
 import {caseNotes} from '../reporting/case-notes.mjs';
@@ -156,12 +157,8 @@ export function writeExecutionReport(roots, executionId, {keepLogin = false, not
   const reportName = executionId.startsWith('execute-') ? executionId : `execute-${executionId}`;
   const view = collectExecution(roots, executionId, {notes}), defects = executionDefects(view), path = `reports/harness/${reportName}-${randomUUID()}`, output = reportDirectory(roots, path), artifacts = [];
   const write = (name, body) => {writeFileSync(join(output, name), body, {flag: 'wx', mode: 0o600, flush: true}); artifacts.push({path: name, sha256: digest(body), bytes: Buffer.byteLength(body)});};
-  for (const row of view.runs.filter(run => run.state === 'ASSESSED')) {
-    const receipt = writeReports(roots, row.result, {directory: `${path}/runs/${row.runId}`}); requireThat(receipt.status === 'WRITTEN', 'A per-run report could not be written.');
-  }
-  const summary = `# ${markdownText(view.source.title)}\n\nExecution: ${executionId}\n\n| Scenario | Outcome | Checked / observed / mixed |\n|---|---|---|\n${view.scenarios.map(row => `| ${markdownText(row.id)} | ${row.status ?? (row.state === 'INTEGRITY_FAILURE' ? 'INTEGRITY FAILURE (no verdict)' : row.state)} | ${row.methods.checked} / ${row.methods.observed} / ${row.methods.mixed} |`).join('\n')}\n\nExclusions: ${view.source.excluded.length}. Defect groups: ${defects.length}.\n`;
-  write('summary.md', summary); write('defects.json', JSON.stringify(defects, null, 2) + '\n');
-  write('defects.md', `# Defect list\n\n${defects.map(item => `- ${item.fingerprint}: ${item.status} — ${markdownText(item.title)} (${item.occurrences.length} occurrence(s))`).join('\n')}\n`);
+  write('defects.json', JSON.stringify(defects, null, 2) + '\n');
+  write('defects.md', `# Defect list\n\n${defects.map(item => `- ${markdownText(item.title)} (${item.occurrences.length} occurrence(s))`).join('\n') || 'No findings recorded.'}\n`);
   let imageBytes = 0;
   const screenshots = new Map(), imageData = new Map(), assertionEvidence = new Map();
   for (const row of view.runs.filter(run => run.state === 'ASSESSED')) {
@@ -183,6 +180,8 @@ export function writeExecutionReport(roots, executionId, {keepLogin = false, not
     }
     screenshots.set(row.runId, images);
   }
+  const summary = `# ${markdownText(view.source.title)}\n\n${view.scenarios.map(row => {const explanation = executionCaseExplanation(row, view.runs.filter(run => run.scenarioId === row.id), assertionEvidence); return `## Case ${markdownText(row.caseId ?? row.id)}: ${markdownText(row.title)}\n\nStatus: ${markdownText(outcome(row.status ?? row.state).label)}\n\n${explanation.reason ? `Reason: ${markdownText(explanation.reason)}\n\n` : ''}${explanation.nextAction ? `Next action: ${markdownText(explanation.nextAction)}\n\n` : ''}`;}).join('')}`;
+  write('summary.md', summary);
   write('index.html', renderExecutionHtml(view, {defectCount: defects.length, screenshots, assertionEvidence}));
   const manifest = {version: 1, status: 'WRITTEN', executionId, sourceFingerprint: view.execution.sourceFingerprint, freezeFingerprint: view.execution.freezeFingerprint, revisionCheck: view.revisionCheck, scenarios: view.scenarios, defects: defects.length, artifacts};
   writeFileSync(join(output, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n', {flag: 'wx', mode: 0o600, flush: true});

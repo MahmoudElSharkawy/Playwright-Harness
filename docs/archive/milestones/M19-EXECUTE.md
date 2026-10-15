@@ -147,8 +147,8 @@ cannot promise historical coverage across earlier navigations. Uncaught exceptio
 and request-number resets are handled without inventing missing history.
 
 Report recreates each run from its frozen input snapshot and reassesses all hashed
-evidence; result.json is never trusted. Output includes per-run core reports, a
-dashboard, summary and grouped defects, with manifest.json written last. HTML is
+evidence; result.json is never trusted. Output is one case report with embedded
+attempt evidence, summary and grouped defects, with manifest.json written last. HTML is
 escaped under a restrictive CSP. Only verified PNG/JPEG context is embedded,
 bounded to 2 MiB each and 20 MiB total.
 
@@ -161,9 +161,9 @@ across assessed attempts. They are separate from failed-case counts.
 The report is self-contained and works from `file://`. Search, case-outcome
 filters, sorting and screenshot previews use a static inline script authorized
 by its generated SHA-256 CSP hash. Without JavaScript, native disclosure controls
-still expose results, assertion evidence, original JSON, cleanup and diagnostics.
+still expose results, expected/actual checks, reasons, next actions and screenshots.
 Identical embedded images share one preview while retaining their run/evidence
-references. Companion Summary, Defects and per-run Core report paths remain relative.
+references. Companion Summary and Defects paths remain relative.
 
 A valid explicit rerun replaces an earlier integrity-invalid run for delivery
 selection, retaining the old audit record. Earlier valid FAILs still dominate.

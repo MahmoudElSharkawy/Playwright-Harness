@@ -7,8 +7,44 @@ import {fixture, retry, resource, operation, attempt} from './fixtures/execution
 import {digest} from '../scripts/lib/execution-core/data.mjs';
 import {reportView, renderJson, renderMarkdown, renderHtml, writeReports, attachResult} from '../scripts/lib/reporting/index.mjs';
 import {allureInventory, generateAllure} from '../scripts/lib/reporting/allure.mjs';
+import {REPORT_SCRIPT} from '../scripts/lib/reporting/case-assets.mjs';
 
 const formats = view => [renderJson(view), renderMarkdown(view), renderHtml(view)];
+const evidenceFormats = view => [renderJson(view), renderMarkdown(view)];
+
+test('runtime blocker and review reasons explain the recorded cause without exposing technical fields', t => {
+  for (const [outcome, failureClass, assertionStatus, expected, verdict] of [
+    ['BLOCKED', 'UNAVAILABLE', 'NOT_EVALUATED', 'A required service or dependency was unavailable.', 'BLOCKED'],
+    ['INFRASTRUCTURE_FAILURE', 'TIMEOUT', 'INDETERMINATE', 'The test exceeded its time limit.', 'NEEDS_REVIEW']
+  ]) {
+    const f = fixture(t); Object.assign(f.current, {outcome, failureClass, outputs: [], effect: {certainty: 'not-executed', resourceIds: []}});
+    f.current.assertions = [{id: 'visible', status: assertionStatus, reliable: false, evidenceIds: []}]; f.scenario.outputRefs = [];
+    const view = reportView(f.assess()), html = renderHtml(view);
+    assert.equal(view.status, verdict); assert(html.includes(expected));
+    assert.match(html, /Check.*before running this case again/);
+    assert.doesNotMatch(html, /failureClass|UNAVAILABLE|TIMEOUT|attempt-1/);
+    assert.equal(view.scenarios[0].attempts[0].failureClass, failureClass);
+  }
+});
+
+test('user-facing runtime HTML omits technical records while internal formats retain them', t => {
+  const f = fixture(t), view = reportView(f.assess()), html = renderHtml(view);
+  assert.match(html, /data-status="PASS"/);
+  assert.doesNotMatch(html.slice(html.indexOf('<body>'), html.indexOf('<script>')), /Operation provenance|Evidence inventory|SHA256|fingerprint|artifact-1|attempt-1|EXERCISE|Invocation|Required lifecycle|Input fingerprint/i);
+  assert.match(renderJson(view), /artifact-1/); assert.match(renderMarkdown(view), /attempt-1/);
+});
+
+test('validated writer and Allure HTML use the approved case-report presentation', async t => {
+  const f = fixture(t), result = f.assess(), html = renderHtml(reportView(result));
+  assert.match(html, /id="status-filter"/); assert.match(html, /Select multiple/);
+  assert.match(html, /data-group-status="PASS"/); assert.match(html, /data-chart-status="PASS"/);
+  assert.doesNotMatch(html, /Operation provenance|Evidence inventory/);
+  assert.doesNotMatch(html, /attempt-1|operationFingerprint|Fingerprint/);
+  assert.doesNotMatch(html, /Core report|PLAYWRIGHT POM HARNESS · VALIDATED EXECUTION/);
+  const attached = [];
+  assert.equal((await attachResult({info: () => ({attach: async (name, body) => attached.push({name, ...body})})}, result)).status, 'ATTACHED');
+  assert.equal(attached[1].body, html);
+});
 for (const [expected, change] of [
   ['PASS', () => {}], ['FAIL', f => {f.current.assertions[0].status = 'FAIL'; f.current.outcome = 'ASSERTION_FAILURE'; f.current.failureClass = 'ASSERTION';}],
   ['NEEDS_REVIEW', f => {f.current.effect.certainty = 'uncertain';}], ...['BLOCKED', 'SKIPPED'].map(status => [status, f => {f.report.evidence = []; Object.assign(f.scenario, {disposition: status.toLowerCase(), reason: 'synthetic-selection', attempts: [], resources: [], outputRefs: []});}])
@@ -20,27 +56,27 @@ for (const [expected, change] of [
 });
 test('safely recovered PASS shows the complete attempts and transient classification in every format', t => {
   const f = fixture(t); retry(f); const view = reportView(f.assess()); assert.equal(view.stability, 'recovered'); assert.equal(view.scenarios[0].attempts.length, 2);
-  for (const text of formats(view)) {assert.match(text, /recovered/); assert.match(text, /attempt-1/); assert.match(text, /attempt-2/); assert.match(text, /TRANSPORT/);}
+  for (const text of evidenceFormats(view)) {assert.match(text, /recovered/); assert.match(text, /attempt-1/); assert.match(text, /attempt-2/); assert.match(text, /TRANSPORT/);}
 });
 for (const [intent, action] of [['persistent', 'retain'], ['no-obligation', 'none']]) test(`${intent} remains an intentional disposition without invented cleanup`, t => {
   const f = fixture(t, {operations: [operation({capability: 'apiMutations'})]}); resource(f, intent);
   const view = reportView(f.assess()); assert.equal(view.status, 'PASS'); assert.equal(view.scenarios[0].resources[0].lifecycle.action, action);
-  for (const text of formats(view)) {assert.match(text, new RegExp(intent)); assert.match(text, /not-required/); assert.doesNotMatch(text, /\bleak\b/i);}
+  for (const text of evidenceFormats(view)) {assert.match(text, new RegExp(intent)); assert.match(text, /not-required/); assert.doesNotMatch(text, /\bleak\b/i);}
 });
 for (const failure of ['pending', 'failed', 'conflict']) test(`required lifecycle ${failure} remains visible and cannot become a pass`, t => {
   const f = fixture(t); const record = resource(f, failure === 'conflict' ? 'restore' : 'temporary'); record.lifecycle.status = failure;
   const view = reportView(f.assess()); assert.equal(view.status, 'NEEDS_REVIEW'); assert.equal(view.scenarios[0].requiredLifecycleComplete, false);
-  for (const text of formats(view)) assert.match(text, new RegExp(failure));
+  for (const text of evidenceFormats(view)) assert.match(text, new RegExp(failure));
 });
 test('failed required cleanup cannot erase a reliable assertion FAIL', t => {
   const f = fixture(t); resource(f, 'temporary').lifecycle.status = 'failed'; f.current.assertions[0].status = 'FAIL';
   f.current.outcome = 'ASSERTION_FAILURE'; f.current.failureClass = 'ASSERTION';
-  const view = reportView(f.assess()); assert.equal(view.status, 'FAIL'); assert.equal(view.scenarios[0].requiredLifecycleComplete, false); assert.match(renderHtml(view), /INCOMPLETE/);
+  const view = reportView(f.assess()); assert.equal(view.status, 'FAIL'); assert.equal(view.scenarios[0].requiredLifecycleComplete, false); assert.match(renderHtml(view), /Test data cleanup needs attention/);
 });
 test('reconciliation and affected-row facts survive presentation', t => {
   const f = fixture(t); retry(f); f.current.effect.certainty = 'uncertain';
   f.current.reconciliation = {kind: 'confirmed-no-effect', evidenceIds: [f.evidence(f.current, 'reconciliation')]};
-  const view = reportView(f.assess()); for (const text of formats(view)) {assert.match(text, /EXERCISE/); assert.match(text, /confirmed-no-effect/);}
+  const view = reportView(f.assess()); for (const text of evidenceFormats(view)) {assert.match(text, /EXERCISE/); assert.match(text, /confirmed-no-effect/);}
   const row = fixture(t); row.current.effect.certainty = 'confirmed'; row.current.effect.affectedRows = {actual: 1, expected: {min: 1, max: 1}};
   assert.deepEqual(reportView(row.assess()).scenarios[0].attempts[0].effect.affectedRows, row.current.effect.affectedRows);
 });
@@ -49,7 +85,7 @@ for (const phase of ['SETUP', 'EXERCISE', 'VERIFY', 'CLEANUP', 'RESTORE']) test(
   const f = fixture(t); f.current.identity.phase = phase;
   // Register evidence under the actual phase rather than altering its frozen identity.
   f.report.evidence = []; f.current.evidenceIds = []; f.current.assertions[0].evidenceIds = [f.evidence(f.current)];
-  for (const text of formats(reportView(f.assess()))) assert.match(text, new RegExp(phase));
+  for (const text of evidenceFormats(reportView(f.assess()))) assert.match(text, new RegExp(phase));
 });
 
 test('completed restoration retains its guarded identity, effect and lifecycle evidence in every format', t => {
@@ -59,7 +95,7 @@ test('completed restoration retains its guarded identity, effect and lifecycle e
   f.scenario.attempts.push(restore); const evidence = f.evidence(restore, 'lifecycle');
   item.lifecycle = {action: 'restore', status: 'completed', attemptId: 'restore-attempt', evidenceIds: [evidence], guard: {kind: 'version', evidenceIds: [evidence]}};
   const view = reportView(f.assess()); assert.equal(view.status, 'PASS');
-  for (const text of formats(view)) for (const word of ['fixture-1', 'existing', 'completed', 'restore-attempt', 'recordId', 'version', evidence]) assert(text.includes(word));
+  for (const text of evidenceFormats(view)) for (const word of ['fixture-1', 'existing', 'completed', 'restore-attempt', 'recordId', 'version', evidence]) assert(text.includes(word));
 });
 
 for (const fault of ['empty', 'incomplete', 'tampered', 'mismatched-count', 'missing-verification']) test(`Allure ${fault} cannot generate a success receipt`, async t => {
@@ -87,19 +123,23 @@ test('sensitive outputs, before-state references, operation definitions and nons
   const f = fixture(t); resource(f, 'restore').beforeStateRef = 'protected:private-before';
   const output = f.current.outputs[0]; delete output.value; output.sensitivity = 'sensitive'; output.protectedRef = 'protected:private-output';
   const view = reportView(f.assess());
-  for (const text of formats(view)) {assert.doesNotMatch(text, /private-before|private-output|Synthetic sanitized observation|Observe a synthetic fixture/); assert.match(text, /redacted/);}
+  for (const text of evidenceFormats(view)) {assert.doesNotMatch(text, /private-before|private-output|Synthetic sanitized observation|Observe a synthetic fixture/); assert.match(text, /redacted/);}
   assert.equal(view.scenarios[0].resources[0].restorationData, 'protected');
 });
 test('hostile text remains text in HTML and Markdown, while selected public values retain meaning in JSON', t => {
   const f = fixture(t), payload = '<script>alert(1)</script> [link](javascript:alert(1)) `</td><img src=x onerror=alert(1)> | **injection**';
-  f.current.outputs[0].value = payload; const view = reportView(f.assess()), html = renderHtml(view), markdown = renderMarkdown(view);
+  f.current.outputs[0].value = payload; const view = reportView(f.assess()), markdown = renderMarkdown(view);
+  const html = renderHtml(view);
   assert.equal(JSON.parse(renderJson(view)).scenarios[0].outputs[0].display, JSON.stringify(payload));
-  assert.doesNotMatch(html, /<script|<img|href="javascript:/); assert.match(html, /&lt;script&gt;/); assert.match(html, /default-src 'none'/);
+  assert.doesNotMatch(html, /<script>alert|<img|href="javascript:/); assert(!html.includes(payload)); assert.match(html, /default-src 'none'/);
+  const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)];
+  assert.equal(scripts.length, 1); assert.equal(scripts[0][1], REPORT_SCRIPT);
+  assert.doesNotMatch(html, /script-src[^;]*unsafe-inline/);
   assert.doesNotMatch(markdown, /<script|\[link\]\(javascript|`<\/td>/);
 });
 test('large public output is explicitly clipped without losing outcome or traceability', t => {
   const f = fixture(t); f.current.outputs[0].value = 'z'.repeat(5000); const view = reportView(f.assess());
-  assert.equal(view.scenarios[0].outputs[0].truncated, true); for (const text of formats(view)) assert.match(text, /truncated/);
+  assert.equal(view.scenarios[0].outputs[0].truncated, true); for (const text of evidenceFormats(view)) assert.match(text, /truncated/);
   assert.equal(view.status, 'PASS'); assert.equal(view.scenarios[0].outputs[0].producer.attemptId, 'attempt-1');
 });
 test('report bundle is fresh, self-contained and manifest hashes describe all three files', t => {

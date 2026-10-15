@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFileSync, writeFileSync, unlinkSync} from 'node:fs';
+import {readFileSync, writeFileSync, unlinkSync, existsSync} from 'node:fs';
 import {join} from 'node:path';
 import {createHash} from 'node:crypto';
 import {executionFixture, executeApi} from './fixtures/execute.mjs';
@@ -9,6 +9,36 @@ import {executionOverview, renderExecutionHtml} from '../scripts/lib/execute/rep
 import {executionReportView, reportCondition} from './fixtures/execute-report.mjs';
 import {readExecution} from '../scripts/lib/execute/storage.mjs';
 import {fingerprint} from '../scripts/lib/execution-core/data.mjs';
+
+test('user-facing execution HTML contains useful results without debugging metadata', () => {
+  const view = executionReportView(['FAIL']);
+  view.runs[0].conditions[0].provenance.results[0].actual = 500;
+  view.runs[0].conditions[0].provenance.results[0].expected = 200;
+  const html = renderExecutionHtml(view);
+  assert.match(html, /Expected/); assert.match(html, /Actual result/); assert.match(html, /500/); assert.match(html, /200/);
+  assert.doesNotMatch(html.slice(html.indexOf('<body>'), html.indexOf('<script>')), /Raw data|Evidence identifiers|Additional execution evidence|Operation provenance|Evidence inventory|SHA256|fingerprint|Verification rollup|No diagnostics|execute-fixture|artifact-1|<code class="run-id"/i);
+});
+
+test('execution report omits obsolete navigation, counting instructions and empty exclusions', () => {
+  const view = executionReportView(['FAIL']);
+  const html = renderExecutionHtml(view);
+  assert.doesNotMatch(html, /Core reports?|How verification methods are counted|Source exclusions/);
+  view.source.excluded = [{id: 901, reason: 'parameters-without-data'}, {id: 902, reason: '<img src=x onerror=alert(1)>'}];
+  const populated = renderExecutionHtml(view);
+  assert.match(populated, /Cases excluded from execution · 2/);
+  assert.match(populated, /901/); assert.match(populated, /Parameter values are missing/);
+  assert.match(populated, /&lt;img src=x/); assert.doesNotMatch(populated, /<img src=x/);
+});
+
+test('execution writes one case report with evidence and no per-attempt report directories', async t => {
+  const f = await executionFixture(t); f.apiStep(); f.freeze(); await executeApi(f);
+  const report = writeExecutionReport(f.roots, f.executionId);
+  assert.equal(report.status, 'WRITTEN');
+  assert.equal(existsSync(join(f.roots.projectRoot, report.directory, 'runs')), false);
+  const html = readFileSync(join(f.roots.projectRoot, report.html), 'utf8');
+  assert.doesNotMatch(html, /Operation provenance|Evidence inventory/);
+  assert.match(html, /<a href="summary.md">Summary/); assert.match(html, /<a href="defects.md">Defects/);
+});
 test('collapsed case rows explain failures and blockers without requiring raw logs', () => {
   const view = executionReportView(['FAIL', 'BLOCKED', 'BLOCKED']);
   view.scenarios[1].reason = 'Required customer fixture is unavailable.';
@@ -115,7 +145,7 @@ test('overview keeps historical review separate and uses supplied source-expecta
   assert.deepEqual(executionOverview(view, 7), {total: 2, passed: 1, failed: 1, review: 0, attempts: 3, defectGroups: 7, passRate: 50,
     outcomes: [{status: 'PASS', count: 1, percentage: 50}, {status: 'FAIL', count: 1, percentage: 50}]});
   const before = JSON.stringify(view), html = renderExecutionHtml(view, {defectCount: 7});
-  assert.equal(JSON.stringify(view), before); assert(html.includes('Historical')); assert(html.includes('run-earlier')); assert(html.includes('1 mixed'));
+  assert.equal(JSON.stringify(view), before); assert(html.includes('Earlier attempt')); assert(!html.includes('run-earlier')); assert(!html.includes('1 mixed')); assert.equal(view.scenarios[0].methods.mixed, 1);
   assert.equal((html.match(/data-chart-status=/g) ?? []).length, 2); assert(!html.includes('data-chart-status="NEEDS_REVIEW"'));
   assert(html.includes('Insufficient evidence')); assert(html.includes('defects.md'));
 });
@@ -133,7 +163,7 @@ test('empty and uniform outcome reports have meaningful rates and actual chart c
   assert.equal((mixed.match(/data-chart-status=/g) ?? []).length, 7); assert(mixed.includes('INTEGRITY FAILURE (no verdict)')); assert(mixed.includes('data-metric="pass-rate">14.3%'));
 });
 
-test('raw payloads stay complete and escaped; screenshots deduplicate without losing run references', () => {
+test('user results remain escaped and screenshots deduplicate without exposing technical records', () => {
   const view = executionReportView(['FAIL']);
   const payload = '</script><img src=x onerror=alert(1)>' + 'long '.repeat(200);
   view.scenarios[0].title = payload; view.runs[0].conditions[0].provenance.results[0].actual = payload;
@@ -144,10 +174,9 @@ test('raw payloads stay complete and escaped; screenshots deduplicate without lo
   const html = renderExecutionHtml(view, {screenshots});
   assert(!html.includes('<img src=x')); assert(html.includes('&lt;/script&gt;&lt;img'));
   assert.equal((html.match(/data:image\/png;base64,/g) ?? []).length, 1);
-  assert(html.includes('artifact-1')); assert(html.includes('artifact-2')); assert(html.includes('2 recorded occurrences · 1 distinct message'));
-  assert(html.includes('2 occurrences')); assert(html.includes('Screenshot 1')); assert(html.includes('Screenshot 2'));
-  const raws = [...html.matchAll(/<pre data-raw-json>([\s\S]*?)<\/pre>/g)].map(match => JSON.parse(match[1].replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&')));
-  assert.deepEqual(raws[0], view.runs[0].conditions[0].provenance); assert.deepEqual(raws[2], view.runs[0].diagnostics);
+  assert(!html.includes('artifact-1')); assert(!html.includes('artifact-2')); assert(!html.includes('recorded occurrences'));
+  assert(html.includes('Screenshot 1')); assert(html.includes('Screenshot 2')); assert.equal(view.runs[0].diagnostics[0].entries.length, 2);
+  assert(!html.includes('data-raw-json')); assert.equal(view.runs[0].conditions[0].provenance.results[0].actual, payload);
   assert(!html.includes('<time')); assert(!html.includes('Environment <strong>'));
 });
 
@@ -156,8 +185,8 @@ test('API proof presentation preserves false, zero, null, redaction and original
   for (const actual of [false, 0, null, '[REDACTED]']) {
     const proof = {check: 'status', expected: true, actual, passed: false, method: 'original-field'};
     const html = renderExecutionHtml(view, {assertionEvidence: new Map([['run-1:artifact-1', proof]])});
-    assert(html.includes('Actual result')); assert(html.includes('original-field')); assert(html.includes('&quot;passed&quot;: false'));
+    assert(html.includes('Actual result')); assert(!html.includes('original-field')); assert(!html.includes('&quot;passed&quot;: false')); assert.equal(proof.actual, actual);
     assert(!html.includes('No actual value is recorded'));
-    assert(html.includes(`<strong>Recorded result:</strong> ${actual === null ? 'null' : String(actual)}`));
+    assert(html.includes(`<dd>${actual === null ? 'null' : String(actual)}</dd>`));
   }
 });

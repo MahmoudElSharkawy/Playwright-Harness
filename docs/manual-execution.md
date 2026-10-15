@@ -195,14 +195,18 @@ and `delivery/`. Control/snapshots stay outside the runtime's fresh run root.
 Windows ACLs/Linux modes protect private state.
 
 Report creation reassesses frozen inputs and evidence, never trusting saved result
-JSON. It writes per-run reports, a self-contained dashboard, Summary, grouped Defects
+JSON. It writes one self-contained case report, Summary, grouped Defects
 and final manifest under a fresh `reports/harness/execute-<execution-uuid>-<report-uuid>/`.
 Verified PNG/JPEG context is limited to 2 MiB each/20 MiB total. Counts come from
 case summaries; attempts/history are separate, and expectation rollups use source
 expectations from the selected assessed run. Defect groups span assessed attempts
 independently of failed-case counts. CSP/escaping protects HTML; filters/search/sorting
 and deduplicated previews work from file://, with disclosures without JavaScript.
-Companion links stay relative. See [reporting](reporting.md).
+Case details show expected/actual results, reasons, next actions, plain retry outcomes
+and screenshots. Raw JSON, internal IDs, hashes and debugging inventories stay in
+execution storage, outside the user-facing HTML. Empty exclusions are hidden; populated
+exclusions identify cases and their reasons. Companion links stay relative.
+See [reporting](reporting.md).
 
 An explicit valid rerun can replace an integrity-invalid attempt for delivery while
 retaining history. Earlier valid FAILs still dominate; unrepaired integrity failures

@@ -28,6 +28,13 @@ p{margin-bottom:12px}
 .small,.scope{font-size:13px}
 .eyebrow{color:var(--accent);font-size:12px;font-weight:750;letter-spacing:.1em;text-transform:uppercase;margin-bottom:10px}
 .report-header{margin-bottom:24px}
+.report-heading{position:relative;padding-right:48px}
+.theme-toggle{position:absolute;top:0;right:0;display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;padding:6px;border:0;border-radius:50%;background:transparent;color:var(--ink);cursor:pointer}
+.theme-toggle:hover{background:var(--surface2);color:var(--accent)}
+.theme-toggle:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
+.theme-toggle svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.theme-toggle .icon-sun,.theme-toggle[data-next-theme=light] .icon-moon{display:none}
+.theme-toggle[data-next-theme=light] .icon-sun{display:block}
 .execution-id{font-size:12px;color:var(--muted);margin-bottom:8px}
 .execution-id code{color:var(--ink)}
 .metadata{display:flex;flex-wrap:wrap;gap:8px 24px;font-size:13px;color:var(--muted)}
@@ -225,7 +232,7 @@ dialog::backdrop{background:rgb(16 28 49 / .65)}
 
 @media print{body{background:var(--surface)}
 main{padding:0}
-.toolbar,.legend-filter,.case-action,.pager,dialog,.screenshot .button{display:none!important}
+.toolbar,.legend-filter,.case-action,.pager,dialog,.screenshot .button,.theme-toggle{display:none!important}
 .case-row,.panel{break-inside:avoid}
 .case-row>summary{background:var(--surface)}
 }
@@ -301,12 +308,12 @@ export const REPORT_SCRIPT = String.raw`
       button.hidden = false;
       button.addEventListener('click', () => {const value = button.dataset.filterStatus; if (selected.has(value)) selected.delete(value); else selected.add(value); update(true);});
     }
-    const theme = document.getElementById('theme-toggle');
-    const themeLabel = () => {const dark = getComputedStyle(document.documentElement).colorScheme === 'dark'; theme.textContent = dark ? 'Light theme' : 'Dark theme'; theme.setAttribute('aria-pressed', String(dark));};
-    theme.addEventListener('click', () => {document.documentElement.dataset.theme = getComputedStyle(document.documentElement).colorScheme === 'dark' ? 'light' : 'dark'; themeLabel();});
-    matchMedia('(prefers-color-scheme: dark)').addEventListener('change', themeLabel); themeLabel();
     update();
   }
+  const theme = document.getElementById('theme-toggle');
+  const themeLabel = () => {const dark = getComputedStyle(document.documentElement).colorScheme === 'dark'; const next = dark ? 'light' : 'dark'; theme.dataset.nextTheme = next; theme.setAttribute('aria-label', 'Switch to ' + next + ' theme'); theme.title = 'Switch to ' + next + ' theme'; theme.setAttribute('aria-pressed', String(dark));};
+  theme.addEventListener('click', () => {document.documentElement.dataset.theme = getComputedStyle(document.documentElement).colorScheme === 'dark' ? 'light' : 'dark'; themeLabel();});
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', themeLabel); themeLabel(); theme.hidden = false;
   function reveal(id, focus) {
     const target = document.getElementById(id);
     if (!target) return;
