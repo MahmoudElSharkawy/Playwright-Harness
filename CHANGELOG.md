@@ -1,5 +1,19 @@
 # Changelog
 
+## 3.6.1 — Clear execution and automation reports
+
+### Upgrade actions
+
+- Re-run setup from the 3.6.1 archive in each project, then reload Claude Code skills or restart Codex to discover the updated execution and automation guidance. Existing customized code and configuration remain subject to review.
+- Regenerate reports through `/execute-test` or `/automate-test` to use the shared HTML experience. Share the report bundle when the skill finishes and attach it to the related PR, preserving its companion files and relative links. Existing saved HTML files are not rewritten; no GitHub Actions report upload is required.
+
+### Changes
+
+- Add a shared offline HTML report for execution and automation results, with a pie chart, compact collapsible case groups, pagination, search, sorting and multiple status selection. Show failed and blocked cases with clear reasons and next actions.
+- Match Summary and Defects navigation across both skills and place an accessible sun/moon theme control in the upper-right header. Remove the Result data control and technical report clutter such as raw JSON, internal identifiers, hashes and provenance inventories; retain expected and actual results, useful evidence and authoritative internal records.
+- Retire the duplicate Core report pages and links. Update both skills to share the final report with the user and attach its bundle to the related PR. Keep existing Allure, Playwright and GitHub Actions reporting unchanged.
+- Add installed-browser report checks for filtering, pagination, navigation, themes, accessibility and privacy on Windows and Linux.
+
 ## 3.6.0 — MySQL execution and URL-encoded API forms
 
 ### Upgrade actions
