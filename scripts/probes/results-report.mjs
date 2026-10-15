@@ -12,7 +12,7 @@ import {renderAutomationHtml} from '../lib/reporting/case-view.mjs';
 import {automationCompanions, automationReportView} from '../lib/generation/report.mjs';
 import {renderHtml, reportView} from '../lib/reporting/index.mjs';
 import {fixture, resource} from '../../harness-tests/fixtures/execution-core.mjs';
-import {prepared, recorded} from '../../harness-tests/fixtures/generation-report.mjs';
+import {prepared, recorded, productionBlockers} from '../../harness-tests/fixtures/generation-report.mjs';
 import {executionReportView} from '../../harness-tests/fixtures/execute-report.mjs';
 import {nativeCliInstallation} from '../lib/browser/native-cli.mjs';
 
@@ -69,11 +69,13 @@ const proof = {version: 5, status: 'INCOMPLETE', themes: ['light', 'dark'], surf
 try {
   browser = await chromium.launch({headless: true});
   const productionFolder = join(output, 'production'); mkdirSync(productionFolder);
-  writeFileSync(join(productionFolder, 'index.html'), renderAutomation({...automation, cases: productionCases}));
+  const commandBlockers = productionBlockers().map((blocker, index) => ({...blocker, status: 'BLOCKED', id: `blocker-${index}`, title: 'Automation stopped'}));
+  writeFileSync(join(productionFolder, 'index.html'), renderAutomation({...automation, blocker: productionBlockers()[8], cases: [...productionCases, ...commandBlockers]}));
   const productionPage = await browser.newPage(); await productionPage.goto(pathToFileURL(join(productionFolder, 'index.html')).href);
   await productionPage.locator('details').evaluateAll(nodes => nodes.forEach(node => {node.open = true;}));
   const productionText = await productionPage.locator('body').innerText();
   assert(!/scoped green|verification gate|native test|register and independently review/i.test(productionText), 'Production automation reasons must use plain explanations.');
+  assert(!/fingerprint|repair classification|repair count|three.round|candidate|receipt|handoff|frozen|native.runner|native verification|assertion counts|pinned consumer|protected diagnostics/i.test(productionText), 'Production command blockers must use plain explanations.');
   for (const text of ['Further verification is needed', 'Automation is ready.', 'Some required checks were not completed.', 'This test was skipped.']) assert(productionText.includes(text));
   await productionPage.close(); proof.productionReasons = 'PASS';
   if (mode === '--base') for (const [name, html] of [...surfaces, ['runtime', runtimeHtml]]) {

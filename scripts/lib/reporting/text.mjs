@@ -14,10 +14,55 @@ const explanations = new Map([
   ['No scoped verification has been recorded for this candidate.', 'The automated test has not been run yet.'],
   ['Run the independently approved candidate through scoped verification.', 'Review and run the automated test.'],
   ['The recorded native receipt is missing, changed, or has a different case scope. Case results are unavailable; review is required.', 'The saved test result is missing or no longer matches this case. Review is required.'],
-  ['Reassess the original receipts and candidate integrity; do not infer a pass.', 'Check the original test result and the current test before running it again.']
+  ['Reassess the original receipts and candidate integrity; do not infer a pass.', 'Check the original test result and the current test before running it again.'],
+  ['No test candidate has been registered.', 'The automated test has not been created yet.'],
+  ['Author and register the candidate before review and verification.', 'Create the automated test, then review and run it.'],
+  ['Generation has not been prepared for this source.', 'These cases are not ready for automation yet.'],
+  ['Complete exploration and prepare a validated generation handoff.', 'Check the requirements and application behavior before creating the tests.'],
+  ['A validated generation handoff is unavailable.', 'The case requirements and application behavior have not been confirmed.'],
+  ['Complete observed execution and prepare generation first.', 'Execute the cases and confirm their results before creating the automated tests.'],
+  ['Exploration contains unresolved outcomes or incomplete cleanup obligations.', 'Some case results or test data cleanup still need attention.'],
+  ['Resolve the recorded exploration and lifecycle blockers before preparing generation.', 'Resolve the case blockers and complete test data cleanup before creating the tests.'],
+  ['No observed execution was supplied.', 'The cases have not been executed yet.'],
+  ['Explore the source cases and provide their recorded execution evidence.', 'Execute the cases and record their results.'],
+  ['Saved exploration inputs differ from their recorded fingerprint.', 'The saved case information changed after execution.'],
+  ['Reassess the original exploration snapshot and evidence before preparing generation.', 'Review the original case information and results before creating the tests.'],
+  ['Independent approval is missing, rejected, or its evidence has changed.', 'Review approval is missing or no longer valid for the current tests.'],
+  ['Obtain independent approval of this exact candidate revision.', 'Have the current tests reviewed and approved.'],
+  ['Consumer files changed after candidate registration.', 'The test files changed after they were reviewed.'],
+  ['Register and independently review the updated candidate before verification.', 'Review and approve the updated tests before running them again.'],
+  ['The repair classification is missing or the three-round repair budget is exhausted.', 'A test repair needs review, or further repair attempts require your decision.'],
+  ['Check the recorded repair count; classify an available repair or request an owner decision at the limit.', 'Review the previous repair attempts and decide whether another repair should proceed.'],
+  ['The native runner could not collect the scoped tests.', 'The test runner could not find or load the selected tests.'],
+  ['Check the configured test files, project and native runner before resuming.', 'Check the selected test files and test runner configuration before resuming.'],
+  ['The scoped native verification did not finish cleanly.', 'The selected tests did not finish successfully.'],
+  ['Inspect the recorded native outcome and repair or resolve its cause before a new reviewed run.', 'Review the test result, resolve its cause and review any changes before running again.'],
+  ['A scoped native test failed or retried.', 'A test failed or needed another attempt.'],
+  ['Investigate its recorded failure and preserve the original failed attempt.', 'Investigate the failure before running the test again.'],
+  ['A case had missing, failed or skipped assertions.', 'Some required checks failed or were not completed.'],
+  ['Inspect assertion counts and failed checks; preserve source expectations when repairing.', 'Review the failed or incomplete checks and keep the case requirements when repairing the test.'],
+  ['Verification changed frozen files or exceeded its deadline.', 'The tests changed during execution or exceeded their time limit.'],
+  ['Inspect the recorded run, resolve the changed files or timeout, and review a new candidate.', 'Review the result, resolve the changed files or timeout, then review the updated tests.'],
+  ['The current candidate has a failed or interrupted verification.', 'The current tests failed or were interrupted.'],
+  ['Repair and independently review the candidate before another verification.', 'Repair and review the tests before running them again.'],
+  ['This candidate already has two recorded scoped green runs.', 'The current tests have already passed the required verification.'],
+  ['Read the existing generation status and report rather than rerun verification.', 'Use the existing report to check the results.'],
+  ['The candidate mapping does not cover every source step exactly once.', 'The automated test does not cover all case steps correctly.'],
+  ['The candidate mapping is missing or duplicates source expectations.', 'The automated test is missing or repeats required checks.'],
+  ['The candidate mapping lacks valid business action or validation references.', 'Some automated test actions or checks are missing or invalid.'],
+  ['Correct the candidate mapping against the frozen source and register it again.', 'Update the automated test to match the original case requirements.'],
+  ['A required generation or native-runner module is unavailable in the consumer.', 'A required test runner component is unavailable.'],
+  ['Restore the configured, pinned consumer dependencies before resuming the named stage.', 'Restore the required test runner components, then resume.'],
+  ['The named generation stage could not complete. Reason unavailable; investigation is needed.', 'Automation could not continue. The cause was not recorded; investigation is needed.'],
+  ['Inspect the recorded stage and protected diagnostics, then resolve the prerequisite before resuming.', 'Investigate where automation stopped and resolve the cause before resuming.'],
+  ['Resolve the recorded review findings and obtain independent approval of the updated candidate.', 'Resolve the review findings and have the updated tests approved.'],
+  ['Clarify the original actions and accepted expected results before preparing generation.', 'Clarify the case steps and expected results before creating the test.'],
+  ['A case result is unavailable from the recorded verification.', 'A test result is unavailable.'],
+  ['Inspect the original verification and resolve its prerequisite before resuming.', 'Review the original test result and resolve its cause before resuming.']
 ]);
 export const caseReason = value => {
-  const text = String(value ?? '');
-  return (explanations.get(text) ?? text).replace(/^(\d+) native assertion(?:\(s\)|s)? failed(?: \([^)]+\))?\./, '$1 check(s) failed.')
+  let text = String(value ?? '');
+  for (const [recorded, readable] of explanations) text = text.replaceAll(recorded, readable);
+  return text.replace(/^(\d+) native assertion(?:\(s\)|s)? failed(?: \([^)]+\))?\./, '$1 check(s) failed.')
     .replace(/^The native test failed\./, 'The test failed.').replace(/^Native execution /, 'The test ');
 };

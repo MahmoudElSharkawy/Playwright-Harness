@@ -4,13 +4,28 @@ import {readFileSync, readdirSync} from 'node:fs';
 import {join} from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {fixture} from './fixtures/execution-core.mjs';
-import {source, put, prepared, recorded} from './fixtures/generation-report.mjs';
+import {source, put, prepared, recorded, productionBlockers} from './fixtures/generation-report.mjs';
 import {fingerprint, digest} from '../scripts/lib/execution-core/data.mjs';
 import {createGenerationHandoff, generationStatus} from '../scripts/lib/generation/index.mjs';
 import {transaction} from '../scripts/lib/generation/storage.mjs';
 import {automationReportView, writeAutomationReport} from '../scripts/lib/generation/report.mjs';
 
 const notes = input => ({version: 1, sourceFingerprint: fingerprint(input), cases: [{scenarioId: input.scenarios[0].id, stage: 'EXPLORE', reason: 'The required fixture is unavailable.', nextAction: 'Provision the fixture before exploration.'}]});
+
+test('all known production command blockers use plain report explanations and preserve original records', async t => {
+  const f = fixture(t), input = source();
+  for (const blocker of productionBlockers()) {
+    const report = await writeAutomationReport(f.roots, {source: input, blocker}); assert.equal(report.status, 'WRITTEN');
+    const view = JSON.parse(readFileSync(join(f.roots.projectRoot, report.directory, 'result.json')));
+    assert.deepEqual(view.blocker, blocker); assert.equal(view.cases[0].reason, blocker.reason);
+    assert.equal(view.cases[0].nextAction, blocker.nextAction); assert.equal(view.cases[0].status, 'BLOCKED');
+    for (const name of ['index.html', 'summary.md', 'defects.md']) {
+      const content = readFileSync(join(f.roots.projectRoot, report.directory, name), 'utf8');
+      assert.doesNotMatch(content, /scoped green|fingerprint|repair classification|repair count|three.round|candidate|receipt|handoff|frozen|native.runner|native test|native verification|assertion counts|pinned consumer|protected diagnostics/i, name);
+      assert(content.includes('Reason') || content.includes('reason'));
+    }
+  }
+});
 
 test('automation Summary and Defects navigation points to complete, manifested companions', async t => {
   const f = fixture(t), input = source(['blocked-case', 'pending-case']), blockerNotes = notes(input);
