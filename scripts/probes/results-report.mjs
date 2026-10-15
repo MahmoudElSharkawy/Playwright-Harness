@@ -69,6 +69,12 @@ try {
     await page.route(/^https?:/, route => {network.push(route.request().url()); return route.abort();});
     page.on('pageerror', error => errors.push(error.message));
     await page.goto(pathToFileURL(join(folder, 'index.html')).href);
+    const themeSwitch = page.locator('#theme-toggle');
+    assert.equal(await page.locator('.report-header #theme-toggle').count(), 1, 'The theme switch belongs above the report, at the right.');
+    assert.equal((await themeSwitch.innerText()).trim(), '', 'Theme switching uses icons, without a text button.');
+    assert.equal(await themeSwitch.locator('svg').count(), 2);
+    assert.equal(await themeSwitch.locator('svg:visible').count(), 1);
+    assert.match(await themeSwitch.getAttribute('aria-label'), /Switch to (light|dark) theme/);
     assert.equal(await page.getByRole('link', {name: 'Summary ↗', exact: true}).count(), 1, 'Both skills expose Summary.');
     assert.equal(await page.getByRole('link', {name: 'Defects ↗', exact: true}).count(), 1, 'Both skills expose Defects.');
     const userText = await page.locator('body').innerText();
@@ -131,12 +137,18 @@ try {
       }
       for (let width = 320; width <= 3840; width += 160) {
         await page.setViewportSize({width, height: 900});
-        const geometry = await page.evaluate(() => ({width: innerWidth, scroll: document.documentElement.scrollWidth, font: getComputedStyle(document.querySelector('h1')).fontSize, rows: [...document.querySelectorAll('[data-case]:not([hidden]) > summary')].filter(row => row.getClientRects().length).map(row => ({width: row.getBoundingClientRect().width, height: row.getBoundingClientRect().height}))}));
+        const geometry = await page.evaluate(() => {const toggle = document.getElementById('theme-toggle').getBoundingClientRect(), header = document.querySelector('.report-heading').getBoundingClientRect(); return {width: innerWidth, scroll: document.documentElement.scrollWidth, font: getComputedStyle(document.querySelector('h1')).fontSize, themeAtRight: Math.abs(toggle.right - header.right) <= 2 && Math.abs(toggle.top - header.top) <= 2, rows: [...document.querySelectorAll('[data-case]:not([hidden]) > summary')].filter(row => row.getClientRects().length).map(row => ({width: row.getBoundingClientRect().width, height: row.getBoundingClientRect().height}))};});
         assert(geometry.scroll <= geometry.width, `${name}/${theme} overflows at ${width}px (${geometry.scroll}px).`);
         assert.equal(geometry.font, '20px'); assert(geometry.rows.every(row => row.width > 0 && row.height >= 38));
+        assert(geometry.themeAtRight, 'Theme icon remains at the top right across widths.');
       }
     }
     await page.locator('#theme-toggle').click(); assert.equal(await page.locator('html').getAttribute('data-theme'), 'light');
+    assert.equal(await themeSwitch.getAttribute('aria-label'), 'Switch to dark theme');
+    await themeSwitch.focus(); await page.keyboard.press('Space');
+    assert.equal(await page.locator('html').getAttribute('data-theme'), 'dark');
+    assert.equal(await themeSwitch.getAttribute('aria-label'), 'Switch to light theme');
+    assert.equal(await themeSwitch.locator('svg').count(), 2, 'Theme changes preserve both icons.');
     await page.locator('#clear-filters').click(); await page.locator('#expand-groups').click();
     assert.equal(await page.locator('[data-group][open]').count(), 5); assert.equal(await page.locator('[data-case]:visible').count(), 46);
     await page.locator('#collapse-groups').click(); assert.equal(await page.locator('[data-case]:visible').count(), 0);

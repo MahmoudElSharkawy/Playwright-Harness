@@ -99,6 +99,8 @@ the full-report overview. Cases appear in collapsed status groups with compact r
 and 10 cases per group page. Filtering opens matching groups; expand/collapse controls
 and keyboard navigation support browsing. Without JavaScript, native disclosures
 still expose every case. Light and dark themes use the plan tracker's palette.
+An icon-only sun/moon switch sits at the top right of the report header, with an
+accessible label and keyboard operation.
 Failed and blocked case rows show their reason before opening details. Details retain the stage, known
 next action, expected/actual checks and useful retry outcomes. Automation does not
 display internal verification-scope history, gate counters or report fingerprints. Missing reasons explicitly say
