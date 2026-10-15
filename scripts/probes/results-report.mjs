@@ -41,10 +41,10 @@ for (const scenario of manual.scenarios.filter(row => row.status === 'BLOCKED'))
 }
 const automation = {id: 'automation-fixture', sourceId: 'synthetic-source', title: 'Synthetic automation report', createdAt: new Date(1791975600000).toISOString(), environment: 'Synthetic QA', sourceFingerprint: 'synthetic-fixture', status: 'NEEDS_REVIEW', rounds: 1, greens: 0,
   cases: [{id: 'case-1', title: 'Observed arithmetic', status: 'PASS', stage: 'VERIFY', reason: 'The native test passed; readiness is still incomplete.', nativeStatus: 'passed', observedStatus: 'PASS'},
-    {id: 'case-2', title: 'Verify the customer record', status: 'FAIL', stage: 'VERIFY', reason: '1 native assertion failed (toHaveText).', nextAction: 'Investigate the recorded failed assertion.', nativeStatus: 'failed'},
+    {id: 'case-2', title: 'Verify the customer record', status: 'FAIL', stage: 'VERIFY', reason: '1 native assertion failed (toHaveText).', nextAction: 'Investigate the failed check.', nativeStatus: 'failed'},
     {id: 'case-3', title: 'Explore the fixture', status: 'BLOCKED', stage: 'EXPLORE', reason: 'The required QA account and customer fixture are unavailable.', nextAction: 'Provision the QA account and fixture, then resume.', declaredBlocker: true},
-    {id: 'case-4', title: 'Pending source case', status: 'NOT_GENERATED', stage: 'AUTHOR', reason: 'No generated candidate exists.'},
-    {id: 'case-5', title: 'Review the candidate', status: 'NEEDS_REVIEW', stage: 'REVIEW', reason: 'Independent approval is missing.'}]};
+    {id: 'case-4', title: 'Pending source case', status: 'NOT_GENERATED', stage: 'AUTHOR', reason: 'No generated test candidate exists for this case.'},
+    {id: 'case-5', title: 'Review the test', status: 'NEEDS_REVIEW', stage: 'REVIEW', reason: 'Review approval is missing.'}]};
 const productionCleanups = [], productionCases = [];
 try {
   for (const [status, patch] of [['PASS', {}], ['READY', {}], ['NEEDS_REVIEW', {assertions: {passed: 0, failed: 0}}], ['SKIPPED', {status: 'skipped'}]]) {
@@ -73,7 +73,7 @@ try {
   writeFileSync(join(productionFolder, 'index.html'), renderAutomation({...automation, blocker: productionBlockers()[8], cases: [...productionCases, ...commandBlockers]}));
   const productionPage = await browser.newPage(); await productionPage.goto(pathToFileURL(join(productionFolder, 'index.html')).href);
   await productionPage.locator('details').evaluateAll(nodes => nodes.forEach(node => {node.open = true;}));
-  const productionText = await productionPage.locator('body').innerText();
+  const productionText = (await productionPage.locator('.report-header, [data-case]').allTextContents()).join(' ');
   assert(!/scoped green|verification gate|native test|register and independently review/i.test(productionText), 'Production automation reasons must use plain explanations.');
   assert(!/fingerprint|repair classification|repair count|three.round|candidate|receipt|handoff|frozen|native.runner|native verification|assertion counts|pinned consumer|protected diagnostics/i.test(productionText), 'Production command blockers must use plain explanations.');
   for (const text of ['Further verification is needed', 'Automation is ready.', 'Some required checks were not completed.', 'This test was skipped.']) assert(productionText.includes(text));

@@ -23,6 +23,7 @@ test('all known production command blockers use plain report explanations and pr
       const content = readFileSync(join(f.roots.projectRoot, report.directory, name), 'utf8');
       assert.doesNotMatch(content, /scoped green|fingerprint|repair classification|repair count|three.round|candidate|receipt|handoff|frozen|native.runner|native test|native verification|assertion counts|pinned consumer|protected diagnostics/i, name);
       assert(content.includes('Reason') || content.includes('reason'));
+      assert.doesNotMatch(content, /The cases have not been executed yet|after they were reviewed/);
     }
   }
 });
