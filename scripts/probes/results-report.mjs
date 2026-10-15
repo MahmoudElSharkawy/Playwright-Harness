@@ -9,9 +9,10 @@ import {execFileSync} from 'node:child_process';
 import {packageRoot} from '../lib/consumer-paths.mjs';
 import {renderExecutionHtml} from '../lib/execute/report-html.mjs';
 import {renderAutomationHtml} from '../lib/reporting/case-view.mjs';
-import {automationCompanions} from '../lib/generation/report.mjs';
+import {automationCompanions, automationReportView} from '../lib/generation/report.mjs';
 import {renderHtml, reportView} from '../lib/reporting/index.mjs';
 import {fixture, resource} from '../../harness-tests/fixtures/execution-core.mjs';
+import {prepared, recorded} from '../../harness-tests/fixtures/generation-report.mjs';
 import {executionReportView} from '../../harness-tests/fixtures/execute-report.mjs';
 import {nativeCliInstallation} from '../lib/browser/native-cli.mjs';
 
@@ -44,6 +45,18 @@ const automation = {id: 'automation-fixture', sourceId: 'synthetic-source', titl
     {id: 'case-3', title: 'Explore the fixture', status: 'BLOCKED', stage: 'EXPLORE', reason: 'The required QA account and customer fixture are unavailable.', nextAction: 'Provision the QA account and fixture, then resume.', declaredBlocker: true},
     {id: 'case-4', title: 'Pending source case', status: 'NOT_GENERATED', stage: 'AUTHOR', reason: 'No generated candidate exists.'},
     {id: 'case-5', title: 'Review the candidate', status: 'NEEDS_REVIEW', stage: 'REVIEW', reason: 'Independent approval is missing.'}]};
+const productionCleanups = [], productionCases = [];
+try {
+  for (const [status, patch] of [['PASS', {}], ['READY', {}], ['NEEDS_REVIEW', {assertions: {passed: 0, failed: 0}}], ['SKIPPED', {status: 'skipped'}]]) {
+    const f = await prepared({after: action => productionCleanups.push(action)});
+    await recorded(f, 'PASS', 'verification-first', patch);
+    if (status === 'READY') await recorded(f, 'PASS', 'verification-second');
+    const view = await automationReportView(f.roots, {sourceId: f.source.id});
+    assert.equal(view.cases[0].status, status);
+    productionCases.push({...view.cases[0], id: `production-${status}`});
+  }
+} finally {for (const cleanup of productionCleanups.reverse()) await cleanup();}
+automation.cases[0] = {...automation.cases[0], ...productionCases.find(row => row.status === 'PASS')};
 automation.cases = statuses.map((status, index) => ({...automation.cases[{PASS: 0, FAIL: 1, BLOCKED: 2, NOT_RUN: 3, NEEDS_REVIEW: 4}[status]], id: `case-${index + 1}`, title: `Case ${index + 1} · ${'A detailed synthetic source title '.repeat(index === 3 ? 8 : 1)}`, status: status === 'NOT_RUN' ? 'NOT_GENERATED' : status}));
 const surfaces = [['execute', renderManual(manual)], ['automate', renderAutomation(automation)]];
 const cleanups = [], runtimeFixture = fixture({after: action => cleanups.push(action)});
@@ -52,9 +65,17 @@ const runtimeHtml = renderRuntime(reportView(runtimeFixture.assess()));
 for (const cleanup of cleanups.reverse()) await cleanup();
 const sizes = [[390,844], [768,1024], [1440,900], [2560,1440], [3840,2160]];
 let browser;
-const proof = {version: 4, status: 'INCOMPLETE', themes: ['light', 'dark'], surfaces: [], viewports: sizes, horizontalSweep: {from: 320, to: 3840, step: 160}};
+const proof = {version: 5, status: 'INCOMPLETE', themes: ['light', 'dark'], surfaces: [], viewports: sizes, horizontalSweep: {from: 320, to: 3840, step: 160}};
 try {
   browser = await chromium.launch({headless: true});
+  const productionFolder = join(output, 'production'); mkdirSync(productionFolder);
+  writeFileSync(join(productionFolder, 'index.html'), renderAutomation({...automation, cases: productionCases}));
+  const productionPage = await browser.newPage(); await productionPage.goto(pathToFileURL(join(productionFolder, 'index.html')).href);
+  await productionPage.locator('details').evaluateAll(nodes => nodes.forEach(node => {node.open = true;}));
+  const productionText = await productionPage.locator('body').innerText();
+  assert(!/scoped green|verification gate|native test|register and independently review/i.test(productionText), 'Production automation reasons must use plain explanations.');
+  for (const text of ['Further verification is needed', 'Automation is ready.', 'Some required checks were not completed.', 'This test was skipped.']) assert(productionText.includes(text));
+  await productionPage.close(); proof.productionReasons = 'PASS';
   if (mode === '--base') for (const [name, html] of [...surfaces, ['runtime', runtimeHtml]]) {
     const folder = join(output, `${name}-before`); mkdirSync(folder); writeFileSync(join(folder, 'index.html'), html);
     const page = await browser.newPage(); await page.goto(pathToFileURL(join(folder, 'index.html')).href);
@@ -78,11 +99,11 @@ try {
     assert.equal(await page.getByRole('link', {name: 'Summary ↗', exact: true}).count(), 1, 'Both skills expose Summary.');
     assert.equal(await page.getByRole('link', {name: 'Defects ↗', exact: true}).count(), 1, 'Both skills expose Defects.');
     const userText = await page.locator('body').innerText();
-    assert(!/Raw data|Evidence identifiers|Additional execution evidence|Operation provenance|Evidence inventory|SHA256|fingerprint|Scoped verification history|Native assertions|Verification rollup|repair rounds|scoped greens/i.test(userText), 'User reports must not display debugging metadata.');
+    assert(!/Raw data|Evidence identifiers|Additional execution evidence|Operation provenance|Evidence inventory|SHA256|fingerprint|Scoped verification history|Native assertions|Verification rollup|repair rounds|scoped green|verification gate|native test/i.test(userText), 'User reports must not display debugging metadata.');
     const originalDetails = await page.locator('details').evaluateAll(nodes => nodes.map(node => node.open));
     await page.locator('details').evaluateAll(nodes => nodes.forEach(node => {node.open = true;}));
     const expandedText = await page.locator('body').innerText();
-    assert(!/Raw data|Evidence identifiers|Additional execution evidence|Operation provenance|Evidence inventory|SHA256|fingerprint|Scoped verification history|Native assertions|Verification rollup|repair rounds|scoped greens/i.test(expandedText), 'Expanded details must also be user-facing.');
+    assert(!/Raw data|Evidence identifiers|Additional execution evidence|Operation provenance|Evidence inventory|SHA256|fingerprint|Scoped verification history|Native assertions|Verification rollup|repair rounds|scoped green|verification gate|native test/i.test(expandedText), 'Expanded details must also be user-facing.');
     await page.locator('details').evaluateAll((nodes, states) => nodes.forEach((node, index) => {node.open = states[index];}), originalDetails);
     assert.equal(await page.getByText('How verification methods are counted', {exact: true}).count(), 0);
     assert.equal(await page.getByRole('link', {name: /Core report/i}).count(), 0, 'The duplicate report is retired.');

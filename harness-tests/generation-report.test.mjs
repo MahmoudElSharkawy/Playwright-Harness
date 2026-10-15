@@ -1,16 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdirSync, writeFileSync, readFileSync, readdirSync} from 'node:fs';
-import {join, dirname} from 'node:path';
+import {readFileSync, readdirSync} from 'node:fs';
+import {join} from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {fixture} from './fixtures/execution-core.mjs';
+import {source, put, prepared, recorded} from './fixtures/generation-report.mjs';
 import {fingerprint, digest} from '../scripts/lib/execution-core/data.mjs';
-import {createGenerationHandoff, sourceExpectations, beginGeneration, registerCandidate, recordGenerationReview, generationStatus} from '../scripts/lib/generation/index.mjs';
+import {createGenerationHandoff, generationStatus} from '../scripts/lib/generation/index.mjs';
 import {transaction} from '../scripts/lib/generation/storage.mjs';
 import {automationReportView, writeAutomationReport} from '../scripts/lib/generation/report.mjs';
 
-const source = (ids = ['source-case']) => ({version: 1, id: 'report-suite', title: 'Synthetic report source', scenarios: ids.map(id => ({id, title: id, steps: [{action: 'Read observation', expected: ['The expected observation is visible']}]}))});
-const put = (root, path, value) => {mkdirSync(dirname(join(root, path)), {recursive: true}); writeFileSync(join(root, path), typeof value === 'string' ? value : JSON.stringify(value));};
 const notes = input => ({version: 1, sourceFingerprint: fingerprint(input), cases: [{scenarioId: input.scenarios[0].id, stage: 'EXPLORE', reason: 'The required fixture is unavailable.', nextAction: 'Provision the fixture before exploration.'}]});
 
 test('automation Summary and Defects navigation points to complete, manifested companions', async t => {
@@ -34,26 +33,27 @@ test('automation Summary and Defects navigation points to complete, manifested c
   }
 });
 
-async function prepared(t) {
-  const f = fixture(t), input = source();
-  put(f.roots.projectRoot, 'playwright.config.mjs', 'export default {};');
-  put(f.roots.projectRoot, 'tests/ObservationTests.spec.ts', '// Synthetic report-contract candidate.');
-  const key = sourceExpectations(input)[0].key;
-  await beginGeneration(f.roots, createGenerationHandoff(input, [{run: f.run, roots: f.roots, observations: f.report}], [{key, runId: f.run.id, scenarioId: 'case-1', expectationId: 'visible'}]), 'report-author');
-  const candidate = await registerCandidate(f.roots, input.id, {config: 'playwright.config.mjs', tests: [{scenarioId: 'source-case', spec: 'tests/ObservationTests.spec.ts', project: 'report', titlePath: ['Observation'], mapping: [{step: 1, actions: ['ObservationPage.read'], expectations: [{key, validations: ['ObservationPage.verify']}]}]}]});
-  put(f.roots.projectRoot, '.harness/state/review.md', 'Synthetic report-contract approval; no independent task review claimed.');
-  await recordGenerationReview(f.roots, input.id, {revision: candidate.revision, reviewer: 'report-reviewer', verdict: 'APPROVE', findings: [], artifact: '.harness/state/review.md'});
-  return {...f, source: input, candidate};
-}
-
-async function recorded(f, status = 'FAIL') {
-  // Synthetic native receipt exercises presentation/integrity; real native failure is tested separately.
-  const runId = 'verify-report', path = `.harness/state/generation/${f.source.id}/${runId}/execution.json`;
-  const receipt = {version: 2, invocation: runId, tests: [{...f.candidate.tests[0], results: [{status: status === 'PASS' ? 'passed' : 'failed', retry: 0, errors: status === 'PASS' ? 0 : 1, assertions: {passed: 1, failed: status === 'PASS' ? 0 : 1}, skippedSteps: 0, failedChecks: status === 'PASS' ? [] : ['toBe']}]}]};
-  put(f.roots.projectRoot, path, receipt);
-  await transaction(f.roots, f.source.id, (state, save) => {state.runs.push({id: runId, revision: f.candidate.revision, gate: 'case-assertions', status, failureClass: 'ASSERTION_COVERAGE', reason: 'A case assertion failed.', receipt: {path, fingerprint: fingerprint(receipt)}}); save(state);});
-  return {path, receipt};
-}
+test('production automation outcomes explain readiness without internal gate wording', async t => {
+  for (const [status, patch, expected] of [
+    ['PASS', {}, 'The test passed. Further verification is needed before automation is ready.'],
+    ['READY', {}, 'Automation is ready. The test passed verification and review.'],
+    ['NEEDS_REVIEW', {assertions: {passed: 0, failed: 0}}, 'Some required checks were not completed. Review this case before using its result.'],
+    ['SKIPPED', {status: 'skipped'}, 'This test was skipped.']
+  ]) {
+    const f = await prepared(t);
+    await recorded(f, 'PASS', 'verification-first', patch);
+    if (status === 'READY') await recorded(f, 'PASS', 'verification-second');
+    const before = await generationStatus(f.roots, f.source.id), view = await automationReportView(f.roots, {sourceId: f.source.id});
+    assert.equal(view.cases[0].status, status);
+    const report = await writeAutomationReport(f.roots, {sourceId: f.source.id});
+    assert.equal(report.status, 'WRITTEN');
+    const html = readFileSync(join(f.roots.projectRoot, report.html), 'utf8');
+    assert(html.includes(expected), `${status} needs a plain explanation`);
+    assert.doesNotMatch(html, /scoped green|verification gate|register and independently review|native test/i);
+    assert.equal(JSON.parse(readFileSync(join(f.roots.projectRoot, report.directory, 'result.json'))).cases[0].reason, view.cases[0].reason);
+    assert.deepEqual(await generationStatus(f.roots, f.source.id), before);
+  }
+});
 
 test('pre-candidate blockers produce a complete report without awarding generation progress', async t => {
   const f = fixture(t), input = source(['blocked-case', 'pending-case']), blockerNotes = notes(input);

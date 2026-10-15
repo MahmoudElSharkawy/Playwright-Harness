@@ -105,6 +105,10 @@ Failed and blocked case rows show their reason before opening details. Details r
 next action, expected/actual checks and useful retry outcomes. Automation does not
 display internal verification-scope history, gate counters or report fingerprints. Missing reasons explicitly say
 that investigation is needed.
+Known automation readiness messages and retry instructions use plain wording in the
+report and its companions; original reasons remain in the internal result records.
+Runtime attachments explain recorded timeouts, unavailable dependencies and other
+blockers without displaying their internal classification codes.
 
 ```sh
 npx --no pom-harness execute report <exec> [--input .harness/state/blockers.json]

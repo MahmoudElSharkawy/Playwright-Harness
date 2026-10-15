@@ -52,7 +52,7 @@ test('failed native verification has a bound, readable report without exposing r
   const view = JSON.parse(readFileSync(join(f.roots.projectRoot, report.directory, 'result.json')));
   assert.equal(view.cases[0].status, 'FAIL'); assert(view.cases[0].reason.includes('toBe'));
   const html = readFileSync(join(f.roots.projectRoot, report.html), 'utf8');
-  assert(html.includes('1 native assertion(s) failed')); assert(!html.includes('synthetic-private-expectation'));
+  assert(html.includes('1 check(s) failed.')); assert(!html.includes('native assertion'));  assert(!html.includes('synthetic-private-expectation'));
   assert.deepEqual(await generationStatus(f.roots, f.source.id), before);
 });
 

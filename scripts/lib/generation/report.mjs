@@ -127,7 +127,7 @@ export async function automationReportView(roots, {sourceId, source: sourceInput
 
 /** Companion text uses the same collected case outcomes; it never files product bugs. */
 export function automationCompanions(view) {
-  const describe = row => `## ${md(row.id)} — ${md(outcome(row.status).label)}\n\n${md(row.title)}\n\nStage: ${md(stageLabel(row.stage))}\n\nReason: ${md(caseReason(row.reason) || 'Reason unavailable; investigation is needed.')}\n\n${row.nextAction ? `Next action: ${md(row.nextAction)}\n\n` : ''}`;
+  const describe = row => `## ${md(row.id)} — ${md(outcome(row.status).label)}\n\n${md(row.title)}\n\nStage: ${md(stageLabel(row.stage))}\n\nReason: ${md(caseReason(row.reason) || 'Reason unavailable; investigation is needed.')}\n\n${row.nextAction ? `Next action: ${md(caseReason(row.nextAction))}\n\n` : ''}`;
   const attention = view.cases.filter(row => ['FAIL', 'BLOCKED', 'NEEDS_REVIEW', 'INTEGRITY_FAILURE'].includes(row.status));
   return [
     ['summary.md', `# ${md(view.title)}\n\n${view.cases.map(describe).join('')}`],

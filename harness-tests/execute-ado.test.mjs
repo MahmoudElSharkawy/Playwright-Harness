@@ -39,7 +39,8 @@ test('changed revisions are flagged and excluded unless explicitly included', as
   const f = await fixture(t); f.ado.state.items.get(101).rev = 2; const preview = await f.deliver('publish-results'); assert.deepEqual(preview.omitted, [{caseId: 101, reason: 'source-changed'}]);
   const included = await f.deliver('publish-results', {execute: true, 'include-changed': true}); assert.equal(included.count, 1); assert(f.ado.state.results[0].comment.includes('revision=1/2; SOURCE CHANGED')); assert(f.ado.state.results[0].comment.length <= 400);
   const requests = f.ado.state.requests.length, report = writeExecutionReport(f.execution.roots, f.execution.executionId), html = readFileSync(join(f.execution.projectRoot, report.directory, 'index.html'), 'utf8');
-  assert.match(html, /Last checked before delivery/); assert.match(html, /executed revision 1; current revision 2 — SOURCE CHANGED/); assert.equal(f.ado.state.requests.length, requests);
+  const revisionCheck = JSON.parse(readFileSync(join(f.execution.projectRoot, report.directory, 'manifest.json'))).revisionCheck;
+  assert.match(html, /Cases changed since execution/); assert.match(html, /Case 101 changed after execution\. Review the updated case before using this result\./); assert.equal(revisionCheck.revisions[0].executed, 1); assert.equal(revisionCheck.revisions[0].current, 2); assert.equal(f.ado.state.requests.length, requests);
 });
 
 test('bug paths support real structural roots and nested nodes without accepting another node', async t => {

@@ -12,6 +12,21 @@ import {REPORT_SCRIPT} from '../scripts/lib/reporting/case-assets.mjs';
 const formats = view => [renderJson(view), renderMarkdown(view), renderHtml(view)];
 const evidenceFormats = view => [renderJson(view), renderMarkdown(view)];
 
+test('runtime blocker and review reasons explain the recorded cause without exposing technical fields', t => {
+  for (const [outcome, failureClass, assertionStatus, expected, verdict] of [
+    ['BLOCKED', 'UNAVAILABLE', 'NOT_EVALUATED', 'A required service or dependency was unavailable.', 'BLOCKED'],
+    ['INFRASTRUCTURE_FAILURE', 'TIMEOUT', 'INDETERMINATE', 'The test exceeded its time limit.', 'NEEDS_REVIEW']
+  ]) {
+    const f = fixture(t); Object.assign(f.current, {outcome, failureClass, outputs: [], effect: {certainty: 'not-executed', resourceIds: []}});
+    f.current.assertions = [{id: 'visible', status: assertionStatus, reliable: false, evidenceIds: []}]; f.scenario.outputRefs = [];
+    const view = reportView(f.assess()), html = renderHtml(view);
+    assert.equal(view.status, verdict); assert(html.includes(expected));
+    assert.match(html, /Check.*before running this case again/);
+    assert.doesNotMatch(html, /failureClass|UNAVAILABLE|TIMEOUT|attempt-1/);
+    assert.equal(view.scenarios[0].attempts[0].failureClass, failureClass);
+  }
+});
+
 test('user-facing runtime HTML omits technical records while internal formats retain them', t => {
   const f = fixture(t), view = reportView(f.assess()), html = renderHtml(view);
   assert.match(html, /data-status="PASS"/);
