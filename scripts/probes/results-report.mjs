@@ -9,6 +9,9 @@ import {execFileSync} from 'node:child_process';
 import {packageRoot} from '../lib/consumer-paths.mjs';
 import {renderExecutionHtml} from '../lib/execute/report-html.mjs';
 import {renderAutomationHtml} from '../lib/reporting/case-view.mjs';
+import {automationCompanions} from '../lib/generation/report.mjs';
+import {renderHtml, reportView} from '../lib/reporting/index.mjs';
+import {fixture, resource} from '../../harness-tests/fixtures/execution-core.mjs';
 import {executionReportView} from '../../harness-tests/fixtures/execute-report.mjs';
 import {nativeCliInstallation} from '../lib/browser/native-cli.mjs';
 
@@ -16,12 +19,16 @@ const [directory, mode] = process.argv.slice(2);
 assert(directory && [undefined, '--base'].includes(mode), 'Use <fresh-output-directory> [--base].');
 const output = resolve(directory); mkdirSync(output, {recursive: false});
 const installation = nativeCliInstallation(packageRoot), require = createRequire(installation.executable), {chromium} = require('playwright');
-let renderManual = renderExecutionHtml;
+let renderManual = renderExecutionHtml, renderAutomation = renderAutomationHtml, renderRuntime = renderHtml;
 if (mode === '--base') {
   const git = path => execFileSync('git', ['-c', `safe.directory=${packageRoot.replaceAll('\\', '/')}`, 'show', `origin/main:${path}`], {cwd: packageRoot, encoding: 'utf8', windowsHide: true});
-  const assets = 'data:text/javascript;base64,' + Buffer.from(git('scripts/lib/execute/report-assets.mjs')).toString('base64');
-  const code = git('scripts/lib/execute/report-html.mjs').replace("'../reporting/render.mjs'", JSON.stringify(pathToFileURL(join(packageRoot, 'scripts/lib/reporting/render.mjs')).href)).replace("'./report-assets.mjs'", JSON.stringify(assets));
+  const moduleUrl = path => JSON.stringify(pathToFileURL(join(packageRoot, path)).href);
+  const code = git('scripts/lib/execute/report-html.mjs').replace("'../reporting/render.mjs'", moduleUrl('scripts/lib/reporting/render.mjs')).replace("'./report-assets.mjs'", moduleUrl('scripts/lib/reporting/case-assets.mjs')).replace("'../reporting/case-view.mjs'", moduleUrl('scripts/lib/reporting/case-view.mjs'));
   renderManual = (await import('data:text/javascript;base64,' + Buffer.from(code).toString('base64'))).renderExecutionHtml;
+  const automationCode = git('scripts/lib/reporting/case-view.mjs').replace("'./render.mjs'", moduleUrl('scripts/lib/reporting/render.mjs')).replace("'./case-assets.mjs'", moduleUrl('scripts/lib/reporting/case-assets.mjs'));
+  renderAutomation = (await import('data:text/javascript;base64,' + Buffer.from(automationCode).toString('base64'))).renderAutomationHtml;
+  const runtimeCode = git('scripts/lib/reporting/render.mjs').replace("'./model.mjs'", moduleUrl('scripts/lib/reporting/model.mjs'));
+  renderRuntime = (await import('data:text/javascript;base64,' + Buffer.from(runtimeCode).toString('base64'))).renderHtml;
 }
 const pattern = ['PASS', 'FAIL', 'PASS', 'BLOCKED', 'PASS', 'NOT_RUN', 'PASS', 'NEEDS_REVIEW', 'PASS', 'PASS', 'PASS', 'FAIL', 'PASS', 'PASS', 'PASS', 'BLOCKED', 'PASS', 'NOT_RUN', 'PASS', 'FAIL'];
 const statuses = Array.from({length: 120}, (_, index) => pattern[index % pattern.length]);
@@ -38,18 +45,35 @@ const automation = {id: 'automation-fixture', sourceId: 'synthetic-source', titl
     {id: 'case-4', title: 'Pending source case', status: 'NOT_GENERATED', stage: 'AUTHOR', reason: 'No generated candidate exists.'},
     {id: 'case-5', title: 'Review the candidate', status: 'NEEDS_REVIEW', stage: 'REVIEW', reason: 'Independent approval is missing.'}]};
 automation.cases = statuses.map((status, index) => ({...automation.cases[{PASS: 0, FAIL: 1, BLOCKED: 2, NOT_RUN: 3, NEEDS_REVIEW: 4}[status]], id: `case-${index + 1}`, title: `Case ${index + 1} · ${'A detailed synthetic source title '.repeat(index === 3 ? 8 : 1)}`, status: status === 'NOT_RUN' ? 'NOT_GENERATED' : status}));
-const surfaces = [['execute', renderManual(manual)], ...(mode === '--base' ? [] : [['automate', renderAutomationHtml(automation)]])];
+const surfaces = [['execute', renderManual(manual)], ['automate', renderAutomation(automation)]];
+const cleanups = [], runtimeFixture = fixture({after: action => cleanups.push(action)});
+resource(runtimeFixture, 'persistent');
+const runtimeHtml = renderRuntime(reportView(runtimeFixture.assess()));
+for (const cleanup of cleanups.reverse()) await cleanup();
 const sizes = [[390,844], [768,1024], [1440,900], [2560,1440], [3840,2160]];
 let browser;
-const proof = {version: 2, status: 'INCOMPLETE', themes: ['light', 'dark'], surfaces: [], viewports: sizes, horizontalSweep: {from: 320, to: 3840, step: 160}};
+const proof = {version: 3, status: 'INCOMPLETE', themes: ['light', 'dark'], surfaces: [], viewports: sizes, horizontalSweep: {from: 320, to: 3840, step: 160}};
 try {
   browser = await chromium.launch({headless: true});
+  if (mode === '--base') for (const [name, html] of [...surfaces, ['runtime', runtimeHtml]]) {
+    const folder = join(output, `${name}-before`); mkdirSync(folder); writeFileSync(join(folder, 'index.html'), html);
+    const page = await browser.newPage(); await page.goto(pathToFileURL(join(folder, 'index.html')).href);
+    for (const theme of proof.themes) {await page.emulateMedia({colorScheme: theme}); for (const [width, height] of sizes) {await page.setViewportSize({width, height}); await page.screenshot({path: join(folder, `${theme}-${width}.png`), fullPage: true});}}
+    await page.close();
+  }
   for (const [name, html] of surfaces) {
     const folder = join(output, name); mkdirSync(folder); writeFileSync(join(folder, 'index.html'), html);
+    const companions = name === 'automate' ? automationCompanions(automation) : [['summary.md', '# Synthetic execution summary\n'], ['defects.md', '# Synthetic execution defects\n']];
+    for (const [file, body] of companions) writeFileSync(join(folder, file), body);
     const page = await browser.newPage(), network = [], errors = [];
     await page.route(/^https?:/, route => {network.push(route.request().url()); return route.abort();});
     page.on('pageerror', error => errors.push(error.message));
     await page.goto(pathToFileURL(join(folder, 'index.html')).href);
+    assert.equal(await page.getByRole('link', {name: 'Summary ↗', exact: true}).count(), 1, 'Both skills expose Summary.');
+    assert.equal(await page.getByRole('link', {name: 'Defects ↗', exact: true}).count(), 1, 'Both skills expose Defects.');
+    assert.equal(await page.getByRole('link', {name: /Core report/i}).count(), 0, 'The duplicate report is retired.');
+    assert.equal(await page.getByText('How verification methods are counted', {exact: true}).count(), 0);
+    assert.equal(await page.getByText(/Source exclusions/).count(), 0, 'Empty exclusion panels are omitted.');
     assert.equal(await page.locator('.status-choice input[type="checkbox"]').count(), 5, 'Multiple statuses must be independently selectable.');
     assert.equal(await page.locator('[data-group]').count(), 5);
     assert.equal(await page.locator('[data-group][open]').count(), 0, 'Groups start collapsed.');
@@ -121,6 +145,27 @@ try {
     proof.surfaces.push({workflow: name, cases: 120, groups: 5, multiStatus: 'PASS', pagination: 'PASS', keyboard: 'PASS', offline: 'PASS', geometry: 'PASS', noScriptFallback: 'PASS'});
     await page.close();
   }
+  const folder = join(output, 'runtime'); mkdirSync(folder); writeFileSync(join(folder, 'index.html'), runtimeHtml);
+  const runtime = await browser.newPage(), runtimeNetwork = [], runtimeErrors = [];
+  runtime.on('pageerror', error => runtimeErrors.push(error.message));
+  await runtime.route(/^https?:/, route => {runtimeNetwork.push(route.request().url()); return route.abort();});
+  await runtime.goto(pathToFileURL(join(folder, 'index.html')).href);
+  assert.equal(await runtime.locator('#status-filter input').count(), 1, 'Runtime attachments use the shared case controls.');
+  assert.equal(await runtime.locator('[data-chart-status="PASS"]').count(), 1);
+  assert.equal(await runtime.locator('a[href="summary.md"],a[href="defects.md"]').count(), 0, 'Standalone attachments have no missing companion links.');
+  await runtime.locator('details').evaluateAll(nodes => nodes.forEach(node => {node.open = true;}));
+  for (const label of ['Operation provenance', 'Evidence inventory', 'Resources and lifecycle', 'Selected outputs']) assert(await runtime.getByText(new RegExp(label)).first().isVisible());
+  for (const theme of proof.themes) {
+    await runtime.emulateMedia({colorScheme: theme});
+    for (const [width, height] of sizes) {await runtime.setViewportSize({width, height}); await runtime.screenshot({path: join(folder, `${theme}-${width}.png`), fullPage: true});}
+    for (let width = 320; width <= 3840; width += 160) {
+      await runtime.setViewportSize({width, height: 900});
+      const geometry = await runtime.evaluate(() => ({scroll: document.documentElement.scrollWidth, width: innerWidth, font: getComputedStyle(document.querySelector('h1')).fontSize}));
+      assert(geometry.scroll <= geometry.width, `Runtime/${theme} overflows at ${width}px.`); assert.equal(geometry.font, '20px');
+    }
+  }
+  assert.deepEqual(runtimeErrors, []); assert.deepEqual(runtimeNetwork, []); await runtime.close();
+  proof.surfaces.push({workflow: 'validated-runtime', cases: 1, offline: 'PASS', geometry: 'PASS', evidence: 'PASS', missingCompanions: 0});
   proof.status = 'PASS';
 } finally {
   if (browser) await browser.close();

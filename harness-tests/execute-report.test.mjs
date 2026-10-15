@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFileSync, writeFileSync, unlinkSync} from 'node:fs';
+import {readFileSync, writeFileSync, unlinkSync, existsSync} from 'node:fs';
 import {join} from 'node:path';
 import {createHash} from 'node:crypto';
 import {executionFixture, executeApi} from './fixtures/execute.mjs';
@@ -9,6 +9,27 @@ import {executionOverview, renderExecutionHtml} from '../scripts/lib/execute/rep
 import {executionReportView, reportCondition} from './fixtures/execute-report.mjs';
 import {readExecution} from '../scripts/lib/execute/storage.mjs';
 import {fingerprint} from '../scripts/lib/execution-core/data.mjs';
+
+test('execution report omits obsolete navigation, counting instructions and empty exclusions', () => {
+  const view = executionReportView(['FAIL']);
+  const html = renderExecutionHtml(view);
+  assert.doesNotMatch(html, /Core reports?|How verification methods are counted|Source exclusions/);
+  view.source.excluded = [{id: 901, reason: 'parameters-without-data'}, {id: 902, reason: '<img src=x onerror=alert(1)>'}];
+  const populated = renderExecutionHtml(view);
+  assert.match(populated, /Cases excluded from execution · 2/);
+  assert.match(populated, /901/); assert.match(populated, /Parameter values are missing/);
+  assert.match(populated, /&lt;img src=x/); assert.doesNotMatch(populated, /<img src=x/);
+});
+
+test('execution writes one case report with evidence and no per-attempt report directories', async t => {
+  const f = await executionFixture(t); f.apiStep(); f.freeze(); await executeApi(f);
+  const report = writeExecutionReport(f.roots, f.executionId);
+  assert.equal(report.status, 'WRITTEN');
+  assert.equal(existsSync(join(f.roots.projectRoot, report.directory, 'runs')), false);
+  const html = readFileSync(join(f.roots.projectRoot, report.html), 'utf8');
+  assert.match(html, /Operation provenance/); assert.match(html, /Evidence inventory/);
+  assert.match(html, /<a href="summary.md">Summary/); assert.match(html, /<a href="defects.md">Defects/);
+});
 test('collapsed case rows explain failures and blockers without requiring raw logs', () => {
   const view = executionReportView(['FAIL', 'BLOCKED', 'BLOCKED']);
   view.scenarios[1].reason = 'Required customer fixture is unavailable.';
@@ -147,7 +168,8 @@ test('raw payloads stay complete and escaped; screenshots deduplicate without lo
   assert(html.includes('artifact-1')); assert(html.includes('artifact-2')); assert(html.includes('2 recorded occurrences · 1 distinct message'));
   assert(html.includes('2 occurrences')); assert(html.includes('Screenshot 1')); assert(html.includes('Screenshot 2'));
   const raws = [...html.matchAll(/<pre data-raw-json>([\s\S]*?)<\/pre>/g)].map(match => JSON.parse(match[1].replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&')));
-  assert.deepEqual(raws[0], view.runs[0].conditions[0].provenance); assert.deepEqual(raws[2], view.runs[0].diagnostics);
+  assert.deepEqual(raws[0], view.runs[0].conditions[0].provenance);
+  assert(raws.some(value => JSON.stringify(value) === JSON.stringify(view.runs[0].diagnostics)), 'Complete diagnostic occurrences survive independently of empty disclosures.');
   assert(!html.includes('<time')); assert(!html.includes('Environment <strong>'));
 });
 

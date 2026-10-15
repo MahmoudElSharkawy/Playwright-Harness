@@ -7,8 +7,21 @@ import {fixture, retry, resource, operation, attempt} from './fixtures/execution
 import {digest} from '../scripts/lib/execution-core/data.mjs';
 import {reportView, renderJson, renderMarkdown, renderHtml, writeReports, attachResult} from '../scripts/lib/reporting/index.mjs';
 import {allureInventory, generateAllure} from '../scripts/lib/reporting/allure.mjs';
+import {REPORT_SCRIPT} from '../scripts/lib/reporting/case-assets.mjs';
 
 const formats = view => [renderJson(view), renderMarkdown(view), renderHtml(view)];
+
+test('validated writer and Allure HTML use the approved case-report presentation', async t => {
+  const f = fixture(t), result = f.assess(), html = renderHtml(reportView(result));
+  assert.match(html, /id="status-filter"/); assert.match(html, /Select multiple/);
+  assert.match(html, /data-group-status="PASS"/); assert.match(html, /data-chart-status="PASS"/);
+  assert.match(html, /Operation provenance/); assert.match(html, /Evidence inventory/);
+  assert.match(html, /attempt-1/); assert.match(html, /operationFingerprint|Fingerprint/);
+  assert.doesNotMatch(html, /Core report|PLAYWRIGHT POM HARNESS · VALIDATED EXECUTION/);
+  const attached = [];
+  assert.equal((await attachResult({info: () => ({attach: async (name, body) => attached.push({name, ...body})})}, result)).status, 'ATTACHED');
+  assert.equal(attached[1].body, html);
+});
 for (const [expected, change] of [
   ['PASS', () => {}], ['FAIL', f => {f.current.assertions[0].status = 'FAIL'; f.current.outcome = 'ASSERTION_FAILURE'; f.current.failureClass = 'ASSERTION';}],
   ['NEEDS_REVIEW', f => {f.current.effect.certainty = 'uncertain';}], ...['BLOCKED', 'SKIPPED'].map(status => [status, f => {f.report.evidence = []; Object.assign(f.scenario, {disposition: status.toLowerCase(), reason: 'synthetic-selection', attempts: [], resources: [], outputRefs: []});}])
@@ -94,7 +107,10 @@ test('hostile text remains text in HTML and Markdown, while selected public valu
   const f = fixture(t), payload = '<script>alert(1)</script> [link](javascript:alert(1)) `</td><img src=x onerror=alert(1)> | **injection**';
   f.current.outputs[0].value = payload; const view = reportView(f.assess()), html = renderHtml(view), markdown = renderMarkdown(view);
   assert.equal(JSON.parse(renderJson(view)).scenarios[0].outputs[0].display, JSON.stringify(payload));
-  assert.doesNotMatch(html, /<script|<img|href="javascript:/); assert.match(html, /&lt;script&gt;/); assert.match(html, /default-src 'none'/);
+  assert.doesNotMatch(html, /<script>alert|<img|href="javascript:/); assert.match(html, /&lt;script&gt;/); assert.match(html, /default-src 'none'/);
+  const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)];
+  assert.equal(scripts.length, 1); assert.equal(scripts[0][1], REPORT_SCRIPT);
+  assert.doesNotMatch(html, /script-src[^;]*unsafe-inline/);
   assert.doesNotMatch(markdown, /<script|\[link\]\(javascript|`<\/td>/);
 });
 test('large public output is explicitly clipped without losing outcome or traceability', t => {

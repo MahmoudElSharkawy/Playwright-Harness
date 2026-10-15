@@ -3,7 +3,7 @@ import {join} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {assessRun} from '../execution-core/index.mjs';
 import {fingerprint, digest, requireThat} from '../execution-core/data.mjs';
-import {reportDirectory, writeReports} from '../reporting/index.mjs';
+import {reportDirectory, reportView} from '../reporting/index.mjs';
 import {renderExecutionHtml} from './report-html.mjs';
 import {readExecution, readFrozen, readBounded, ownedFile, listRunRecords} from './storage.mjs';
 import {scopedReadiness} from './refinement.mjs';
@@ -156,9 +156,6 @@ export function writeExecutionReport(roots, executionId, {keepLogin = false, not
   const reportName = executionId.startsWith('execute-') ? executionId : `execute-${executionId}`;
   const view = collectExecution(roots, executionId, {notes}), defects = executionDefects(view), path = `reports/harness/${reportName}-${randomUUID()}`, output = reportDirectory(roots, path), artifacts = [];
   const write = (name, body) => {writeFileSync(join(output, name), body, {flag: 'wx', mode: 0o600, flush: true}); artifacts.push({path: name, sha256: digest(body), bytes: Buffer.byteLength(body)});};
-  for (const row of view.runs.filter(run => run.state === 'ASSESSED')) {
-    const receipt = writeReports(roots, row.result, {directory: `${path}/runs/${row.runId}`}); requireThat(receipt.status === 'WRITTEN', 'A per-run report could not be written.');
-  }
   const summary = `# ${markdownText(view.source.title)}\n\nExecution: ${executionId}\n\n| Scenario | Outcome | Checked / observed / mixed |\n|---|---|---|\n${view.scenarios.map(row => `| ${markdownText(row.id)} | ${row.status ?? (row.state === 'INTEGRITY_FAILURE' ? 'INTEGRITY FAILURE (no verdict)' : row.state)} | ${row.methods.checked} / ${row.methods.observed} / ${row.methods.mixed} |`).join('\n')}\n\nExclusions: ${view.source.excluded.length}. Defect groups: ${defects.length}.\n`;
   write('summary.md', summary); write('defects.json', JSON.stringify(defects, null, 2) + '\n');
   write('defects.md', `# Defect list\n\n${defects.map(item => `- ${item.fingerprint}: ${item.status} — ${markdownText(item.title)} (${item.occurrences.length} occurrence(s))`).join('\n')}\n`);
@@ -183,7 +180,8 @@ export function writeExecutionReport(roots, executionId, {keepLogin = false, not
     }
     screenshots.set(row.runId, images);
   }
-  write('index.html', renderExecutionHtml(view, {defectCount: defects.length, screenshots, assertionEvidence}));
+  const runtimeEvidence = new Map(view.runs.filter(run => run.state === 'ASSESSED').map(row => [row.runId, reportView(row.result)]));
+  write('index.html', renderExecutionHtml(view, {defectCount: defects.length, screenshots, assertionEvidence, runtimeEvidence}));
   const manifest = {version: 1, status: 'WRITTEN', executionId, sourceFingerprint: view.execution.sourceFingerprint, freezeFingerprint: view.execution.freezeFingerprint, revisionCheck: view.revisionCheck, scenarios: view.scenarios, defects: defects.length, artifacts};
   writeFileSync(join(output, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n', {flag: 'wx', mode: 0o600, flush: true});
   if (!keepLogin) deleteLogin(roots, executionId); return {status: 'WRITTEN', executionId, directory: path, html: `${path}/index.html`, scenarios: view.scenarios, defects: defects.length};

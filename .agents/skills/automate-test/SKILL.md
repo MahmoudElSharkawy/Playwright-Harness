@@ -86,6 +86,8 @@ notes cannot overwrite them or create passes. Link the returned `html` in the fi
 response with a brief status/count summary and clear failure/blocker reasons. When
 delivering the work through a PR, also follow the
 [report handoff](../../../docs/reporting.md#skill-report-handoff) to attach its report.
+Share this single case report with its Summary and Defects companions; exploration
+and verification context stay inside its case details.
 Generation commands also return a separate `reporting` delivery result. Report failure
 must remain visible without changing the workflow verdict, repair count or greens.
 

@@ -37,6 +37,8 @@ given by the user remains in force for ordinary permitted application operations
    methods, defects and cleanup dispositions. Include the report in a related PR
    when PR delivery is part of the work, following the
    [report handoff](../../../docs/reporting.md#skill-report-handoff).
+   Share this single case report with its Summary and Defects companions; attempt
+   evidence is already inside its case details.
    If report delivery fails, state that separately from case outcomes. Report output is ignored consumer storage; never generate
    framework, tracker or legacy verification files on this route.
 5. Read [delivery](references/delivery.md) only when ADO delivery is requested.

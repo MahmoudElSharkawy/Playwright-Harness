@@ -13,6 +13,27 @@ const source = (ids = ['source-case']) => ({version: 1, id: 'report-suite', titl
 const put = (root, path, value) => {mkdirSync(dirname(join(root, path)), {recursive: true}); writeFileSync(join(root, path), typeof value === 'string' ? value : JSON.stringify(value));};
 const notes = input => ({version: 1, sourceFingerprint: fingerprint(input), cases: [{scenarioId: input.scenarios[0].id, stage: 'EXPLORE', reason: 'The required fixture is unavailable.', nextAction: 'Provision the fixture before exploration.'}]});
 
+test('automation Summary and Defects navigation points to complete, manifested companions', async t => {
+  const f = fixture(t), input = source(['blocked-case', 'pending-case']), blockerNotes = notes(input);
+  const report = await writeAutomationReport(f.roots, {source: input, notes: blockerNotes});
+  assert.equal(report.status, 'WRITTEN');
+  const html = readFileSync(join(f.roots.projectRoot, report.html), 'utf8');
+  assert.match(html, /<a href="summary.md">Summary/); assert.match(html, /<a href="defects.md">Defects/);
+  const summary = readFileSync(join(f.roots.projectRoot, report.directory, 'summary.md'), 'utf8');
+  const defects = readFileSync(join(f.roots.projectRoot, report.directory, 'defects.md'), 'utf8');
+  for (const body of [summary, defects]) {
+    assert.match(body, /blocked\\-case/); assert.match(body, /BLOCKED/); assert.match(body, /EXPLORE/);
+    assert.match(body, /required fixture is unavailable/); assert.match(body, /Provision the fixture/);
+  }
+  assert.match(summary, /pending\\-case/); assert.doesNotMatch(defects, /pending\\-case/);
+  assert.match(defects, /not filed product bugs/);
+  for (const name of ['summary.md', 'defects.md']) {
+    const artifact = report.artifacts.find(file => file.path === name); assert(artifact);
+    const bytes = readFileSync(join(f.roots.projectRoot, report.directory, name));
+    assert.equal(bytes.length, artifact.bytes); assert.equal(digest(bytes), artifact.sha256);
+  }
+});
+
 async function prepared(t) {
   const f = fixture(t), input = source();
   put(f.roots.projectRoot, 'playwright.config.mjs', 'export default {};');
