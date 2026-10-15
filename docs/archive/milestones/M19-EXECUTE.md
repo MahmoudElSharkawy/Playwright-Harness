@@ -161,7 +161,7 @@ across assessed attempts. They are separate from failed-case counts.
 The report is self-contained and works from `file://`. Search, case-outcome
 filters, sorting and screenshot previews use a static inline script authorized
 by its generated SHA-256 CSP hash. Without JavaScript, native disclosure controls
-still expose results, assertion evidence, original JSON, cleanup and diagnostics.
+still expose results, expected/actual checks, reasons, next actions and screenshots.
 Identical embedded images share one preview while retaining their run/evidence
 references. Companion Summary and Defects paths remain relative.
 

@@ -202,8 +202,9 @@ case summaries; attempts/history are separate, and expectation rollups use sourc
 expectations from the selected assessed run. Defect groups span assessed attempts
 independently of failed-case counts. CSP/escaping protects HTML; filters/search/sorting
 and deduplicated previews work from file://, with disclosures without JavaScript.
-Attempt provenance, resource lifecycle, selected public outputs and the evidence
-inventory stay within case details. Empty exclusions are hidden; populated
+Case details show expected/actual results, reasons, next actions, plain retry outcomes
+and screenshots. Raw JSON, internal IDs, hashes and debugging inventories stay in
+execution storage, outside the user-facing HTML. Empty exclusions are hidden; populated
 exclusions identify cases and their reasons. Companion links stay relative.
 See [reporting](reporting.md).
 

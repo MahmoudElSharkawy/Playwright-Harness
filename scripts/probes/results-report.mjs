@@ -52,7 +52,7 @@ const runtimeHtml = renderRuntime(reportView(runtimeFixture.assess()));
 for (const cleanup of cleanups.reverse()) await cleanup();
 const sizes = [[390,844], [768,1024], [1440,900], [2560,1440], [3840,2160]];
 let browser;
-const proof = {version: 3, status: 'INCOMPLETE', themes: ['light', 'dark'], surfaces: [], viewports: sizes, horizontalSweep: {from: 320, to: 3840, step: 160}};
+const proof = {version: 4, status: 'INCOMPLETE', themes: ['light', 'dark'], surfaces: [], viewports: sizes, horizontalSweep: {from: 320, to: 3840, step: 160}};
 try {
   browser = await chromium.launch({headless: true});
   if (mode === '--base') for (const [name, html] of [...surfaces, ['runtime', runtimeHtml]]) {
@@ -71,8 +71,15 @@ try {
     await page.goto(pathToFileURL(join(folder, 'index.html')).href);
     assert.equal(await page.getByRole('link', {name: 'Summary ↗', exact: true}).count(), 1, 'Both skills expose Summary.');
     assert.equal(await page.getByRole('link', {name: 'Defects ↗', exact: true}).count(), 1, 'Both skills expose Defects.');
-    assert.equal(await page.getByRole('link', {name: /Core report/i}).count(), 0, 'The duplicate report is retired.');
+    const userText = await page.locator('body').innerText();
+    assert(!/Raw data|Evidence identifiers|Additional execution evidence|Operation provenance|Evidence inventory|SHA256|fingerprint|Scoped verification history|Native assertions|Verification rollup|repair rounds|scoped greens/i.test(userText), 'User reports must not display debugging metadata.');
+    const originalDetails = await page.locator('details').evaluateAll(nodes => nodes.map(node => node.open));
+    await page.locator('details').evaluateAll(nodes => nodes.forEach(node => {node.open = true;}));
+    const expandedText = await page.locator('body').innerText();
+    assert(!/Raw data|Evidence identifiers|Additional execution evidence|Operation provenance|Evidence inventory|SHA256|fingerprint|Scoped verification history|Native assertions|Verification rollup|repair rounds|scoped greens/i.test(expandedText), 'Expanded details must also be user-facing.');
+    await page.locator('details').evaluateAll((nodes, states) => nodes.forEach((node, index) => {node.open = states[index];}), originalDetails);
     assert.equal(await page.getByText('How verification methods are counted', {exact: true}).count(), 0);
+    assert.equal(await page.getByRole('link', {name: /Core report/i}).count(), 0, 'The duplicate report is retired.');
     assert.equal(await page.getByText(/Source exclusions/).count(), 0, 'Empty exclusion panels are omitted.');
     assert.equal(await page.locator('.status-choice input[type="checkbox"]').count(), 5, 'Multiple statuses must be independently selectable.');
     assert.equal(await page.locator('[data-group]').count(), 5);
@@ -154,7 +161,8 @@ try {
   assert.equal(await runtime.locator('[data-chart-status="PASS"]').count(), 1);
   assert.equal(await runtime.locator('a[href="summary.md"],a[href="defects.md"]').count(), 0, 'Standalone attachments have no missing companion links.');
   await runtime.locator('details').evaluateAll(nodes => nodes.forEach(node => {node.open = true;}));
-  for (const label of ['Operation provenance', 'Evidence inventory', 'Resources and lifecycle', 'Selected outputs']) assert(await runtime.getByText(new RegExp(label)).first().isVisible());
+  assert.equal(await runtime.getByText(/Operation provenance|Evidence inventory|Resources and lifecycle|Selected outputs|fingerprint|artifact-1|attempt-1/).count(), 0);
+  assert(await runtime.getByRole('heading', {name: 'Case details'}).isVisible());
   for (const theme of proof.themes) {
     await runtime.emulateMedia({colorScheme: theme});
     for (const [width, height] of sizes) {await runtime.setViewportSize({width, height}); await runtime.screenshot({path: join(folder, `${theme}-${width}.png`), fullPage: true});}
@@ -165,7 +173,7 @@ try {
     }
   }
   assert.deepEqual(runtimeErrors, []); assert.deepEqual(runtimeNetwork, []); await runtime.close();
-  proof.surfaces.push({workflow: 'validated-runtime', cases: 1, offline: 'PASS', geometry: 'PASS', evidence: 'PASS', missingCompanions: 0});
+  proof.surfaces.push({workflow: 'validated-runtime', cases: 1, offline: 'PASS', geometry: 'PASS', userContent: 'PASS', missingCompanions: 0});
   proof.status = 'PASS';
 } finally {
   if (browser) await browser.close();

@@ -52,21 +52,24 @@ reports. Existing outputs/source paths/escaping links fail. Nothing is overwritt
 | index.html | Shared case layout with chart, status groups and optional offline filters; native disclosures work without JavaScript |
 | manifest.json | Report delivery/integrity receipt |
 
-Reports inventory original evidence, not raw bodies; retain the run for inspection.
-Source/version/fingerprint and evidence associations remain visible. Public outputs
-are JSON-encoded/clipped above 4,096 characters. Sensitive values are redacted;
+Internal JSON/Markdown adapters retain the evidence inventory, source/version/hash
+associations and selected public outputs for diagnosis; keep the original run for
+inspection. These details are not presented in user-facing HTML. Public outputs
+in those internal records are JSON-encoded/clipped above 4,096 characters. Sensitive values are redacted;
 protected refs, inputs and definitions omitted. Correct classification remains the
 producer's responsibility. HTML/Markdown escape text and HTML uses CSP.
 
 Delivery is WRITTEN/FAILED separately from verdict. render-results exits 0 for a
 written FAIL report, 2 for invalid input, 1 for write failure. Gate tests on assessed
-outcomes, not render success. Cleanup problems, reliable failures, intentional retention
-and recovered stability/history stay visible.
+outcomes, not render success. The internal formats retain lifecycle and stability
+facts; HTML shows relevant cleanup problems as a plain next-action notice.
 
 Manual `execute report <exec>` reassesses every snapshot/evidence file and writes
-one case report, Summary, grouped Defects and final manifest. Attempt evidence,
-operation provenance, resource lifecycle, selected public outputs and the evidence
-inventory are inside the case details; no separate per-attempt HTML is generated. Counts use
+one case report, Summary, grouped Defects and final manifest. Case details show
+expected/actual results, reasons, next actions, plain attempt numbers and screenshots.
+Raw JSON, diagnostic inventories, operation provenance, lifecycle counters, internal
+run/attempt/evidence IDs and hashes are excluded from HTML, including expanded details.
+They remain in authoritative execution storage and internal adapters. No separate per-attempt HTML is generated. Counts use
 case summaries; history/attempts remain separate. Rollups count source expectations
 in the selected assessed run. Defects span attempts independently of case counts.
 CSP permits the generated hashed script for filters/search/sorting/previews, while
@@ -97,7 +100,8 @@ and 10 cases per group page. Filtering opens matching groups; expand/collapse co
 and keyboard navigation support browsing. Without JavaScript, native disclosures
 still expose every case. Light and dark themes use the plan tracker's palette.
 Failed and blocked case rows show their reason before opening details. Details retain the stage, known
-next action and available attempt/assertion history. Missing reasons explicitly say
+next action, expected/actual checks and useful retry outcomes. Automation does not
+display internal verification-scope history, gate counters or report fingerprints. Missing reasons explicitly say
 that investigation is needed.
 
 ```sh
@@ -161,8 +165,9 @@ The synthetic browser proof is `npm run probe:results-report -- <fresh-directory
 It checks both skill reports with 120 synthetic cases each, combined status/search
 filtering, pagination/reset, deep links, keyboard and no-script access, no external
 requests, five viewport sizes in both themes and horizontal reflow from 320 to 3840 pixels.
-It also checks validated-runtime attachments with expanded provenance and evidence,
-the shared case controls and no missing companion links. PR
+It also checks validated-runtime attachments, the shared case controls and no missing
+companion links. All reports are checked with disclosures open to reject technical
+metadata hidden inside details. PR
 validation runs the same proof against the installed archive after browser setup.
 
 ## Skill report handoff

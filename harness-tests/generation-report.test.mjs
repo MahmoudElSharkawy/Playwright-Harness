@@ -22,7 +22,7 @@ test('automation Summary and Defects navigation points to complete, manifested c
   const summary = readFileSync(join(f.roots.projectRoot, report.directory, 'summary.md'), 'utf8');
   const defects = readFileSync(join(f.roots.projectRoot, report.directory, 'defects.md'), 'utf8');
   for (const body of [summary, defects]) {
-    assert.match(body, /blocked\\-case/); assert.match(body, /BLOCKED/); assert.match(body, /EXPLORE/);
+    assert.match(body, /blocked\\-case/); assert.match(body, /Blocked/); assert.match(body, /Exploration/);
     assert.match(body, /required fixture is unavailable/); assert.match(body, /Provision the fixture/);
   }
   assert.match(summary, /pending\\-case/); assert.doesNotMatch(defects, /pending\\-case/);
@@ -68,7 +68,7 @@ test('pre-candidate blockers produce a complete report without awarding generati
   for (const artifact of manifest.artifacts) assert.equal(digest(readFileSync(join(f.roots.projectRoot, report.directory, artifact.path))), artifact.sha256);
   const html = readFileSync(join(f.roots.projectRoot, report.html), 'utf8');
   assert(html.includes('data-chart-status="BLOCKED" data-count="1"')); assert(html.includes('Provision the fixture before exploration.'));
-  assert(html.includes('id="status-filter"')); assert(html.includes('Complete source · full report'));
+  assert(html.includes('id="status-filter"')); assert(html.includes('All test cases'));
 });
 
 test('incomplete source drafts remain reportable while generation preparation stays blocked', async t => {
@@ -127,7 +127,8 @@ test('case history excludes verification scopes before its source membership and
   assert.equal(view.cases[0].history[0].reason, 'A case assertion failed.');
   const report = await writeAutomationReport(f.roots, {sourceId: f.source.id});
   const html = readFileSync(join(f.roots.projectRoot, report.html), 'utf8');
-  assert(html.includes('Scoped verification history')); assert(html.includes('not individual case verdicts'));
+  assert(!html.includes('Scoped verification history')); assert(!html.includes('verify-before-addition'));
+  assert(!html.includes('verify-report')); assert(html.includes('1 check(s) failed.'));
 });
 
 test('changed or unbound native receipts cannot supply a case verdict', async t => {
