@@ -5,6 +5,7 @@ import {validateHandoff} from './handoff.mjs';
 import {transaction, snapshot, relativeFile, reviewArtifact} from './storage.mjs';
 import {reportingContext} from './reporting-context.mjs';
 export {createGenerationHandoff, sourceExpectations} from './handoff.mjs';
+export {createReportingAssessment} from './reporting-context.mjs';
 const CASE_GATE = 'case-assertions';
 
 function mappingThat(condition, code) {
@@ -44,12 +45,17 @@ export async function beginGeneration(roots, handoffInput, author, reporting) {
   });
 }
 
-/** Persist report-only scope/notes without changing executable source, reviews or runs. */
+/** Persist report-only scope/observations/notes without changing executable gates. */
 export async function recordGenerationReporting(roots, sourceId, input) {
   const checked = data(input, 2 * 1024 * 1024, {maxNodes: 200000});
   return transaction(roots, sourceId, (state, save) => {
     requireThat(state, 'Begin from a validated handoff.');
-    const reporting = reportingContext(state.handoff.source, {...checked, ...(checked.notes === undefined && state.reporting?.notes ? {notes: state.reporting.notes} : {})});
+    const context = {...checked};
+    if (checked.observed !== undefined) context.observed = input.observed;
+    else if (state.reporting?.observed) context.observed = state.reporting.observed;
+    if (checked.notes === undefined && state.reporting?.notes) context.notes = {...state.reporting.notes,
+      cases: state.reporting.notes.cases.filter(note => ![...(context.observed?.source.scenarios ?? []), ...(state.reporting.observed?.source.scenarios ?? [])].some(row => row.id === note.scenarioId))};
+    const reporting = reportingContext(state.handoff.source, context, state.reporting);
     requireThat(!state.reporting || state.reporting.sourceFingerprint === reporting.sourceFingerprint, 'Requested source differs from recorded reporting scope.');
     if (fingerprint(state.reporting ?? null) !== fingerprint(reporting)) {state.reporting = reporting; save(state);}
     return frozen(reporting);
@@ -115,9 +121,12 @@ export async function reviseGeneration(roots, sourceId, handoffInput, input, rep
     const previousHandoff = state.handoff; state.handoff = handoff;
     if (state.reporting || reporting !== undefined) {
       const previous = state.reporting;
-      const retainedNotes = previous?.notes && {...previous.notes, cases: previous.notes.cases.filter(note => !handoff.source.scenarios.some(row => row.id === note.scenarioId))};
       const context = reporting === undefined ? {source: previous.source} : data(reporting, 2 * 1024 * 1024, {maxNodes: 200000});
-      const next = reportingContext(handoff.source, {...context, ...(context.notes === undefined && retainedNotes ? {notes: retainedNotes} : {})});
+      if (reporting?.observed !== undefined) context.observed = reporting.observed;
+      else if (previous?.observed) context.observed = previous.observed;
+      if (context.notes === undefined && previous?.notes) context.notes = {...previous.notes,
+        cases: previous.notes.cases.filter(note => ![...handoff.source.scenarios, ...(context.observed?.source.scenarios ?? []), ...(previous.observed?.source.scenarios ?? [])].some(row => row.id === note.scenarioId))};
+      const next = reportingContext(handoff.source, context, previous);
       requireThat(!previous || (previous.source.id === next.source.id && fingerprint(previous.source.scenarios.map(row => row.id)) === fingerprint(next.source.scenarios.map(row => row.id))), 'A revision must retain the originally requested case inventory.');
       state.reporting = next;
     }

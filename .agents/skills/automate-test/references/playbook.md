@@ -226,13 +226,18 @@ frozen generation handoff described in [automation workflow](../../../../docs/PI
 earlier runs), and the existing framework code as the living style reference.
 
 Before selecting a supported subset, retain the complete original neutral source.
-Record each excluded case's blocker stage, reason and next action in notes bound to
-that source's fingerprint. Supply the original source and notes through preparation's
-`reporting: { "source": "<full-source.json>", "notes": "<blockers.json>" }` paths;
+Record each excluded case's known status and explanation. Capture pre-execution
+blockers in notes bound to that source's fingerprint and assessed exploration
+outcomes through a report-only observation descriptor. Supply preparation's optional
+`reporting: { "source": "<full-source.json>", "notes": "<blockers.json>", "observed": "<observed-scope.json>" }` paths;
 generation still accepts only the unchanged, supported subset with assessed evidence.
 For existing history, associate it explicitly with `generate report --id <source-id>
---scope <full-source.json> --input <blockers.json>`. Later automatic reports and
-`report --id` retain that context. See [case results and blocker notes](../../../../docs/reporting.md#case-results-and-blocker-notes).
+--scope <full-source.json> --input <blockers.json>`, adding `--observed <observed-scope.json>`
+for reassessed outcomes. The descriptor has `source`, `executions` and case-level
+`bindings` (`{sourceScenarioId, runId, scenarioId}` once per observed source case).
+It retains all execution statuses, including skipped and unresolved cases, without
+weakening generation preparation. Later automatic reports and `report --id` retain
+that context. See [case results and blocker notes](../../../../docs/reporting.md#case-results-and-blocker-notes).
 
 **Route through the skills — never from memory** (CLAUDE.md's common-flow order):
 
@@ -482,7 +487,10 @@ silently skipped:
 **Report to the user** (also the PR description's source):
 - Render and share the standard QA report with its Summary and Defects companions.
   It must include every originally requested case exactly once, including cases
-  blocked before generation. State separately whether the selected automation
+  blocked, failed, skipped, pending, not run or awaiting review. Preserve recorded
+  exploration outcomes separately from automation results; exploration alone cannot
+  grant an automation pass or READY. Historical results remain historical after
+  subset changes. State separately whether the selected automation
   subset is READY and whether the complete requested scope is finished. Without a
   recorded original inventory, report completeness as unknown. A separate manually
   assembled full-scope summary is unnecessary.

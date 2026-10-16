@@ -249,9 +249,10 @@ export const REPORT_SCRIPT = String.raw`
   const legend = Array.from(document.querySelectorAll('[data-filter-status]'));
   const choices = Array.from(document.querySelectorAll('.status-choice input'));
   const selected = new Set();
-  const attention = new Set(choices.map(input => input.value).filter(value => ['FAIL', 'BLOCKED', 'NEEDS_REVIEW', 'INTEGRITY_FAILURE'].includes(value)));
+  let attentionOnly = false;
+  const needsAttention = row => row.dataset.needsAttention === 'true' || ['FAIL', 'BLOCKED', 'NEEDS_REVIEW', 'INTEGRITY_FAILURE'].includes(row.dataset.status);
   const groups = Array.from(document.querySelectorAll('[data-group]')).map(node => ({node, rows: Array.from(node.querySelectorAll('[data-case]')), page: 0, matches: []}));
-  const matches = row => row.dataset.search.toLowerCase().includes(search.value.trim().toLowerCase()) && (!selected.size || selected.has(row.dataset.status));
+  const matches = row => row.dataset.search.toLowerCase().includes(search.value.trim().toLowerCase()) && (!selected.size || selected.has(row.dataset.status)) && (!attentionOnly || needsAttention(row));
   function update(filtersChanged = false) {
     if (!search) return;
     const query = search.value.trim().toLowerCase();
@@ -267,7 +268,7 @@ export const REPORT_SCRIPT = String.raw`
       const visible = new Set(group.matches.slice(group.page * 10, group.page * 10 + 10));
       for (const row of ordered) {row.hidden = !visible.has(row); group.node.querySelector('.group-rows').append(row);}
       group.node.hidden = group.matches.length === 0;
-      if (filtersChanged) group.node.open = !group.node.hidden && (!!query || !!selected.size);
+      if (filtersChanged) group.node.open = !group.node.hidden && (!!query || !!selected.size || attentionOnly);
       group.node.querySelector('.group-count').textContent = group.matches.length === group.rows.length ? group.rows.length + ' cases' : group.matches.length + ' of ' + group.rows.length + ' matching';
       group.node.querySelector('.pager').hidden = pages <= 1;
       group.node.querySelector('.page-label').textContent = 'Cases ' + (group.page * 10 + 1) + '–' + Math.min(group.page * 10 + 10, group.matches.length) + ' of ' + group.matches.length;
@@ -278,25 +279,24 @@ export const REPORT_SCRIPT = String.raw`
     document.getElementById('no-results').hidden = count !== 0;
     const active = document.getElementById('active-filters');
     const labels = choices.filter(input => selected.has(input.value)).map(input => input.nextElementSibling.textContent);
-    active.hidden = !query && !selected.size;
-    active.textContent = [query ? 'Search: ' + search.value.trim() : '', labels.length ? 'Statuses: ' + labels.join(' + ') : ''].filter(Boolean).join(' · ');
-    clear.disabled = !query && !selected.size;
+    active.hidden = !query && !selected.size && !attentionOnly;
+    active.textContent = [query ? 'Search: ' + search.value.trim() : '', labels.length ? 'Statuses: ' + labels.join(' + ') : '', attentionOnly ? 'Needs attention' : ''].filter(Boolean).join(' · ');
+    clear.disabled = !query && !selected.size && !attentionOnly;
     for (const input of choices) {input.checked = selected.has(input.value); input.closest('label').classList.toggle('selected', input.checked);}
-    document.getElementById('all-statuses').setAttribute('aria-pressed', String(!selected.size || selected.size === choices.length));
+    document.getElementById('all-statuses').setAttribute('aria-pressed', String(!attentionOnly && (!selected.size || selected.size === choices.length)));
     for (const button of legend) button.setAttribute('aria-pressed', String(selected.has(button.dataset.filterStatus)));
-    document.querySelector('[data-attention]')?.setAttribute('aria-pressed', String(attention.size > 0 && [...attention].every(value => selected.has(value))));
+    document.querySelector('[data-attention]')?.setAttribute('aria-pressed', String(attentionOnly));
   }
-  function reset() { if (search) { search.value = ''; selected.clear(); update(true); } }
+  function reset() { if (search) { search.value = ''; selected.clear(); attentionOnly = false; update(true); } }
   if (search) {
     document.getElementById('result-controls').hidden = false;
     search.addEventListener('input', () => update(true));
-    for (const input of choices) input.addEventListener('change', () => {if (input.checked) selected.add(input.value); else selected.delete(input.value); update(true);});
+    for (const input of choices) input.addEventListener('change', () => {attentionOnly = false; if (input.checked) selected.add(input.value); else selected.delete(input.value); update(true);});
     sort.addEventListener('change', () => {for (const group of groups) group.page = 0; update();});
     clear.addEventListener('click', reset);
-    document.getElementById('all-statuses').addEventListener('click', () => {selected.clear(); update(true);});
+    document.getElementById('all-statuses').addEventListener('click', () => {selected.clear(); attentionOnly = false; update(true);});
     document.querySelector('[data-attention]')?.addEventListener('click', () => {
-      const remove = [...attention].every(value => selected.has(value));
-      for (const value of attention) {if (remove) selected.delete(value); else selected.add(value);}
+      attentionOnly = !attentionOnly; selected.clear();
       update(true);
     });
     document.getElementById('expand-groups').addEventListener('click', () => {for (const group of groups) if (!group.node.hidden) group.node.open = true;});
@@ -306,7 +306,7 @@ export const REPORT_SCRIPT = String.raw`
     });
     for (const button of legend) {
       button.hidden = false;
-      button.addEventListener('click', () => {const value = button.dataset.filterStatus; if (selected.has(value)) selected.delete(value); else selected.add(value); update(true);});
+      button.addEventListener('click', () => {attentionOnly = false; const value = button.dataset.filterStatus; if (selected.has(value)) selected.delete(value); else selected.add(value); update(true);});
     }
     update();
   }
