@@ -1,5 +1,11 @@
 # Third-party notices and references
 
+The dependency security refresh uses Handlebars 4.7.10 (MIT) through the example's
+Allure tools and Tedious 20.3.8 (MIT) in the runtime and example graphs. Both
+distributions retain their upstream license notices. Tedious no longer depends
+on `sprintf-js`; its record is removed from both inventories. No dependency
+implementation is copied or relicensed by this update.
+
 Issue #57 consumes [mysql2](https://github.com/sidorares/node-mysql2) 3.24.5 (MIT)
 as a separately installed runtime dependency. Its eight added packages are mysql2,
 aws-ssl-profiles, generate-function, is-property, long, lru.min, named-placeholders
@@ -23,8 +29,8 @@ the existing identities and notices are unchanged. npm may duplicate or
 relocate dependency nodes during installation; the installed validation checks
 their exact identities, registry origins, integrity and on-disk package metadata.
 
-CI references the official `actions/checkout`, `actions/setup-node` and
-`actions/upload-artifact` repositories at immutable commits. Their implementations
+CI references the official `actions/checkout`, `actions/setup-node`,
+`actions/upload-artifact` and `actions/download-artifact` repositories at immutable commits. Their implementations
 are downloaded by GitHub Actions, not copied or relicensed here. The local Linux
 acceptance client separately installs Claude Code 2.1.285 and Codex CLI 0.159.2.
 They are external host tools, not dependencies included in the harness archive;
