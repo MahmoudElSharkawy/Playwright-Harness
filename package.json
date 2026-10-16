@@ -99,7 +99,7 @@
     "open": "11.0.4",
     "pg": "8.23.1",
     "readable-stream": "4.7.0",
-    "tedious": "20.0.0",
+    "tedious": "20.3.8",
     "wsl-utils": "1.0.1"
   }
 }

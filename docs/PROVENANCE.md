@@ -123,7 +123,7 @@ No upstream implementation was copied into M1. Exact research revisions are reco
 in [the provenance inventory](../scripts/provenance.json). Architectural ideas and links
 do not change the licenses of dependencies or any future copied source.
 
-Dependency versions are resolved in the example lockfile and all 280 dependency
+Dependency versions are resolved in the example lockfile and all 279 dependency
 records are listed in [the dependency inventory](../scripts/dependency-licenses.json).
 The original M1 audit inspected 122 Windows packages and recorded declarations for
 28 uninstalled optional platform packages. The Allure 3 follow-up installed and
@@ -135,6 +135,13 @@ reviewed upstream metadata, not broad privacy-scanner exemptions.
 No dependency implementation is bundled in
 the source package. Preserve upstream LICENSE and NOTICE files when redistributing
 dependencies; that would require a distribution-specific audit.
+
+The dependency security refresh records Handlebars 4.7.10 and Tedious 20.3.8,
+both MIT, from their published npm distributions. The root and example graphs
+remove `sprintf-js`; the runtime inventory contains 99 records and the example
+inventory contains 279. All surviving unrelated package versions remain unchanged.
+The pinned artifact actions use the official upload 7.0.2 and download 8.0.2
+releases, both declaring Node 24. No action implementation is copied or bundled.
 
 Before publication: recheck any new third-party source, retain required notices,
 inspect the archive, resolve outstanding security remediation, and obtain explicit

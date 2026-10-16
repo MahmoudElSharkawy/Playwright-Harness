@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Update the locked Handlebars dependency to 4.7.10 and Tedious to 20.3.8,
+  removing the vulnerable `sprintf-js` dependency. Keep the dependency license
+  inventories aligned with the reviewed versions.
+- Pin the artifact upload and download actions to native Node 24 releases.
+  Verify retained summary bytes through a real Windows/Linux upload/download
+  round trip while preserving existing artifact contents and release checks.
 - Preserve unreadable discovery links with an actionable diagnostic instead of
   exposing a bare filesystem error or classifying an unreadable link as a file.
   Document the Windows junction readability requirement, recovery steps and
