@@ -1,5 +1,19 @@
 # Changelog
 
+## 3.6.2 — Reliable shared setup inputs
+
+### Upgrade actions
+
+- Re-run setup from the 3.6.2 archive in each project, then reload Claude Code skills or restart Codex to discover the updated setup guidance. Existing customized code and configuration remain subject to review.
+- Review the [selective Git ignore policy](docs/getting-started.md#selective-git-ignore-policy). Commit the release archive and shared `.harness/` inputs; ignore only local runs, state, candidate knowledge and installation receipts. Replace blanket `.harness/` or `.harness/vendor/` ignore rules when present; setup preserves team rules and does not untrack existing files.
+- Set up [ChaosEngine Core](https://github.com/ShaftHQ/SHAFT_ENGINE/tree/main/chaos-engine#install) in the same project if you have not already. Setup now includes this reminder in its next steps.
+
+### Changes
+
+- Detect ignored vendored archives even when they are already tracked. Explain how to correct ignored parent directories, preserve team rules and avoid duplicate archive exceptions when setup is repeated.
+- Document which `.harness/` inputs teammates and CI need, with secret values kept in the ignored `.env`. Verify shared inputs and archive bytes survive fresh CRLF clones while local output remains untracked.
+- Add the ChaosEngine Core setup reminder to installation next steps and onboarding guidance.
+
 ## 3.6.1 — Clear execution and automation reports
 
 ### Upgrade actions
