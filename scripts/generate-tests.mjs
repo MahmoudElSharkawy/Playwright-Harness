@@ -5,7 +5,7 @@ import {projectArgument} from './lib/consumer-paths.mjs';
 import {readJson} from './lib/project-config.mjs';
 import {createRun} from './lib/execution-core/index.mjs';
 import {requireThat, keys} from './lib/execution-core/data.mjs';
-import {createGenerationHandoff, beginGeneration, registerCandidate, reviseGeneration, recordGenerationReview, generationStatus} from './lib/generation/index.mjs';
+import {createGenerationHandoff, beginGeneration, registerCandidate, reviseGeneration, recordGenerationReview, generationStatus, recordGenerationReporting} from './lib/generation/index.mjs';
 import {verifyGeneration} from './lib/generation/verify.mjs';
 import {relativeFile} from './lib/generation/storage.mjs';
 import {writeAutomationReport} from './lib/generation/report.mjs';
@@ -19,7 +19,7 @@ try {
   const options = {};
   for (let i = 0; i < rest.length;) {
     if (rest[i] === '--allure') {requireThat(command === 'verify' && !options['--allure'], 'Allure capture is available once on verify.'); options['--allure'] = true; i++; continue;}
-    requireThat((command === 'report' ? ['--input', '--id', '--source'] : ['--input', '--id']).includes(rest[i]) && rest[i + 1] && !options[rest[i]], 'Use the command-specific input, source and/or id options once.'); options[rest[i]] = rest[i + 1];
+    requireThat((command === 'report' ? ['--input', '--id', '--source', '--scope'] : ['--input', '--id']).includes(rest[i]) && rest[i + 1] && !options[rest[i]], 'Use the command-specific input, source and/or id options once.'); options[rest[i]] = rest[i + 1];
     i += 2;
   }
   let result;
@@ -27,11 +27,20 @@ try {
   if (command === 'report') {
     requireThat(sourceId || options['--source'], 'Report requires --id or --source.');
     if (options['--source']) source = readJson(relativeFile(roots, options['--source']));
+    if (options['--scope']) {
+      requireThat(sourceId, 'Associating requested scope requires the generation --id.');
+      await recordGenerationReporting(roots, sourceId, {source: readJson(relativeFile(roots, options['--scope'])), ...(options['--input'] ? {notes: readJson(relativeFile(roots, options['--input']))} : {})});
+    }
     result = await writeAutomationReport(roots, {sourceId, source, ...(options['--input'] ? {notes: readJson(relativeFile(roots, options['--input']))} : {})});
   } else if (['prepare', 'revise'].includes(command)) {
     requireThat(options['--input'] && (command === 'revise' ? options['--id'] : !options['--id']), 'Prepare requires --input; revise also requires the existing --id.');
-    const input = readJson(relativeFile(roots, options['--input'])); keys(input, ['source', 'executions', 'bindings', command === 'prepare' ? 'author' : 'candidate'], 'generation preparation');
+    const input = readJson(relativeFile(roots, options['--input'])); keys(input, ['source', 'executions', 'bindings', 'reporting', command === 'prepare' ? 'author' : 'candidate'], 'generation preparation');
     source = readJson(relativeFile(roots, input.source)); sourceId ??= source.id;
+    let reporting;
+    if (input.reporting !== undefined) {
+      keys(input.reporting, ['source', 'notes'], 'generation reporting paths');
+      reporting = {source: readJson(relativeFile(roots, input.reporting.source)), ...(input.reporting.notes === undefined ? {} : {notes: readJson(relativeFile(roots, input.reporting.notes))})};
+    }
     const executions = input.executions.map(item => {
       keys(item, ['snapshot', 'runRoot'], 'observed execution');
       const saved = readJson(relativeFile(roots, item.snapshot));
@@ -42,9 +51,9 @@ try {
     });
     const handoff = createGenerationHandoff(source, executions, input.bindings);
     if (command === 'prepare') {
-      await beginGeneration(roots, handoff, input.author); result = {status: 'PREPARED', sourceId: source.id, expectations: handoff.expectations.length};
+      await beginGeneration(roots, handoff, input.author, reporting); result = {status: 'PREPARED', sourceId: source.id, expectations: handoff.expectations.length};
     } else {
-      const candidate = await reviseGeneration(roots, options['--id'], handoff, input.candidate);
+      const candidate = await reviseGeneration(roots, options['--id'], handoff, input.candidate, reporting);
       result = {status: 'NEEDS_REVIEW', sourceId: source.id, revision: candidate.revision, sourceFingerprint: candidate.sourceFingerprint};
     }
   } else {

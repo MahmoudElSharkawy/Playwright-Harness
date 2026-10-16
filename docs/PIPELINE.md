@@ -183,14 +183,19 @@ Bind every source expectation to an observed result and open the generation hist
 - **Inputs:** a preparation JSON file containing `source` (the neutral source file),
   `author`, `executions` (each a consumer-relative `snapshot` and `runRoot`) and
   `bindings` (`{key, runId, scenarioId, expectationId}` for every key that
-  `sourceExpectations(source)` returns).
+  `sourceExpectations(source)` returns). When generating a supported subset, also
+  include `reporting: { "source": "<original-source.json>", "notes": "<blockers.json>" }`
+  with consumer-relative paths; `notes` is optional. Preserve the original source
+  before selecting the subset and bind blocker notes to its fingerprint.
 - **Outputs:** append-only generation history under
   `.harness/state/generation/<source-id>/`. The command prints `PREPARED` with the
   expectation count.
 - **Rules:** preparation rebuilds and fingerprints the inputs and reassesses the
   evidence bytes; it never trusts saved result JSON. It refuses a source ID that
   already has history. Run outputs and credentials are not copied into generated test
-  data.
+  data. The original reporting inventory is stored separately and must contain the
+  selected cases unchanged. Incomplete blocked cases remain reportable but cannot
+  enter generation preparation.
 
 ```text
 npx --no pom-harness generate prepare --input .harness/state/<preparation>.json
@@ -460,11 +465,20 @@ Check whether the candidate is ready:
 ```text
 npx --no pom-harness generate status --id <source-id>
 npx --no pom-harness generate report --source .harness/sources/<name>.json --id <source-id>
+npx --no pom-harness generate report --id <subset-source-id> --scope .harness/sources/<original-source>.json [--input .harness/state/blockers.json]
 ```
 
 `READY` means the current approved candidate has two scoped greens from distinct
 processes, and its review and receipts are intact. Each green receipt is
 integrity-checked again when status is requested. `READY` does not authorize delivery.
+For a subset, READY describes only the selected candidate. The standard report uses
+the saved original inventory and blocker notes to show every requested case once,
+with partial coverage and outstanding work explicit. Use `--scope` to associate
+the original inventory with an older subset history; later automatic reports and
+`report --id` reuse it. `--source` retains exact generation-source validation.
+Without explicit original scope, request completeness is unknown. Summary and
+Defects companions share the report's full inventory; no supplemental scope document
+is needed.
 The hash-linked history detects accidental edits and gaps; it is not tamper-proof
 against the filesystem's owner.
 
@@ -518,9 +532,10 @@ from `playwright-pom-harness/scripts/lib/generation/verify.mjs`.
 | Operation | Interface |
 |---|---|
 | Bind unchanged source expectations to reassessed observations | `createGenerationHandoff(source, executions, bindings)` |
-| Open consumer history | `beginGeneration(roots, handoff, author)` |
+| Open consumer history, optionally retaining original reporting scope | `beginGeneration(roots, handoff, author, reporting?)` |
+| Associate original scope or refresh its blocker notes | `recordGenerationReporting(roots, sourceId, { source, notes? })` |
 | Freeze a candidate and its mapping | `registerCandidate(roots, sourceId, candidate)` |
-| Continue an accepted source revision in the same history | `reviseGeneration(roots, sourceId, handoff, candidate)` |
+| Continue an accepted source revision in the same history | `reviseGeneration(roots, sourceId, handoff, candidate, reporting?)` |
 | Record the independent verdict and review artifact | `recordGenerationReview(roots, sourceId, review)` |
 | Run one scoped verification process | `verifyGeneration(roots, sourceId)` |
 
@@ -529,6 +544,11 @@ preparation instead reconstructs them from consumer-relative `snapshot` and
 `runRoot` paths and reassesses registered evidence bytes. Neither route trusts
 a saved claimed verdict. Catalogs, deterministic helpers and fixed parameterized
 inline operations remain peers; imported team libraries are derive-only.
+The optional library `reporting` value is `{ source, notes? }`, containing the
+original neutral source object and its fingerprint-bound notes. CLI `prepare` and
+`revise` instead load these objects from `input.reporting` paths. Accepted revisions
+may explicitly update that inventory while retaining its original case IDs; prior
+history remains intact, and newly selected cases need reassessed evidence.
 
 Promote observations into `.harness/knowledge/` only after review and
 sanitization. Active-run inputs remain frozen; promoted knowledge does not

@@ -114,6 +114,7 @@ blockers without displaying their internal classification codes.
 npx --no pom-harness execute report <exec> [--input .harness/state/blockers.json]
 npx --no pom-harness generate report --source .harness/sources/<name>.json [--input .harness/state/blockers.json]
 npx --no pom-harness generate report --id <source-id>
+npx --no pom-harness generate report --id <subset-source-id> --scope .harness/sources/<full-source>.json [--input .harness/state/blockers.json]
 ```
 
 Execution can report a captured source before freeze. Missing environment references
@@ -126,6 +127,36 @@ such cases are `NOT_GENERATED`, with no inferred execution result. Reports can a
 inventory a draft with known IDs/titles and missing actions or
 expectations; incomplete cases appear BLOCKED at REFINE. The original empty slots
 are retained, and generation preparation still rejects the draft.
+Before selecting cases for generation, preserve the original requested source and
+record every blocker against that source's fingerprint. Add `reporting` to the
+preparation JSON alongside the executable subset's `source`:
+
+```json
+{
+  "reporting": {
+    "source": ".harness/sources/full-source.json",
+    "notes": ".harness/state/blockers.json"
+  }
+}
+```
+
+`notes` is optional. The original inventory may contain incomplete blocked cases;
+the selected subset must still pass normal preparation checks and match its cases
+in that inventory exactly. Reporting context is stored in the generation history,
+separately from the executable handoff. Automatic reports and later `report --id`
+commands reuse it, including recorded blockers, without an extra full-scope document.
+For existing histories, `--scope` explicitly associates the original inventory;
+combine it with `--input` to persist or refresh its blocker notes. `--input` alone
+applies only to the current report. `--source` continues to require an exact match
+to the generation source; it does not select the original reporting scope.
+
+The report includes every original case exactly once and identifies partial coverage.
+For example, a READY six-case subset of a 20-case request reports six verified cases
+and fourteen blockers with their recorded stages, reasons and next actions. READY
+describes the selected candidate; the original request remains incomplete. HTML
+counts and filters, Summary and Defects use the same full inventory. Histories
+without explicit original scope show completeness as unknown; the report never
+infers the full request from neighboring files or matching IDs.
 Generation commands automatically return a separate `reporting` delivery result when their source is
 known. The final skill response still renders the current report and links its `html`.
 Native outcomes, exploration outcomes and automation readiness appear separately;
@@ -161,6 +192,12 @@ actions. Each entry records BLOCKED only; there is no status override. Preserve 
 observed obstacles in the reason. Notes for assessed/generated cases, changed sources,
 unknown IDs or credential-like content fail validation. Titles and arbitrary prose
 still require correct classification by the producer.
+For subset reporting, bind notes to the original source fingerprint. A later report
+reuses saved notes unless a validated replacement is supplied. Preparation and
+`generate revise` accept the same optional `reporting` paths. An accepted source
+revision may explicitly revise the original inventory while retaining its case IDs;
+newly selected cases need reassessed generation evidence and no longer retain their
+pre-generation blocker notes.
 
 Automation output contains `result.json` (including the frozen source/notes),
 `index.html`, `summary.md`, `defects.md`, and a final integrity `manifest.json`. Report delivery is WRITTEN/FAILED

@@ -1,41 +1,20 @@
 import {readFileSync, writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {randomUUID} from 'node:crypto';
-import {data, digest, fingerprint, frozen, requireThat, integer, id, keys, unique} from '../execution-core/data.mjs';
+import {data, digest, fingerprint, frozen, requireThat, integer, id, keys} from '../execution-core/data.mjs';
 import {validateLocalSource} from '../local-source.mjs';
 import {transaction, relativeFile} from './storage.mjs';
 import {generationStateStatus, currentCandidate, approvedCandidate} from './index.mjs';
 import {generationBlocker, GENERATION_STAGES} from './reasons.mjs';
 import {caseNotes} from '../reporting/case-notes.mjs';
 import {reportDirectory} from '../reporting/index.mjs';
-import {renderAutomationHtml, outcome} from '../reporting/case-view.mjs';
+import {renderAutomationHtml, outcome, automationCoverageText} from '../reporting/case-view.mjs';
 import {markdownText as md, caseReason, stageLabel} from '../reporting/text.mjs';
+import {reportSource, reportingContext} from './reporting-context.mjs';
 export {renderAutomationHtml};
 
 const identity = test => fingerprint([test.spec, test.project, test.titlePath]);
 const MATCHERS = new Set(['assertion', 'toBe', 'toEqual', 'toStrictEqual', 'toBeTruthy', 'toBeFalsy', 'toContain', 'toMatch', 'toHaveLength', 'toBeVisible', 'toBeHidden', 'toHaveText', 'toContainText', 'toHaveValue', 'toHaveCount', 'toHaveURL', 'toHaveTitle', 'toBeEnabled', 'toBeDisabled', 'toBeChecked']);
-
-/** Reporting may inventory an incomplete draft; generation still requires validateLocalSource. */
-function reportSource(input) {
-  const source = data(input, 2 * 1024 * 1024, {maxNodes: 200000});
-  const text = value => typeof value === 'string' && value.trim();
-  keys(source, ['version', 'id', 'title', 'scenarios'], 'report source'); id(source.id);
-  requireThat(source.version === 1 && text(source.title) && Array.isArray(source.scenarios) && source.scenarios.length > 0 && source.scenarios.length <= 500, 'Report source needs a known case inventory.');
-  unique(source.scenarios.map(row => row.id), 'report source cases');
-  for (const scenario of source.scenarios) {
-    keys(scenario, ['id', 'title', 'steps', 'externalReferences'], 'report source case'); id(scenario.id);
-    requireThat(text(scenario.title) && Array.isArray(scenario.steps) && scenario.steps.length <= 1000, 'Report cases need titles and bounded source steps.');
-    for (const step of scenario.steps) {
-      keys(step, ['action', 'expected'], 'report source step');
-      requireThat(typeof step.action === 'string' && Array.isArray(step.expected) && step.expected.every(value => typeof value === 'string'), 'Report source steps must retain textual actions and expectations.');
-    }
-    if (scenario.externalReferences !== undefined) {
-      requireThat(Array.isArray(scenario.externalReferences), 'Report external references must be an array.');
-      for (const ref of scenario.externalReferences) {keys(ref, ['system', 'id'], 'report external reference'); requireThat(text(ref.system) && text(ref.id), 'Report external references need a system and ID.');}
-    }
-  }
-  return source;
-}
 
 function nativeReceipt(roots, run, candidate) {
   if (!run?.receipt) return null;
@@ -76,11 +55,13 @@ export async function automationReportView(roots, {sourceId, source: sourceInput
   sourceId ??= supplied?.id; id(sourceId);
   requireThat(!supplied || supplied.id === sourceId, 'Report source identity differs from generation.');
   return transaction(roots, sourceId, state => {
-    const source = state ? validateLocalSource(state.handoff.source) : supplied;
-    requireThat(source, 'A valid source inventory is required before reporting.');
-    requireThat(!supplied || fingerprint(supplied) === fingerprint(source), 'Report source differs from recorded generation history.');
+    const selected = state ? validateLocalSource(state.handoff.source) : supplied;
+    requireThat(selected, 'A valid source inventory is required before reporting.');
+    requireThat(!supplied || fingerprint(supplied) === fingerprint(selected), 'Report source differs from recorded generation history.');
+    const reporting = state?.reporting ? reportingContext(selected, state.reporting) : undefined;
+    const source = reporting?.source ?? selected, retainedNotes = notes ?? reporting?.notes;
     const readiness = state ? generationStateStatus(roots, state) : {status: 'NOT_STARTED', rounds: 0, greens: 0};
-    const candidate = state?.candidates.at(-1), blockers = caseNotes(source, notes, candidate?.tests.map(test => test.scenarioId) ?? []);
+    const candidate = state?.candidates.at(-1), blockers = caseNotes(source, retainedNotes, candidate?.tests.map(test => test.scenarioId) ?? []);
     let candidateIssue, approved = false;
     if (candidate) {
       try {currentCandidate(roots, state); approvedCandidate(roots, state); approved = true;}
@@ -99,16 +80,17 @@ export async function automationReportView(roots, {sourceId, source: sourceInput
     }
     const cases = source.scenarios.map(scenario => {
       const note = blockers.get(scenario.id), mapped = candidate?.tests.find(test => test.scenarioId === scenario.id);
+      const inSelection = selected.scenarios.some(row => row.id === scenario.id);
       const observed = state?.handoff.bindings.filter(binding => state.handoff.expectations.some(expected => expected.key === binding.key && expected.scenarioId === scenario.id))
         .map(binding => state.handoff.observations.find(run => run.runId === binding.runId)?.scenarios.find(row => row.id === binding.scenarioId)?.status) ?? [];
-      let disposition = {status: 'NOT_GENERATED', stage: state ? 'AUTHOR' : 'EXPLORE', reason: 'No generated test candidate exists for this case.', nextAction: state ? 'Author and register the case in a complete source candidate.' : 'Explore the source and prepare its observed generation handoff.'};
+      let disposition = {status: 'NOT_GENERATED', stage: state && inSelection ? 'AUTHOR' : 'EXPLORE', reason: 'No generated test candidate exists for this case.', nextAction: state && inSelection ? 'Author and register the case in a complete source candidate.' : 'Explore the source and prepare its observed generation handoff.'};
       if (note) disposition = {status: 'BLOCKED', stage: note.stage, reason: note.reason, ...(note.nextAction ? {nextAction: note.nextAction} : {}), declaredBlocker: true};
-      else if (!candidate && (!scenario.steps.length || scenario.steps.some(step => !step.action.trim() || step.expected.some(value => !value.trim())) || !scenario.steps.some(step => step.expected.length))) {
+      else if (!mapped && (!scenario.steps.length || scenario.steps.some(step => !step.action.trim() || step.expected.some(value => !value.trim())) || !scenario.steps.some(step => step.expected.length))) {
         disposition = {status: 'BLOCKED', stage: 'REFINE', reason: 'The source case has incomplete actions or expected results.', nextAction: 'Clarify the original actions and accepted expected results before preparing generation.'};
       }
-      else if (!candidate && blocker) disposition = {...blocker, status: 'BLOCKED'};
-      else if (candidateIssue) disposition = {status: 'NEEDS_REVIEW', ...candidateIssue};
-      else if (approved) {
+      else if (!candidate && inSelection && blocker) disposition = {...blocker, status: 'BLOCKED'};
+      else if (mapped && candidateIssue) disposition = {status: 'NEEDS_REVIEW', ...candidateIssue};
+      else if (mapped && approved) {
         disposition = {status: 'NOT_RUN', stage: 'VERIFY', reason: 'No scoped verification has been recorded for this candidate.', nextAction: 'Run the independently approved candidate through scoped verification.'};
         if (receiptIssue) disposition = {status: 'NEEDS_REVIEW', stage: 'VERIFY', reason: receiptIssue, nextAction: 'Reassess the original receipts and candidate integrity; do not infer a pass.'};
         else if (receipt) disposition = {stage: 'VERIFY', ...nativeCase(receipt.tests.find(test => identity(test) === identity(mapped)), latest, readiness.status)};
@@ -118,10 +100,13 @@ export async function automationReportView(roots, {sourceId, source: sourceInput
         expectations: scenario.steps.flatMap(step => step.expected), history: (state?.runs ?? []).filter(run => state.candidates.find(item => item.revision === run.revision)?.tests.some(test => test.scenarioId === scenario.id))
           .map(run => ({id: run.id, revision: run.revision, status: run.status, ...(run.failureClass ? {failureClass: run.failureClass} : {}), ...(run.reason ? {reason: run.reason} : {}), ...(run.nextAction ? {nextAction: run.nextAction} : {})}))};
     });
+    const coverage = {total: cases.length, selected: selected.scenarios.length, ready: cases.filter(row => row.status === 'READY').length,
+      blocked: cases.filter(row => row.status === 'BLOCKED').length, scopeKnown: Boolean(reporting || !state)};
+    coverage.complete = coverage.scopeKnown && coverage.ready === coverage.total;
     return frozen(data({version: 1, id: `automation-${randomUUID()}`, workflow: 'automate-test', sourceId, title: source.title,
-      createdAt: new Date().toISOString(), sourceFingerprint: fingerprint(source), status: readiness.status, rounds: readiness.rounds, greens: readiness.greens,
+      createdAt: new Date().toISOString(), sourceFingerprint: fingerprint(source), selectedSourceFingerprint: fingerprint(selected), status: readiness.status, rounds: readiness.rounds, greens: readiness.greens,
       environment: [...new Set((state?.handoff.observations ?? []).map(run => run.environment).filter(Boolean))].join(', ') || 'Not recorded',
-      ...(blocker ? {blocker} : {}), cases, source, ...(notes ? {notes} : {})}, 8 * 1024 * 1024, {maxNodes: 200000}));
+      ...(blocker ? {blocker} : {}), coverage, cases, source, ...(retainedNotes ? {notes: retainedNotes} : {})}, 8 * 1024 * 1024, {maxNodes: 200000}));
   });
 }
 
@@ -129,9 +114,10 @@ export async function automationReportView(roots, {sourceId, source: sourceInput
 export function automationCompanions(view) {
   const describe = row => `## ${md(row.id)} — ${md(outcome(row.status).label)}\n\n${md(row.title)}\n\nStage: ${md(stageLabel(row.stage))}\n\nReason: ${md(caseReason(row.reason) || 'Reason unavailable; investigation is needed.')}\n\n${row.nextAction ? `Next action: ${md(caseReason(row.nextAction))}\n\n` : ''}`;
   const attention = view.cases.filter(row => ['FAIL', 'BLOCKED', 'NEEDS_REVIEW', 'INTEGRITY_FAILURE'].includes(row.status));
+  const coverage = automationCoverageText(view);
   return [
-    ['summary.md', `# ${md(view.title)}\n\n${view.cases.map(describe).join('')}`],
-    ['defects.md', `# Defects and cases needing attention\n\nThese are recorded failures, blockers and review findings, not filed product bugs.\n\n${attention.map(describe).join('') || 'No cases currently need attention.\n'}`]
+    ['summary.md', `# ${md(view.title)}\n\n${md(coverage)}\n\n${view.cases.map(describe).join('')}`],
+    ['defects.md', `# Defects and cases needing attention\n\n${md(coverage)}\n\nThese are recorded failures, blockers and review findings, not filed product bugs.\n\n${attention.map(describe).join('') || 'No cases currently need attention.\n'}`]
   ];
 }
 
@@ -141,7 +127,7 @@ export async function writeAutomationReport(roots, options = {}) {
     const view = await automationReportView(roots, options), directory = `reports/harness/${view.id}`, output = reportDirectory(roots, directory);
     const files = [['result.json', JSON.stringify(view, null, 2) + '\n'], ...automationCompanions(view), ['index.html', renderAutomationHtml(view)]];
     const artifacts = files.map(([name, body]) => {writeFileSync(join(output, name), body, {flag: 'wx', mode: 0o600}); return {path: name, bytes: Buffer.byteLength(body), sha256: digest(body)};});
-    const manifest = {version: 1, status: 'WRITTEN', sourceId: view.sourceId, sourceFingerprint: view.sourceFingerprint, readiness: view.status, cases: view.cases.length, artifacts};
+    const manifest = {version: 1, status: 'WRITTEN', sourceId: view.sourceId, sourceFingerprint: view.sourceFingerprint, readiness: view.status, coverage: view.coverage, cases: view.cases.length, artifacts};
     writeFileSync(join(output, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n', {flag: 'wx', mode: 0o600, flush: true});
     return {...manifest, directory, html: `${directory}/index.html`};
   } catch {return {status: 'FAILED', reason: 'Automation report input, integrity validation or delivery failed; generation history and verdicts are unchanged.'};}

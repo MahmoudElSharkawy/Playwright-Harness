@@ -225,6 +225,15 @@ frozen generation handoff described in [automation workflow](../../../../docs/PI
 `.harness/knowledge/ui/` (selector, landmark, and rendered-string authority proven by
 earlier runs), and the existing framework code as the living style reference.
 
+Before selecting a supported subset, retain the complete original neutral source.
+Record each excluded case's blocker stage, reason and next action in notes bound to
+that source's fingerprint. Supply the original source and notes through preparation's
+`reporting: { "source": "<full-source.json>", "notes": "<blockers.json>" }` paths;
+generation still accepts only the unchanged, supported subset with assessed evidence.
+For existing history, associate it explicitly with `generate report --id <source-id>
+--scope <full-source.json> --input <blockers.json>`. Later automatic reports and
+`report --id` retain that context. See [case results and blocker notes](../../../../docs/reporting.md#case-results-and-blocker-notes).
+
 **Route through the skills — never from memory** (CLAUDE.md's common-flow order):
 
 **Reuse gate (2026-08-24 ruling) — before writing ANY new action or validation
@@ -276,8 +285,9 @@ independent framework-review re-checks every new method against the inventory.
      feature-naming law beats "one file per suite".
    - Record the outcome in the manifest: `"resolvedSpecFiles": ["tests/…"]`.
 
-   One test per test case (skip `stepCount: 0` cases — they go to the report's
-   "not automated" list). Each test's first body lines:
+   One test per supported test case. Keep `stepCount: 0` and other blocked cases in
+   the original reporting inventory with their recorded blockers; do not generate
+   them. Each test's first body lines:
    `allure.feature('<describe title>')` then `allure.tms('<TC id>')` — the ADO id
    from the manifest, one per test. A parameterized case (manifest `dataTable`)
    becomes one test per data row, titled with the distinguishing param value, all
@@ -470,6 +480,12 @@ silently skipped:
    hands the user this exact command as the remaining step in its final message.
 
 **Report to the user** (also the PR description's source):
+- Render and share the standard QA report with its Summary and Defects companions.
+  It must include every originally requested case exactly once, including cases
+  blocked before generation. State separately whether the selected automation
+  subset is READY and whether the complete requested scope is finished. Without a
+  recorded original inventory, report completeness as unknown. A separate manually
+  assembled full-scope summary is unnecessary.
 - Matrix: TC id → title → EXPLORE verdict → generated test title → VERIFY status → note.
 - Artifacts: `execution-tests/ado-suite-<suiteId>/`, `executions/execu_<ts>/report.md`, the
   generated spec + data files, PR link, Allure TMS links (wired via `allure.tms`).

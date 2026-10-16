@@ -6,11 +6,192 @@ import {spawnSync} from 'node:child_process';
 import {fixture} from './fixtures/execution-core.mjs';
 import {source, put, prepared, recorded, productionBlockers} from './fixtures/generation-report.mjs';
 import {fingerprint, digest} from '../scripts/lib/execution-core/data.mjs';
-import {createGenerationHandoff, generationStatus} from '../scripts/lib/generation/index.mjs';
+import {createGenerationHandoff, beginGeneration, reviseGeneration, recordGenerationReview, recordGenerationReporting, generationStatus} from '../scripts/lib/generation/index.mjs';
 import {transaction} from '../scripts/lib/generation/storage.mjs';
 import {automationReportView, writeAutomationReport} from '../scripts/lib/generation/report.mjs';
 
 const notes = input => ({version: 1, sourceFingerprint: fingerprint(input), cases: [{scenarioId: input.scenarios[0].id, stage: 'EXPLORE', reason: 'The required fixture is unavailable.', nextAction: 'Provision the fixture before exploration.'}]});
+
+const mixedScope = () => {
+  const original = {...source(Array.from({length: 20}, (_, index) => `case${String(index + 1).padStart(2, '0')}`)), id: 'requested-report-suite'};
+  original.scenarios.at(-1).steps[0].expected = [];
+  const selected = {...original, id: 'report-suite', scenarios: original.scenarios.slice(0, 6)};
+  const blockers = {version: 1, sourceFingerprint: fingerprint(original), cases: original.scenarios.slice(6).map(scenario => ({scenarioId: scenario.id, stage: 'EXPLORE', reason: `Prerequisite for ${scenario.id} is unavailable.`, nextAction: `Provision the fixture for ${scenario.id}.`}))};
+  return {original, selected, blockers};
+};
+
+test('standard QA reporting retains the twenty-case request after the six-case subset is ready', async t => {
+  const {original, selected, blockers} = mixedScope(), f = await prepared(t, {source: selected, reporting: {source: original, notes: blockers}});
+  await recorded(f, 'PASS', 'verification-first'); await recorded(f, 'PASS', 'verification-second');
+  const before = await generationStatus(f.roots, selected.id), view = await automationReportView(f.roots, {sourceId: selected.id});
+  assert.equal(view.cases.length, 20);
+  assert.equal(new Set(view.cases.map(row => row.id)).size, 20);
+  assert.deepEqual(view.cases.map(row => row.id), original.scenarios.map(row => row.id));
+  assert.equal(view.status, 'READY'); assert.equal(view.greens, 2);
+  assert.deepEqual(view.coverage, {total: 20, selected: 6, ready: 6, blocked: 14, complete: false, scopeKnown: true});
+  assert.equal(view.sourceId, selected.id); assert.deepEqual(view.source, original); assert.equal(view.sourceFingerprint, fingerprint(original));
+  assert.deepEqual(view.cases.slice(0, 6).map(row => row.status), Array(6).fill('READY'));
+  for (const [index, row] of view.cases.slice(6).entries()) {
+    assert.equal(row.status, 'BLOCKED'); assert.equal(row.stage, 'EXPLORE');
+    assert.equal(row.reason, blockers.cases[index].reason); assert.equal(row.nextAction, blockers.cases[index].nextAction);
+    assert.deepEqual(row.history, []); assert.equal(row.observedStatus, 'Not recorded');
+  }
+  for (let render = 0; render < 2; render++) {
+    const report = await writeAutomationReport(f.roots, {sourceId: selected.id}); assert.equal(report.status, 'WRITTEN');
+    assert.equal(report.cases, 20);
+    const saved = JSON.parse(readFileSync(join(f.roots.projectRoot, report.directory, 'result.json')));
+    assert.deepEqual(saved.cases, view.cases); assert.deepEqual(saved.coverage, view.coverage);
+    const html = readFileSync(join(f.roots.projectRoot, report.html), 'utf8');
+    assert.match(html, /Showing 20 of 20 test cases/); assert.match(html, /data-metric="total">20</);
+    assert.match(html, /data-chart-status="READY" data-count="6"/); assert.match(html, /data-chart-status="BLOCKED" data-count="14"/);
+    assert.equal((html.match(/data-case data-order=/g) ?? []).length, 20);
+    assert.match(html, /value="READY"/); assert.match(html, /value="BLOCKED"/);
+    for (const name of ['index.html', 'summary.md', 'defects.md']) {
+      const body = readFileSync(join(f.roots.projectRoot, report.directory, name), 'utf8');
+      assert.match(body, /6 of 20.*ready/i, name); assert.match(body, /14 blocked/i, name); assert.match(body, /requested scope.*incomplete/i, name);
+      const readable = body.replaceAll('\\.', '.');
+      for (const row of blockers.cases) {assert(readable.includes(row.scenarioId), name); assert(readable.includes(row.reason), name); assert(readable.includes(row.nextAction), name);}
+    }
+    const summary = readFileSync(join(f.roots.projectRoot, report.directory, 'summary.md'), 'utf8'), defects = readFileSync(join(f.roots.projectRoot, report.directory, 'defects.md'), 'utf8');
+    assert.equal((summary.match(/^## case\d{2} — /gm) ?? []).length, 20); assert.equal((defects.match(/^## case\d{2} — /gm) ?? []).length, 14);
+    const manifest = JSON.parse(readFileSync(join(f.roots.projectRoot, report.directory, 'manifest.json')));
+    assert.equal(manifest.cases, 20); assert.equal(manifest.sourceFingerprint, fingerprint(original));
+    for (const artifact of manifest.artifacts) assert.equal(digest(readFileSync(join(f.roots.projectRoot, report.directory, artifact.path))), artifact.sha256);
+  }
+  assert.deepEqual(await generationStatus(f.roots, selected.id), before);
+});
+
+test('reporting context rejects changed selection, stale fingerprints and verdict overrides without changing generation gates', async t => {
+  const {original, selected, blockers} = mixedScope(), f = await prepared(t, {source: selected}), untouched = fixture(t);
+  const before = await generationStatus(f.roots, selected.id);
+  const invalid = [
+    input => input.source.scenarios.splice(0, 1),
+    input => input.source.scenarios[0].title = 'An altered requested title',
+    input => input.source.scenarios[0].steps[0].action = 'A different action',
+    input => input.source.scenarios[0].steps[0].expected[0] = 'A different expectation',
+    input => input.source.scenarios[0].externalReferences = [{system: 'ado', id: 'invented'}],
+    input => input.sourceFingerprint = 'stale',
+    input => input.selectedSourceFingerprint = 'stale',
+    input => input.notes.sourceFingerprint = 'stale',
+    input => input.notes.cases.push({...input.notes.cases[0]}),
+    input => input.notes.cases[0].scenarioId = 'unknown',
+    input => input.notes.cases[0].scenarioId = selected.scenarios[0].id,
+    input => input.notes.cases[0].status = 'PASS',
+    input => input.notes.cases[0].status = 'READY',
+    input => input.notes.cases[0].reason = ['password', 'secret-value'].join('=')
+  ];
+  for (const mutate of invalid) {
+    const reporting = structuredClone({source: original, notes: blockers}); mutate(reporting);
+    await assert.rejects(() => recordGenerationReporting(f.roots, selected.id, reporting));
+    await assert.rejects(() => beginGeneration(untouched.roots, f.handoff, 'report-author', reporting));
+    assert.deepEqual(await generationStatus(f.roots, selected.id), before);
+  }
+  await beginGeneration(untouched.roots, f.handoff, 'report-author', {source: original, notes: blockers});
+  assert.equal((await automationReportView(untouched.roots, {sourceId: selected.id})).cases.length, 20);
+  assert.deepEqual(await generationStatus(f.roots, selected.id), before);
+});
+
+test('captured original scope and blocker notes survive input mutation and explicit refresh preserves verification', async t => {
+  const {original, selected, blockers} = mixedScope(), reporting = structuredClone({source: original, notes: blockers});
+  const f = await prepared(t, {source: selected, reporting});
+  await recorded(f, 'PASS', 'verification-first'); await recorded(f, 'PASS', 'verification-second');
+  const before = await generationStatus(f.roots, selected.id);
+  reporting.source.scenarios.pop(); reporting.notes.cases[0].reason = 'Mutated caller input';
+  let view = await automationReportView(f.roots, {sourceId: selected.id});
+  assert.deepEqual(view.source, original); assert.equal(view.cases[6].reason, blockers.cases[0].reason);
+  const refreshed = structuredClone(blockers); refreshed.cases[0].reason = 'The requested prerequisite still needs owner approval.';
+  await recordGenerationReporting(f.roots, selected.id, {source: original, notes: refreshed});
+  await recordGenerationReporting(f.roots, selected.id, {source: original});
+  view = await automationReportView(f.roots, {sourceId: selected.id});
+  assert.equal(view.cases[6].reason, refreshed.cases[0].reason); assert.deepEqual(view.coverage, {total: 20, selected: 6, ready: 6, blocked: 14, complete: false, scopeKnown: true});
+  assert.deepEqual(await generationStatus(f.roots, selected.id), before);
+  const changed = structuredClone(original); changed.scenarios[6].title = 'Rewritten original request';
+  await assert.rejects(() => recordGenerationReporting(f.roots, selected.id, {source: changed}));
+  assert.deepEqual(await generationStatus(f.roots, selected.id), before);
+  assert.equal((await writeAutomationReport(f.roots, {sourceId: selected.id, source: changed})).status, 'FAILED');
+});
+
+test('full-scope reporting cannot turn one green or a changed prior receipt into ready cases', async t => {
+  const {original, selected, blockers} = mixedScope(), f = await prepared(t, {source: selected, reporting: {source: original, notes: blockers}});
+  const first = await recorded(f, 'PASS', 'verification-first');
+  let view = await automationReportView(f.roots, {sourceId: selected.id});
+  assert.equal(view.greens, 1); assert.equal(view.status, 'PASS'); assert.equal(view.coverage.ready, 0); assert.equal(view.coverage.complete, false);
+  assert.deepEqual(view.cases.slice(0, 6).map(row => row.status), Array(6).fill('PASS'));
+  const second = await recorded(f, 'PASS', 'verification-second');
+  first.receipt.tests[0].results[0].assertions.passed = 0; put(f.roots.projectRoot, first.path, first.receipt);
+  view = await automationReportView(f.roots, {sourceId: selected.id});
+  assert.equal(view.status, 'NEEDS_REVIEW'); assert.equal(view.coverage.ready, 0); assert.equal(view.coverage.complete, false);
+  assert(view.cases.slice(0, 6).every(row => row.status !== 'READY')); assert.equal(view.cases.filter(row => row.status === 'BLOCKED').length, 14);
+  second.receipt.tests.pop(); put(f.roots.projectRoot, second.path, second.receipt);
+  view = await automationReportView(f.roots, {sourceId: selected.id});
+  assert(view.cases.slice(0, 6).every(row => row.status === 'NEEDS_REVIEW')); assert.equal(view.cases.filter(row => row.status === 'BLOCKED').length, 14);
+  const report = await writeAutomationReport(f.roots, {sourceId: selected.id}); assert.equal(report.status, 'WRITTEN'); assert.equal(report.cases, 20);
+});
+
+test('legacy subset history identifies unknown original scope until an explicit CLI scope binding is persisted', async t => {
+  const {original, selected, blockers} = mixedScope(), f = await prepared(t, {source: selected});
+  await recorded(f, 'PASS', 'verification-first'); await recorded(f, 'PASS', 'verification-second');
+  let view = await automationReportView(f.roots, {sourceId: selected.id});
+  assert.equal(view.status, 'READY'); assert.equal(view.coverage.scopeKnown, false); assert.equal(view.coverage.complete, false);
+  const legacy = await writeAutomationReport(f.roots, {sourceId: selected.id});
+  for (const name of ['index.html', 'summary.md', 'defects.md']) assert.match(readFileSync(join(f.roots.projectRoot, legacy.directory, name), 'utf8'), /original.*scope.*unknown/i, name);
+  put(f.roots.projectRoot, '.harness/state/original-source.json', original); put(f.roots.projectRoot, '.harness/state/blocker-notes.json', blockers);
+  const cli = (...args) => spawnSync(process.execPath, [join(f.roots.packageRoot, 'scripts/generate-tests.mjs'), 'report', '--project-root', f.roots.projectRoot, '--id', selected.id, ...args], {encoding: 'utf8', windowsHide: true});
+  const before = await generationStatus(f.roots, selected.id);
+  const wrongSource = cli('--source', '.harness/state/original-source.json'); assert.notEqual(wrongSource.status, 0, 'Existing --source must not silently accept an arbitrary superset.');
+  const bound = cli('--scope', '.harness/state/original-source.json', '--input', '.harness/state/blocker-notes.json'); assert.equal(bound.status, 0, bound.stderr);
+  assert.equal(JSON.parse(bound.stdout).cases, 20);
+  const rerendered = cli(); assert.equal(rerendered.status, 0, rerendered.stderr); assert.equal(JSON.parse(rerendered.stdout).cases, 20);
+  view = await automationReportView(f.roots, {sourceId: selected.id});
+  assert.deepEqual(view.source, original); assert.deepEqual(view.coverage, {total: 20, selected: 6, ready: 6, blocked: 14, complete: false, scopeKnown: true});
+  assert.deepEqual(await generationStatus(f.roots, selected.id), before);
+});
+
+test('CLI prepare captures full reporting scope and following standard commands retain it automatically', async t => {
+  const {original, selected, blockers} = mixedScope(), f = await prepared(t, {source: selected});
+  const cliSource = {...selected, id: 'cli-report-suite'}, paths = '.harness/state/cli-report';
+  put(f.roots.projectRoot, `${paths}/selected.json`, cliSource); put(f.roots.projectRoot, `${paths}/original.json`, original); put(f.roots.projectRoot, `${paths}/notes.json`, blockers);
+  const executions = f.executions.map(observed => {
+    const runRoot = `${paths}/observations/${observed.run.id}`, snapshot = `${runRoot}/inputs.json`;
+    put(f.roots.projectRoot, snapshot, observed.run); put(f.roots.projectRoot, `${runRoot}/observations.json`, observed.report);
+    for (const evidence of observed.report.evidence) put(f.roots.projectRoot, `${runRoot}/${evidence.path}`, readFileSync(join(observed.roots.runRoot, evidence.path), 'utf8'));
+    return {snapshot, runRoot};
+  });
+  put(f.roots.projectRoot, `${paths}/prepare.json`, {source: `${paths}/selected.json`, author: 'cli-report-author', executions, bindings: f.handoff.bindings, reporting: {source: `${paths}/original.json`, notes: `${paths}/notes.json`}});
+  const cli = (...args) => spawnSync(process.execPath, [join(f.roots.packageRoot, 'scripts/generate-tests.mjs'), ...args, '--project-root', f.roots.projectRoot], {encoding: 'utf8', windowsHide: true});
+  const preparation = cli('prepare', '--input', `${paths}/prepare.json`); assert.equal(preparation.status, 0, preparation.stderr);
+  const started = JSON.parse(preparation.stdout); assert.equal(started.status, 'PREPARED'); assert.equal(started.reporting.cases, 20);
+  const status = cli('status', '--id', cliSource.id); assert.equal(status.status, 0, status.stderr);
+  const continued = JSON.parse(status.stdout); assert.equal(continued.reporting.cases, 20);
+  for (const report of [started.reporting, continued.reporting]) {
+    const view = JSON.parse(readFileSync(join(f.roots.projectRoot, report.directory, 'result.json')));
+    assert.equal(view.sourceId, cliSource.id); assert.deepEqual(view.source, original);
+    assert.deepEqual(view.coverage, {total: 20, selected: 6, ready: 0, blocked: 14, complete: false, scopeKnown: true});
+    assert.deepEqual(view.cases.slice(6).map(row => row.reason), blockers.cases.map(row => row.reason));
+  }
+});
+
+test('a later assessed subset expansion retains original scope and history while newly selected cases need fresh review and verification', async t => {
+  const {original, selected, blockers} = mixedScope(), f = await prepared(t, {source: selected, reporting: {source: original, notes: blockers}});
+  await recorded(f, 'PASS', 'verification-first'); await recorded(f, 'PASS', 'verification-second');
+  const before = await transaction(f.roots, selected.id, state => structuredClone(state));
+  const expanded = {...selected, scenarios: original.scenarios.slice(0, 7)}, observation = await prepared(t, {source: expanded});
+  put(f.roots.projectRoot, '.harness/state/accepted-expansion.md', 'Synthetic owner acceptance: the seventh case prerequisite is available; include its assessed execution.');
+  const changed = await reviseGeneration(f.roots, selected.id, observation.handoff, {config: f.candidate.config, tests: observation.candidate.tests, repair: 'requirement-change', change: {previousSourceFingerprint: before.handoff.fingerprint, artifact: '.harness/state/accepted-expansion.md'}});
+  let view = await automationReportView(f.roots, {sourceId: selected.id});
+  assert.deepEqual(view.source, original); assert.equal(view.cases.length, 20); assert.equal(view.coverage.selected, 7); assert.equal(view.coverage.blocked, 13); assert.equal(view.coverage.ready, 0);
+  assert.equal(view.status, 'NEEDS_REVIEW'); assert.equal(view.greens, 0); assert.equal(view.cases[6].status, 'NEEDS_REVIEW');
+  assert.deepEqual(view.cases[6].history, []); assert.equal(view.cases[0].history.length, 2);
+  await recordGenerationReview(f.roots, selected.id, {revision: changed.revision, reviewer: 'expanded-report-reviewer', verdict: 'APPROVE', findings: [], artifact: '.harness/state/review.md'});
+  const updated = {...f, source: expanded, candidate: changed}; await recorded(updated, 'PASS', 'expanded-first');
+  assert.equal((await automationReportView(f.roots, {sourceId: selected.id})).coverage.ready, 0);
+  await recorded(updated, 'PASS', 'expanded-second');
+  view = await automationReportView(f.roots, {sourceId: selected.id});
+  assert.deepEqual(view.coverage, {total: 20, selected: 7, ready: 7, blocked: 13, complete: false, scopeKnown: true});
+  assert.equal(view.cases[6].status, 'READY'); assert.equal(view.cases[6].history.length, 2); assert.equal(view.cases[0].history.length, 4);
+  const after = await transaction(f.roots, selected.id, state => state);
+  assert.equal(after.rounds, 1); assert.deepEqual(after.runs.slice(0, 2), before.runs); assert.deepEqual(after.candidates[0], before.candidates[0]);
+});
 
 test('all known production command blockers use plain report explanations and preserve original records', async t => {
   const f = fixture(t), input = source();
@@ -84,7 +265,7 @@ test('pre-candidate blockers produce a complete report without awarding generati
   for (const artifact of manifest.artifacts) assert.equal(digest(readFileSync(join(f.roots.projectRoot, report.directory, artifact.path))), artifact.sha256);
   const html = readFileSync(join(f.roots.projectRoot, report.html), 'utf8');
   assert(html.includes('data-chart-status="BLOCKED" data-count="1"')); assert(html.includes('Provision the fixture before exploration.'));
-  assert(html.includes('id="status-filter"')); assert(html.includes('All test cases'));
+  assert(html.includes('id="status-filter"')); assert(html.includes('Complete requested scope'));
 });
 
 test('incomplete source drafts remain reportable while generation preparation stays blocked', async t => {

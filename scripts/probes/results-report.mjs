@@ -12,7 +12,8 @@ import {renderAutomationHtml} from '../lib/reporting/case-view.mjs';
 import {automationCompanions, automationReportView} from '../lib/generation/report.mjs';
 import {renderHtml, reportView} from '../lib/reporting/index.mjs';
 import {fixture, resource} from '../../harness-tests/fixtures/execution-core.mjs';
-import {prepared, recorded, productionBlockers} from '../../harness-tests/fixtures/generation-report.mjs';
+import {prepared, recorded, productionBlockers, source as reportSource} from '../../harness-tests/fixtures/generation-report.mjs';
+import {fingerprint} from '../lib/execution-core/data.mjs';
 import {executionReportView} from '../../harness-tests/fixtures/execute-report.mjs';
 import {nativeCliInstallation} from '../lib/browser/native-cli.mjs';
 
@@ -46,6 +47,7 @@ const automation = {id: 'automation-fixture', sourceId: 'synthetic-source', titl
     {id: 'case-4', title: 'Pending source case', status: 'NOT_GENERATED', stage: 'AUTHOR', reason: 'No generated test candidate exists for this case.'},
     {id: 'case-5', title: 'Review the test', status: 'NEEDS_REVIEW', stage: 'REVIEW', reason: 'Review approval is missing.'}]};
 const productionCleanups = [], productionCases = [];
+let mixedView;
 try {
   for (const [status, patch] of [['PASS', {}], ['READY', {}], ['NEEDS_REVIEW', {assertions: {passed: 0, failed: 0}}], ['SKIPPED', {status: 'skipped'}]]) {
     const f = await prepared({after: action => productionCleanups.push(action)});
@@ -55,6 +57,13 @@ try {
     assert.equal(view.cases[0].status, status);
     productionCases.push({...view.cases[0], id: `production-${status}`});
   }
+  const original = {...reportSource(Array.from({length: 20}, (_, index) => `requested-case-${index + 1}`)), id: 'requested-report-source'};
+  const selected = {...original, id: 'report-subset', scenarios: original.scenarios.slice(0, 6)};
+  const notes = {version: 1, sourceFingerprint: fingerprint(original), cases: original.scenarios.slice(6).map(row => ({scenarioId: row.id, stage: 'EXPLORE', reason: 'The required fixture is unavailable.', nextAction: 'Provision the fixture, then resume exploration.'}))};
+  const f = await prepared({after: action => productionCleanups.push(action)}, {source: selected, reporting: {source: original, notes}});
+  await recorded(f, 'PASS', 'mixed-first'); await recorded(f, 'PASS', 'mixed-second');
+  mixedView = await automationReportView(f.roots, {sourceId: selected.id});
+  assert.equal(mixedView.status, 'READY'); assert.deepEqual(mixedView.coverage, {total: 20, selected: 6, ready: 6, blocked: 14, complete: false, scopeKnown: true});
 } finally {for (const cleanup of productionCleanups.reverse()) await cleanup();}
 automation.cases[0] = {...automation.cases[0], ...productionCases.find(row => row.status === 'PASS')};
 automation.cases = statuses.map((status, index) => ({...automation.cases[{PASS: 0, FAIL: 1, BLOCKED: 2, NOT_RUN: 3, NEEDS_REVIEW: 4}[status]], id: `case-${index + 1}`, title: `Case ${index + 1} · ${'A detailed synthetic source title '.repeat(index === 3 ? 8 : 1)}`, status: status === 'NOT_RUN' ? 'NOT_GENERATED' : status}));
@@ -68,6 +77,26 @@ let browser;
 const proof = {version: 5, status: 'INCOMPLETE', themes: ['light', 'dark'], surfaces: [], viewports: sizes, horizontalSweep: {from: 320, to: 3840, step: 160}};
 try {
   browser = await chromium.launch({headless: true});
+  const mixedFolder = join(output, 'mixed-scope'); mkdirSync(mixedFolder);
+  writeFileSync(join(mixedFolder, 'index.html'), renderAutomation(mixedView));
+  for (const [file, body] of automationCompanions(mixedView)) writeFileSync(join(mixedFolder, file), body);
+  const mixedPage = await browser.newPage(); await mixedPage.goto(pathToFileURL(join(mixedFolder, 'index.html')).href);
+  assert.equal(await mixedPage.locator('[data-case]').count(), 20);
+  assert.equal(await mixedPage.locator('[data-status="READY"]').count(), 6);
+  assert.equal(await mixedPage.locator('[data-status="BLOCKED"]').count(), 14);
+  assert((await mixedPage.locator('.report-header').innerText()).includes('Automation subset status:'));
+  assert((await mixedPage.locator('.report-header').innerText()).includes('Requested scope incomplete'));
+  await mixedPage.locator('input[value="BLOCKED"]').check();
+  assert.equal(await mixedPage.locator('#result-count').textContent(), 'Showing 14 of 20 test cases');
+  assert.equal(await mixedPage.locator('[data-metric="total"]').textContent(), '20');
+  await mixedPage.locator('#clear-filters').click();
+  assert.equal(await mixedPage.locator('#result-count').textContent(), 'Showing 20 of 20 test cases');
+  for (const width of [390, 1440]) {
+    await mixedPage.setViewportSize({width, height: 900});
+    assert(await mixedPage.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+    await mixedPage.screenshot({path: join(mixedFolder, `scope-${width}.png`), fullPage: true});
+  }
+  await mixedPage.close(); proof.mixedScope = {...mixedView.coverage, filters: 'PASS', companions: 'PASS', geometry: 'PASS'};
   const productionFolder = join(output, 'production'); mkdirSync(productionFolder);
   const commandBlockers = productionBlockers().map((blocker, index) => ({...blocker, status: 'BLOCKED', id: `blocker-${index}`, title: 'Automation stopped'}));
   writeFileSync(join(productionFolder, 'index.html'), renderAutomation({...automation, blocker: productionBlockers()[8], cases: [...productionCases, ...commandBlockers]}));
