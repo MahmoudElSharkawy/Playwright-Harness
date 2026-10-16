@@ -3,7 +3,9 @@ import {readFileSync} from 'node:fs';
 import {fingerprint, frozen, data, id, keys, requireThat, unique, integer} from '../execution-core/data.mjs';
 import {validateHandoff} from './handoff.mjs';
 import {transaction, snapshot, relativeFile, reviewArtifact} from './storage.mjs';
+import {reportingContext} from './reporting-context.mjs';
 export {createGenerationHandoff, sourceExpectations} from './handoff.mjs';
+export {createReportingAssessment} from './reporting-context.mjs';
 const CASE_GATE = 'case-assertions';
 
 function mappingThat(condition, code) {
@@ -35,11 +37,28 @@ function validateMapping(test, handoff) {
 const nativeScope = candidate => fingerprint({config: candidate.config, tests: candidate.tests.map(({scenarioId, spec, project, titlePath}) =>
   ({scenarioId, spec, project, titlePath})).sort((a, b) => a.scenarioId.localeCompare(b.scenarioId))});
 
-export async function beginGeneration(roots, handoffInput, author) {
+export async function beginGeneration(roots, handoffInput, author, reporting) {
   const handoff = validateHandoff(handoffInput); id(author);
   return transaction(roots, handoff.source.id, (state, save) => {
     requireThat(!state, 'This source already has generation history; continue it instead of resetting the repair budget.');
-    const next = {version: 1, author, handoff, rounds: 0, candidates: [], reviews: [], runs: []}; save(next); return frozen(next);
+    const next = {version: 1, author, handoff, rounds: 0, candidates: [], reviews: [], runs: [], ...(reporting === undefined ? {} : {reporting: reportingContext(handoff.source, reporting)})}; save(next); return frozen(next);
+  });
+}
+
+/** Persist report-only scope/observations/notes without changing executable gates. */
+export async function recordGenerationReporting(roots, sourceId, input) {
+  const checked = data(input, 2 * 1024 * 1024, {maxNodes: 200000});
+  return transaction(roots, sourceId, (state, save) => {
+    requireThat(state, 'Begin from a validated handoff.');
+    const context = {...checked};
+    if (checked.observed !== undefined) context.observed = input.observed;
+    else if (state.reporting?.observed) context.observed = state.reporting.observed;
+    if (checked.notes === undefined && state.reporting?.notes) context.notes = {...state.reporting.notes,
+      cases: state.reporting.notes.cases.filter(note => ![...(context.observed?.source.scenarios ?? []), ...(state.reporting.observed?.source.scenarios ?? [])].some(row => row.id === note.scenarioId))};
+    const reporting = reportingContext(state.handoff.source, context, state.reporting);
+    requireThat(!state.reporting || state.reporting.sourceFingerprint === reporting.sourceFingerprint, 'Requested source differs from recorded reporting scope.');
+    if (fingerprint(state.reporting ?? null) !== fingerprint(reporting)) {state.reporting = reporting; save(state);}
+    return frozen(reporting);
   });
 }
 
@@ -94,12 +113,23 @@ export async function registerCandidate(roots, sourceId, input) {
 /** Atomic source/candidate revision. Prior handoffs remain in the immutable history snapshots.
  * The artifact records acceptance; an independent reviewer must verify the actual owner decision.
  */
-export async function reviseGeneration(roots, sourceId, handoffInput, input) {
+export async function reviseGeneration(roots, sourceId, handoffInput, input, reporting) {
   const handoff = validateHandoff(handoffInput);
   return transaction(roots, sourceId, (state, save) => {
     requireThat(state && handoff.source.id === sourceId, 'Revise the same source with existing generation history.');
     requireThat(fingerprint(state.handoff.source) !== fingerprint(handoff.source), 'Revision requires a changed source; use candidate for an unchanged requirement.');
     const previousHandoff = state.handoff; state.handoff = handoff;
+    if (state.reporting || reporting !== undefined) {
+      const previous = state.reporting;
+      const context = reporting === undefined ? {source: previous.source} : data(reporting, 2 * 1024 * 1024, {maxNodes: 200000});
+      if (reporting?.observed !== undefined) context.observed = reporting.observed;
+      else if (previous?.observed) context.observed = previous.observed;
+      if (context.notes === undefined && previous?.notes) context.notes = {...previous.notes,
+        cases: previous.notes.cases.filter(note => ![...handoff.source.scenarios, ...(context.observed?.source.scenarios ?? []), ...(previous.observed?.source.scenarios ?? [])].some(row => row.id === note.scenarioId))};
+      const next = reportingContext(handoff.source, context, previous);
+      requireThat(!previous || (previous.source.id === next.source.id && fingerprint(previous.source.scenarios.map(row => row.id)) === fingerprint(next.source.scenarios.map(row => row.id))), 'A revision must retain the originally requested case inventory.');
+      state.reporting = next;
+    }
     const candidate = appendCandidate(roots, state, input, previousHandoff);
     state.sourceChange = candidate.change; save(state); return frozen(candidate);
   });

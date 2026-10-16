@@ -12,7 +12,8 @@ import {renderAutomationHtml} from '../lib/reporting/case-view.mjs';
 import {automationCompanions, automationReportView} from '../lib/generation/report.mjs';
 import {renderHtml, reportView} from '../lib/reporting/index.mjs';
 import {fixture, resource} from '../../harness-tests/fixtures/execution-core.mjs';
-import {prepared, recorded, productionBlockers} from '../../harness-tests/fixtures/generation-report.mjs';
+import {observed, prepared, recorded, productionBlockers, source as reportSource} from '../../harness-tests/fixtures/generation-report.mjs';
+import {fingerprint} from '../lib/execution-core/data.mjs';
 import {executionReportView} from '../../harness-tests/fixtures/execute-report.mjs';
 import {nativeCliInstallation} from '../lib/browser/native-cli.mjs';
 
@@ -46,6 +47,7 @@ const automation = {id: 'automation-fixture', sourceId: 'synthetic-source', titl
     {id: 'case-4', title: 'Pending source case', status: 'NOT_GENERATED', stage: 'AUTHOR', reason: 'No generated test candidate exists for this case.'},
     {id: 'case-5', title: 'Review the test', status: 'NEEDS_REVIEW', stage: 'REVIEW', reason: 'Review approval is missing.'}]};
 const productionCleanups = [], productionCases = [];
+let mixedView, heterogeneousView;
 try {
   for (const [status, patch] of [['PASS', {}], ['READY', {}], ['NEEDS_REVIEW', {assertions: {passed: 0, failed: 0}}], ['SKIPPED', {status: 'skipped'}]]) {
     const f = await prepared({after: action => productionCleanups.push(action)});
@@ -55,6 +57,29 @@ try {
     assert.equal(view.cases[0].status, status);
     productionCases.push({...view.cases[0], id: `production-${status}`});
   }
+  const original = {...reportSource(Array.from({length: 20}, (_, index) => `requested-case-${index + 1}`)), id: 'requested-report-source'};
+  const selected = {...original, id: 'report-subset', scenarios: original.scenarios.slice(0, 6)};
+  const notes = {version: 1, sourceFingerprint: fingerprint(original), cases: original.scenarios.slice(6).map(row => ({scenarioId: row.id, stage: 'EXPLORE', reason: 'The required fixture is unavailable.', nextAction: 'Provision the fixture, then resume exploration.'}))};
+  const f = await prepared({after: action => productionCleanups.push(action)}, {source: selected, reporting: {source: original, notes}});
+  await recorded(f, 'PASS', 'mixed-first'); await recorded(f, 'PASS', 'mixed-second');
+  mixedView = await automationReportView(f.roots, {sourceId: selected.id});
+  assert.equal(mixedView.status, 'READY'); assert.deepEqual(mixedView.coverage, {total: 20, selected: 6, ready: 6, blocked: 14, complete: false, scopeKnown: true});
+  const assessedStatuses = ['PASS', 'FAIL', 'BLOCKED', 'SKIPPED', 'NEEDS_REVIEW'];
+  const heterogeneousSource = {...reportSource(['native-pass', 'native-fail', 'native-skipped', 'native-blocked', 'native-needs-review', ...assessedStatuses.map(status => `exploration-${status.toLowerCase()}`), 'note-blocked', 'unassessed']), id: 'heterogeneous-request'};
+  const heterogeneousSelected = {...heterogeneousSource, id: 'heterogeneous-selection', scenarios: heterogeneousSource.scenarios.slice(0, 5)};
+  const exploration = observed({after: action => productionCleanups.push(action)}, {...heterogeneousSource, id: 'exploration-scope', scenarios: heterogeneousSource.scenarios.slice(5, 10)}, {statuses: assessedStatuses});
+  const heterogeneousNotes = {version: 1, sourceFingerprint: fingerprint(heterogeneousSource), cases: [{scenarioId: 'note-blocked', stage: 'REFINE', reason: 'The accepted expected result remains unresolved.', nextAction: 'Obtain the approved expected result before exploration.'}]};
+  const heterogeneous = await prepared({after: action => productionCleanups.push(action)}, {source: heterogeneousSelected, reporting: {source: heterogeneousSource, observed: exploration.assessment, notes: heterogeneousNotes}});
+  await recorded(heterogeneous, 'FAIL', 'heterogeneous-verification', (_test, index) => [
+    {status: 'passed', errors: 0, assertions: {passed: 1, failed: 0}, failedChecks: []}, {},
+    {status: 'skipped', errors: 0, assertions: {passed: 0, failed: 0}, failedChecks: []},
+    {status: 'timedOut', errors: 1, assertions: {passed: 0, failed: 0}, failedChecks: []},
+    {status: 'passed', errors: 0, assertions: {passed: 0, failed: 0}, failedChecks: []}
+  ][index]);
+  heterogeneousView = await automationReportView(heterogeneous.roots, {sourceId: heterogeneousSelected.id});
+  assert.deepEqual(heterogeneousView.cases.map(row => row.status), ['PASS', 'FAIL', 'SKIPPED', 'BLOCKED', 'NEEDS_REVIEW', ...Array(5).fill('NOT_GENERATED'), 'BLOCKED', 'NOT_GENERATED']);
+  assert.deepEqual(heterogeneousView.cases.slice(5, 10).map(row => row.observedStatus), assessedStatuses);
+  assert.deepEqual(heterogeneousView.coverage, {total: 12, selected: 5, ready: 0, blocked: 2, complete: false, scopeKnown: true});
 } finally {for (const cleanup of productionCleanups.reverse()) await cleanup();}
 automation.cases[0] = {...automation.cases[0], ...productionCases.find(row => row.status === 'PASS')};
 automation.cases = statuses.map((status, index) => ({...automation.cases[{PASS: 0, FAIL: 1, BLOCKED: 2, NOT_RUN: 3, NEEDS_REVIEW: 4}[status]], id: `case-${index + 1}`, title: `Case ${index + 1} · ${'A detailed synthetic source title '.repeat(index === 3 ? 8 : 1)}`, status: status === 'NOT_RUN' ? 'NOT_GENERATED' : status}));
@@ -65,9 +90,91 @@ const runtimeHtml = renderRuntime(reportView(runtimeFixture.assess()));
 for (const cleanup of cleanups.reverse()) await cleanup();
 const sizes = [[390,844], [768,1024], [1440,900], [2560,1440], [3840,2160]];
 let browser;
-const proof = {version: 5, status: 'INCOMPLETE', themes: ['light', 'dark'], surfaces: [], viewports: sizes, horizontalSweep: {from: 320, to: 3840, step: 160}};
+const proof = {version: 6, status: 'INCOMPLETE', themes: ['light', 'dark'], surfaces: [], viewports: sizes, horizontalSweep: {from: 320, to: 3840, step: 160}};
 try {
   browser = await chromium.launch({headless: true});
+  const mixedFolder = join(output, 'mixed-scope'); mkdirSync(mixedFolder);
+  writeFileSync(join(mixedFolder, 'index.html'), renderAutomation(mixedView));
+  for (const [file, body] of automationCompanions(mixedView)) writeFileSync(join(mixedFolder, file), body);
+  const mixedPage = await browser.newPage(); await mixedPage.goto(pathToFileURL(join(mixedFolder, 'index.html')).href);
+  assert.equal(await mixedPage.locator('[data-case]').count(), 20);
+  assert.equal(await mixedPage.locator('[data-status="READY"]').count(), 6);
+  assert.equal(await mixedPage.locator('[data-status="BLOCKED"]').count(), 14);
+  assert((await mixedPage.locator('.report-header').innerText()).includes('Automation subset status:'));
+  assert((await mixedPage.locator('.report-header').innerText()).includes('Requested scope incomplete'));
+  await mixedPage.locator('input[value="BLOCKED"]').check();
+  assert.equal(await mixedPage.locator('#result-count').textContent(), 'Showing 14 of 20 test cases');
+  assert.equal(await mixedPage.locator('[data-metric="total"]').textContent(), '20');
+  await mixedPage.locator('#clear-filters').click();
+  assert.equal(await mixedPage.locator('#result-count').textContent(), 'Showing 20 of 20 test cases');
+  for (const width of [390, 1440]) {
+    await mixedPage.setViewportSize({width, height: 900});
+    assert(await mixedPage.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+    await mixedPage.screenshot({path: join(mixedFolder, `scope-${width}.png`), fullPage: true});
+  }
+  await mixedPage.close(); proof.mixedScope = {...mixedView.coverage, filters: 'PASS', companions: 'PASS', geometry: 'PASS'};
+  const heterogeneousFolder = join(output, 'heterogeneous-scope'); mkdirSync(heterogeneousFolder);
+  writeFileSync(join(heterogeneousFolder, 'index.html'), renderAutomation(heterogeneousView));
+  writeFileSync(join(heterogeneousFolder, 'result.json'), JSON.stringify(heterogeneousView, null, 2) + '\n');
+  const heterogeneousCompanions = new Map(automationCompanions(heterogeneousView));
+  for (const [file, body] of heterogeneousCompanions) writeFileSync(join(heterogeneousFolder, file), body);
+  const companionIds = body => [...body.matchAll(/^## (.+?) — /gm)].map(match => match[1].replaceAll('\\-', '-').replaceAll('\\_', '_'));
+  const expectedAttention = ['native-fail', 'native-blocked', 'native-needs-review', 'exploration-fail', 'exploration-blocked', 'exploration-needs_review', 'note-blocked'];
+  assert.deepEqual(companionIds(heterogeneousCompanions.get('summary.md')), heterogeneousView.cases.map(row => row.id));
+  assert.deepEqual(companionIds(heterogeneousCompanions.get('defects.md')), expectedAttention);
+  const heterogeneousPage = await browser.newPage(), heterogeneousNetwork = [], heterogeneousErrors = [];
+  heterogeneousPage.on('pageerror', error => heterogeneousErrors.push(error.message));
+  await heterogeneousPage.route(/^https?:/, route => {heterogeneousNetwork.push(route.request().url()); return route.abort();});
+  await heterogeneousPage.goto(pathToFileURL(join(heterogeneousFolder, 'index.html')).href);
+  assert.equal(await heterogeneousPage.locator('[data-case]').count(), 12);
+  const rowOrders = await heterogeneousPage.locator('[data-case]').evaluateAll(nodes => nodes.map(node => Number(node.dataset.order)).sort((a, b) => a - b));
+  assert.deepEqual(rowOrders, Array.from({length: 12}, (_, index) => index), 'Every originally requested case appears once.');
+  assert.equal(await heterogeneousPage.locator('[data-metric="total"]').innerText(), '12');
+  assert.equal(await heterogeneousPage.locator('[data-metric="ready"]').innerText(), '0');
+  const heterogeneousChart = await heterogeneousPage.locator('[data-chart-status]').evaluateAll(nodes => Object.fromEntries(nodes.map(node => [node.dataset.chartStatus, Number(node.dataset.count)])));
+  assert.deepEqual(heterogeneousChart, {PASS: 1, FAIL: 1, SKIPPED: 1, BLOCKED: 2, NEEDS_REVIEW: 1, NOT_GENERATED: 6});
+  for (const [status, count] of Object.entries(heterogeneousChart)) {
+    await heterogeneousPage.locator(`input[value="${status}"]`).check();
+    assert.equal(await heterogeneousPage.locator('#result-count').innerText(), `Showing ${count} of 12 test cases`);
+    assert.equal(await heterogeneousPage.locator('[data-case]:visible').count(), count);
+    assert.equal(await heterogeneousPage.locator(`[data-case]:visible:not([data-status="${status}"])`).count(), 0);
+    await heterogeneousPage.locator('#clear-filters').click();
+  }
+  await heterogeneousPage.locator('#expand-groups').click();
+  for (const [index, row] of heterogeneousView.cases.slice(5, 10).entries()) {
+    const caseRow = heterogeneousPage.locator(`#case-${index + 5}`);
+    await caseRow.locator(':scope > summary').click();
+    const details = await caseRow.locator('.case-body').innerText();
+    assert(details.includes('Automation status: Not generated')); assert(details.includes(`Exploration result: ${row.observedStatus}`));
+    const companion = heterogeneousCompanions.get('summary.md').replaceAll('\\_', '_'); assert(companion.includes(`Exploration result: ${row.observedStatus}`));
+    await caseRow.locator(':scope > summary').click();
+  }
+  assert.equal(await heterogeneousPage.locator('[data-attention] strong').innerText(), '7');
+  await heterogeneousPage.locator('[data-attention]').click();
+  assert.equal(await heterogeneousPage.locator('#result-count').innerText(), 'Showing 7 of 12 test cases');
+  const attentionIds = await heterogeneousPage.locator('[data-case]:visible').evaluateAll(nodes => nodes.map(node => node.querySelector('.case-title').textContent));
+  assert.deepEqual(attentionIds.slice().sort(), expectedAttention.slice().sort(), 'Needs attention and Defects include the same native and exploration findings.');
+  assert.equal(await heterogeneousPage.locator('[data-case]:visible[data-status="NOT_GENERATED"]').count(), 3);
+  assert.equal(await heterogeneousPage.locator('[data-attention]').getAttribute('aria-pressed'), 'true');
+  await heterogeneousPage.locator('[data-attention]').click();
+  assert.equal(await heterogeneousPage.locator('#result-count').innerText(), 'Showing 12 of 12 test cases');
+  await heterogeneousPage.locator('#expand-groups').click();
+  for (const width of [390, 1440]) {
+    await heterogeneousPage.setViewportSize({width, height: 900});
+    assert(await heterogeneousPage.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `Heterogeneous scope overflows at ${width}px.`);
+    const overlappingIdentifiers = await heterogeneousPage.locator('[data-case] > summary').evaluateAll(rows => rows.flatMap(row => {
+      const labels = [...row.querySelectorAll('.case-identifiers')].flatMap(container => container.children.length ? [...container.children] : [container]).filter(label => label.getClientRects().length);
+      return labels.flatMap((label, index) => labels.slice(index + 1).filter(other => {
+        if (label.contains(other) || other.contains(label)) return false;
+        const a = label.getBoundingClientRect(), b = other.getBoundingClientRect();
+        return Math.min(a.right, b.right) - Math.max(a.left, b.left) > 1 && Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 1;
+      }).map(other => [label.textContent, other.textContent]));
+    }));
+    assert.deepEqual(overlappingIdentifiers, [], `Case identifiers and exploration outcomes overlap at ${width}px.`);
+    await heterogeneousPage.screenshot({path: join(heterogeneousFolder, `scope-${width}.png`), fullPage: true});
+  }
+  assert.deepEqual(heterogeneousNetwork, []); assert.deepEqual(heterogeneousErrors, []); await heterogeneousPage.close();
+  proof.heterogeneousScope = {...heterogeneousView.coverage, outcomes: heterogeneousChart, exploration: ['PASS', 'FAIL', 'BLOCKED', 'SKIPPED', 'NEEDS_REVIEW'], attentionCases: expectedAttention, filters: 'PASS', companions: 'PASS', attentionAgreement: 'PASS', offline: 'PASS', geometry: 'PASS'};
   const productionFolder = join(output, 'production'); mkdirSync(productionFolder);
   const commandBlockers = productionBlockers().map((blocker, index) => ({...blocker, status: 'BLOCKED', id: `blocker-${index}`, title: 'Automation stopped'}));
   writeFileSync(join(productionFolder, 'index.html'), renderAutomation({...automation, blocker: productionBlockers()[8], cases: [...productionCases, ...commandBlockers]}));
@@ -142,7 +249,9 @@ try {
     await blocked.uncheck(); assert((await page.locator('#result-count').innerText()).includes('18 of 120'));
     await failed.uncheck(); assert((await page.locator('#result-count').innerText()).includes('120 of 120'));
     await page.locator('[data-attention]').click(); assert((await page.locator('#result-count').innerText()).includes('36 of 120'));
-    await page.locator('[data-filter-status="BLOCKED"]').click(); assert(!await blocked.isChecked());
+    await page.locator('[data-filter-status="BLOCKED"]').click(); assert(await blocked.isChecked());
+    assert.equal(await page.locator('[data-attention]').getAttribute('aria-pressed'), 'false');
+    assert((await page.locator('#result-count').innerText()).includes('12 of 120'));
     await page.locator('#all-statuses').click();
     for (const checkbox of await page.locator('.status-choice input').all()) await checkbox.check();
     assert((await page.locator('#result-count').innerText()).includes('120 of 120'));

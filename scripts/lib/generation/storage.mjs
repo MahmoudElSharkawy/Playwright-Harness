@@ -67,19 +67,24 @@ export async function transaction(roots, sourceId, action) {
     const entries = readdirSync(directory).filter(name => /^\d{6}\.json$/.test(name)).sort();
     requireThat(entries.length < 500, 'Generation history limit reached.');
     let state, previous = null;
+    const history = {handoffs: new Map(), candidateHandoffs: new Map()};
     for (let index = 0; index < entries.length; index++) {
       requireThat(entries[index] === `${String(index + 1).padStart(6, '0')}.json`, 'Generation history has a gap.');
       const path = join(directory, entries[index]); requireThat(lstatSync(path).isFile() && lstatSync(path).size <= 2 * 1024 * 1024, 'Invalid generation history file.');
       const record = JSON.parse(readFileSync(path, 'utf8'));
       requireThat(record.previous === previous && record.sha256 === fingerprint(record.state), 'Generation history integrity mismatch.');
       state = record.state; previous = record.sha256;
+      // A candidate's first appearance binds it to its original assessed source.
+      // Later revisions must not reinterpret an old receipt against a new oracle.
+      if (state.handoff) history.handoffs.set(state.handoff.fingerprint, state.handoff);
+      for (const candidate of state.candidates ?? []) if (!history.candidateHandoffs.has(candidate.revision)) history.candidateHandoffs.set(candidate.revision, state.handoff);
     }
     const save = next => {
       const checked = data(next); const file = join(directory, `${String(entries.length + 1).padStart(6, '0')}.json`);
       writeFileSync(file, JSON.stringify({previous, sha256: fingerprint(checked), state: checked}, null, 2), {flag: 'wx', mode: 0o600, flush: true});
       entries.push(file); previous = fingerprint(checked);
     };
-    return await action(state, save, directory);
+    return await action(state, save, directory, history);
   } finally {closeSync(fd); unlinkSync(lock);}
 }
 

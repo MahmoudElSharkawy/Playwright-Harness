@@ -1,5 +1,19 @@
 # Changelog
 
+## 3.6.4 — Complete QA reporting for partial automation
+
+### Upgrade actions
+
+- Re-run setup from the 3.6.4 archive in each project, then reload Claude Code skills or restart Codex to discover the updated reporting guidance. Existing customized code and configuration remain subject to review.
+- When generating a supported subset, retain the original source, assessed exploration outcomes and fingerprint-bound blocker notes through the preparation input's `reporting` field. For an existing subset history, associate the original inventory with `generate report --id <source-id> --scope <full-source.json> [--input <blockers.json>] [--observed <observations.json>]`, then regenerate the standard report. Old report files are unchanged; missing historical scope or evidence is never inferred. See [reporting](docs/reporting.md#case-results-and-blocker-notes).
+
+### Changes
+
+- Preserve the original requested case inventory, assessed exploration outcomes and pre-generation blocker notes separately from the executable subset. Automatic reports and later report commands retain the complete scope, with every requested case shown once across HTML, Summary and Defects.
+- Distinguish a READY automation subset from completion of the original request. Report selected coverage, verified cases and blockers; identify older histories without recorded original scope as having unknown completeness.
+- Retain verified historical case outcomes when later selections exclude those cases, checking their original source, approval and native result. Earlier READY cases remain historical passes and do not establish current readiness. Show exploration outcomes separately from automation verification, including failures, blockers, skips and review findings.
+- Validate explicit scope membership, source fingerprints, assessed observations and blocker notes without relaxing generation preparation, independent review or either required scoped verification run. Add mixed-scope regression coverage across supported statuses and selection changes.
+
 ## 3.6.3 — Safer Windows setup and patched dependencies
 
 ### Upgrade actions

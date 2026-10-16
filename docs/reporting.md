@@ -114,6 +114,8 @@ blockers without displaying their internal classification codes.
 npx --no pom-harness execute report <exec> [--input .harness/state/blockers.json]
 npx --no pom-harness generate report --source .harness/sources/<name>.json [--input .harness/state/blockers.json]
 npx --no pom-harness generate report --id <source-id>
+npx --no pom-harness generate report --id <subset-source-id> --scope .harness/sources/<full-source>.json [--input .harness/state/blockers.json]
+npx --no pom-harness generate report --id <subset-source-id> --scope .harness/sources/<full-source>.json --observed .harness/state/observed-scope.json [--input .harness/state/blockers.json]
 ```
 
 Execution can report a captured source before freeze. Missing environment references
@@ -126,6 +128,70 @@ such cases are `NOT_GENERATED`, with no inferred execution result. Reports can a
 inventory a draft with known IDs/titles and missing actions or
 expectations; incomplete cases appear BLOCKED at REFINE. The original empty slots
 are retained, and generation preparation still rejects the draft.
+Before selecting cases for generation, preserve the original requested source and
+record every blocker against that source's fingerprint. Add `reporting` to the
+preparation JSON alongside the executable subset's `source`:
+
+```json
+{
+  "reporting": {
+    "source": ".harness/sources/full-source.json",
+    "notes": ".harness/state/blockers.json",
+    "observed": ".harness/state/observed-scope.json"
+  }
+}
+```
+
+`notes` and `observed` are optional. The original inventory may contain incomplete blocked cases;
+the selected subset must still pass normal preparation checks and match its cases
+in that inventory exactly. Reporting context is stored in the generation history,
+separately from the executable handoff. Automatic reports and later `report --id`
+commands reuse it, including recorded blockers, without an extra full-scope document.
+For existing histories, `--scope` explicitly associates the original inventory;
+combine it with `--input` to persist or refresh its blocker notes. `--input` alone
+applies only to the current report. `--source` continues to require an exact match
+to the generation source; it does not select the original reporting scope.
+
+When exploration assessed cases outside the generated subset, `observed` preserves
+those outcomes through a separate report-only assessment of the actual evidence. Its
+descriptor uses consumer-relative paths:
+
+```json
+{
+  "source": ".harness/sources/observed-source.json",
+  "executions": [
+    {"snapshot": ".harness/runs/observed-run/inputs.json", "runRoot": ".harness/runs/observed-run"}
+  ],
+  "bindings": [
+    {"sourceScenarioId": "case-1", "runId": "observed-run", "scenarioId": "case-1"}
+  ]
+}
+```
+
+The observed source contains exactly the assessed cases, unchanged from the original
+inventory; it can differ from the executable subset. Bind every observed source case
+exactly once to one assessed execution case. The command reconstructs runs and
+reassesses their evidence; a saved claimed result or arbitrary status annotation is rejected.
+`report --observed` requires both `--id` and `--scope` and persists this context for
+later reports. PASS, FAIL, BLOCKED, SKIPPED and NEEDS_REVIEW remain exploration outcomes. A case with
+no generated test remains NOT_GENERATED and cannot gain an automation pass or READY
+from exploration alone.
+
+The report includes every original case exactly once and identifies partial coverage.
+For example, a READY six-case subset of a 20-case request reports six verified cases
+and fourteen blockers with their recorded stages, reasons and next actions. READY
+describes the selected candidate; the original request remains incomplete. HTML
+counts and filters, Summary and Defects use the same full inventory. Histories
+without explicit original scope show completeness as unknown; the report never
+infers the full request from neighboring files or matching IDs.
+This applies to every recorded workflow status, including failed, skipped, pending,
+not-run and review-needed cases. Cases excluded from a later subset retain their
+source-bound historical results with their recorded stage and follow-up work.
+Historical outcomes do not grant readiness to the current candidate. Unrecorded
+outcomes are not inferred.
+Case totals and status filters describe automation dispositions. Exploration results
+are listed separately; a case outside the current candidate with a failed, blocked or review-needed
+exploration result also appears in Needs attention and Defects.
 Generation commands automatically return a separate `reporting` delivery result when their source is
 known. The final skill response still renders the current report and links its `html`.
 Native outcomes, exploration outcomes and automation readiness appear separately;
@@ -161,11 +227,30 @@ actions. Each entry records BLOCKED only; there is no status override. Preserve 
 observed obstacles in the reason. Notes for assessed/generated cases, changed sources,
 unknown IDs or credential-like content fail validation. Titles and arbitrary prose
 still require correct classification by the producer.
+For subset reporting, bind notes to the original source fingerprint. A later report
+reuses saved notes unless a validated replacement is supplied. Preparation and
+`generate revise` accept the same optional `reporting` paths. An accepted source
+revision may explicitly revise the original inventory while retaining its case IDs;
+newly selected cases need reassessed generation evidence and no longer retain their
+pre-generation blocker notes. Saved observations are also retained when omitted
+from a refresh. Incremental captures replace only reassessed cases and retain the
+other source-bound outcomes, including their recorded causes and next actions.
+Newly assessed cases lose their retained blocker notes; explicit
+notes conflicting with assessed outcomes are rejected. If an observed case's source
+changes in an accepted revision, supply freshly reassessed observations rather than
+reusing its old outcome.
 
-Automation output contains `result.json` (including the frozen source/notes),
+Automation output contains `result.json` (including the frozen reporting context),
 `index.html`, `summary.md`, `defects.md`, and a final integrity `manifest.json`. Report delivery is WRITTEN/FAILED
 separately from workflow outcomes; write failure neither resets history nor grants
 greens. Explicit report commands exit nonzero when delivery fails.
+
+Each report invocation produces one complete QA bundle: `index.html` is the main
+report, and JSON, Summary and Defects use the same full-scope case data. There is
+no separate passed-only QA report. Collection and verification receipts remain
+unchanged supporting evidence for the tests actually executed; their selected
+scope does not replace the QA inventory. Optional native Allure capture is also
+run-level evidence. Earlier report snapshots remain historical output.
 
 The synthetic browser proof is `npm run probe:results-report -- <fresh-directory>`.
 It checks both skill reports with 120 synthetic cases each, combined status/search
