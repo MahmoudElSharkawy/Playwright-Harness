@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### Upgrade actions
+
+- Merge the updated `src/utils/AllureReport.ts` and `src/config/reporting.ts` into customized consumers. Use `historyDir` (default `reports/allure-history`), remove obsolete `reportDir`/`keepHistory` settings and `ALLURE_HISTORY`, and update CI uploads to retain the entire history root with `latest.html` and its target. `HARNESS_ALLURE_HISTORY` selects a shared root under consumer `reports/`. To disable optional Allure output, remove its ordinary reporter or omit verification's `--allure`.
+- Pass the exact recording directory returned by verification or standalone capture to `generate-allure --input`; no longer derive it from the verification ID. Existing report folders, captures and recorded links remain untouched and readable. See the [report inventory and migration guide](docs/reporting.md).
+
+### Changes
+
+- Name new automation and execution QA report folders with UTC `YYYY-MM-DD_HH-mm-ssZ` timestamps, without milliseconds, replacing the `execute-` prefix with `execution-`. Allocate numeric suffixes for same-second collisions without overwriting history; preserve internal IDs and generic runtime report locations.
+- Generate one native Allure report per ordinary, standalone or verification invocation under the shared timestamped history root. Preserve raw results and capture/verification/generation receipts, retain reports for failed tests, and publish a portable relative latest link only after successful generation. Remove duplicate latest/archive HTML and verification wrapper pages; independent verification runs retain separate reports.
+- Keep harness QA reports separate from native Allure, preserving their full requested case inventory, blockers and readiness. Document all report/evidence locations and align starter configuration, CI artifact uploads and framework reporting conventions.
+
 ## 3.6.4 — Complete QA reporting for partial automation
 
 ### Upgrade actions

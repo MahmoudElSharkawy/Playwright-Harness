@@ -362,15 +362,32 @@ the assertion-message poll check accepts a `message:` token anywhere inside the 
 
 ## Report output contract
 
-The retained example workflow produces: `reports/playwright-report/` (HTML), `reports/json-report/test-results.json`,
-the CTRF JSON (`ctrf/ctrf-report.json`), root `allure-results/`, and root `allure-report/`
-(generated after reporter flush by `src/utils/AllureReport.ts`). **Warning:** the allure-playwright `outputFolder`
-option in `playwright.config.ts` is dead in v3 — results land in the root default —
-never copy that key into new configs. Any path change lands in lockstep across
+The retained example workflow produces `reports/playwright-report/` (HTML),
+`reports/json-report/test-results.json`, `reports/junit/results.xml`, the CTRF JSON
+(`ctrf/ctrf-report.json`), and raw Allure staging at the configured `resultsDir`
+(default `allure-results/`). After reporter flush, `src/utils/AllureReport.ts`
+preserves raw evidence and generates one canonical native report at
+`reports/allure-history/YYYY-MM-DD_HH-mm-ssZ[-NNN]/index.html`. UTC seconds retain
+`Z`, omit milliseconds and add a numeric suffix only for collisions. The shared
+history root's `latest.html` is a relative redirect/link published atomically after
+completion. CI uploads the entire root, including its target and evidence.
+`HARNESS_ALLURE_HISTORY` overrides the consumer-relative history root under
+`reports/`; the ordinary starter otherwise uses `allureConfig.historyDir`.
+There is no duplicate latest HTML/archive copy or verification wrapper page.
+**Warning:** allure-playwright v3 uses `resultsDir`; `outputFolder` is unsupported.
+Any path change lands in lockstep across
 `playwright.config.ts` + global-setup/teardown + the README report table + the CI
 artifact steps, in the same MR.
 
-For the sequential shared-runtime and generation workflow, follow [reporting](../../../../docs/reporting.md). Its fresh consumer report directories and Allure `resultsDir` keep invocations isolated without changing the retained example paths. Report validated verdicts; keep report delivery failures separate. Native Allure detail does not replace the source-coverage verifier or two-green readiness gate.
+For the sequential shared-runtime and generation workflow, follow
+[reporting](../../../../docs/reporting.md). Ordinary, standalone and verification
+Allure invocations share the canonical history root and retain their own raw
+captures and receipts. Two independent scoped greens keep two native reports.
+Automation/execution QA bundles remain separate under `reports/harness/`, with
+`automation-`/`execution-` timestamped names and unchanged internal IDs. Old reports
+and generic validated-runtime locations remain unchanged. Report validated verdicts;
+keep report delivery failures separate. Native Allure detail does not replace the
+full QA inventory, source-coverage verifier or two-green readiness gate.
 
 ## Repo shell & README
 

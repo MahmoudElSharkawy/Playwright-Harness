@@ -196,7 +196,9 @@ Windows ACLs/Linux modes protect private state.
 
 Report creation reassesses frozen inputs and evidence, never trusting saved result
 JSON. It writes one self-contained case report, Summary, grouped Defects
-and final manifest under a fresh `reports/harness/execute-<execution-uuid>-<report-uuid>/`.
+and final manifest under a fresh `reports/harness/execution-YYYY-MM-DD_HH-mm-ssZ[-NNN]/`.
+Names use UTC seconds, retain `Z`, and add a numeric suffix only for same-second
+collisions. Internal execution IDs and existing report directories are unchanged.
 Verified PNG/JPEG context is limited to 2 MiB each/20 MiB total. Counts come from
 case summaries; attempts/history are separate, and expectation rollups use source
 expectations from the selected assessed run. Defect groups span assessed attempts

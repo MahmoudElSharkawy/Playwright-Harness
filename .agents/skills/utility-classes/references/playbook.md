@@ -186,9 +186,9 @@ private shouldConsoleLog(): boolean {
 ```
 
 Facade env toggles are opt-in: absent means off, and only the literal string `'true'`
-enables (`API_CONSOLE_LOGS`, `DB_CONSOLE_LOGS`). The documented opt-outs
-`AUTO_ALLURE_OPEN` / `ALLURE_HISTORY` (practice 16) are the sanctioned exceptions —
-don't invent a third convention. True module constants in utils are `UPPER_SNAKE_CASE`
+enables (`API_CONSOLE_LOGS`, `DB_CONSOLE_LOGS`). The documented opt-out
+`AUTO_ALLURE_OPEN` (practice 16) is the sanctioned exception — don't invent another
+toggle convention. True module constants in utils are `UPPER_SNAKE_CASE`
 (`REDACTED_HEADERS`, `TEXTUAL_CONTENT`) per design-conventions §2.
 
 ## 9. Complexity is allowed here — and only here
@@ -294,11 +294,16 @@ context** — never `test.step()`, `test.info()`, or an Allure attachment.
 **Why:** they execute once per run, outside any worker — before the first test and
 after the last.
 
-Scope is strictly run hygiene. ✅ Clear stale `allure-results` before the run
-(`global-setup.ts`); generate the report, archive a timestamped copy
-(`reports/allure-history/<timestamp>/index.html`), and optionally open it after
-all reporters flush (`src/utils/AllureReport.ts`, reporter `onExit`). The archive
-contains the generated HTML; it is distinct from optional Allure trend history.
+Scope is strictly run hygiene. ✅ Clear stale raw staging before the run
+(`global-setup.ts`); after all reporters flush, preserve the invocation's raw
+results and generate its single native HTML in
+`reports/allure-history/YYYY-MM-DD_HH-mm-ssZ[-NNN]/index.html`
+(`src/utils/AllureReport.ts`, reporter `onExit`). Publish a relative `latest.html`
+link only after the report and generation receipt are complete, then optionally
+open the report. UTC seconds retain `Z`, omit milliseconds, and add a numeric
+suffix only for collisions. Ordinary, standalone and verification entry points
+share this history; harness QA reports remain separate. These run bundles are
+distinct from optional Allure trend history and contain no duplicate archive HTML.
 ❌ Business logic, and data seeding/cleanup of any kind — iron law 8 makes seeding
 per-test (`beforeEach`, via API); these files run once per run and cannot honor it.
 
@@ -332,9 +337,9 @@ an earlier opt-in `ALLURE_STRICT` escape hatch was removed as redundant).
 
 ## 16. Lifecycle env toggles: documented opt-outs, desktop off in CI
 
-**Rule:** `AUTO_ALLURE_OPEN` and `ALLURE_HISTORY` are **documented opt-outs**: by
-default the teardown opens the report locally and archives a timestamped copy; set
-either to `'false'` to skip — exactly as the runbook documents. Any behavior that
+**Rule:** `AUTO_ALLURE_OPEN` is a **documented opt-out**: by default the reporter
+opens the completed report locally; set it to `'false'` to skip — exactly as the
+runbook documents. Any behavior that
 needs a desktop (opening a browser or GUI viewer) is *additionally* disabled
 automatically when `process.env.CI` is set — CI must not depend on every pipeline
 remembering an env var.
@@ -342,9 +347,10 @@ remembering an env var.
 ✅ `const autoOpen = process.env.AUTO_ALLURE_OPEN !== 'false' && !process.env.CI;`
 
 Keep toggle conventions from multiplying: facades are opt-in `=== 'true'`
-(`API_CONSOLE_LOGS`, practice 8); the documented opt-outs
-`AUTO_ALLURE_OPEN` / `ALLURE_HISTORY` are the sanctioned exceptions — don't invent a
-third convention.
+(`API_CONSOLE_LOGS`, practice 8); `AUTO_ALLURE_OPEN` is the sanctioned opt-out.
+Remove the obsolete `ALLURE_HISTORY` archive toggle and `keepHistory` setting;
+`ALLURE_HISTORY=false` cannot suppress the sole canonical report. Disable optional
+reporting by removing the ordinary reporter or omitting verification's `--allure`.
 
 ## 17. Report paths: one source in code, lockstep copies in docs/CI
 
@@ -357,9 +363,12 @@ config; they are updated in lockstep with any path change, per the design-conven
 
 **Why:** duplicated paths drift silently and keep "working" until the day they don't.
 
-✅ (shipped example) `src/config/reporting.ts` — the allure paths, the history toggle,
-and the `environmentInfo` object live in one module, imported by
-`playwright.config.ts` and both lifecycle scripts.
+✅ (shipped example) `src/config/reporting.ts` — the raw `resultsDir`, canonical
+`historyDir`, generator config and `environmentInfo` object live in one module,
+imported by the reporter configuration and lifecycle code. `HARNESS_ALLURE_HISTORY`
+overrides the shared history root under consumer `reports/`; use the same root
+for scoped commands. Remove the old duplicate `reportDir` setting. CI uploads the
+entire history root, preserving `latest.html`, its target and supporting evidence.
 
 ❌ (illustrative counterexample) `global-setup.ts` cleared `./allure-results` while
 `playwright.config.ts` carried a dead `outputFolder: 'reports/allure-results'` key on
@@ -489,6 +498,6 @@ sourcing of env config, secrets, and JSON test data →
 - [ ] Class and methods carry JSDoc; rewrites preserve the facade surface (step-title format, attachment names/order, verb signatures) — verified by diffing old vs new Allure reports
 - [ ] Lifecycle scripts: run hygiene only (no business logic, no seeding); no `test.step()`/`test.info()`/attachments; JSDoc'd like utils
 - [ ] Teardown never exits non-zero or throws over report generate/open; setup rethrows only for report-integrity failures
-- [ ] Report generation waits for all reporters to flush (`onExit` or a subsequent process); environment information comes from the reporter; archives the report before opening the latest
-- [ ] `AUTO_ALLURE_OPEN` / `ALLURE_HISTORY` opt-outs honored, desktop behavior auto-disabled when `CI` is set; facade toggles stay opt-in `=== 'true'`
+- [ ] Report generation waits for all reporters to flush (`onExit` or a subsequent process); preserves raw results/receipts and one HTML per invocation; atomically publishes relative latest only after completion, including failed tests; keeps QA separate
+- [ ] `AUTO_ALLURE_OPEN` opt-out honored, desktop behavior auto-disabled when `CI` is set; obsolete `ALLURE_HISTORY`/`keepHistory` settings removed; facade toggles stay opt-in `=== 'true'`
 - [ ] Lifecycle scripts share a constant with (or read) the reporter config — no second hardcoded path copy in code; README report table and CI artifact steps updated in lockstep with any path change

@@ -1,8 +1,7 @@
-import {randomUUID} from 'node:crypto';
-import {existsSync, writeFileSync} from 'node:fs';
+import {existsSync, writeFileSync, mkdirSync} from 'node:fs';
 import {join} from 'node:path';
 import {consumerRoots} from '../consumer-paths.mjs';
-import {reportDirectory} from './index.mjs';
+import {reserveAllureReport, readAllureRun} from './history.mjs';
 import {installedAllure, allureInventory} from './allure.mjs';
 import {validateAllureLinks} from '../convention-source.mjs';
 
@@ -12,7 +11,11 @@ export default class HarnessAllureReporter {
     this.failed = false; this.tests = 0;
     try {
       this.roots = consumerRoots();
-      this.path = reportDirectory(this.roots, options.directory ?? process.env.HARNESS_ALLURE_DIRECTORY ?? `reports/allure/${randomUUID()}`);
+      const reserved = process.env.HARNESS_ALLURE_DIRECTORY;
+      const run = reserved ? readAllureRun(this.roots, reserved, process.env.HARNESS_GENERATION_INVOCATION)
+        : reserveAllureReport(this.roots, {directory: options.directory, historyRoot: options.historyRoot});
+      this.path = run.path; this.directory = run.directory;
+      mkdirSync(join(this.path, 'allure-results'), {mode: 0o700});
       const installed = installedAllure(this.roots, 'allure-playwright');
       if (installed.version !== '3.13.0') throw new Error('Unsupported Allure reporter.');
       this.reporter = installed.version;

@@ -74,10 +74,12 @@ steps:
     condition: always()
     displayName: Publish HTML report
 
-  - publish: allure-report/index.html
+  # Keep latest.html beside its relative target and retain native run evidence.
+  # If HARNESS_ALLURE_HISTORY is customized, update this path in the same change.
+  - publish: reports/allure-history/
     artifact: allure-report
     condition: always()
-    displayName: Publish Allure single-file report
+    displayName: Publish Allure run history
 
   - publish: ctrf
     artifact: ctrf-report

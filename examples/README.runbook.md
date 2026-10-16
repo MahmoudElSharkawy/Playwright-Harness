@@ -48,7 +48,7 @@ Consumed by the `utils/` facades and the root lifecycle scripts
 | Flag | Consumed by | Default | Effect |
 |---|---|---|---|
 | `AUTO_ALLURE_OPEN` | `src/utils/AllureReport.ts` | on (opt-out) | Set to `false` to skip auto-opening the generated Allure report after the run. |
-| `ALLURE_HISTORY` | `src/utils/AllureReport.ts` | on (opt-out) | Set to `false` to skip archiving this run's report copy to `reports/allure-history/<timestamp>/index.html` (master switch: `keepHistory` in `src/config/reporting.ts`). |
+| `HARNESS_ALLURE_HISTORY` | Ordinary and scoped Allure reporters | `reports/allure-history` | Shared consumer-relative history root under `reports/`; overrides the ordinary starter's `allureConfig.historyDir`. |
 | `API_CONSOLE_LOGS` | `utils/ApiActions.ts` | off (opt-in) | Set to `true` to mirror every API request/response to the console (report attachments are always written). |
 | `DB_CONSOLE_LOGS` | `utils/DBActions.ts` | off (opt-in) | Set to `true` to mirror every SQL query/result to the console (report attachments are always written). |
 
@@ -74,11 +74,29 @@ One run produces (mirrors the `reporter` array in `playwright.config.ts`):
 | Console list | terminal output | `list` reporter |
 | Playwright HTML report | `reports/playwright-report/` | `html` reporter (`open: 'always'` locally) |
 | Allure raw results | `allure-results/` (explicit `resultsDir`; `outputFolder` is unsupported) | `src/utils/AllureReport.ts`, extending `allure-playwright` |
-| Allure 3 single-file HTML (latest) | `allure-report/index.html` | `src/utils/AllureReport.ts`, after all reporters flush |
-| Archived Allure HTML | `reports/allure-history/<timestamp>/index.html` — one copy per run, not trend history | `src/utils/AllureReport.ts` (opt out: `ALLURE_HISTORY=false`) |
+| Allure 3 single-file HTML | `reports/allure-history/YYYY-MM-DD_HH-mm-ssZ[-NNN]/index.html` — one report per native invocation | `src/utils/AllureReport.ts`, after all reporters flush |
+| Latest Allure link | `reports/allure-history/latest.html` — relative redirect/link to the last completed report | Published atomically after report generation succeeds |
 | JSON results | `reports/json-report/test-results.json` | `json` reporter |
 | JUnit XML (CI Tests tab) | `reports/junit/results.xml` | `junit` reporter |
 | CTRF JSON | `ctrf/ctrf-report.json` | `playwright-ctrf-json-reporter` |
+
+Allure names use UTC seconds with `Z`, without milliseconds. Same-second runs add
+`-001`, `-002`, and so on without overwriting prior output. The run bundle retains
+`run.json`, its own `allure-results/`, `capture.json` and `generation.json` alongside
+the single HTML report. Raw staging is copied after reporter flush, then the next
+setup can clear it safely. Failed test runs also retain their completed reports;
+failed report generation leaves the previous latest link intact. Upload or copy the
+entire history root so `latest.html` keeps working with its relative target.
+
+The optional harness workflows use the same Allure history root for standalone and
+generation verification captures. Pass the returned recording directory to
+`npx --no pom-harness generate-allure --input <recording-directory>` after the run.
+Two independent verification runs retain two native reports. Harness QA reports
+remain separate under `reports/harness/automation-<timestamp>[-NNN]/` and
+`reports/harness/execution-<timestamp>[-NNN]/`; they include blocked and ungenerated
+cases that never appear in native results. See the [complete harness report
+inventory](https://github.com/MahmoudElSharkawy/Playwright-Harness/blob/main/docs/reporting.md#locations-and-authority)
+for tracker, metrics, evidence and legacy locations.
 
 > **Keep this table honest:** any reporter or path change in
 > `playwright.config.ts` lands in lockstep — same MR — across the config,
@@ -94,9 +112,14 @@ is contained in the class. Replace the separate `allure-playwright` and generato
 entries with one `./src/utils/AllureReport.ts` entry before the HTML reporter,
 preserving the official reporter's options. Apply the count-comparison message update
 in `Expects.ts`; setup does not overwrite consumer customizations.
+Merge `historyDir` from `src/config/reporting.ts` and remove old `reportDir`,
+`keepHistory` and `ALLURE_HISTORY` settings. `ALLURE_HISTORY=false` no longer skips
+the canonical report. To disable optional Allure output, remove its ordinary
+reporter or omit `--allure` for verification. Old `allure-report/` and scoped
+report directories remain untouched; new CI uploads use the entire history root.
 It runs on Node, without Java. Tests and action methods retain their existing
 `allure-js-commons` calls. The report keeps epic/feature/story grouping, embedded
-attachments and the existing output paths. Generation occurs in the reporter's
+attachments and native outcomes. Generation occurs in the reporter's
 `onExit`, not `globalTeardown`, so environment details and results have finished
 writing. Keep this reporter before the HTML viewer, which can hold its exit hook
 open in a local terminal. It cannot override native test outcomes. The generated HTML blocks

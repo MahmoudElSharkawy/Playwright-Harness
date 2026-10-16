@@ -45,7 +45,8 @@ async function completed(t, {businessValue = 'row-1', duration = 10, assertionCo
     const observations = JSON.parse(JSON.stringify(f.report).replaceAll('"run-1"', JSON.stringify(run.id)));
     const generatedResult = assessRun(run, f.roots, observations), reporting = writeReports(f.roots, generatedResult, {directory: `reports/execution/${invocation}/case-1`});
     put(root, `.harness/workflow/generated/${invocation}/case-1.json`, {id: 'case-1', invocation, execution: {id: 'case-1', run, roots: f.roots, observations, result: generatedResult}, reporting});
-    const directory = `reports/generation/${invocation}`, view = reportView(generatedResult), json = renderJson(view), html = renderHtml(view);
+    const directory = `reports/allure-history/2026-10-17_14-05-0${number}Z`, view = reportView(generatedResult), json = renderJson(view), html = renderHtml(view);
+    put(root, `${directory}/run.json`, {version: 1, id: invocation, directory, historyRoot: 'reports/allure-history'});
     put(root, `${directory}/allure-results/attachment.json`, json); put(root, `${directory}/allure-results/attachment.html`, html);
     put(root, `${directory}/allure-results/case-result.json`, {name: 'Observe', status: 'passed', steps: [{name: 'Business', steps: [{name: 'Technical', attachments: [{name: 'Harness execution result', type: 'application/json', source: 'attachment.json'}, {name: 'Harness execution report', type: 'text/html', source: 'attachment.html'}]}]}]});
     put(root, `${directory}/capture.json`, {status: 'CAPTURED', tests: 1, nativeStatus: 'passed', artifacts: allureInventory(join(root, directory, 'allure-results'))});
@@ -54,12 +55,12 @@ async function completed(t, {businessValue = 'row-1', duration = 10, assertionCo
       {type: 'attachment', link: {name: 'Harness execution result', contentType: 'application/json', id: 'a', ext: '.json', missed: false}},
       {type: 'attachment', link: {name: 'Harness execution report', contentType: 'text/html', id: 'b', ext: '.html', missed: false}},
     ]}]}]};
-    const landing = 'Recorded outcome: <strong>PASS</strong>', nativeHtml = `Content-Security-Policy d("data/attachments/a.json","${Buffer.from(json).toString('base64')}"); d("data/attachments/b.html","${Buffer.from(html).toString('base64')}"); d("data/test-results/case.json","${Buffer.from(JSON.stringify(converted)).toString('base64')}");`;
-    put(root, `${directory}/index.html`, landing); put(root, `${directory}/allure-report/index.html`, nativeHtml);
+    const nativeHtml = `Content-Security-Policy d("data/attachments/a.json","${Buffer.from(json).toString('base64')}"); d("data/attachments/b.html","${Buffer.from(html).toString('base64')}"); d("data/test-results/case.json","${Buffer.from(JSON.stringify(converted)).toString('base64')}");`;
+    put(root, `${directory}/index.html`, nativeHtml);
     const artifact = (path, text) => ({path, bytes: Buffer.byteLength(text), sha256: digest(text)});
     put(root, `${directory}/generation.json`, {status: 'GENERATED', generator: 'allure', commandline: '3.19.1', reporter: '3.13.0', tests: 1,
       configuration: digest(readFileSync(join(f.roots.packageRoot, 'scripts/lib/reporting/allurerc.json'))), verification: {id: invocation, revision: candidate.revision, status: 'PASS'},
-      artifact: artifact(`${directory}/index.html`, landing), nativeArtifact: artifact(`${directory}/allure-report/index.html`, nativeHtml)});
+      artifact: artifact(`${directory}/index.html`, nativeHtml)});
     await transaction(f.roots, source.id, (state, save) => {state.runs.push({id: invocation, revision: candidate.revision, gate: 'case-assertions', status: 'PASS', receipt: {path: `${recordPath}/execution.json`, fingerprint: fingerprint(native)}, reporting: {status: 'CAPTURED', directory}}); save(state);});
   }
   return {...f, h, n};
@@ -92,8 +93,9 @@ for (const [name, change] of [
   ['refinement changed after exploration', f => put(f.roots.projectRoot, 'refinement.json', {...f.n.refinement, scenarios: [{...f.n.refinement.scenarios[0], notes: 'Changed after execution'}]})],
   ['report content change', f => put(f.roots.projectRoot, 'reports/exploration/observe/index.html', 'changed')],
   ['missing generated execution', f => unlinkSync(join(f.roots.projectRoot, '.harness/workflow/generated/verify-0/case-1.json'))],
-  ['missing rendered Allure', f => unlinkSync(join(f.roots.projectRoot, 'reports/generation/verify-0/allure-report/index.html'))],
-  ['modified native attachment', f => put(f.roots.projectRoot, 'reports/generation/verify-0/allure-results/attachment.json', '{}')],
+  ['missing rendered Allure', f => unlinkSync(join(f.roots.projectRoot, 'reports/allure-history/2026-10-17_14-05-00Z/index.html'))],
+  ['modified native attachment', f => put(f.roots.projectRoot, 'reports/allure-history/2026-10-17_14-05-00Z/allure-results/attachment.json', '{}')],
+  ['wrong Allure invocation', f => put(f.roots.projectRoot, 'reports/allure-history/2026-10-17_14-05-00Z/run.json', {id: 'verify-foreign'})],
   ['review drift', f => put(f.roots.projectRoot, '.harness/state/review.md', 'modified')],
   ['frozen generated code change', f => put(f.roots.projectRoot, 'tests/ObservationTests.spec.ts', '// changed')],
 ]) test(`full workflow refuses ${name}`, async t => {const f = await completed(t); change(f); await assert.rejects(workflowSemantics(f.roots, expected));});
@@ -113,13 +115,13 @@ for (const [name, change] of [
   ['wrong attachment association', result => result.steps[0].steps[0].steps[0].link.id = 'b'],
   ['attachment outside technical step', result => result.steps = result.steps[0].steps],
 ]) test(`rendered Allure rejects ${name} even when the report hash is updated`, async t => {
-  const f = await completed(t), directory = 'reports/generation/verify-0', path = `${directory}/allure-report/index.html`;
+  const f = await completed(t), directory = 'reports/allure-history/2026-10-17_14-05-00Z', path = `${directory}/index.html`;
   const html = readFileSync(join(f.roots.projectRoot, path), 'utf8').replace(/d\("data\/test-results\/case.json","([^"]+)"\)/, (_, encoded) => {
     const result = JSON.parse(Buffer.from(encoded, 'base64')); change(result);
     return `d("data/test-results/case.json","${Buffer.from(JSON.stringify(result)).toString('base64')}")`;
   });
   put(f.roots.projectRoot, path, html);
   const receipt = JSON.parse(readFileSync(join(f.roots.projectRoot, directory, 'generation.json')));
-  receipt.nativeArtifact.bytes = Buffer.byteLength(html); receipt.nativeArtifact.sha256 = digest(html); put(f.roots.projectRoot, `${directory}/generation.json`, receipt);
+  receipt.artifact.bytes = Buffer.byteLength(html); receipt.artifact.sha256 = digest(html); put(f.roots.projectRoot, `${directory}/generation.json`, receipt);
   await assert.rejects(workflowSemantics(f.roots, expected), /attachment/);
 });

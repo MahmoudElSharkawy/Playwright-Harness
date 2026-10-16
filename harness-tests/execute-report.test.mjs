@@ -127,7 +127,8 @@ test('large valid API assertions remain assessed FAIL instead of an integrity fa
   step.expectations[0].conditions[0].expected.value = 'ok'; Object.assign(step.operation.checks[0], {select: {from: 'json', path: ['value']}, equals: 'ok'});
   f.freeze(); const run = await executeApi(f); assert.equal(run.result.status, 'FAIL'); assert(run.result.evidence.some(record => record.kind === 'assertion' && record.bytes > 64 * 1024));
   const report = writeExecutionReport(f.roots, f.executionId); assert.equal(report.scenarios[0].status, 'FAIL'); assert.equal(report.scenarios[0].state, 'ASSESSED');
-  assert(report.directory.startsWith(`reports/harness/${f.executionId}-`)); assert(!report.directory.includes('/execute-execute-'));
+  assert.match(report.directory, /^reports\/harness\/execution-\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}Z(?:-\d{3,})?$/);
+  assert(!report.directory.includes('/execute-execute-')); assert.equal(report.executionId, f.executionId);
 });
 
 test('diagnostic defects merge parameterized iterations through the report caller', () => {

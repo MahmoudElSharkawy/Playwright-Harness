@@ -11,6 +11,7 @@ import {packageRoot} from '../scripts/lib/consumer-paths.mjs';
 import {generateAllure} from '../scripts/lib/reporting/allure.mjs';
 import {transaction} from '../scripts/lib/generation/storage.mjs';
 import {writeAutomationReport} from '../scripts/lib/generation/report.mjs';
+import {linkExampleDependencies} from './fixtures/example-dependencies.mjs';
 const put = (root, path, content) => {mkdirSync(dirname(join(root, path)), {recursive: true}); writeFileSync(join(root, path), content);};
 
 // Real native runner contract tests; generated text here is deliberately a small runner fixture,
@@ -20,7 +21,7 @@ async function nativeFixture(t, body = 'await expect(2 + 2).toBe(4);', extra = '
   const key = sourceExpectations(source)[0].key, bindings = [{key, runId: f.run.id, scenarioId: 'case-1', expectationId: 'visible'}];
   if (withoutAllure) {
     for (const name of ['@playwright/test', 'playwright', 'playwright-core']) {const target = join(f.roots.projectRoot, 'node_modules', name); mkdirSync(dirname(target), {recursive: true}); symlinkSync(join(f.roots.packageRoot, 'examples/node_modules', name), target, process.platform === 'win32' ? 'junction' : 'dir');}
-  } else symlinkSync(join(f.roots.packageRoot, 'examples/node_modules'), join(f.roots.projectRoot, 'node_modules'), process.platform === 'win32' ? 'junction' : 'dir');
+  } else linkExampleDependencies(f.roots.projectRoot, f.roots.packageRoot);
   put(f.roots.projectRoot, 'package.json', JSON.stringify({type: options.packageType ?? 'module'}));
   put(f.roots.projectRoot, 'playwright.config.mjs', options.config ?? "export default {testDir:'./tests', projects:[{name:'native'}]};");
   for (const [file, contents] of Object.entries(options.files ?? {})) put(f.roots.projectRoot, file, contents);
@@ -120,9 +121,9 @@ test('Allure capture preserves the verifier FAIL when a native helper swallows a
   if (process.env.HARNESS_ALLURE_HTML_PROOF === '1') {
     const generated = await generateAllure(f.roots, result.reporting.directory);
     assert.equal(generated.status, 'GENERATED', JSON.stringify(generated)); assert.equal(generated.verification.status, 'FAIL');
-    assert.match(readFileSync(join(f.roots.projectRoot, generated.artifact.path), 'utf8'), /Recorded outcome: <strong>FAIL<\/strong>/);
-    assert(readFileSync(join(f.roots.projectRoot, generated.nativeArtifact.path)).length > 1000);
-    assert.equal((await generateAllure(f.roots, result.reporting.directory)).status, 'FAILED');
+    assert(readFileSync(join(f.roots.projectRoot, generated.artifact.path)).length > 1000);
+    assert.equal(generated.artifact.path, `${result.reporting.directory}/index.html`);
+    assert.equal((await generateAllure(f.roots, result.reporting.directory)).status, 'GENERATED');
     assert.equal((await generationStatus(f.roots, f.source.id)).greens, 0);
   }
 });
@@ -298,7 +299,8 @@ if (process.env.HARNESS_ALLURE_LOCATOR_PROOF === '1') for (const fails of [false
     const normal = spawnSync(process.execPath, [join(packageRoot, 'examples/node_modules/playwright/cli.js'), 'test', '--config', f.input.config, '--grep', 'adds'],
       {cwd: f.roots.projectRoot, env: {...process.env, AUTO_ALLURE_OPEN: 'false', ALLURE_HISTORY: 'false'}, encoding: 'utf8', windowsHide: true, timeout: 90000});
     assert.equal(normal.status, fails ? 1 : 0, normal.stdout + normal.stderr);
-    const normalHtml = readFileSync(join(f.roots.projectRoot, 'allure-report/index.html'), 'utf8');
+    const history = join(f.roots.projectRoot, 'reports/allure-history'), normalDirectory = readdirSync(history).find(name => /^\d{4}-/.test(name));
+    const normalHtml = readFileSync(join(history, normalDirectory, 'index.html'), 'utf8');
     const scoped = await verifyGeneration(f.roots, f.source.id, {allure: true});
     assert.equal(scoped.status, fails ? 'FAIL' : 'PASS', JSON.stringify(scoped)); assert.equal(scoped.reporting.links, 'CONFIGURED');
     const generated = await generateAllure(f.roots, scoped.reporting.directory);
@@ -324,7 +326,7 @@ if (process.env.HARNESS_ALLURE_LOCATOR_PROOF === '1') for (const fails of [false
       assert.equal(result.links.find(link => link.type === 'tms').url, linkTemplates.tms.urlTemplate.replace('%s', '101'));
       assert.equal(result.links.find(link => link.type === 'issue').url, linkTemplates.issue.urlTemplate.replace('%s', '202'));
     }
-    for (const rendered of [normalHtml, readFileSync(join(f.roots.projectRoot, generated.nativeArtifact.path), 'utf8')]) {
+    for (const rendered of [normalHtml, readFileSync(join(f.roots.projectRoot, generated.artifact.path), 'utf8')]) {
       const embedded = [...rendered.matchAll(/\bd\(("(?:[^"\\]|\\.)*"),("(?:[^"\\]|\\.)*")\)/g)]
         .filter(match => /^data\/test-results\/.+\.json$/.test(JSON.parse(match[1])))
         .map(match => JSON.parse(Buffer.from(JSON.parse(match[2]), 'base64').toString()));

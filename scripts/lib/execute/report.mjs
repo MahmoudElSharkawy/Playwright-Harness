@@ -1,9 +1,8 @@
 import {existsSync, writeFileSync, openSync, fstatSync, readSync, closeSync, constants} from 'node:fs';
 import {join} from 'node:path';
-import {randomUUID} from 'node:crypto';
 import {assessRun} from '../execution-core/index.mjs';
 import {fingerprint, digest, requireThat} from '../execution-core/data.mjs';
-import {reportDirectory} from '../reporting/index.mjs';
+import {timestampedReportDirectory} from '../reporting/directories.mjs';
 import {renderExecutionHtml, executionCaseExplanation} from './report-html.mjs';
 import {outcome} from '../reporting/case-view.mjs';
 import {readExecution, readFrozen, readBounded, ownedFile, listRunRecords} from './storage.mjs';
@@ -154,8 +153,7 @@ export function deliverableDefects(view, include = '') {
   return {defects, skipped};
 }
 export function writeExecutionReport(roots, executionId, {keepLogin = false, notes} = {}) {
-  const reportName = executionId.startsWith('execute-') ? executionId : `execute-${executionId}`;
-  const view = collectExecution(roots, executionId, {notes}), defects = executionDefects(view), path = `reports/harness/${reportName}-${randomUUID()}`, output = reportDirectory(roots, path), artifacts = [];
+  const view = collectExecution(roots, executionId, {notes}), defects = executionDefects(view), {directory: path, path: output} = timestampedReportDirectory(roots, {parent: 'reports/harness', prefix: 'execution-'}), artifacts = [];
   const write = (name, body) => {writeFileSync(join(output, name), body, {flag: 'wx', mode: 0o600, flush: true}); artifacts.push({path: name, sha256: digest(body), bytes: Buffer.byteLength(body)});};
   write('defects.json', JSON.stringify(defects, null, 2) + '\n');
   write('defects.md', `# Defect list\n\n${defects.map(item => `- ${markdownText(item.title)} (${item.occurrences.length} occurrence(s))`).join('\n') || 'No findings recorded.'}\n`);

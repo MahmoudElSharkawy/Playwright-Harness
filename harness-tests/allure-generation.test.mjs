@@ -6,6 +6,7 @@ import {spawnSync} from 'node:child_process';
 import {fixture} from './fixtures/execution-core.mjs';
 import {allureInventory, generateAllure} from '../scripts/lib/reporting/allure.mjs';
 import {digest} from '../scripts/lib/execution-core/data.mjs';
+import {linkExampleDependencies} from './fixtures/example-dependencies.mjs';
 
 const put = (root, path, content) => {mkdirSync(dirname(join(root, path)), {recursive: true}); writeFileSync(join(root, path), content);};
 function captured(t, fake) {
@@ -60,7 +61,7 @@ test('Allure 3 preserves native statuses, business/technical nesting and attachm
     }
   }
   assert.equal(existsSync(join(f.root, f.directory, 'allure-report/agent')), false);
-  assert.equal((await generateAllure(f.roots, f.directory)).status, 'FAILED');
+  assert.deepEqual(await generateAllure(f.roots, f.directory), receipt);
 });
 
 for (const [name, fake, phase] of [
@@ -81,10 +82,8 @@ for (const [name, fails, missingGenerator] of [['passing test', false, false], [
       mkdirSync(dirname(join(root, file)), {recursive: true}); cpSync(join(example, file), join(root, file));
     }
     if (missingGenerator) {
-      for (const name of ['@playwright/test', 'playwright', 'playwright-core', 'allure-playwright', 'allure-js-commons']) {
-        const destination = join(root, 'node_modules', name); mkdirSync(dirname(destination), {recursive: true}); symlinkSync(join(example, 'node_modules', name), destination, process.platform === 'win32' ? 'junction' : 'dir');
-      }
-    } else symlinkSync(join(example, 'node_modules'), join(root, 'node_modules'), process.platform === 'win32' ? 'junction' : 'dir');
+      linkExampleDependencies(root, f.roots.packageRoot, ['@playwright/test', 'playwright', 'playwright-core', 'allure-playwright', 'allure-js-commons']);
+    } else linkExampleDependencies(root, f.roots.packageRoot);
     put(root, 'package.json', '{"type":"commonjs"}');
     const resultsDir = fails ? 'allure-results' : 'reports/custom allure-results';
     put(root, 'playwright.config.ts', `export default {testDir:'./tests',workers:1,retries:0,globalSetup:'./global-setup.ts',reporter:[['./src/utils/AllureReport.ts',{resultsDir:${JSON.stringify(resultsDir)},environmentInfo:{fixture:'after-flush'}}]]};`);
@@ -92,14 +91,17 @@ for (const [name, fails, missingGenerator] of [['passing test', false, false], [
     const run = spawnSync(process.execPath, [join(example, 'node_modules/@playwright/test/cli.js'), 'test', '--config=playwright.config.ts'],
       {cwd: root, env: {...process.env, CI: '1', AUTO_ALLURE_OPEN: 'false'}, encoding: 'utf8', timeout: 90000, windowsHide: true});
     assert.equal(run.status, fails ? 1 : 0, run.stderr);
-    const output = join(root, 'allure-report/index.html');
-    if (missingGenerator) {assert.equal(existsSync(output), false); assert.match(run.stdout + run.stderr, /test outcomes are unchanged/); return;}
-    const summary = JSON.parse(readFileSync(join(root, 'allure-report/summary.json')));
+    const history = join(root, 'reports/allure-history'), runs = readdirSync(history).filter(name => /^\d{4}-/.test(name));
+    assert.equal(runs.length, 1); assert.match(runs[0], /^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}Z(?:-\d{3,})?$/);
+    const output = join(history, runs[0], 'index.html');
+    if (missingGenerator) {assert.equal(existsSync(output), false); assert.equal(existsSync(join(history, 'latest.html')), false); assert.match(run.stdout + run.stderr, /test outcomes are unchanged/); return;}
+    const summary = JSON.parse(readFileSync(join(history, runs[0], 'summary.json')));
     assert.equal(summary.stats.total, 1); assert.equal(summary.status, fails ? 'failed' : 'passed');
     const html = readFileSync(output, 'utf8'), files = inlineFiles(html);
     assert([...files.values()].some(value => value.toString().includes('after-flush')));
-    const archives = readdirSync(join(root, 'reports/allure-history')); assert.equal(archives.length, 1);
-    assert.equal(readFileSync(join(root, 'reports/allure-history', archives[0], 'index.html'), 'utf8'), html);
+    assert.equal(existsSync(join(root, 'allure-report/index.html')), false);
+    assert.equal(existsSync(join(history, runs[0], 'awesome')), false);
+    assert.match(readFileSync(join(history, 'latest.html'), 'utf8'), new RegExp(`${runs[0]}/index.html`));
   });
 }
 
@@ -108,15 +110,16 @@ test('the example finishes Allure before entering the HTML viewer exit hook', t 
   for (const file of ['playwright.config.ts', 'src/utils/AllureReport.ts', 'src/config/reporting.ts', 'src/config/timeouts.ts', 'global-setup.ts', 'allurerc.json']) {
     mkdirSync(dirname(join(root, file)), {recursive: true}); cpSync(join(example, file), join(root, file));
   }
-  symlinkSync(join(example, 'node_modules'), join(root, 'node_modules'), process.platform === 'win32' ? 'junction' : 'dir');
+  linkExampleDependencies(root, f.roots.packageRoot);
   put(root, 'package.json', '{"type":"commonjs"}');
   // Keep the shipped reporter order. Observe the point at which the real HTML viewer can block onExit.
   put(root, 'proof.config.ts', `import source from './playwright.config'; export default {...source,workers:1,retries:0,reporter:source.reporter.filter(([name])=>['list','html','./src/utils/AllureReport.ts'].includes(name)).map(([name,options])=>name==='html'?['./HtmlExitBoundary.ts']:[name,options])};`);
-  put(root, 'HtmlExitBoundary.ts', `import {existsSync,writeFileSync} from 'node:fs'; export default class HtmlExitBoundary {onExit(){writeFileSync('html-exit.json',JSON.stringify({reportReady:existsSync('allure-report/index.html')}));}}`);
+  put(root, 'HtmlExitBoundary.ts', `import {existsSync,writeFileSync} from 'node:fs'; export default class HtmlExitBoundary {onExit(){writeFileSync('html-exit.json',JSON.stringify({reportReady:existsSync('reports/allure-history/latest.html')}));}}`);
   put(root, 'tests/Report.spec.ts', `import {test,expect} from '@playwright/test'; test('native report ordering',()=>{expect(2).toBe(2);});`);
   const run = spawnSync(process.execPath, [join(example, 'node_modules/@playwright/test/cli.js'), 'test', '--config=proof.config.ts'],
     {cwd: root, env: {...process.env, CI: '', AUTO_ALLURE_OPEN: 'false'}, encoding: 'utf8', timeout: 90000, windowsHide: true});
   assert.equal(run.status, 0, run.stdout + run.stderr);
   assert.deepEqual(JSON.parse(readFileSync(join(root, 'html-exit.json'))), {reportReady: true});
-  assert.equal(JSON.parse(readFileSync(join(root, 'allure-report/summary.json'))).stats.total, 1);
+  const history = join(root, 'reports/allure-history'), directory = readdirSync(history).find(name => /^\d{4}-/.test(name));
+  assert.equal(JSON.parse(readFileSync(join(history, directory, 'summary.json'))).stats.total, 1);
 });
