@@ -187,7 +187,7 @@ export function configureInstalled({projectRoot, run, environment, mode, skipBro
     // The committed archive must stay tracked even under a broad *.tgz rule.
     const vendored = `.harness/vendor/playwright-pom-harness-${VERSION}.tgz`, notes = [];
     if (git(projectRoot, 'rev-parse', '--is-inside-work-tree').status === 0 && git(projectRoot, 'check-ignore', '-q', vendored).status === 0) {
-      appendLine(projectRoot, '.gitignore', '!/.harness/vendor/*.tgz', journal); changed.push('.gitignore');
+      if (appendLine(projectRoot, '.gitignore', '!/.harness/vendor/*.tgz', journal)) changed.push('.gitignore');
       if (git(projectRoot, 'check-ignore', '-q', vendored).status === 0) notes.push(`${vendored} is still git-ignored, probably because a rule ignores its folder; adjust .gitignore so it is committed.`);
     }
     if (appendLine(projectRoot, '.gitattributes', '/.harness/vendor/*.tgz binary', journal)) changed.push('.gitattributes');

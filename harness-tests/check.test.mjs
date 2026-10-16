@@ -172,6 +172,23 @@ test('the vendored archive must exist, match the lockfile and stay tracked',t=>{
  assert.match(check(root).errors.join(' '),/is git-ignored/);
  put(root,'.gitignore','*.tgz\n!/.harness/vendor/*.tgz\n');
  const untracked=check(root);assert.deepEqual(untracked.errors,[]);assert.match(untracked.notes.join(' '),/is not committed yet/);
+ assert.equal(git(root,'add',archive).status,0);const tracked=check(root);
+ assert.deepEqual(tracked.errors,[]);assert(!tracked.notes.some(note=>note.includes('is not committed yet')));
+});
+test('an archive exception cannot reopen an ignored harness parent; checking preserves team rules and tracked files',t=>{
+ const root=project(t),archive='.harness/vendor/playwright-pom-harness-0.0.1.tgz',tracked='.harness/state/team-history.json';
+ put(root,'package.json',JSON.stringify({name:'synthetic',devDependencies:{'playwright-pom-harness':`file:${archive}`}}));
+ put(root,archive,'synthetic archive bytes');put(root,tracked,'{"reviewed":true}\n');
+ assert.equal(git(root,'init','-q').status,0);assert.equal(git(root,'add',tracked).status,0);
+ for(const parent of ['/.harness/','/.harness/vendor/']) {
+  const ignore=`# Team rule\n/team-cache/\n${parent}\n!/${archive}\n`;put(root,'.gitignore',ignore);
+  const before=snapshot(root),result=check(root);
+  assert.equal(result.errors.length,1);
+  assert.match(result.errors.join(' '),/ignored parent director.*selective/i);
+  assert.deepEqual(snapshot(root),before);assert.equal(git(root,'ls-files',tracked).stdout.trim(),tracked);
+ }
+ put(root,'.gitignore','# Team rule\n/team-cache/\n/.harness/runs/\n/.harness/state/\n/.harness/knowledge-candidates/\n/.harness/installation.json\n');
+ assert.deepEqual(check(root).errors,[]);assert.equal(readFileSync(join(root,tracked),'utf8'),'{"reviewed":true}\n');
 });
 test('an installation without npm-shrinkwrap.json reports the gap instead of failing',t=>{
  // npm 12 packs without the shrinkwrap; the drift comparison then has nothing to compare against.

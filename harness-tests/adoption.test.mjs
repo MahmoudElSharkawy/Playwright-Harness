@@ -139,6 +139,17 @@ test('fresh consumer ignores secrets/auth/reports but permits the example enviro
  assert(readFileSync(join(root,'.gitignore'),'utf8').startsWith('# Team rule\n/team-cache/\n'));
 });
 
+test('selective harness ignores preserve shared inputs, tracked local files and team rules on rerun',t=>{
+ const root=project(t),tracked='.harness/runs/team-history.json',history='{"reviewed":true}\n',ignore='# Team rule\n/team-cache/\n';
+ put(root,tracked,history);put(root,'.gitignore',ignore);
+ assert.equal(git(root,'init','--initial-branch=fixture').status,0);assert.equal(git(root,'add',tracked).status,0);adopt(root);
+ const local=['.harness/runs/new.json','.harness/state/lock.json','.harness/knowledge-candidates/observation.md','.harness/installation.json'];
+ const shared=['.harness/vendor/release.tgz','.harness/sources/cases.json','.harness/knowledge/reviewed.md','.harness/project.json','.harness/targets.json','.harness/integrations.json','.harness/links.json'];
+ for(const file of local)assert.equal(git(root,'check-ignore','--quiet','--no-index',file).status,0,file);
+ for(const file of shared)assert.equal(git(root,'check-ignore','--quiet',file).status,1,file);
+ assert.equal(git(root,'ls-files',tracked).stdout.trim(),tracked);assert.equal(readFileSync(join(root,tracked),'utf8'),history);
+ assert(readFileSync(join(root,'.gitignore'),'utf8').startsWith(ignore));assert.equal(adopt(root).changes.length,0);
+});
 test('dangling discovery entries fail preflight without writes',t=>{
  const root=project(t);mkdirSync(join(root,'.agents/skills'),{recursive:true});
  symlinkSync(join(root,'absent-skill'),join(root,'.agents/skills/action-methods'),'junction');
