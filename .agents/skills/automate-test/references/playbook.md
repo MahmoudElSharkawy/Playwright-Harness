@@ -486,6 +486,8 @@ silently skipped:
 
 **Report to the user** (also the PR description's source):
 - Render and share the standard QA report with its Summary and Defects companions.
+  Return one complete QA report as the primary deliverable, with verification
+  receipts and optional native run reports retained as supporting evidence.
   It must include every originally requested case exactly once, including cases
   blocked, failed, skipped, pending, not run or awaiting review. Preserve recorded
   exploration outcomes separately from automation results; exploration alone cannot

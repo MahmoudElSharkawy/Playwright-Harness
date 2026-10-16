@@ -245,6 +245,13 @@ Automation output contains `result.json` (including the frozen reporting context
 separately from workflow outcomes; write failure neither resets history nor grants
 greens. Explicit report commands exit nonzero when delivery fails.
 
+Each report invocation produces one complete QA bundle: `index.html` is the main
+report, and JSON, Summary and Defects use the same full-scope case data. There is
+no separate passed-only QA report. Collection and verification receipts remain
+unchanged supporting evidence for the tests actually executed; their selected
+scope does not replace the QA inventory. Optional native Allure capture is also
+run-level evidence. Earlier report snapshots remain historical output.
+
 The synthetic browser proof is `npm run probe:results-report -- <fresh-directory>`.
 It checks both skill reports with 120 synthetic cases each, combined status/search
 filtering, pagination/reset, deep links, keyboard and no-script access, no external

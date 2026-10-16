@@ -20,9 +20,11 @@ const mixedScope = () => {
   return {original, selected, blockers};
 };
 
-test('standard QA reporting retains the twenty-case request after the six-case subset is ready', async t => {
+test('standard QA reporting produces one complete twenty-case bundle with subset receipts as supporting evidence', async t => {
   const {original, selected, blockers} = mixedScope(), f = await prepared(t, {source: selected, reporting: {source: original, notes: blockers}});
-  await recorded(f, 'PASS', 'verification-first'); await recorded(f, 'PASS', 'verification-second');
+  const receipts = [await recorded(f, 'PASS', 'verification-first'), await recorded(f, 'PASS', 'verification-second')];
+  const evidence = receipts.map(receipt => ({path: receipt.path, bytes: readFileSync(join(f.roots.projectRoot, receipt.path))}));
+  for (const receipt of receipts) assert.deepEqual(receipt.receipt.tests.map(row => row.scenarioId), selected.scenarios.map(row => row.id));
   const before = await generationStatus(f.roots, selected.id), view = await automationReportView(f.roots, {sourceId: selected.id});
   assert.equal(view.cases.length, 20);
   assert.equal(new Set(view.cases.map(row => row.id)).size, 20);
@@ -36,8 +38,19 @@ test('standard QA reporting retains the twenty-case request after the six-case s
     assert.equal(row.reason, blockers.cases[index].reason); assert.equal(row.nextAction, blockers.cases[index].nextAction);
     assert.deepEqual(row.history, []); assert.equal(row.observedStatus, 'Not recorded');
   }
+  const deliveries = [];
   for (let render = 0; render < 2; render++) {
-    const report = await writeAutomationReport(f.roots, {sourceId: selected.id}); assert.equal(report.status, 'WRITTEN');
+    let report;
+    if (render === 0) report = await writeAutomationReport(f.roots, {sourceId: selected.id});
+    else {
+      const result = spawnSync(process.execPath, [join(f.roots.packageRoot, 'scripts/generate-tests.mjs'), 'report', '--project-root', f.roots.projectRoot, '--id', selected.id], {encoding: 'utf8', windowsHide: true});
+      assert.equal(result.status, 0, result.stderr); report = JSON.parse(result.stdout);
+    }
+    assert.equal(report.status, 'WRITTEN');
+    deliveries.push(report.directory.split('/').at(-1));
+    assert.deepEqual(readdirSync(join(f.roots.projectRoot, 'reports/harness')).sort(), deliveries.slice().sort(), 'Each invocation produces one complete QA bundle, without another subset-only report.');
+    assert.deepEqual(readdirSync(join(f.roots.projectRoot, report.directory)).sort(), ['defects.md', 'index.html', 'manifest.json', 'result.json', 'summary.md']);
+    for (const receipt of evidence) assert.deepEqual(readFileSync(join(f.roots.projectRoot, receipt.path)), receipt.bytes, 'QA reporting must preserve verification evidence byte for byte.');
     assert.equal(report.cases, 20);
     const saved = JSON.parse(readFileSync(join(f.roots.projectRoot, report.directory, 'result.json')));
     assert.deepEqual(saved.cases, view.cases); assert.deepEqual(saved.coverage, view.coverage);
