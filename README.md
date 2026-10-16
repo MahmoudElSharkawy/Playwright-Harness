@@ -99,6 +99,8 @@ You need **Node 24**, git, and Claude Code or Codex. Open your project and ask:
 1. **"Install the harness from https://github.com/MahmoudElSharkawy/Playwright-Harness."**
    The agent resolves one release, verifies its checksum and runs setup. Review
    the diff. Reload skills in Claude Code or restart Codex if discovery needs refreshing.
+   After installation, set up [ChaosEngine Core](https://github.com/ShaftHQ/SHAFT_ENGINE/tree/main/chaos-engine#install)
+   in the same project if you have not already.
 2. **"Here is my project information; configure the harness and use it."**
    Supply application URLs and environments, plus any API/DB targets you need.
    The agent asks whether runs may change data in each environment, records the
