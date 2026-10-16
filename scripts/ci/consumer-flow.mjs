@@ -174,8 +174,9 @@ flow('C5', 'A CRLF clone restores the links with npm ci', () => {
   const clone = join(workspace, 'c5-clone'); git(workspace, 'clone', '-q', '-c', 'core.autocrlf=true', c1, clone);
   assert(readFileSync(join(clone, 'package.json'), 'utf8').includes('\r\n'), 'The clone was not checked out with CRLF.');
   assert(!existsSync(join(clone, '.claude/skills/test-data')), 'A skill link was committed.');
-  for (const file of [`vendor/${name}`, 'project.json', 'targets.json', 'integrations.json', 'links.json', 'sources/scenarios.json', 'knowledge/reviewed.md'])
-    assert.equal(hash(readFileSync(join(clone, '.harness', file))), hash(readFileSync(join(c1, '.harness', file))), `Shared input ${file} did not survive the clone.`);
+  assert.equal(hash(readFileSync(join(clone, '.harness/vendor', name))), hash(readFileSync(join(c1, '.harness/vendor', name))), 'The archive bytes changed in the clone.');
+  for (const file of ['project.json', 'targets.json', 'integrations.json', 'links.json', 'sources/scenarios.json', 'knowledge/reviewed.md'])
+    assert.equal(readFileSync(join(clone, '.harness', file), 'utf8').replaceAll('\r\n', '\n'), readFileSync(join(c1, '.harness', file), 'utf8').replaceAll('\r\n', '\n'), `Shared input ${file} did not survive the CRLF clone.`);
   for (const file of ['runs', 'state', 'knowledge-candidates', 'installation.json']) assert(!existsSync(join(clone, '.harness', file)), `Local output ${file} leaked into the clone.`);
   assert.equal(run([npm, 'ci'], clone).status, 'PASS', 'npm ci failed in the clone.');
   assert.equal(linked(clone, '.claude/skills/test-data'), installedSkill(clone, 'test-data'));
