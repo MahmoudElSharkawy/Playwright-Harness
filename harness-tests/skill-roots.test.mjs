@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs,{mkdtempSync,mkdirSync,writeFileSync,readFileSync,rmSync,realpathSync,symlinkSync} from 'node:fs';
 import {syncBuiltinESMExports} from 'node:module';
-import {join,relative,isAbsolute} from 'node:path';
+import {join,relative,isAbsolute,resolve} from 'node:path';
+import {spawnSync} from 'node:child_process';
 import {tmpdir} from 'node:os';
 import {resolveSkillRoots,linkRepresentativeSkill,discoveryEntry,removeSkillLink} from '../scripts/lib/skill-roots.mjs';
 function fixture(t) {
@@ -57,4 +58,13 @@ test('discovery still distinguishes missing entries, ordinary directories and fi
  assert.deepEqual(discoveryEntry(join(f.projectRoot,'absent')),{kind:'missing'});
  assert.deepEqual(discoveryEntry(join(f.projectRoot,'absent/child')),{kind:'missing'});
  assert.deepEqual(discoveryEntry(f.packageRoot),{kind:'directory'});assert.deepEqual(discoveryEntry(file),{kind:'file'});
+});
+
+test('junction probe records the runtime and removes its owned fixture',t=>{
+ const f=fixture(t),before=fs.readdirSync(f.root);
+ const probe=spawnSync(process.execPath,[resolve(import.meta.dirname,'../scripts/probes/junctions.mjs'),f.root],{encoding:'utf8'});
+ assert.equal(probe.status,0,probe.stdout+probe.stderr);
+ const result=JSON.parse(probe.stdout);assert.equal(result.platform,process.platform);assert.equal(result.node,process.version);assert.equal(result.uv,process.versions.uv);
+ assert.equal(result.enumeratedAsLink,true);assert.equal(result.readlink.status,'PASS');assert.equal(result.discovery.value.live,false);assert.equal(result.cleanup,'PASS');
+ assert(!fs.existsSync(result.root));assert.deepEqual(fs.readdirSync(f.root),before);
 });
