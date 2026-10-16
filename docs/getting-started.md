@@ -117,9 +117,46 @@ Map CI secrets to the same variable names used locally. The setup skill can adap
 the supplied GitHub Actions or Azure Pipelines templates while preserving existing
 steps; setup does not enable a pipeline automatically.
 
-Consumer-owned state is summarized in [configuration](configuration.md#consumer-owned-state).
-Keep versioned scenario sources and reviewed knowledge separate from ignored runs,
-candidate knowledge, journals and generated reports.
+### Selective Git ignore policy
+
+Do not ignore the entire `.harness/` directory. It holds both shared project inputs
+and machine-local output. A blanket `.harness/` ignore hides the release archive
+needed by `npm ci` and the configuration and link manifest needed by fresh clones.
+
+| Consumer path | Git policy | Purpose |
+|---|---|---|
+| `.harness/runs/` | Ignore | Generated execution evidence |
+| `.harness/state/` | Ignore | Local workflow state, locks, tracker state and setup journals |
+| `.harness/knowledge-candidates/` | Ignore | Unreviewed observations |
+| `.harness/installation.json` | Ignore | Local installation receipt |
+| `.harness/vendor/` | Commit | Release archive required by teammates and CI |
+| `.harness/sources/` | Commit | Versioned local test scenarios |
+| `.harness/knowledge/` | Commit | Reviewed, reusable project knowledge |
+| `.harness/project.json` | Commit | Environment configuration |
+| `.harness/targets.json` | Commit | Targets and secret references |
+| `.harness/integrations.json` | Commit when present | Optional integration configuration |
+| `.harness/links.json` | Commit | Manifest used to restore managed skill links |
+
+Setup adds these selective rules to the consumer's `.gitignore`:
+
+```gitignore
+/.harness/runs/
+/.harness/state/
+/.harness/knowledge-candidates/
+/.harness/installation.json
+```
+
+If a team rule ignores `.harness/` or `.harness/vendor/`, replace that blanket rule
+with the selective rules above. A file exception cannot reopen an ignored parent
+directory. For a broad `*.tgz` rule, setup adds `!/.harness/vendor/*.tgz`; readiness
+still reports an error if an ignored parent prevents that exception from working.
+Setup preserves team rules, so review and correct the conflicting rule yourself.
+
+Configuration stores secret references; actual secret values remain in the ignored
+`.env`. Committed scenarios and reviewed knowledge must be suitable for the repository's
+audience. Ignore rules do not untrack existing files, and setup does not remove them;
+any decision to stop sharing already tracked state needs a separate team review.
+See [consumer-owned state](configuration.md#consumer-owned-state) for storage ownership.
 
 ## Update, recover and roll back
 

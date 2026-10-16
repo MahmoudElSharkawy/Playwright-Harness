@@ -121,7 +121,7 @@ const c1 = join(workspace, 'c1-empty'), c2 = join(workspace, 'c2-no-playwright')
 let next;
 
 flow('C1', 'An empty folder gets the harness and the starter', () => {
-  project('c1-empty'); const result = setup(c1, download(c1));
+  project('c1-empty'); const result = setup(c1, download(c1), ['--environment', 'qa', '--mode', 'test']);
   assert.equal(result.status, 'DONE', stops(result)); assert.equal(result.checksum, true, 'The published checksum was not verified.');
   assert(result.starter?.includes('playwright.config.ts') && result.starter.includes('src/config/targets.ts'), 'The starter is incomplete.');
   assert(!existsSync(join(c1, name)), 'The downloaded archive stayed in the project folder.');
@@ -130,8 +130,14 @@ flow('C1', 'An empty folder gets the harness and the starter', () => {
   for (const rel of ['.claude/skills/test-data', '.agents/skills/harness-setup']) assert.equal(linked(c1, rel), installedSkill(c1, rel.split('/').pop()));
   assert.equal(run([join(c1, 'node_modules/typescript/bin/tsc'), '--noEmit', '-p', 'tsconfig.json'], c1).status, 'PASS', 'The starter does not typecheck.');
   assert.equal(run([join(c1, 'node_modules/@playwright/test/cli.js'), 'test', '--list', '--pass-with-no-tests'], c1).status, 'PASS', 'The starter cannot list tests.');
+  write(c1, {'.harness/sources/scenarios.json': JSON.stringify({version: 1, id: 'synthetic', title: 'Synthetic suite', scenarios: [{id: 'case-1', title: 'Synthetic observation', steps: [{action: 'Observe the fixture', expected: ['The fixture is visible']}]}]}) + '\n',
+    '.harness/knowledge/reviewed.md': '# Reviewed synthetic knowledge\n', '.harness/integrations.json': JSON.stringify({version: 1, ado: {organizationUrl: 'https://dev.azure.com/example-org', project: 'Synthetic', credentialRef: 'SYN_ADO_PAT'}}) + '\n',
+    '.harness/runs/local.json': '{}\n', '.harness/knowledge-candidates/local.md': 'Unreviewed synthetic observation\n'});
   commit(c1, 'Adopt the harness');
   assert(git(c1, 'ls-files', `.harness/vendor/${name}`).trim(), 'The vendored archive is not committed.');
+  for (const file of ['project.json', 'targets.json', 'integrations.json', 'links.json', 'sources/scenarios.json', 'knowledge/reviewed.md'])
+    assert.equal(git(c1, 'ls-files', `.harness/${file}`).trim(), `.harness/${file}`, `Shared input ${file} was not committed.`);
+  assert.equal(git(c1, 'ls-files', '.harness/runs', '.harness/state', '.harness/knowledge-candidates', '.harness/installation.json').trim(), '', 'Local harness output was committed.');
   assert.equal(git(c1, 'ls-files', '.claude/skills', '.agents/skills').trim(), '', 'Skill links or their files were committed.');
   return {starterFiles: result.starter.length, links: result.links};
 });
@@ -168,10 +174,16 @@ flow('C5', 'A CRLF clone restores the links with npm ci', () => {
   const clone = join(workspace, 'c5-clone'); git(workspace, 'clone', '-q', '-c', 'core.autocrlf=true', c1, clone);
   assert(readFileSync(join(clone, 'package.json'), 'utf8').includes('\r\n'), 'The clone was not checked out with CRLF.');
   assert(!existsSync(join(clone, '.claude/skills/test-data')), 'A skill link was committed.');
+  assert.equal(hash(readFileSync(join(clone, '.harness/vendor', name))), hash(readFileSync(join(c1, '.harness/vendor', name))), 'The archive bytes changed in the clone.');
+  for (const file of ['project.json', 'targets.json', 'integrations.json', 'links.json', 'sources/scenarios.json', 'knowledge/reviewed.md'])
+    assert.equal(readFileSync(join(clone, '.harness', file), 'utf8').replaceAll('\r\n', '\n'), readFileSync(join(c1, '.harness', file), 'utf8').replaceAll('\r\n', '\n'), `Shared input ${file} did not survive the CRLF clone.`);
+  for (const file of ['runs', 'state', 'knowledge-candidates', 'installation.json']) assert(!existsSync(join(clone, '.harness', file)), `Local output ${file} leaked into the clone.`);
   assert.equal(run([npm, 'ci'], clone).status, 'PASS', 'npm ci failed in the clone.');
   assert.equal(linked(clone, '.claude/skills/test-data'), installedSkill(clone, 'test-data'));
   const report = check(clone); assert.equal(report.exit, 0, report.errors.join(' ')); assert.equal(feature(report, 'skills'), 'ready'); noDrift(report);
   const rerun = parse(harness(clone, 'setup', '--skip-browsers', '--json')); assert.equal(rerun.status, 'DONE', stops(rerun)); assert.deepEqual(rerun.changed, []);
+  write(clone, {'.harness/runs/local.json': '{}\n', '.harness/knowledge-candidates/local.md': 'Unreviewed clone observation\n'});
+  assert.equal(git(clone, 'ls-files', '.harness/runs', '.harness/state', '.harness/knowledge-candidates', '.harness/installation.json').trim(), '', 'Clone-local output became tracked.');
   assert.equal(git(clone, 'status', '--porcelain').trim(), '');
 });
 flow('F3', 'check flags a pipeline that runs Playwright tests without installing a browser', () => {

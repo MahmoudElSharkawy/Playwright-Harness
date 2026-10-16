@@ -93,6 +93,16 @@ test('setup adopts, vendors the archive, chains an existing postinstall and reru
  const clone=configureInstalled({projectRoot:root,skipBrowsers:true,packageRoot});
  assert.equal(clone.status,'DONE');assert.deepEqual(clone.changed,[]);assert(existsSync(join(root,'.harness/state/review/class-ledger.md')));
 });
+for(const ignoredParent of [false,true])test(`setup preserves team rules and ${ignoredParent?'diagnoses a blanket harness ignore':'repairs a broad archive ignore'} on rerun`,t=>{
+ const root=project(t),git=(...args)=>spawnSync('git',args,{cwd:root,encoding:'utf8',windowsHide:true});
+ const ignore=`# Team rule\n/team-cache/\n${ignoredParent?'/.harness/':'*.tgz'}\n`,vendored=`.harness/vendor/${archiveName}`;
+ put(root,'package.json',JSON.stringify({name:'app',devDependencies:{'@playwright/test':'1.63.0','playwright-pom-harness':`file:${vendored}`}}));put(root,'.gitignore',ignore);archive(join(root,archiveName));
+ assert.equal(git('init','-q').status,0);const result=setup(root);assert.equal(result.status,ignoredParent?'INCOMPLETE':'DONE',JSON.stringify(result));
+ assert(readFileSync(join(root,'.gitignore'),'utf8').startsWith(ignore));assert.equal(git('check-ignore','--quiet',vendored).status,ignoredParent?0:1);
+ if(ignoredParent)assert.match(result.notes.join(' '),/still git-ignored.*folder/);
+ else assert.match(readFileSync(join(root,'.gitignore'),'utf8'),/!\/\.harness\/vendor\/\*\.tgz/);
+ const rerun=configureInstalled({projectRoot:root,skipBrowsers:true,packageRoot});assert.equal(rerun.status,ignoredParent?'INCOMPLETE':'DONE');assert.deepEqual(rerun.changed,[]);
+});
 test('the installed copy previews a repair or a new environment without writing',t=>{
  const root=project(t);put(root,'package.json','{"name":"app","devDependencies":{"@playwright/test":"1.63.0"}}\n');archive(join(root,archiveName));
  assert.equal(setup(root).status,'DONE');assert.deepEqual(planInstalled({projectRoot:root,packageRoot}).changes,[]);

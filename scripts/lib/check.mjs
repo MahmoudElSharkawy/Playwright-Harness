@@ -62,7 +62,7 @@ export function runCheck({projectRoot, packageRoot, addEnvKeys = false}) {
     if (!existsSync(absolute)) errors.push(`${archive} is missing; teammates and CI cannot install the harness.`);
     else if (entry?.integrity && entry.integrity !== integrity(absolute)) errors.push(`${archive} differs from the integrity recorded in package-lock.json.`);
     else if (git(projectRoot, 'rev-parse', '--is-inside-work-tree').status === 0) {
-      if (git(projectRoot, 'check-ignore', '-q', archive).status === 0) errors.push(`${archive} is git-ignored; teammates and CI cannot install the harness. Add "!/${archive}" to .gitignore.`);
+      if (git(projectRoot, 'check-ignore', '--no-index', '-q', archive).status === 0) errors.push(`${archive} is git-ignored; teammates and CI cannot install the harness. In .gitignore, replace ignored parent directories (such as .harness/) with selective local-state rules; a file exception cannot reopen an ignored parent. If only *.tgz matches, add "!/${archive}".`);
       else if (git(projectRoot, 'ls-files', '--error-unmatch', archive).status !== 0) notes.push(`${archive} is not committed yet; commit it with the other setup changes.`);
     }
   }

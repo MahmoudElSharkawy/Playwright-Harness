@@ -115,7 +115,9 @@ npx --no pom-harness check
 ```
 
 Teammates and CI use `npm ci` to install the committed archive and restore skill
-links. For updates, ask **"Update the harness and preserve my project customizations."**
+links. Follow the [selective Git ignore policy](docs/getting-started.md#selective-git-ignore-policy)
+to share required `.harness/` inputs while ignoring local output.
+For updates, ask **"Update the harness and preserve my project customizations."**
 See [getting started](docs/getting-started.md) for installation details, readiness,
 conflict recovery and rollback.
 

@@ -44,6 +44,18 @@ npm-cache prompts.
    includes the archive under `.harness/vendor/`, `package.json`, `package-lock.json`,
    `.harness/links.json`, `.gitignore` and `.gitattributes`. Setup moves the downloaded
    archive out of the project folder after success.
+   Follow the [selective Git ignore policy](../../../../docs/getting-started.md#selective-git-ignore-policy):
+   commit `.harness/vendor/`, `.harness/sources/`, `.harness/knowledge/`,
+   `.harness/project.json`, `.harness/targets.json`, `.harness/links.json` and
+   `.harness/integrations.json` when present. Ignore only the local harness paths
+   `.harness/runs/`, `.harness/state/`, `.harness/knowledge-candidates/` and
+   `.harness/installation.json`. Secret values stay in the ignored `.env`; committed
+   scenarios and reviewed knowledge must suit the repository's audience.
+   A blanket `.harness/` or `.harness/vendor/` ignore prevents fresh-clone installation;
+   a file exception cannot reopen an ignored parent directory. Setup preserves team
+   rules, so report that conflict and have the team narrow the rule. Never untrack or
+   delete existing files to enforce this policy.
+
 7. **Discovery.** If the skills do not appear yet, the user runs `/reload-skills` in
    Claude Code, or restarts Codex.
 
