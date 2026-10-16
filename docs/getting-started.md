@@ -52,6 +52,9 @@ The first profile starts with empty target lists. Add target definitions and
 environment references together before execution. Rerunning setup with a different
 mode does not silently change an existing profile.
 
+After installation, set up [ChaosEngine Core](https://github.com/ShaftHQ/SHAFT_ENGINE/tree/main/chaos-engine#install)
+in the same project if you have not already. Setup includes this reminder in its next steps.
+
 ## What setup adds
 
 | Item | Purpose |
