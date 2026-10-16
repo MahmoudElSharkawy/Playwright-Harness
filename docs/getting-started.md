@@ -77,6 +77,28 @@ exact development dependencies. It creates no demo pages or tests. The starter's
 Existing code, instructions, host settings and imported team libraries are preserved.
 Optional host hooks are not enabled by setup.
 
+### Windows junction readability
+
+Setup, readiness checks, restore and unlink require a filesystem location where
+Node can read the stored target of a directory junction, including after that
+target is removed. Some Windows locations do not meet this requirement. On the
+maintainer's Windows 11 host, the user Temp folder fails with Node 24.15.0 and
+24.21.0, while a normal workspace or short external scratch folder works. A Node
+upgrade alone is not a verified remedy.
+
+If a command reports `Cannot read existing discovery entry`, it preserves that
+entry and refuses to infer ownership from `.harness/links.json`. Restore the
+original target from your known previous installation, or move the project
+outside the affected directory tree and rerun the command. Preserve custom or
+unknown entries; do not delete them merely because inspection failed. Adoption
+plans discovery changes before writing instructions or configuration. Restore and
+unlink can have completed earlier operations before reaching an unreadable entry.
+
+Maintainers can compare locations with the [junction probe and recorded evidence](reference/windows-junctions.md).
+For validation fixtures, set both `TEMP` and `TMP` to a short existing directory
+outside any harness installation or consumer project, after verifying it with
+the probe. Changing test temp does not repair existing project links.
+
 ## Check readiness and choose a workflow
 
 `npx --no pom-harness check` reports readiness by feature: ready, unavailable,

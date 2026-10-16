@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtempSync,realpathSync,rmSync,mkdirSync,writeFileSync,readFileSync,existsSync,readdirSync,symlinkSync,cpSync,utimesSync,renameSync} from 'node:fs';
+import fs,{mkdtempSync,realpathSync,rmSync,mkdirSync,writeFileSync,readFileSync,existsSync,readdirSync,symlinkSync,cpSync,utimesSync,renameSync} from 'node:fs';
+import {syncBuiltinESMExports} from 'node:module';
 import {createHash} from 'node:crypto';
 import {tmpdir} from 'node:os';
 import {join,dirname,relative,isAbsolute} from 'node:path';
@@ -59,6 +60,24 @@ test('custom canonical or legacy skills stop before any instruction/configuratio
  for(const base of ['.agents/skills','.claude/skills']) {
   const root=project(t);put(root,`${base}/action-methods/SKILL.md`,'custom rules');
   assert.throws(()=>adopt(root));assert.equal(readFileSync(join(root,base,'action-methods/SKILL.md'),'utf8'),'custom rules');assert(!existsSync(join(root,'AGENTS.md')));assert(!existsSync(join(root,'.harness/project.json')));
+ }
+});
+
+test('unreadable listed and foreign junctions stop adoption before writes',t=>{
+ const original=fs.readlinkSync;
+ for(const listed of [false,true])for(const code of ['ENOENT','UNKNOWN']) {
+  const root=project(t),target=join(root,'custom-target'),link=join(root,'.agents/skills/action-methods');
+  put(root,'custom-target/SKILL.md','custom rules');createSkillLink(target,link);
+  const manifest=JSON.stringify({version:1,links:['.agents/skills/action-methods']});
+  if(listed)put(root,'.harness/links.json',manifest);
+  t.mock.method(fs,'readlinkSync',(path,...args)=>{if(path===link)throw Object.assign(new Error('Injected junction read failure'),{code});return original(path,...args);});syncBuiltinESMExports();
+  try {
+   for(const dryRun of [true,false])assert.throws(()=>adoptProject({projectRoot:root,environment:'qa',mode:'test',dryRun}),/preserved/i);
+   assert.equal(realpathSync(link),realpathSync(target));assert.equal(readFileSync(join(target,'SKILL.md'),'utf8'),'custom rules');
+   assert(!existsSync(join(root,'AGENTS.md')));assert(!existsSync(join(root,'.harness/project.json')));
+   if(listed)assert.equal(readFileSync(join(root,'.harness/links.json'),'utf8'),manifest);
+   else assert(!existsSync(join(root,'.harness')));
+  } finally {t.mock.restoreAll();syncBuiltinESMExports();}
  }
 });
 test('legacy state migrates byte-for-byte; later consumer changes are not overwritten on rerun',t=>{

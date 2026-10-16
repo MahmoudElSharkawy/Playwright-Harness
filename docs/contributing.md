@@ -22,6 +22,10 @@ installed proofs create external consumer workspaces. Canonical skills live unde
 .agents/skills; runtime plumbing belongs in scripts/lib, CLI entrypoints in scripts,
 and consumer examples in their POM layers. Optional hooks are advisory, never setup-enabled.
 
+On Windows, verify the temporary filesystem supports reading dangling junctions
+with the [focused junction probe](reference/windows-junctions.md). Use a short
+external `TEMP` and `TMP` when the system temp location does not support them.
+
 ## Checks for a change
 
 Run focused checks for touched behavior, then the fixed package checklist before delivery:

@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Preserve unreadable discovery links with an actionable diagnostic instead of
+  exposing a bare filesystem error or classifying an unreadable link as a file.
+  Document the Windows junction readability requirement, recovery steps and
+  focused filesystem probe. Managed ownership checks remain unchanged.
+
 ## 3.6.2 — Reliable shared setup inputs
 
 ### Upgrade actions

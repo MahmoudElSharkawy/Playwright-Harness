@@ -53,7 +53,10 @@ export function discoveryEntry(path) {
   catch(error) {if(['ENOENT','ENOTDIR'].includes(error.code))return {kind:'missing'};throw error;}
   if(!found)return {kind:'missing'};
   let target;
-  try {target=readlinkSync(path);} catch(error) {if(!['EINVAL','UNKNOWN'].includes(error.code))throw error;}
+  try {target=readlinkSync(path);} catch(error) {
+    if(found.isSymbolicLink() || error.code==='ENOENT')throw new Error(`Cannot read existing discovery entry "${path}" (${error.code}). The entry was preserved. Restore its original target or move the project to a location where dangling directory junctions can be read, then retry. See docs/getting-started.md#windows-junction-readability.`,{cause:error});
+    if(!['EINVAL','UNKNOWN'].includes(error.code))throw error;
+  }
   if(target!==undefined) {
     let live=false;
     try {live=statSync(path).isDirectory();} catch(error) {if(error.code!=='ENOENT')throw error;}
