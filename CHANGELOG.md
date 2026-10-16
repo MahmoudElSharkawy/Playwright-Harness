@@ -1,6 +1,13 @@
 # Changelog
 
-## Unreleased
+## 3.6.3 — Safer Windows setup and patched dependencies
+
+### Upgrade actions
+
+- Re-run setup from the 3.6.3 archive in each project to install the patched runtime dependencies. Existing customized code and configuration remain subject to review.
+- If setup reports an unreadable Windows junction, follow the diagnostic and [Windows skill-link guidance](docs/getting-started.md#windows-junction-readability) before retrying. No action is needed for projects whose skill links are readable.
+
+### Changes
 
 - Update the locked Handlebars dependency to 4.7.10 and Tedious to 20.3.8,
   removing the vulnerable `sprintf-js` dependency. Keep the dependency license
