@@ -45,7 +45,7 @@ function nativeCase(test, run, readiness) {
 }
 
 /** Read existing history only. Blocker notes cannot create verdicts, candidates or greens. */
-export async function automationReportView(roots, {sourceId, source: sourceInput, notes, blocker} = {}) {
+export async function automationReportView(roots, {sourceId, source: sourceInput, notes, blocker, reporting: reportingInput} = {}) {
   if (blocker !== undefined) {
     blocker = data(blocker); keys(blocker, ['stage', 'reason', 'nextAction'], 'generation command blocker');
     const text = value => typeof value === 'string' && value.trim() && value.length <= 4096;
@@ -58,8 +58,10 @@ export async function automationReportView(roots, {sourceId, source: sourceInput
     const selected = state ? validateLocalSource(state.handoff.source) : supplied;
     requireThat(selected, 'A valid source inventory is required before reporting.');
     requireThat(!supplied || fingerprint(supplied) === fingerprint(selected), 'Report source differs from recorded generation history.');
-    const reporting = state?.reporting ? reportingContext(selected, state.reporting) : undefined;
-    const source = reporting?.source ?? selected, retainedNotes = notes ?? reporting?.notes;
+    const context = reportingInput ?? state?.reporting;
+    const reporting = context === undefined ? undefined : reportingContext(selected, context);
+    requireThat(!state?.reporting || !reportingInput || state.reporting.sourceFingerprint === reporting.sourceFingerprint, 'Requested source differs from recorded reporting scope.');
+    const source = reporting?.source ?? selected, retainedNotes = notes ?? reporting?.notes ?? state?.reporting?.notes;
     const readiness = state ? generationStateStatus(roots, state) : {status: 'NOT_STARTED', rounds: 0, greens: 0};
     const candidate = state?.candidates.at(-1), blockers = caseNotes(source, retainedNotes, candidate?.tests.map(test => test.scenarioId) ?? []);
     let candidateIssue, approved = false;

@@ -116,7 +116,8 @@ export async function reviseGeneration(roots, sourceId, handoffInput, input, rep
     if (state.reporting || reporting !== undefined) {
       const previous = state.reporting;
       const retainedNotes = previous?.notes && {...previous.notes, cases: previous.notes.cases.filter(note => !handoff.source.scenarios.some(row => row.id === note.scenarioId))};
-      const next = reportingContext(handoff.source, reporting ?? {source: previous.source, ...(retainedNotes ? {notes: retainedNotes} : {})});
+      const context = reporting === undefined ? {source: previous.source} : data(reporting, 2 * 1024 * 1024, {maxNodes: 200000});
+      const next = reportingContext(handoff.source, {...context, ...(context.notes === undefined && retainedNotes ? {notes: retainedNotes} : {})});
       requireThat(!previous || (previous.source.id === next.source.id && fingerprint(previous.source.scenarios.map(row => row.id)) === fingerprint(next.source.scenarios.map(row => row.id))), 'A revision must retain the originally requested case inventory.');
       state.reporting = next;
     }

@@ -171,17 +171,36 @@ test('CLI prepare captures full reporting scope and following standard commands 
   }
 });
 
-test('a later assessed subset expansion retains original scope and history while newly selected cases need fresh review and verification', async t => {
+test('CLI preparation failure retains full reporting scope and recorded blockers without generation progress', t => {
+  const {original, selected, blockers} = mixedScope(), f = fixture(t), paths = '.harness/state/blocked-prepare';
+  put(f.roots.projectRoot, `${paths}/selected.json`, selected); put(f.roots.projectRoot, `${paths}/original.json`, original); put(f.roots.projectRoot, `${paths}/notes.json`, blockers);
+  put(f.roots.projectRoot, `${paths}/prepare.json`, {source: `${paths}/selected.json`, author: 'blocked-report-author', executions: [], bindings: [], reporting: {source: `${paths}/original.json`, notes: `${paths}/notes.json`}});
+  const result = spawnSync(process.execPath, [join(f.roots.packageRoot, 'scripts/generate-tests.mjs'), 'prepare', '--project-root', f.roots.projectRoot, '--input', `${paths}/prepare.json`], {encoding: 'utf8', windowsHide: true});
+  assert.equal(result.status, 2, result.stderr);
+  const blocked = JSON.parse(result.stderr); assert.equal(blocked.status, 'BLOCKED'); assert.equal(blocked.reporting.status, 'WRITTEN'); assert.equal(blocked.reporting.cases, 20);
+  const view = JSON.parse(readFileSync(join(f.roots.projectRoot, blocked.reporting.directory, 'result.json')));
+  assert.equal(view.status, 'NOT_STARTED'); assert.equal(view.greens, 0); assert.equal(view.sourceId, selected.id); assert.deepEqual(view.source, original);
+  assert.deepEqual(view.notes, blockers); assert.deepEqual(view.coverage, {total: 20, selected: 6, ready: 0, blocked: 20, complete: false, scopeKnown: true});
+  assert.equal(new Set(view.cases.map(row => row.id)).size, 20);
+  for (const row of view.cases.slice(0, 6)) {assert.equal(row.status, 'BLOCKED'); assert.equal(row.stage, 'PREPARE'); assert.equal(row.observedStatus, 'Not recorded'); assert.deepEqual(row.history, []);}
+  for (const [index, row] of view.cases.slice(6).entries()) {assert.equal(row.status, 'BLOCKED'); assert.equal(row.stage, blockers.cases[index].stage); assert.equal(row.reason, blockers.cases[index].reason); assert.equal(row.nextAction, blockers.cases[index].nextAction);}
+  assert.equal(readdirSync(join(f.roots.projectRoot, '.harness/state/generation', selected.id)).filter(name => /^\d{6}\.json$/.test(name)).length, 0);
+});
+
+for (const context of ['implicit', 'explicit']) test(`a later assessed subset expansion retains original scope and history while newly selected cases need fresh review and verification (${context} reporting)`, async t => {
   const {original, selected, blockers} = mixedScope(), f = await prepared(t, {source: selected, reporting: {source: original, notes: blockers}});
   await recorded(f, 'PASS', 'verification-first'); await recorded(f, 'PASS', 'verification-second');
   const before = await transaction(f.roots, selected.id, state => structuredClone(state));
   const expanded = {...selected, scenarios: original.scenarios.slice(0, 7)}, observation = await prepared(t, {source: expanded});
   put(f.roots.projectRoot, '.harness/state/accepted-expansion.md', 'Synthetic owner acceptance: the seventh case prerequisite is available; include its assessed execution.');
-  const changed = await reviseGeneration(f.roots, selected.id, observation.handoff, {config: f.candidate.config, tests: observation.candidate.tests, repair: 'requirement-change', change: {previousSourceFingerprint: before.handoff.fingerprint, artifact: '.harness/state/accepted-expansion.md'}});
+  const changed = await reviseGeneration(f.roots, selected.id, observation.handoff, {config: f.candidate.config, tests: observation.candidate.tests, repair: 'requirement-change', change: {previousSourceFingerprint: before.handoff.fingerprint, artifact: '.harness/state/accepted-expansion.md'}}, context === 'explicit' ? {source: original} : undefined);
+  const automatic = await automationReportView(f.roots, {sourceId: selected.id, reporting: {source: original}});
+  assert.equal(automatic.coverage.blocked, 13); assert.equal(automatic.cases[7].reason, blockers.cases[1].reason);
   let view = await automationReportView(f.roots, {sourceId: selected.id});
   assert.deepEqual(view.source, original); assert.equal(view.cases.length, 20); assert.equal(view.coverage.selected, 7); assert.equal(view.coverage.blocked, 13); assert.equal(view.coverage.ready, 0);
   assert.equal(view.status, 'NEEDS_REVIEW'); assert.equal(view.greens, 0); assert.equal(view.cases[6].status, 'NEEDS_REVIEW');
   assert.deepEqual(view.cases[6].history, []); assert.equal(view.cases[0].history.length, 2);
+  for (const [index, row] of view.cases.slice(7).entries()) {assert.equal(row.status, 'BLOCKED'); assert.equal(row.stage, blockers.cases[index + 1].stage); assert.equal(row.reason, blockers.cases[index + 1].reason); assert.equal(row.nextAction, blockers.cases[index + 1].nextAction);}
   await recordGenerationReview(f.roots, selected.id, {revision: changed.revision, reviewer: 'expanded-report-reviewer', verdict: 'APPROVE', findings: [], artifact: '.harness/state/review.md'});
   const updated = {...f, source: expanded, candidate: changed}; await recorded(updated, 'PASS', 'expanded-first');
   assert.equal((await automationReportView(f.roots, {sourceId: selected.id})).coverage.ready, 0);

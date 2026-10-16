@@ -11,7 +11,7 @@ import {relativeFile} from './lib/generation/storage.mjs';
 import {writeAutomationReport} from './lib/generation/report.mjs';
 import {generationBlocker} from './lib/generation/reasons.mjs';
 
-let roots, source, sourceId, command;
+let roots, source, sourceId, command, reportContext;
 
 try {
   const parsed = projectArgument(); roots = parsed.roots;
@@ -36,10 +36,9 @@ try {
     requireThat(options['--input'] && (command === 'revise' ? options['--id'] : !options['--id']), 'Prepare requires --input; revise also requires the existing --id.');
     const input = readJson(relativeFile(roots, options['--input'])); keys(input, ['source', 'executions', 'bindings', 'reporting', command === 'prepare' ? 'author' : 'candidate'], 'generation preparation');
     source = readJson(relativeFile(roots, input.source)); sourceId ??= source.id;
-    let reporting;
     if (input.reporting !== undefined) {
       keys(input.reporting, ['source', 'notes'], 'generation reporting paths');
-      reporting = {source: readJson(relativeFile(roots, input.reporting.source)), ...(input.reporting.notes === undefined ? {} : {notes: readJson(relativeFile(roots, input.reporting.notes))})};
+      reportContext = {source: readJson(relativeFile(roots, input.reporting.source)), ...(input.reporting.notes === undefined ? {} : {notes: readJson(relativeFile(roots, input.reporting.notes))})};
     }
     const executions = input.executions.map(item => {
       keys(item, ['snapshot', 'runRoot'], 'observed execution');
@@ -51,9 +50,9 @@ try {
     });
     const handoff = createGenerationHandoff(source, executions, input.bindings);
     if (command === 'prepare') {
-      await beginGeneration(roots, handoff, input.author, reporting); result = {status: 'PREPARED', sourceId: source.id, expectations: handoff.expectations.length};
+      await beginGeneration(roots, handoff, input.author, reportContext); result = {status: 'PREPARED', sourceId: source.id, expectations: handoff.expectations.length};
     } else {
-      const candidate = await reviseGeneration(roots, options['--id'], handoff, input.candidate, reporting);
+      const candidate = await reviseGeneration(roots, options['--id'], handoff, input.candidate, reportContext);
       result = {status: 'NEEDS_REVIEW', sourceId: source.id, revision: candidate.revision, sourceFingerprint: candidate.sourceFingerprint};
     }
   } else {
@@ -69,12 +68,12 @@ try {
       else {requireThat(command === 'status', 'Unknown generation command.'); result = await generationStatus(roots, options['--id']);}
     }
   }
-  const reporting = command === 'report' ? undefined : await writeAutomationReport(roots, {sourceId, source});
+  const reporting = command === 'report' ? undefined : await writeAutomationReport(roots, {sourceId, source, ...(reportContext ? {reporting: reportContext} : {})});
   console.log(JSON.stringify({...result, ...(reporting ? {reporting} : {})}));
   if (result.status !== 'PASS' && command === 'verify' || command === 'report' && result.status === 'FAILED') process.exitCode = 1;
 } catch (error) {
   const code = ['MAPPING_STEPS', 'MAPPING_KEYS', 'MAPPING_REFERENCES'].includes(error.code) ? error.code : undefined;
   const blocker = generationBlocker(error, (command ?? 'PREPARE').toUpperCase());
-  const reporting = roots && (sourceId || source) ? await writeAutomationReport(roots, {sourceId, source, blocker}) : undefined;
+  const reporting = roots && (sourceId || source) ? await writeAutomationReport(roots, {sourceId, source, blocker, ...(reportContext ? {reporting: reportContext} : {})}) : undefined;
   console.error(JSON.stringify({status: 'BLOCKED', ...(code ? {code} : {}), reason: blocker.reason, ...(reporting ? {reporting} : {})})); process.exitCode = 2;
 }
