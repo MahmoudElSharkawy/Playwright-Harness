@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync, writeFileSync, mkdirSync, readdirSync} from 'node:fs';
 import {join} from 'node:path';
-import {spawn} from 'node:child_process';
+import {spawn, spawnSync} from 'node:child_process';
 import {fixture} from './fixtures/execution-core.mjs';
 import * as reporting from '../scripts/lib/reporting/index.mjs';
 
@@ -39,4 +39,11 @@ test('independent processes allocate unique history entries within the same seco
   const directories = await Promise.all(Array.from({length: 4}, allocate));
   assert.equal(new Set(directories).size, 4);
   assert.equal(readdirSync(join(f.roots.projectRoot, 'reports/allure-history')).length, 4);
+});
+
+test('a directory appearing during path resolution is rechecked while dangling links stay guarded', t => {
+  const f = fixture(t), module = new URL('../scripts/lib/skill-roots.mjs', import.meta.url).href;
+  const source = `import fs from 'node:fs';import path from 'node:path';import {syncBuiltinESMExports} from 'node:module';const parent=process.argv[1],target=path.join(parent,'appeared'),original=fs.readdirSync;let created=false;fs.readdirSync=function(directory,...args){if(directory===parent&&!created){fs.mkdirSync(target);created=true;}return original.call(this,directory,...args);};syncBuiltinESMExports();const {realFuture}=await import(${JSON.stringify(module)});console.log(realFuture(target));`;
+  const result = spawnSync(process.execPath, ['--input-type=module', '-e', source, f.roots.projectRoot], {encoding: 'utf8', windowsHide: true});
+  assert.equal(result.status, 0, result.stderr); assert.equal(result.stdout.trim(), join(f.roots.projectRoot, 'appeared'));
 });

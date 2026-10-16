@@ -81,6 +81,10 @@ export async function generateAllure(inputRoots, directory, {configuration} = {}
       if (!run) return undefined;
       try {return publishLatest(roots, run);} catch {return {status: 'FAILED', reason: 'Latest Allure link could not be published; the completed report is retained.'};}
     };
+    phase = 'GENERATION';
+    lockFile = consumerPath(roots, `${directory}/.generation.lock`); generationLock = openSync(lockFile, 'wx', 0o600);
+    writeFileSync(generationLock, JSON.stringify({pid: process.pid, invocation: run?.id, startedAt: new Date().toISOString()}), {flush: true});
+    // Another process may have completed while this job was waiting to acquire ownership.
     if (existsSync(receiptFile)) {
       const receipt = data(JSON.parse(readFileSync(receiptFile, 'utf8')));
       requireThat(receipt.status === 'GENERATED' && receipt.generator === 'allure' && receipt.commandline === installation.version
@@ -98,9 +102,6 @@ export async function generateAllure(inputRoots, directory, {configuration} = {}
     }
     // Pinned official CLI, bound argv and an explicit package config: consumer
     // discovery cannot enable publishing, result filters, known issues or quality gates.
-    phase = 'GENERATION';
-    lockFile = consumerPath(roots, `${directory}/.generation.lock`); generationLock = openSync(lockFile, 'wx', 0o600);
-    writeFileSync(generationLock, JSON.stringify({pid: process.pid, invocation: run?.id, startedAt: new Date().toISOString()}), {flush: true});
     // The CLI treats inputs as globs. A fixed relative input avoids interpreting
     // brackets or other glob syntax in the consumer's absolute directory name.
     execFileSync(process.execPath, [join(installation.directory, 'cli.js'), 'generate', 'allure-results', '--config', configuration, '--output', path],

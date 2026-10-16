@@ -8,7 +8,11 @@ export function realFuture(path) {
   while(!existsSync(path)) {
     // Windows can report ENOENT from lstat for a dangling junction; its parent
     // directory still records the entry. Never treat that entry as empty space.
-    if(existsSync(dirname(path)) && readdirSync(dirname(path)).some(name=>process.platform==='win32'?name.toLowerCase()===basename(path).toLowerCase():name===basename(path)))throw new Error('unresolvable existing path');
+    if(existsSync(dirname(path)) && readdirSync(dirname(path)).some(name=>process.platform==='win32'?name.toLowerCase()===basename(path).toLowerCase():name===basename(path))) {
+      // Another writer can create a normal directory between the existence check and listing.
+      if(existsSync(path))continue;
+      throw new Error('unresolvable existing path');
+    }
     try { if(lstatSync(path).isSymbolicLink()) throw new Error('dangling link'); } catch(error) {if(error.code!=='ENOENT')throw error;}
     const parent=dirname(path);if(parent===path)throw new Error('unresolvable root');tail.unshift(basename(path));path=parent;
   }

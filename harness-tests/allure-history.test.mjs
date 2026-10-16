@@ -11,7 +11,7 @@ function history(t) {
   writeFileSync(join(f.roots.projectRoot, 'package.json'), '{"type":"commonjs"}');
   writeFileSync(join(dependencies, 'package.json'), JSON.stringify({name: 'allure', version: '3.19.1', main: 'index.cjs'}));
   writeFileSync(join(dependencies, 'index.cjs'), '');
-  writeFileSync(join(dependencies, 'cli.js'), `const fs=require('node:fs'),path=require('node:path');if(fs.existsSync('.fail'))process.exit(7);const output=process.argv[process.argv.indexOf('--output')+1];fs.mkdirSync(path.join(output,'awesome'),{recursive:true});fs.writeFileSync(path.join(output,'awesome/index.html'),'<!doctype html><html><head></head><body>Native failed test</body></html>');fs.writeFileSync(path.join(output,'awesome/summary.json'),'{}');`);
+  writeFileSync(join(dependencies, 'cli.js'), `const fs=require('node:fs'),path=require('node:path');if(fs.existsSync('.fail'))process.exit(7);const output=process.argv[process.argv.indexOf('--output')+1];fs.appendFileSync(path.join(output,'.render-count'),'render\\n');fs.mkdirSync(path.join(output,'awesome'),{recursive:true});fs.writeFileSync(path.join(output,'awesome/index.html'),'<!doctype html><html><head></head><body>Native failed test '+require('node:crypto').randomUUID()+'</body></html>');fs.writeFileSync(path.join(output,'awesome/summary.json'),'{}');`);
   return {...f, capture(id) {
     const run = reserveAllureReport(f.roots, {id, at: new Date('2026-10-17T14:05:09.999Z')});
     mkdirSync(join(run.path, 'allure-results'));
@@ -95,6 +95,23 @@ test('an occupied render lock prevents same-invocation writers without replacing
   assert.equal((await generateAllure(f.roots, run.directory)).phase, 'GENERATION');
   assert.equal(readFileSync(join(run.path, '.generation.lock'), 'utf8'), 'another report job');
   assert.equal(existsSync(join(run.path, 'index.html')), false);
+});
+
+test('completion is rechecked under the lock when another process finishes before acquisition', async t => {
+  const f = history(t), run = f.capture('one-invocation');
+  const module = new URL('../scripts/lib/reporting/allure.mjs', import.meta.url).href;
+  const source = `import fs from 'node:fs';import {syncBuiltinESMExports} from 'node:module';import path from 'node:path';const original=fs.openSync;fs.openSync=function(file,...args){if(String(file).endsWith('.generation.lock')){fs.writeFileSync(path.join(process.argv[1],'ready'),'');const until=Date.now()+15000;while(!fs.existsSync(path.join(process.argv[1],'done'))){if(Date.now()>until)throw new Error('parent did not complete');Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,10);}}return original.call(this,file,...args);};syncBuiltinESMExports();const {generateAllure}=await import(${JSON.stringify(module)});console.log(JSON.stringify(await generateAllure({projectRoot:process.argv[1]},process.argv[2])));`;
+  const child = spawn(process.execPath, ['--input-type=module', '-e', source, f.roots.projectRoot, run.directory], {windowsHide: true});
+  let output = '', error = ''; child.stdout.on('data', bytes => {output += bytes;}); child.stderr.on('data', bytes => {error += bytes;});
+  const completed = new Promise((resolve, reject) => {child.on('error', reject); child.on('close', code => code === 0 ? resolve(JSON.parse(output)) : reject(new Error(error)));});
+  t.after(() => {if (child.exitCode === null) child.kill();});
+  const {setTimeout: delay} = await import('node:timers/promises'), until = Date.now() + 15000;
+  while (!existsSync(join(f.roots.projectRoot, 'ready'))) {assert(Date.now() < until, 'Child did not reach lock acquisition.'); await delay(10);}
+  const first = await generateAllure(f.roots, run.directory);
+  writeFileSync(join(f.roots.projectRoot, 'done'), ''); const second = await completed;
+  assert.equal(first.status, 'GENERATED'); assert.equal(second.status, 'GENERATED', JSON.stringify(second));
+  assert.deepEqual(second.artifact, first.artifact); assert.equal((await generateAllure(f.roots, run.directory)).status, 'GENERATED');
+  assert.equal(readFileSync(join(run.path, '.render-count'), 'utf8'), 'render\n');
 });
 
 if (process.env.HARNESS_ALLURE_HTML_PROOF === '1') test('latest relative redirect opens the canonical local report in a real browser', async t => {

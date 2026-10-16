@@ -369,6 +369,12 @@ failed or interrupted generation leaves the previous link intact. Reopening an o
 completed report does not move latest backwards. A link-publication failure retains
 the completed report and reports the delivery problem separately.
 
+Rendering uses an exclusive per-invocation `.generation.lock`; completion is rechecked
+after acquiring it. A job terminated without cleanup can leave its PID/invocation
+lock record. Inspect that recorded ownership and confirm the generator is no longer
+running before removing the stale lock and retrying the same captured directory.
+The harness never steals a live or unknown writer's lock.
+
 The separate bounded generator uses argument arrays without a shell, fresh output
 and no browser opening. Failures retain test history, withhold raw diagnostics and
 write no success receipt. Receipts record version/config hash and completeness, not
