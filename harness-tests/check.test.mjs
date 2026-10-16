@@ -180,12 +180,15 @@ test('an archive exception cannot reopen an ignored harness parent; checking pre
  put(root,'package.json',JSON.stringify({name:'synthetic',devDependencies:{'playwright-pom-harness':`file:${archive}`}}));
  put(root,archive,'synthetic archive bytes');put(root,tracked,'{"reviewed":true}\n');
  assert.equal(git(root,'init','-q').status,0);assert.equal(git(root,'add',tracked).status,0);
- for(const parent of ['/.harness/','/.harness/vendor/']) {
+ for(const trackedArchive of [false,true]) {
+  if(trackedArchive)assert.equal(git(root,'add','--force',archive).status,0);
+  for(const parent of ['/.harness/','/.harness/vendor/']) {
   const ignore=`# Team rule\n/team-cache/\n${parent}\n!/${archive}\n`;put(root,'.gitignore',ignore);
   const before=snapshot(root),result=check(root);
   assert.equal(result.errors.length,1);
   assert.match(result.errors.join(' '),/ignored parent director.*selective/i);
   assert.deepEqual(snapshot(root),before);assert.equal(git(root,'ls-files',tracked).stdout.trim(),tracked);
+  }
  }
  put(root,'.gitignore','# Team rule\n/team-cache/\n/.harness/runs/\n/.harness/state/\n/.harness/knowledge-candidates/\n/.harness/installation.json\n');
  assert.deepEqual(check(root).errors,[]);assert.equal(readFileSync(join(root,tracked),'utf8'),'{"reviewed":true}\n');

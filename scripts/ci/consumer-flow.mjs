@@ -131,7 +131,7 @@ flow('C1', 'An empty folder gets the harness and the starter', () => {
   assert.equal(run([join(c1, 'node_modules/typescript/bin/tsc'), '--noEmit', '-p', 'tsconfig.json'], c1).status, 'PASS', 'The starter does not typecheck.');
   assert.equal(run([join(c1, 'node_modules/@playwright/test/cli.js'), 'test', '--list', '--pass-with-no-tests'], c1).status, 'PASS', 'The starter cannot list tests.');
   write(c1, {'.harness/sources/scenarios.json': JSON.stringify({version: 1, id: 'synthetic', title: 'Synthetic suite', scenarios: [{id: 'case-1', title: 'Synthetic observation', steps: [{action: 'Observe the fixture', expected: ['The fixture is visible']}]}]}) + '\n',
-    '.harness/knowledge/reviewed.md': '# Reviewed synthetic knowledge\n', '.harness/integrations.json': '{"version":1}\n',
+    '.harness/knowledge/reviewed.md': '# Reviewed synthetic knowledge\n', '.harness/integrations.json': JSON.stringify({version: 1, ado: {organizationUrl: 'https://dev.azure.com/example-org', project: 'Synthetic', credentialRef: 'SYN_ADO_PAT'}}) + '\n',
     '.harness/runs/local.json': '{}\n', '.harness/knowledge-candidates/local.md': 'Unreviewed synthetic observation\n'});
   commit(c1, 'Adopt the harness');
   assert(git(c1, 'ls-files', `.harness/vendor/${name}`).trim(), 'The vendored archive is not committed.');
