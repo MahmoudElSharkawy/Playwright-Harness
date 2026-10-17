@@ -13,16 +13,8 @@ export const allureConfig = {
   resultsDir: 'allure-results',
   /** Explicit Allure 3 config; no Java, remote publishing or verdict overrides. */
   generatorConfig: 'allurerc.json',
-  /** Where the latest single-file report is generated each run. */
-  reportDir: 'allure-report',
-  /** Per-run archive root: each run's report is copied to `<historyDir>/<timestamp>/index.html`. */
+  /** One native report per run: `<historyDir>/<UTC timestamp>/index.html`; latest.html links to it. */
   historyDir: 'reports/allure-history',
-  /**
-   * Master switch for archiving a timestamped copy of every generated report.
-   * Set to false to disable archiving entirely; a single run can opt out with
-   * ALLURE_HISTORY=false (same documented opt-out convention as AUTO_ALLURE_OPEN).
-   */
-  keepHistory: true,
 } as const;
 
 /**

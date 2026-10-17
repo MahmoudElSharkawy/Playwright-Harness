@@ -1,12 +1,13 @@
 import {createRequire} from 'node:module';
-import {readFileSync, readdirSync, lstatSync, writeFileSync, existsSync} from 'node:fs';
+import {readFileSync, readdirSync, lstatSync, writeFileSync, existsSync, mkdirSync, copyFileSync, renameSync, rmdirSync, openSync, closeSync, fstatSync, unlinkSync, constants} from 'node:fs';
 import {join, dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {execFileSync} from 'node:child_process';
 import {consumerRoots, consumerPath} from '../consumer-paths.mjs';
 import {digest, requireThat, data} from '../execution-core/data.mjs';
 import {verificationRecord} from '../generation/index.mjs';
-import {escapeHtml} from './render.mjs';
+import {readAllureRun, publishLatest} from './history.mjs';
+export {reserveAllureReport} from './history.mjs';
 
 export function installedAllure(roots, name) {
   requireThat(['allure-playwright', 'allure'].includes(name), 'Unsupported Allure component.');
@@ -36,9 +37,24 @@ export function allureInventory(directory) {
   walk(directory); return files;
 }
 
-/** Separate report job after the native process exits and all reporters have flushed. */
-export async function generateAllure(inputRoots, directory) {
-  let phase = 'CAPTURE';
+/** Capture ordinary reporter output after every native reporter has flushed. */
+export function captureAllureResults(inputRoots, directory, resultsDirectory) {
+  const roots = consumerRoots(inputRoots.projectRoot, inputRoots.packageRoot), run = readAllureRun(roots, directory);
+  const source = consumerPath(roots, resultsDirectory), artifacts = allureInventory(source);
+  const target = consumerPath(roots, `${directory}/allure-results`); mkdirSync(target, {mode: 0o700});
+  for (const artifact of artifacts) {
+    const destination = consumerPath(roots, `${directory}/allure-results/${artifact.path}`);
+    mkdirSync(dirname(destination), {recursive: true, mode: 0o700}); copyFileSync(join(source, artifact.path), destination, constants.COPYFILE_EXCL);
+  }
+  requireThat(JSON.stringify(allureInventory(target)) === JSON.stringify(artifacts) && JSON.stringify(allureInventory(source)) === JSON.stringify(artifacts), 'Allure evidence changed during capture.');
+  const tests = artifacts.filter(item => item.path.endsWith('-result.json')).length;
+  requireThat(tests > 0, 'Allure capture is empty.');
+  writeFileSync(join(run.path, 'capture.json'), JSON.stringify({version: 1, source: 'playwright-native', status: 'CAPTURED', reporter: '3.13.0', tests, artifacts}, null, 2), {flag: 'wx', mode: 0o600, flush: true});
+}
+
+/** Separate idempotent report job after native flush; never a verdict engine. */
+export async function generateAllure(inputRoots, directory, {configuration} = {}) {
+  let phase = 'CAPTURE', generationLock, lockFile;
   try {
     const roots = consumerRoots(inputRoots.projectRoot, inputRoots.packageRoot);
     requireThat(typeof directory === 'string' && directory.startsWith('reports/') && !/[\\:\r\n]/.test(directory) && directory.split('/').every(p => p && !['.', '..'].includes(p)), 'Use a relative captured report directory.');
@@ -48,26 +64,62 @@ export async function generateAllure(inputRoots, directory) {
     const current = allureInventory(join(path, 'allure-results'));
     requireThat(JSON.stringify(current) === JSON.stringify(manifest.artifacts), 'Allure evidence changed after capture.');
     requireThat(current.filter(item => item.path.endsWith('-result.json')).length === manifest.tests, 'Allure test scope is empty or inconsistent.');
+    const run = existsSync(join(path, 'run.json')) ? readAllureRun(roots, directory) : undefined;
     let verification;
     phase = 'VERIFICATION';
-    if (directory.startsWith('reports/generation/') || existsSync(join(path, 'verification.json'))) {
+    if (directory.startsWith('reports/generation/') || run?.id.startsWith('verify-') || existsSync(join(path, 'verification.json'))) {
       const reference = data(JSON.parse(readFileSync(consumerPath(roots, `${directory}/verification.json`), 'utf8')));
       verification = await verificationRecord(roots, reference.sourceId, reference.invocation);
       requireThat(verification.reporting?.directory === directory && verification.revision === reference.revision && verification.status === reference.status, 'Allure capture belongs to another verification.');
     }
     phase = 'DEPENDENCY';
     const installation = installedAllure(roots, 'allure'); requireThat(installation.version === '3.19.1', 'Use the validated Allure Report 3.19.1.');
-    const output = join(path, 'allure-report'); requireThat(!existsSync(output), 'Do not overwrite a generated Allure report.');
+    configuration = configuration === undefined ? fileURLToPath(new URL('./allurerc.json', import.meta.url)) : consumerPath(roots, configuration);
+    if (run && verification) requireThat(run.id === verification.id, 'Allure report directory belongs to another invocation.');
+    const receiptFile = consumerPath(roots, `${directory}/generation.json`);
+    const latest = () => {
+      if (!run) return undefined;
+      try {return publishLatest(roots, run);} catch {return {status: 'FAILED', reason: 'Latest Allure link could not be published; the completed report is retained.'};}
+    };
+    phase = 'GENERATION';
+    lockFile = consumerPath(roots, `${directory}/.generation.lock`); generationLock = openSync(lockFile, 'wx', 0o600);
+    writeFileSync(generationLock, JSON.stringify({pid: process.pid, invocation: run?.id, startedAt: new Date().toISOString()}), {flush: true});
+    // Another process may have completed while this job was waiting to acquire ownership.
+    if (existsSync(receiptFile)) {
+      const receipt = data(JSON.parse(readFileSync(receiptFile, 'utf8')));
+      requireThat(receipt.status === 'GENERATED' && receipt.generator === 'allure' && receipt.commandline === installation.version
+        && receipt.tests === manifest.tests && receipt.reporter === manifest.reporter && receipt.configuration === digest(readFileSync(configuration))
+        && receipt.artifact?.path === `${directory}/index.html`, 'Invalid prior Allure generation receipt.');
+      requireThat(verification ? receipt.verification?.id === verification.id && receipt.verification.revision === verification.revision
+        && receipt.verification.status === verification.status && receipt.verification.gate === verification.gate : !receipt.verification, 'Generated Allure verification association changed.');
+      for (const artifact of [receipt.artifact, ...(receipt.nativeArtifact ? [receipt.nativeArtifact] : [])]) {
+        requireThat(artifact === receipt.artifact || artifact.path === `${directory}/allure-report/index.html`, 'Invalid prior native report path.');
+        const bytes = readFileSync(consumerPath(roots, artifact.path));
+        requireThat(bytes.length === artifact.bytes && digest(bytes) === artifact.sha256, 'Generated Allure report changed.');
+      }
+      // Re-opening an older completed report must not move the latest pointer backwards.
+      return receipt;
+    }
     // Pinned official CLI, bound argv and an explicit package config: consumer
     // discovery cannot enable publishing, result filters, known issues or quality gates.
-    const configuration = fileURLToPath(new URL('./allurerc.json', import.meta.url));
-    phase = 'GENERATION';
     // The CLI treats inputs as globs. A fixed relative input avoids interpreting
     // brackets or other glob syntax in the consumer's absolute directory name.
-    execFileSync(process.execPath, [join(installation.directory, 'cli.js'), 'generate', 'allure-results', '--config', configuration, '--output', output],
+    execFileSync(process.execPath, [join(installation.directory, 'cli.js'), 'generate', 'allure-results', '--config', configuration, '--output', path],
       {cwd: path, windowsHide: true, stdio: 'pipe', timeout: 60000, maxBuffer: 1024 * 1024});
     phase = 'OUTPUT';
-    const reportFile = join(output, 'index.html');
+    // Allure keeps its plugin directory when native inputs already occupy the output.
+    // Move the single-file renderer output in place; never retain a second HTML copy.
+    const plugin = join(path, 'awesome');
+    if (existsSync(plugin)) {
+      requireThat(!lstatSync(plugin).isSymbolicLink(), 'Allure output cannot redirect.');
+      for (const name of readdirSync(plugin)) {
+        const destination = consumerPath(roots, `${directory}/${name}`);
+        requireThat(!existsSync(destination) || run && ['index.html', 'summary.json'].includes(name) && !lstatSync(destination).isSymbolicLink(), 'Allure output would replace an existing artifact.');
+        renameSync(join(plugin, name), destination);
+      }
+      rmdirSync(plugin);
+    }
+    const reportFile = consumerPath(roots, `${directory}/index.html`);
     const html = readFileSync(reportFile, 'utf8'); requireThat(html.includes('<head>'), 'Allure generated no HTML report.');
     // Allure 3.19.1's Awesome template embeds analytics without an opt-out.
     // Keep this local single-file artifact offline, including when opened directly.
@@ -77,18 +129,19 @@ export async function generateAllure(inputRoots, directory) {
     requireThat(JSON.stringify(allureInventory(join(path, 'allure-results'))) === JSON.stringify(current), 'Allure evidence changed during generation.');
     const receipt = {status: 'GENERATED', source: 'playwright-native', tests: manifest.tests, reporter: manifest.reporter, commandline: installation.version,
       generator: 'allure', configuration: digest(readFileSync(configuration)),
-      artifact: {path: `${directory}/allure-report/index.html`, bytes: bytes.length, sha256: digest(bytes)}};
+      artifact: {path: `${directory}/index.html`, bytes: bytes.length, sha256: digest(bytes)}};
     if (verification) {
-      // The native runner can pass while assertion assessment fails (for example, a
-      // swallowed assertion). Keep the authoritative gate above native details.
-      const gateDescription = verification.gate === 'case-assertions'
-        ? 'This case-level gate checks completed assertions and skipped steps. Independent review assesses scenario coverage; the receipt does not prove execution of every source expectation.'
-        : 'This historical verification used the legacy source-expectation gate.';
-      const landing = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'"><title>Harness verification ${escapeHtml(verification.status)}</title><style>body{font:18px/1.6 system-ui;max-width:900px;margin:50px auto;padding:24px;color:#183149}strong{font-size:1.5em}a{color:#17528a}code{overflow-wrap:anywhere}</style></head><body><h1>Harness verification</h1><p>Recorded outcome: <strong>${escapeHtml(verification.status)}</strong></p><p>Invocation: <code>${escapeHtml(verification.id)}</code></p><p>Reviewed revision: <code>${escapeHtml(verification.revision)}</code></p><p>${gateDescription} Native test status alone does not establish readiness.</p><p><a href="allure-report/index.html">Open Allure native test details</a></p><p>Readiness requires two independent green runs for the same reviewed candidate. Reporting does not change that gate.</p></body></html>\n`;
-      writeFileSync(join(path, 'index.html'), landing, {flag: 'wx', mode: 0o600});
-      receipt.nativeArtifact = receipt.artifact; receipt.verification = {id: verification.id, revision: verification.revision, status: verification.status, ...(verification.gate ? {gate: verification.gate} : {})};
-      receipt.artifact = {path: `${directory}/index.html`, bytes: Buffer.byteLength(landing), sha256: digest(landing)};
+      receipt.verification = {id: verification.id, revision: verification.revision, status: verification.status, ...(verification.gate ? {gate: verification.gate} : {})};
     }
-    writeFileSync(join(path, 'generation.json'), JSON.stringify(receipt, null, 2), {flag: 'wx', mode: 0o600}); return receipt;
-  } catch {return {status: 'FAILED', phase, reason: 'Allure capture, dependency or generation is unavailable; execution verdicts are unchanged.'};}
+    writeFileSync(receiptFile, JSON.stringify(receipt, null, 2), {flag: 'wx', mode: 0o600, flush: true});
+    const delivery = latest(); return {...receipt, ...(delivery ? {latest: delivery} : {})};
+  } catch {return {status: 'FAILED', phase, reason: 'Allure capture, dependency or generation is unavailable or already in progress; execution verdicts are unchanged.'};}
+  finally {
+    if (generationLock !== undefined) {
+      try {
+        const owner = fstatSync(generationLock); closeSync(generationLock);
+        if (existsSync(lockFile)) {const current = lstatSync(lockFile); if (!current.isSymbolicLink() && current.dev === owner.dev && current.ino === owner.ino) unlinkSync(lockFile);}
+      } catch { /* Reporting cleanup cannot mask a verdict; a retained lock requires ownership inspection. */ }
+    }
+  }
 }

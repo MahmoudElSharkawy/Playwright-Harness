@@ -10,6 +10,7 @@ import {approvedCandidate} from './index.mjs';
 import {readJson} from '../project-config.mjs';
 import {allureLinkTemplates} from '../convention-source.mjs';
 import {generationBlocker} from './reasons.mjs';
+import {reserveAllureReport} from '../reporting/history.mjs';
 
 const reporter = fileURLToPath(new URL('./reporter.cjs', import.meta.url));
 const reportingReporter = fileURLToPath(new URL('../reporting/verification-reporter.mjs', import.meta.url));
@@ -92,7 +93,7 @@ export async function verifyGeneration(roots, sourceId, {timeoutMs = 120000, all
     requireThat(prior.length < 2, 'Two independent green runs are already recorded.');
     const record = {id: `verify-${randomUUID()}`, revision: candidate.revision, gate: 'case-assertions', status: 'STARTED', startedAt: Date.now()};
     state.runs.push(record); save(state); const invocation = record;
-    let phase = 'PREPARATION', failureStatus = 'BLOCKED', links = {state: 'NONE'};
+    let phase = 'PREPARATION', failureStatus = 'BLOCKED', links = {state: 'NONE'}, captureDirectory;
     try {
       const candidate = approvedCandidate(roots, state), native = nativeRunner(roots);
       const output = join(directory, invocation.id); mkdirSync(output, {mode: 0o700});
@@ -115,10 +116,14 @@ export async function verifyGeneration(roots, sourceId, {timeoutMs = 120000, all
       writeFileSync(testList, selected.map(t => `[${t.project}] › ${t.nativeFile} › ${t.titlePath.join(' › ')}`).join('\n'), {flag: 'wx', mode: 0o600});
       requireThat(snapshot(roots).fingerprint === candidate.snapshot.fingerprint, 'Collection changed frozen consumer files.');
       phase = 'EXECUTION'; failureStatus = 'NEEDS_REVIEW';
+      if (allure) {
+        captureDirectory = reserveAllureReport(roots, {id: invocation.id}).directory;
+        record.reporting = {status: 'STARTED', directory: captureDirectory}; save(state);
+      }
       const executionArgs = [...shared, '--test-list', testList];
       if (allure) executionArgs[executionArgs.indexOf('--reporter') + 1] = reportingReporter;
       const execution = await command(roots, native.cli, executionArgs, {...env, HARNESS_GENERATION_RECEIPT: runReceipt,
-        HARNESS_ALLURE_DIRECTORY: `reports/generation/${invocation.id}`}, timeoutMs);
+        HARNESS_ALLURE_DIRECTORY: allure ? captureDirectory : ''}, timeoutMs);
       const report = data(readJson(runReceipt));
       requireThat(report.version === 2, 'New verification requires case-level assertion receipts.');
       requireThat(report.invocation === invocation.id && Array.isArray(report.tests), 'Native receipt identity or case inventory changed.');
@@ -132,7 +137,8 @@ export async function verifyGeneration(roots, sourceId, {timeoutMs = 120000, all
     } catch (error) {const blocker = generationBlocker(error, phase); record.status = failureStatus; record.failureClass = phase; record.reason = blocker.reason; record.nextAction = blocker.nextAction;}
     if (allure) {
       try {
-        const path = `reports/generation/${invocation.id}`, capture = data(readJson(relativeFile(roots, `${path}/capture.json`)));
+        requireThat(captureDirectory, 'Allure capture was not allocated.');
+        const path = captureDirectory, capture = data(readJson(relativeFile(roots, `${path}/capture.json`)));
         record.reporting = {status: capture.status === 'CAPTURED' ? 'CAPTURED' : 'FAILED', directory: path, source: 'playwright-native', links: links.state,
           ...(['PLACEHOLDER', 'UNRESOLVED'].includes(links.state) ? {linksDiagnostic: 'Scoped Allure links were omitted; configure literal reporter templates.'} : {})};
         writeFileSync(relativeFile(roots, `${path}/verification.json`), JSON.stringify({sourceId, invocation: invocation.id, revision: record.revision, status: record.status,

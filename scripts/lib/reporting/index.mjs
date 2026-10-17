@@ -1,20 +1,12 @@
-import {mkdirSync, writeFileSync} from 'node:fs';
-import {join, dirname, relative} from 'node:path';
+import {writeFileSync} from 'node:fs';
+import {join, relative} from 'node:path';
 import {randomUUID} from 'node:crypto';
-import {consumerRoots, consumerPath} from '../consumer-paths.mjs';
-import {digest, requireThat} from '../execution-core/data.mjs';
+import {reportDirectory} from './directories.mjs';
+export {reportDirectory, reportTimestamp, timestampedReportDirectory} from './directories.mjs';
+import {digest} from '../execution-core/data.mjs';
 import {reportView} from './model.mjs';
 import {renderJson, renderMarkdown, renderHtml} from './render.mjs';
 export {reportView, renderJson, renderMarkdown, renderHtml};
-
-/** New consumer report directory only; never replace source, package files or a prior run. */
-export function reportDirectory(inputRoots, path) {
-  const roots = consumerRoots(inputRoots.projectRoot, inputRoots.packageRoot);
-  requireThat(typeof path === 'string' && path.startsWith('reports/') && !/[\\\r\n\0:]/.test(path) && path.split('/').every(part => part && !['.', '..'].includes(part)), 'Report output must be relative consumer reports/ storage.');
-  const directory = consumerPath(roots, path); mkdirSync(dirname(directory), {recursive: true, mode: 0o700});
-  requireThat(consumerPath(roots, path) === directory, 'Report directory ownership changed.');
-  mkdirSync(directory, {mode: 0o700}); return directory;
-}
 
 /** Separate delivery status from immutable test verdicts. A manifest is the completion marker. */
 export function writeReports(roots, result, {directory} = {}) {

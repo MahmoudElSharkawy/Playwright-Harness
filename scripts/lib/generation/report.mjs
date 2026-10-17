@@ -7,7 +7,7 @@ import {transaction, relativeFile, reviewArtifact} from './storage.mjs';
 import {generationStateStatus, currentCandidate, approvedCandidate} from './index.mjs';
 import {generationBlocker, GENERATION_STAGES} from './reasons.mjs';
 import {caseNotes} from '../reporting/case-notes.mjs';
-import {reportDirectory} from '../reporting/index.mjs';
+import {timestampedReportDirectory} from '../reporting/directories.mjs';
 import {renderAutomationHtml, outcome, automationCoverageText, caseNeedsAttention} from '../reporting/case-view.mjs';
 import {markdownText as md, caseReason, stageLabel} from '../reporting/text.mjs';
 import {reportSource, reportingContext} from './reporting-context.mjs';
@@ -173,7 +173,7 @@ export function automationCompanions(view) {
 /** Fresh consumer output, with a final integrity manifest and a separate delivery outcome. */
 export async function writeAutomationReport(roots, options = {}) {
   try {
-    const view = await automationReportView(roots, options), directory = `reports/harness/${view.id}`, output = reportDirectory(roots, directory);
+    const view = await automationReportView(roots, options), {directory, path: output} = timestampedReportDirectory(roots, {parent: 'reports/harness', prefix: 'automation-', at: view.createdAt});
     const files = [['result.json', JSON.stringify(view, null, 2) + '\n'], ...automationCompanions(view), ['index.html', renderAutomationHtml(view)]];
     const artifacts = files.map(([name, body]) => {writeFileSync(join(output, name), body, {flag: 'wx', mode: 0o600}); return {path: name, bytes: Buffer.byteLength(body), sha256: digest(body)};});
     const manifest = {version: 1, status: 'WRITTEN', sourceId: view.sourceId, sourceFingerprint: view.sourceFingerprint, readiness: view.status, coverage: view.coverage, cases: view.cases.length, artifacts};

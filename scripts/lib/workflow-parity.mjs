@@ -1,5 +1,5 @@
 // M15 evidence assessment only. Existing runtimes, generation gates and reporters keep their responsibilities.
-import {readFileSync, readdirSync} from 'node:fs';
+import {readFileSync, readdirSync, existsSync} from 'node:fs';
 import {join, relative} from 'node:path';
 import {consumerPath} from './consumer-paths.mjs';
 import {within} from './skill-roots.mjs';
@@ -90,7 +90,9 @@ const renderedAttachments = (step, depth = 0) => [...(step.type === 'attachment'
 /** Pin-specific Allure rendering evidence; never execute embedded scripts or use report status as readiness. */
 export function checkWorkflowAllure(roots, verification, tests, generated) {
   const directory = verification.reporting?.directory;
-  requireThat(verification.reporting?.status === 'CAPTURED' && directory === `reports/generation/${verification.id}`, 'Missing or misassociated Allure capture.');
+  requireThat(verification.reporting?.status === 'CAPTURED' && typeof directory === 'string', 'Missing or misassociated Allure capture.');
+  if (existsSync(consumerPath(roots, `${directory}/run.json`))) same(read(roots, `${directory}/run.json`).id, verification.id, 'Allure directory belongs to another invocation.');
+  else requireThat(directory === `reports/generation/${verification.id}`, 'Missing Allure invocation association.');
   const capture = read(roots, `${directory}/capture.json`), receipt = read(roots, `${directory}/generation.json`), reference = read(roots, `${directory}/verification.json`);
   requireThat(capture.status === 'CAPTURED' && capture.tests === tests.length && capture.nativeStatus === 'passed', 'Allure scope or native status changed.');
   same(allureInventory(consumerPath(roots, `${directory}/allure-results`)), capture.artifacts, 'Allure captured files changed.');
@@ -98,9 +100,8 @@ export function checkWorkflowAllure(roots, verification, tests, generated) {
   requireThat(receipt.status === 'GENERATED' && receipt.generator === 'allure' && receipt.commandline === '3.19.1' && receipt.tests === tests.length && receipt.reporter === '3.13.0', 'Unsupported or incomplete Allure generation.');
   requireThat(receipt.configuration === digest(readFileSync(join(roots.packageRoot, 'scripts/lib/reporting/allurerc.json'))), 'Allure configuration changed.');
   same(receipt.verification, {id: verification.id, revision: verification.revision, status: verification.status}, 'Allure generation belongs to another verifier.');
-  const landing = checkArtifact(roots, receipt.artifact, `${directory}/index.html`).toString();
-  requireThat(landing.includes(`Recorded outcome: <strong>${verification.status}</strong>`), 'Verifier outcome missing from landing page.');
-  const html = checkArtifact(roots, receipt.nativeArtifact, `${directory}/allure-report/index.html`).toString();
+  const html = receipt.nativeArtifact ? checkArtifact(roots, receipt.nativeArtifact, `${directory}/allure-report/index.html`).toString()
+    : checkArtifact(roots, receipt.artifact, `${directory}/index.html`).toString();
   requireThat(html.includes('Content-Security-Policy'), 'Offline report policy missing.');
   const inline = new Map([...html.matchAll(/\bd\(("(?:[^"\\]|\\.)*"),("(?:[^"\\]|\\.)*")\)/g)].map(m => [JSON.parse(m[1]), Buffer.from(JSON.parse(m[2]), 'base64')]));
   const results = capture.artifacts.filter(a => a.path.endsWith('-result.json')).map(a => read(roots, `${directory}/allure-results/${a.path}`));

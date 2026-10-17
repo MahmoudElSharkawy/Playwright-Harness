@@ -47,6 +47,7 @@ test('standard QA reporting produces one complete twenty-case bundle with subset
       assert.equal(result.status, 0, result.stderr); report = JSON.parse(result.stdout);
     }
     assert.equal(report.status, 'WRITTEN');
+    assert.match(report.directory, /^reports\/harness\/automation-\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}Z(?:-\d{3,})?$/);
     deliveries.push(report.directory.split('/').at(-1));
     assert.deepEqual(readdirSync(join(f.roots.projectRoot, 'reports/harness')).sort(), deliveries.slice().sort(), 'Each invocation produces one complete QA bundle, without another subset-only report.');
     assert.deepEqual(readdirSync(join(f.roots.projectRoot, report.directory)).sort(), ['defects.md', 'index.html', 'manifest.json', 'result.json', 'summary.md']);
