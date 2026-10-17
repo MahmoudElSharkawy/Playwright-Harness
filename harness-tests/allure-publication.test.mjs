@@ -1,0 +1,44 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {mkdirSync, writeFileSync, readFileSync, readdirSync, existsSync} from 'node:fs';
+import {join} from 'node:path';
+import {fixture} from './fixtures/execution-core.mjs';
+import {reserveAllureReport, generateAllure, allureInventory} from '../scripts/lib/reporting/allure.mjs';
+
+test('publication keeps only the current HTML in allure-report and older HTML in history', async t => {
+  const f = fixture(t), root = f.roots.projectRoot, dependency = join(root, 'node_modules/allure');
+  mkdirSync(dependency, {recursive: true});
+  writeFileSync(join(root, 'package.json'), '{"type":"commonjs"}');
+  writeFileSync(join(dependency, 'package.json'), '{"name":"allure","version":"3.19.1","main":"index.cjs"}');
+  writeFileSync(join(dependency, 'index.cjs'), '');
+  writeFileSync(join(dependency, 'cli.js'), `const fs=require('node:fs');if(fs.existsSync('.fail'))process.exit(7);fs.mkdirSync('awesome');fs.writeFileSync('awesome/index.html','<!doctype html><html><head></head><body>'+process.cwd()+'</body></html>');`);
+  const capture = id => {
+    const run = reserveAllureReport(f.roots, {id, at: new Date('2026-10-17T14:05:09Z')});
+    mkdirSync(join(run.path, 'allure-results'));
+    writeFileSync(join(run.path, 'allure-results/case-result.json'), '{"status":"failed"}');
+    writeFileSync(join(run.path, 'capture.json'), JSON.stringify({status: 'CAPTURED', source: 'playwright-native', tests: 1, reporter: '3.13.0', artifacts: allureInventory(join(run.path, 'allure-results'))}));
+    return run;
+  };
+  const first = capture('one'), a = await generateAllure(f.roots, first.directory);
+  assert.equal(a.status, 'GENERATED'); assert.equal(a.latest.path, 'reports/allure-report/index.html');
+  const latest = join(root, a.latest.path), original = readFileSync(latest, 'utf8');
+  assert.match(original, /<body>/); assert.doesNotMatch(original, /http-equiv="refresh"/);
+  const history = join(root, 'reports/allure-history');
+  assert.equal(existsSync(history) ? readdirSync(history).length : 0, 0);
+  assert(first.directory.startsWith('.harness/runs/allure/'));
+  const second = capture('two'); writeFileSync(join(second.path, '.fail'), 'fail');
+  assert.equal((await generateAllure(f.roots, second.directory)).status, 'FAILED');
+  assert.equal(readFileSync(latest, 'utf8'), original);
+  const {unlinkSync} = await import('node:fs'); unlinkSync(join(second.path, '.fail'));
+  const b = await generateAllure(f.roots, second.directory); assert.equal(b.status, 'GENERATED');
+  assert.deepEqual(readdirSync(history), ['2026-10-17_14-05-09Z.html']);
+  assert.equal(readFileSync(join(history, readdirSync(history)[0]), 'utf8'), original);
+  const current = readFileSync(latest, 'utf8'); assert.notEqual(current, original);
+  assert.deepEqual((await generateAllure(f.roots, first.directory)).artifact, a.artifact);
+  assert.equal(readFileSync(latest, 'utf8'), current);
+  writeFileSync(join(history, '2026-10-17_14-05-09Z-001.html'), 'older occupied archive');
+  const third = capture('three'), c = await generateAllure(f.roots, third.directory);
+  assert.equal(c.latest.status, 'WRITTEN');
+  assert.equal(readFileSync(join(history, '2026-10-17_14-05-09Z-001.html'), 'utf8'), 'older occupied archive');
+  assert.equal(readFileSync(join(history, '2026-10-17_14-05-09Z-002.html'), 'utf8'), current);
+});

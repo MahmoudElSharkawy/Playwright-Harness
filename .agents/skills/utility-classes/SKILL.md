@@ -36,9 +36,11 @@ For shared-runtime outcomes, follow [reporting](../../../docs/reporting.md). Att
 The example uses `src/utils/AllureReport.ts` in reporter `onExit` with the pinned
 Node-based Allure 3 generator; do not generate during `globalTeardown`. Register
 this reporter before the HTML viewer, which can keep its `onExit` hook open.
-Ordinary, standalone and verification invocations share one timestamped Allure
-history root, with a relative `latest.html` link; keep harness QA reports separate.
-Preserve raw evidence and receipts, and publish latest only after report completion.
+Ordinary, standalone and verification invocations publish current HTML at
+`reports/allure-report/index.html`, with older HTML only in `reports/allure-history/`.
+Keep immutable capture/HTML/receipts under `.harness/runs/allure/` and harness QA
+reports separate. Publish only after completion. Allure video attachments are opt-in;
+Playwright recording and native attachment arrays remain independent.
 
 ## Boundaries
 

@@ -384,13 +384,14 @@ consumer; Java is not required. Reporting never grants or revokes a green.
 
 ```text
 npx --no pom-harness generate verify --id <source-id> --allure
-npx --no pom-harness generate-allure --input reports/allure-history/<timestamp>[-NNN]
+npx --no pom-harness generate-allure --input .harness/runs/allure/<timestamp>[-NNN]
 ```
 
 Pass the exact recording directory returned by `verify`; the verification ID stays
-internal. Each independent green keeps its own native report. The shared history
-uses UTC `YYYY-MM-DD_HH-mm-ssZ` names, with a numeric collision suffix when needed;
-`latest.html` links to the last completed report. Harness QA reports remain separate
+internal. Each independent green keeps immutable native evidence under
+`.harness/runs/allure/<timestamp>[-NNN]/`. Current HTML is
+`reports/allure-report/index.html`; older HTML alone is archived under
+`reports/allure-history/<timestamp>[-NNN].html`. Harness QA reports remain separate
 and include the full requested case inventory, blockers and readiness.
 
 Details: [verification compatibility](#verification-compatibility-and-integrity)
@@ -537,8 +538,9 @@ Details: [Azure DevOps](azure-devops.md),
 | `reports/harness/automation-YYYY-MM-DD_HH-mm-ssZ[-NNN]/` | Automation QA bundle: full case inventory, readiness, blockers and defects |
 | `reports/harness/execution-YYYY-MM-DD_HH-mm-ssZ[-NNN]/` | Execution QA bundle: assessed cases, attempts and defects |
 | `reports/harness/<run-id>-<unique-id>/` | Generic validated-runtime case report; existing naming is unchanged |
-| `reports/allure-history/<timestamp>[-NNN]/` | One ordinary, standalone or verification invocation's native Allure report, capture and receipts |
-| `reports/allure-history/latest.html` | Relative entry point to the last completed Allure report |
+| `.harness/runs/allure/<timestamp>[-NNN]/` | Immutable native Allure capture, HTML and receipts |
+| `reports/allure-report/index.html` | Current completed Allure single-file HTML |
+| `reports/allure-history/<timestamp>[-NNN].html` | Older published HTML only |
 
 All of this belongs to the consumer; the installed package stays unchanged. See
 [consumer-owned state](getting-started.md).

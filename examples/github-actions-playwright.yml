@@ -81,22 +81,12 @@ jobs:
           path: reports/playwright-report
           retention-days: 30
 
-      # Keep latest.html beside its relative target and retain native run evidence.
-      # If HARNESS_ALLURE_HISTORY is customized, update this path in the same change.
-      - name: Publish Allure run history
+      - name: Publish current Allure report
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: allure-report
-          path: reports/allure-history/
-          retention-days: 30
-
-      - name: Publish CTRF results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ctrf-report
-          path: ctrf
+          path: reports/allure-report/index.html
           retention-days: 30
 
       # Fail the job if the run step failed (kept explicit because the run step

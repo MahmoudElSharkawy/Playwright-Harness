@@ -296,14 +296,15 @@ after the last.
 
 Scope is strictly run hygiene. ✅ Clear stale raw staging before the run
 (`global-setup.ts`); after all reporters flush, preserve the invocation's raw
-results and generate its single native HTML in
-`reports/allure-history/YYYY-MM-DD_HH-mm-ssZ[-NNN]/index.html`
-(`src/utils/AllureReport.ts`, reporter `onExit`). Publish a relative `latest.html`
-link only after the report and generation receipt are complete, then optionally
-open the report. UTC seconds retain `Z`, omit milliseconds, and add a numeric
-suffix only for collisions. Ordinary, standalone and verification entry points
-share this history; harness QA reports remain separate. These run bundles are
-distinct from optional Allure trend history and contain no duplicate archive HTML.
+results and generate immutable native HTML under
+`.harness/runs/allure/YYYY-MM-DD_HH-mm-ssZ[-NNN]/`
+(`src/utils/AllureReport.ts`, reporter `onExit`). After HTML and receipt completion,
+archive the previous current HTML in `reports/allure-history/<timestamp>[-NNN].html`
+and atomically replace `reports/allure-report/index.html`, then optionally open it.
+Serialize publication; failed generation preserves the previous current report.
+UTC seconds retain `Z`, omit milliseconds, and add numeric collision suffixes.
+Ordinary, standalone and verification entry points share this publication; harness
+QA reports remain separate. Archive only older HTML files, not captures or receipts.
 ❌ Business logic, and data seeding/cleanup of any kind — iron law 8 makes seeding
 per-test (`beforeEach`, via API); these files run once per run and cannot honor it.
 
@@ -363,12 +364,18 @@ config; they are updated in lockstep with any path change, per the design-conven
 
 **Why:** duplicated paths drift silently and keep "working" until the day they don't.
 
+Allure video inclusion defaults off: `ALLURE_ATTACH_VIDEO=true` or explicit reporter
+`attachVideo: true` enables it; an explicit option takes precedence. Filter `video/*`
+from separate Allure step/result views, never mutate native Playwright attachments.
+Retain stable step identity, screenshots, other attachments and recording policy.
+
 ✅ (shipped example) `src/config/reporting.ts` — the raw `resultsDir`, canonical
 `historyDir`, generator config and `environmentInfo` object live in one module,
 imported by the reporter configuration and lifecycle code. `HARNESS_ALLURE_HISTORY`
 overrides the shared history root under consumer `reports/`; use the same root
 for scoped commands. Remove the old duplicate `reportDir` setting. CI uploads the
-entire history root, preserving `latest.html`, its target and supporting evidence.
+current Allure single-file HTML and the current Playwright report folder; leave
+history, raw results and internal evidence out of consumer GitHub Actions artifacts.
 
 ❌ (illustrative counterexample) `global-setup.ts` cleared `./allure-results` while
 `playwright.config.ts` carried a dead `outputFolder: 'reports/allure-results'` key on
@@ -498,6 +505,6 @@ sourcing of env config, secrets, and JSON test data →
 - [ ] Class and methods carry JSDoc; rewrites preserve the facade surface (step-title format, attachment names/order, verb signatures) — verified by diffing old vs new Allure reports
 - [ ] Lifecycle scripts: run hygiene only (no business logic, no seeding); no `test.step()`/`test.info()`/attachments; JSDoc'd like utils
 - [ ] Teardown never exits non-zero or throws over report generate/open; setup rethrows only for report-integrity failures
-- [ ] Report generation waits for all reporters to flush (`onExit` or a subsequent process); preserves raw results/receipts and one HTML per invocation; atomically publishes relative latest only after completion, including failed tests; keeps QA separate
+- [ ] Report generation waits for all reporters to flush (`onExit` or a subsequent process); preserves raw results/receipts and one HTML per invocation; atomically publishes current HTML only after completion, archives only older HTML, including failed tests; keeps QA separate
 - [ ] `AUTO_ALLURE_OPEN` opt-out honored, desktop behavior auto-disabled when `CI` is set; obsolete `ALLURE_HISTORY`/`keepHistory` settings removed; facade toggles stay opt-in `=== 'true'`
 - [ ] Lifecycle scripts share a constant with (or read) the reporter config — no second hardcoded path copy in code; README report table and CI artifact steps updated in lockstep with any path change

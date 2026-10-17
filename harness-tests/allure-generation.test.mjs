@@ -91,17 +91,18 @@ for (const [name, fails, missingGenerator] of [['passing test', false, false], [
     const run = spawnSync(process.execPath, [join(example, 'node_modules/@playwright/test/cli.js'), 'test', '--config=playwright.config.ts'],
       {cwd: root, env: {...process.env, CI: '1', AUTO_ALLURE_OPEN: 'false'}, encoding: 'utf8', timeout: 90000, windowsHide: true});
     assert.equal(run.status, fails ? 1 : 0, run.stderr);
-    const history = join(root, 'reports/allure-history'), runs = readdirSync(history).filter(name => /^\d{4}-/.test(name));
+    const evidence = join(root, '.harness/runs/allure'), runs = readdirSync(evidence).filter(name => /^\d{4}-/.test(name));
     assert.equal(runs.length, 1); assert.match(runs[0], /^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}Z(?:-\d{3,})?$/);
-    const output = join(history, runs[0], 'index.html');
-    if (missingGenerator) {assert.equal(existsSync(output), false); assert.equal(existsSync(join(history, 'latest.html')), false); assert.match(run.stdout + run.stderr, /test outcomes are unchanged/); return;}
-    const summary = JSON.parse(readFileSync(join(history, runs[0], 'summary.json')));
+    const output = join(root, 'reports/allure-report/index.html');
+    if (missingGenerator) {assert.equal(existsSync(output), false); assert.match(run.stdout + run.stderr, /test outcomes are unchanged/); return;}
+    const summary = JSON.parse(readFileSync(join(evidence, runs[0], 'summary.json')));
     assert.equal(summary.stats.total, 1); assert.equal(summary.status, fails ? 'failed' : 'passed');
     const html = readFileSync(output, 'utf8'), files = inlineFiles(html);
     assert([...files.values()].some(value => value.toString().includes('after-flush')));
     assert.equal(existsSync(join(root, 'allure-report/index.html')), false);
-    assert.equal(existsSync(join(history, runs[0], 'awesome')), false);
-    assert.match(readFileSync(join(history, 'latest.html'), 'utf8'), new RegExp(`${runs[0]}/index.html`));
+    assert.equal(existsSync(join(evidence, runs[0], 'awesome')), false);
+    assert.equal(existsSync(join(root, 'reports/allure-history')), false);
+    assert.doesNotMatch(html, /http-equiv="refresh"/);
   });
 }
 
@@ -114,12 +115,12 @@ test('the example finishes Allure before entering the HTML viewer exit hook', t 
   put(root, 'package.json', '{"type":"commonjs"}');
   // Keep the shipped reporter order. Observe the point at which the real HTML viewer can block onExit.
   put(root, 'proof.config.ts', `import source from './playwright.config'; export default {...source,workers:1,retries:0,reporter:source.reporter.filter(([name])=>['list','html','./src/utils/AllureReport.ts'].includes(name)).map(([name,options])=>name==='html'?['./HtmlExitBoundary.ts']:[name,options])};`);
-  put(root, 'HtmlExitBoundary.ts', `import {existsSync,writeFileSync} from 'node:fs'; export default class HtmlExitBoundary {onExit(){writeFileSync('html-exit.json',JSON.stringify({reportReady:existsSync('reports/allure-history/latest.html')}));}}`);
+  put(root, 'HtmlExitBoundary.ts', `import {existsSync,writeFileSync} from 'node:fs'; export default class HtmlExitBoundary {onExit(){writeFileSync('html-exit.json',JSON.stringify({reportReady:existsSync('reports/allure-report/index.html')}));}}`);
   put(root, 'tests/Report.spec.ts', `import {test,expect} from '@playwright/test'; test('native report ordering',()=>{expect(2).toBe(2);});`);
   const run = spawnSync(process.execPath, [join(example, 'node_modules/@playwright/test/cli.js'), 'test', '--config=proof.config.ts'],
     {cwd: root, env: {...process.env, CI: '', AUTO_ALLURE_OPEN: 'false'}, encoding: 'utf8', timeout: 90000, windowsHide: true});
   assert.equal(run.status, 0, run.stdout + run.stderr);
   assert.deepEqual(JSON.parse(readFileSync(join(root, 'html-exit.json'))), {reportReady: true});
-  const history = join(root, 'reports/allure-history'), directory = readdirSync(history).find(name => /^\d{4}-/.test(name));
-  assert.equal(JSON.parse(readFileSync(join(history, directory, 'summary.json'))).stats.total, 1);
+  const evidence = join(root, '.harness/runs/allure'), directory = readdirSync(evidence).find(name => /^\d{4}-/.test(name));
+  assert.equal(JSON.parse(readFileSync(join(evidence, directory, 'summary.json'))).stats.total, 1);
 });

@@ -21,7 +21,7 @@ function history(t) {
   }};
 }
 
-test('canonical native report has one HTML, a relative latest link, and idempotent generation', async t => {
+test('canonical evidence and current HTML retain idempotent generation and archive only older reports', async t => {
   const f = history(t), first = f.capture('ordinary-one');
   const receipt = await generateAllure(f.roots, first.directory);
   assert.equal(receipt.status, 'GENERATED', JSON.stringify(receipt)); assert.equal(receipt.artifact.path, `${first.directory}/index.html`);
@@ -29,18 +29,18 @@ test('canonical native report has one HTML, a relative latest link, and idempote
   assert.deepEqual(readdirSync(first.path).filter(name => name.endsWith('.html')), ['index.html']);
   assert.equal(existsSync(join(first.path, 'awesome')), false); assert.equal(existsSync(join(first.path, 'allure-report')), false);
   const latest = join(f.roots.projectRoot, receipt.latest.path);
-  assert.match(readFileSync(latest, 'utf8'), /href="2026-10-17_14-05-09Z\/index.html"/);
-  assert(readFileSync(latest).length < 1024);
+  assert.equal(receipt.latest.path, 'reports/allure-report/index.html');
+  assert.match(readFileSync(latest, 'utf8'), /Native failed test/);
   const second = f.capture('ordinary-two'), newer = await generateAllure(f.roots, second.directory), before = readFileSync(latest, 'utf8');
-  assert.equal(newer.status, 'GENERATED'); assert.match(before, /2026-10-17_14-05-09Z-001\/index.html/);
+  assert.equal(newer.status, 'GENERATED'); assert.match(before, /2026-10-17_14-05-09Z-001/);
   assert.deepEqual((await generateAllure(f.roots, first.directory)).artifact, receipt.artifact);
   assert.equal(readFileSync(latest, 'utf8'), before, 'Opening an old report cannot make it latest.');
-  assert.equal(readdirSync(join(f.roots.projectRoot, first.historyRoot)).filter(name => /^\d{4}-/.test(name)).length, 2);
+  assert.deepEqual(readdirSync(join(f.roots.projectRoot, first.historyRoot)), ['2026-10-17_14-05-09Z.html']);
 });
 
 test('generation failure retains prior latest and resumes in the same capture directory', async t => {
   const f = history(t), first = f.capture('first'); await generateAllure(f.roots, first.directory);
-  const latest = join(f.roots.projectRoot, first.historyRoot, 'latest.html'), before = readFileSync(latest, 'utf8');
+  const latest = join(f.roots.projectRoot, 'reports/allure-report/index.html'), before = readFileSync(latest, 'utf8');
   const failed = f.capture('failed'); writeFileSync(join(failed.path, '.fail'), 'fail rendering');
   assert.equal((await generateAllure(f.roots, failed.directory)).status, 'FAILED');
   assert.equal(readFileSync(latest, 'utf8'), before); assert.equal(existsSync(join(failed.path, 'generation.json')), false);
@@ -67,13 +67,18 @@ test('rewritten completion receipt cannot redirect the canonical report or chang
 });
 
 test('unknown latest file is preserved and its delivery failure remains explicit', async t => {
-  const f = history(t), run = f.capture('normal'), latest = join(f.roots.projectRoot, run.historyRoot, 'latest.html');
+  const f = history(t), run = f.capture('normal'), latest = join(f.roots.projectRoot, 'reports/allure-report/index.html');
+  mkdirSync(join(f.roots.projectRoot, 'reports/allure-report'), {recursive: true});
   writeFileSync(latest, 'unrelated content'); const receipt = await generateAllure(f.roots, run.directory);
   assert.equal(receipt.status, 'GENERATED'); assert.equal(receipt.latest.status, 'FAILED');
   assert.equal(readFileSync(latest, 'utf8'), 'unrelated content'); assert(existsSync(join(run.path, 'generation.json')));
+  const {unlinkSync} = await import('node:fs'); unlinkSync(latest);
+  const resumed = await generateAllure(f.roots, run.directory);
+  assert.equal(resumed.latest.status, 'WRITTEN'); assert.match(readFileSync(latest, 'utf8'), /Native failed test/);
+  assert.equal(readFileSync(join(run.path, '.render-count'), 'utf8'), 'render\n');
 });
 
-test('concurrent finalizers publish an intact latest link to one complete canonical report', async t => {
+test('concurrent finalizers publish one intact current HTML and archive the other complete reports', async t => {
   const f = history(t), runs = [f.capture('one'), f.capture('two'), f.capture('three')];
   const module = new URL('../scripts/lib/reporting/allure.mjs', import.meta.url).href;
   const source = `import {generateAllure} from ${JSON.stringify(module)}; console.log(JSON.stringify(await generateAllure({projectRoot:process.argv[1]},process.argv[2])));`;
@@ -83,11 +88,13 @@ test('concurrent finalizers publish an intact latest link to one complete canoni
     child.on('error', reject); child.on('close', code => code === 0 ? resolve(JSON.parse(output)) : reject(new Error(error)));
   })));
   for (const receipt of receipts) {assert.equal(receipt.status, 'GENERATED', JSON.stringify(receipt)); assert.equal(receipt.latest.status, 'WRITTEN');}
-  const latest = readFileSync(join(f.roots.projectRoot, runs[0].historyRoot, 'latest.html'), 'utf8');
-  const href = latest.match(/href="([^"]+)"/)[1];
-  assert(runs.some(run => href === `${run.directory.split('/').at(-1)}/index.html`));
-  assert(existsSync(join(f.roots.projectRoot, runs[0].historyRoot, href.replace('/index.html', '/generation.json'))));
-  assert.equal(readdirSync(join(f.roots.projectRoot, runs[0].historyRoot)).some(name => name.startsWith('.latest-')), false);
+  const latest = readFileSync(join(f.roots.projectRoot, 'reports/allure-report/index.html'), 'utf8');
+  const metadata = JSON.parse(latest.match(/^<!-- harness-allure-report\/2 (.+) -->/)[1]);
+  assert(runs.some(run => run.directory === metadata.directory));
+  assert(existsSync(join(f.roots.projectRoot, metadata.directory, 'generation.json')));
+  const archived = readdirSync(join(f.roots.projectRoot, runs[0].historyRoot));
+  assert.equal(archived.length, 2); assert(archived.every(name => name.endsWith('.html')));
+  assert.deepEqual(readdirSync(join(f.roots.projectRoot, 'reports/allure-report')), ['index.html']);
 });
 
 test('an occupied render lock prevents same-invocation writers without replacing history', async t => {
@@ -114,14 +121,14 @@ test('completion is rechecked under the lock when another process finishes befor
   assert.equal(readFileSync(join(run.path, '.render-count'), 'utf8'), 'render\n');
 });
 
-if (process.env.HARNESS_ALLURE_HTML_PROOF === '1') test('latest relative redirect opens the canonical local report in a real browser', async t => {
+if (process.env.HARNESS_ALLURE_HTML_PROOF === '1') test('current HTML opens directly as a standalone local report in a real browser', async t => {
   const f = history(t), run = f.capture('normal'), receipt = await generateAllure(f.roots, run.directory); assert.equal(receipt.status, 'GENERATED');
   const {pathToFileURL} = await import('node:url');
   const {chromium} = await import(pathToFileURL(join(f.roots.packageRoot, 'examples/node_modules/playwright/index.mjs')).href);
   const browser = await chromium.launch({channel: process.env.HARNESS_BROWSER_CHANNEL, headless: true}); t.after(() => browser.close());
   const page = await browser.newPage(), requests = []; page.on('request', request => {requests.push(request.url());});
   await page.goto(pathToFileURL(join(f.roots.projectRoot, receipt.latest.path)).href);
-  await page.waitForURL(pathToFileURL(join(run.path, 'index.html')).href);
+  await page.waitForURL(pathToFileURL(join(f.roots.projectRoot, 'reports/allure-report/index.html')).href);
   assert.match(await page.locator('body').innerText(), /Native failed test/);
   assert(requests.every(url => url.startsWith('file:')));
 });
