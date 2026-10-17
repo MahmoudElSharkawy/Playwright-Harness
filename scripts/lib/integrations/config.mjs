@@ -2,6 +2,7 @@ import {existsSync, readFileSync} from 'node:fs';
 import {consumerPath} from '../consumer-paths.mjs';
 import {consumerEnvironment} from '../consumer-env.mjs';
 import {keys} from '../project-config.mjs';
+import {validateAdoContextConfiguration} from './context-policy.mjs';
 
 export function requireValue(condition, message) { if (!condition) throw new Error(message); }
 export const adoGuid = value => typeof value === 'string' && /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(value);
@@ -37,8 +38,9 @@ export function workItemUrlTemplate(organizationUrl, project) {
 }
 
 export function validateAdoConfiguration(input) {
-  keys(input, ['organizationUrl', 'project', 'credentialRef', 'repository', 'planId', 'automationField', 'timeoutMs', 'maxResponseBytes', 'bugs'], 'ADO configuration');
+  keys(input, ['organizationUrl', 'project', 'credentialRef', 'repository', 'planId', 'automationField', 'timeoutMs', 'maxResponseBytes', 'bugs', 'context'], 'ADO configuration');
   const organizationUrl = adoCoordinates(input.organizationUrl, input.project);
+  if (input.context !== undefined) validateAdoContextConfiguration(input.context);
   requireValue(typeof input.credentialRef === 'string' && /^[A-Z_][A-Z0-9_]{0,99}$/.test(input.credentialRef), 'ADO credentials must use an environment-variable reference.');
   if (input.repository !== undefined) requireValue(typeof input.repository === 'string' && /^[^/\\?#%\x00-\x1f]{1,150}$/.test(input.repository) && !['.', '..'].includes(input.repository), 'Invalid configured repository.');
   if (input.automationField !== undefined) requireValue(/^Custom\.[A-Za-z][A-Za-z0-9_]*$/.test(input.automationField), 'Optional automation field must be a Custom field reference.');

@@ -22,7 +22,7 @@ export function createAdoClient({configuration, roots, resolveCredential, fetchI
     requireValue(url.href.startsWith(scopedBase) && !decoded.includes('..') && !url.username && !url.password, 'ADO route escapes the configured project.');
     return url.href;
   }
-  async function request(route, {method = 'GET', body, patch = false, raw = false, contentType, beforeDispatch, projectLookup = false} = {}) {
+  async function request(route, {method = 'GET', body, patch = false, raw = false, binary = false, contentType, beforeDispatch, projectLookup = false} = {}) {
     requireValue(!projectLookup || method === 'GET', 'Project identity lookup is read-only.');
     requireValue(!raw || Buffer.isBuffer(body) && contentType === 'application/octet-stream', 'Raw ADO bodies require bounded attachment bytes.');
     const url = destination(route, projectLookup), serialized = body === undefined ? undefined : raw ? body : JSON.stringify(body);
@@ -34,7 +34,7 @@ export function createAdoClient({configuration, roots, resolveCredential, fetchI
     try {
       beforeDispatch?.();
       response = await fetchImpl(url, {method, redirect: 'manual', signal: controller.signal,
-        headers: {Authorization: `Basic ${Buffer.from(`:${credential}`).toString('base64')}`, Accept: 'application/json', 'Content-Type': raw ? contentType : patch ? 'application/json-patch+json' : 'application/json'}, body: serialized});
+        headers: {Authorization: `Basic ${Buffer.from(`:${credential}`).toString('base64')}`, Accept: binary ? 'application/octet-stream' : 'application/json', 'Content-Type': raw ? contentType : patch ? 'application/json-patch+json' : 'application/json'}, body: serialized});
       if (response.status === 203 || [401, 403].includes(response.status)) throw new AdoError('authentication-rejected', response.status);
       if (response.status >= 300 && response.status < 400) throw new AdoError('redirect-refused', response.status);
       if (!response.ok) throw new AdoError('request-rejected', response.status);
@@ -43,6 +43,7 @@ export function createAdoClient({configuration, roots, resolveCredential, fetchI
       for await (const chunk of response.body ?? []) {
         length += chunk.length; if (length > config.maxResponseBytes) throw new AdoError('response-too-large'); chunks.push(chunk);
       }
+      if (binary) return {data: Buffer.concat(chunks)};
       let data; try { data = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { throw new AdoError('invalid-json'); }
       if (!data || typeof data !== 'object') throw new AdoError('invalid-json');
       return {data, continuation: response.headers.get('x-ms-continuationtoken') || undefined};
@@ -132,10 +133,14 @@ export function createAdoClient({configuration, roots, resolveCredential, fetchI
   const cached = (key, action) => {if (!cache.has(key)) {const pending = Promise.resolve().then(action); cache.set(key, pending); pending.catch(() => {if (cache.get(key) === pending) cache.delete(key);});} return cache.get(key);};
   return Object.freeze({configuration: config, read, list, delivery, projectIdentity, requireWorkItemProject,
     cachedRead: route => cached(`read:${route}`, () => read(route)),
-    async wiql(query) {
-      requireValue(typeof query === 'string' && query.length <= 16000 && /^SELECT\s+/i.test(query) && !/;|\b(?:INSERT|UPDATE|DELETE|DROP)\b/i.test(query), 'WIQL must be a bounded read-only SELECT.');
-      return (await request('wit/wiql?api-version=7.1', {method: 'POST', body: {query}})).data;
+    async wiql(query, {top} = {}) {
+      // Keywords in quoted field values are data, including localized area names.
+      const statement = typeof query === 'string' ? query.replace(/'(?:[^']|'')*'|"(?:[^"]|"")*"/g, '') : '';
+      requireValue(typeof query === 'string' && query.length <= 16000 && /^SELECT\s+/i.test(query) && !/['";]|\b(?:INSERT|UPDATE|DELETE|DROP)\b/i.test(statement), 'WIQL must be a bounded read-only SELECT.');
+      requireValue(top === undefined || Number.isInteger(top) && top > 0 && top <= 20000, 'Invalid WIQL page bound.');
+      return (await request(`wit/wiql?api-version=7.1${top === undefined ? '' : `&$top=${top}`}`, {method: 'POST', body: {query}})).data;
     },
+    async attachment(id) {requireValue(adoGuid(id), 'Invalid ADO attachment identity.'); return (await request(`wit/attachments/${encodeURIComponent(id)}?api-version=7.1`, {binary: true})).data;},
     validateWorkItem(type, body) {requireValue(typeof type === 'string' && type.trim() && type.length <= 150 && !/[\/\\?#\r\n]/.test(type), 'Invalid bug work-item type.'); return cached(`validate:${type}:${digest(JSON.stringify(body))}`, async () => (await request(`wit/workitems/$${encodeURIComponent(type)}?validateOnly=true&api-version=7.1`, {method: 'POST', body, patch: true})).data);},
     upload(delivery, bytes, name, options = {}) {requireValue(typeof name === 'string' && /^[A-Za-z0-9_.-]{1,100}$/.test(name), 'Invalid attachment name.'); return delivery.write('upload-attachment', `wit/attachments?fileName=${encodeURIComponent(name)}&api-version=7.1`, bytes, {method: 'POST', raw: true, contentType: 'application/octet-stream', ...options});},
     // This POST has a documented read-only contract; callers cannot select a mutation route.

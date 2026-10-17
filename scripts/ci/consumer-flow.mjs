@@ -127,17 +127,23 @@ flow('C1', 'An empty folder gets the harness and the starter', () => {
   assert(!existsSync(join(c1, name)), 'The downloaded archive stayed in the project folder.');
   const report = check(c1); assert.equal(report.exit, 0, report.errors.join(' ')); noDrift(report);
   for (const prefix of ['skills', 'generation verification']) assert.equal(feature(report, prefix), 'ready', `${prefix} is not ready.`);
-  for (const rel of ['.claude/skills/test-data', '.agents/skills/harness-setup']) assert.equal(linked(c1, rel), installedSkill(c1, rel.split('/').pop()));
+  for (const rel of ['.claude/skills/test-data', '.agents/skills/harness-setup', '.claude/skills/project-context', '.agents/skills/context-update']) assert.equal(linked(c1, rel), installedSkill(c1, rel.split('/').pop()));
   assert.equal(run([join(c1, 'node_modules/typescript/bin/tsc'), '--noEmit', '-p', 'tsconfig.json'], c1).status, 'PASS', 'The starter does not typecheck.');
   assert.equal(run([join(c1, 'node_modules/@playwright/test/cli.js'), 'test', '--list', '--pass-with-no-tests'], c1).status, 'PASS', 'The starter cannot list tests.');
   write(c1, {'.harness/sources/scenarios.json': JSON.stringify({version: 1, id: 'synthetic', title: 'Synthetic suite', scenarios: [{id: 'case-1', title: 'Synthetic observation', steps: [{action: 'Observe the fixture', expected: ['The fixture is visible']}]}]}) + '\n',
     '.harness/knowledge/reviewed.md': '# Reviewed synthetic knowledge\n', '.harness/integrations.json': JSON.stringify({version: 1, ado: {organizationUrl: 'https://dev.azure.com/example-org', project: 'Synthetic', credentialRef: 'SYN_ADO_PAT'}}) + '\n',
     '.harness/runs/local.json': '{}\n', '.harness/knowledge-candidates/local.md': 'Unreviewed synthetic observation\n'});
+  write(c1, {'.harness/runs/context-request.json': JSON.stringify({version: 1, contextId: 'synthetic-qa', identity: {project: 'Synthetic'}, scope: {application: 'starter', environment: 'qa'}, sources: [{id: 'knowledge', kind: 'repository', path: '.harness/knowledge/reviewed.md', authority: 'reviewed'}]})});
+  const retrieved = parse(harness(c1, 'context', 'retrieve', '--request', '.harness/runs/context-request.json'));
+  assert.equal(retrieved.snapshot.status, 'complete'); assert(!existsSync(join(c1, '.harness/context')), 'Transient context was saved.');
+  const captured = parse(harness(c1, 'context', 'update', '--request', '.harness/runs/context-request.json')); assert.equal(captured.saved, true);
+  const contextPath = join(c1, '.harness/context/synthetic-qa/current.json'), contextBefore = readFileSync(contextPath, 'utf8');
+  assert.equal(parse(harness(c1, 'context', 'read', '--id', 'synthetic-qa')).snapshot.revision, captured.snapshot.revision); assert.equal(readFileSync(contextPath, 'utf8'), contextBefore);
   commit(c1, 'Adopt the harness');
   assert(git(c1, 'ls-files', `.harness/vendor/${name}`).trim(), 'The vendored archive is not committed.');
   for (const file of ['project.json', 'targets.json', 'integrations.json', 'links.json', 'sources/scenarios.json', 'knowledge/reviewed.md'])
     assert.equal(git(c1, 'ls-files', `.harness/${file}`).trim(), `.harness/${file}`, `Shared input ${file} was not committed.`);
-  assert.equal(git(c1, 'ls-files', '.harness/runs', '.harness/state', '.harness/knowledge-candidates', '.harness/installation.json').trim(), '', 'Local harness output was committed.');
+  assert.equal(git(c1, 'ls-files', '.harness/runs', '.harness/state', '.harness/context', '.harness/knowledge-candidates', '.harness/installation.json').trim(), '', 'Local harness output was committed.');
   assert.equal(git(c1, 'ls-files', '.claude/skills', '.agents/skills').trim(), '', 'Skill links or their files were committed.');
   return {starterFiles: result.starter.length, links: result.links};
 });

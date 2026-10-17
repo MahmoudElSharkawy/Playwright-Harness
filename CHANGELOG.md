@@ -1,5 +1,25 @@
 # Changelog
 
+## Unreleased — Project context retrieval and refresh
+
+### Upgrade actions
+
+- Re-run setup after upgrading to expose `project-context` and `context-update` to
+  Claude Code and Codex. Existing customized instructions and skills still require
+  a reviewed merge. Captured context/history is local and ignored by default.
+- Optional ADO context policies live under `ado.context.sources` in the existing
+  `.harness/integrations.json`. Choose exclusions from live metadata once per source;
+  no type/state or completion filter is assumed.
+
+### Changes
+
+- Retrieve and refresh scoped consumer context with located repository/file facts,
+  explicit authority/status, deduplicated provenance, partial/stale coverage and
+  recoverable snapshots. Reuse available host readers for image/office/PDF sources.
+- Classify ADO work items before ingesting descriptions or linked attachments;
+  validate live metadata and report missing/invalid policy selections. Keep ordinary
+  snapshot questions read-only, without source retrieval or verification-date writes.
+
 ## 3.7.1 — Current reports and optional Allure video
 
 ### Upgrade actions

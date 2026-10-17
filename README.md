@@ -186,6 +186,7 @@ reports for cases that stop before execution or generated tests exist.
 | Install, check readiness, update or roll back | [Getting started](docs/getting-started.md) |
 | Understand POM layers and project ownership | [Architecture](docs/architecture.md) |
 | Configure environments, targets, secrets and knowledge | [Configuration](docs/configuration.md) |
+| Retrieve or refresh captured project/application context | [Project context](docs/project-context.md) |
 | Generate automation or execute manual cases | [Automation workflow](docs/PIPELINE.md) · [Manual execution](docs/manual-execution.md) |
 | Connect ADO, retrieve cases or deliver results | [Azure DevOps](docs/azure-devops.md) |
 | Find reports, Allure and plan progress | [Reporting](docs/reporting.md) |

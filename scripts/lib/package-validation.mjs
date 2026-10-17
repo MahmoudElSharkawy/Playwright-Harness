@@ -34,12 +34,13 @@ export function inventory(root) {
   return { files: files.sort(), excluded: excluded.sort(), unexpected };
 }
 
+export const credentialName = name => /^(?:password|passwd|pwd|api[_-]?key|access[_-]?token|refresh[_-]?token|token|secret|pat)$/i.test(name)
+  || /(?:Password|Passwd|ApiKey|Token|Secret|[_-](?:password|token|secret|api_key|PASSWORD|TOKEN|SECRET|API_KEY))$/.test(name);
+
 export function secretFindings(file, text) {
   const findings = [];
   const placeholder = value => value === '' || /^(?:<[^<>]+>|\$\{[^}]+\}|\{\{[^}]+\}\}|\[REDACTED\])$/.test(value);
   const assignment = /\b([A-Za-z_][A-Za-z0-9_-]*)['"]?\s*[:=]\s*(['"`])([^'"`\r\n]+)\2/g;
-  const credentialName = name => /^(?:password|passwd|pwd|api[_-]?key|access[_-]?token|refresh[_-]?token|token|secret|pat)$/i.test(name)
-    || /(?:Password|Passwd|ApiKey|Token|Secret|[_-](?:password|token|secret|api_key|PASSWORD|TOKEN|SECRET|API_KEY))$/.test(name);
   const connection = /\b(?:Password|Pwd)\s*=\s*([^;\s'"`]+)/gi;
   // A connection-string credential is data; a declared/member assignment to a
   // runtime expression is code. Do not classify a generator call by its variable name.

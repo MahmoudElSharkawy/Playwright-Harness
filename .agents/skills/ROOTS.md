@@ -9,6 +9,8 @@ and mutable state. Never derive consumer paths from a skill's installation direc
 |---|---|
 | `.harness/project.json` | Deliberately selected environment profiles and target references |
 | `.harness/targets.json` | Destinations and secret references; no secret values |
+| `.harness/integrations.json` | Optional ADO destination and per-source context selection policies |
+| `.harness/context/` | Consumer captured context, provenance and recoverable history; separate from reviewed knowledge |
 | `.harness/sources/` | Versioned local scenario specifications |
 | `.harness/state/review/class-ledger.md` | Consumer review finding history |
 | `.harness/state/tracker/` | Consumer plan registries and append-only history |

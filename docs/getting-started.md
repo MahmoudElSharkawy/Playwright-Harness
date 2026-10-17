@@ -152,6 +152,7 @@ needed by `npm ci` and the configuration and link manifest needed by fresh clone
 |---|---|---|
 | `.harness/runs/` | Ignore | Generated execution evidence |
 | `.harness/state/` | Ignore | Local workflow state, locks, tracker state and setup journals |
+| `.harness/context/` | Ignore | Captured project context and history; review/sanitize before deliberately sharing |
 | `.harness/knowledge-candidates/` | Ignore | Unreviewed observations |
 | `.harness/installation.json` | Ignore | Local installation receipt |
 | `.harness/vendor/` | Commit | Release archive required by teammates and CI |
@@ -167,6 +168,7 @@ Setup adds these selective rules to the consumer's `.gitignore`:
 ```gitignore
 /.harness/runs/
 /.harness/state/
+/.harness/context/
 /.harness/knowledge-candidates/
 /.harness/installation.json
 ```

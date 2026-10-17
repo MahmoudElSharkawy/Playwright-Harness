@@ -51,6 +51,8 @@ router) and follow its routing table.
 | "Update / regenerate the plan tracker", "record these cases as done/blocked", "sync the tracker", "where are we on the plan" — any change to the tracked plan's progress or scope | `plan-tracker` — registry + append-only history in the consumer's `.harness/state/tracker/`, rendered by `scripts/generate-tracker.mjs` |
 | "Install / update the harness", "configure the harness with my project information", add an environment, target, secret or CI pipeline, roll the harness back | `harness-setup` |
 | Folder layout, naming, where new code belongs, or a full MR/code review | `pom-architecture` |
+| Retrieve source-backed project/application context | `project-context` |
+| Save, update or refresh project/application context | `context-update` — ordinary captured-context questions do not refresh sources |
 
 ## Automation workflow
 

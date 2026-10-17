@@ -5,6 +5,7 @@
 /.validation/
 /.harness/runs/
 /.harness/state/
+/.harness/context/
 /.harness/knowledge-candidates/
 *.dpapi
 *.pfx
