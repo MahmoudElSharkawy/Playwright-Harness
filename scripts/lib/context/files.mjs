@@ -5,6 +5,7 @@ import {consumerPath} from '../consumer-paths.mjs';
 import {data, digest, fingerprint, requireThat} from '../execution-core/data.mjs';
 import {keys} from '../project-config.mjs';
 import {credentialName, secretFindings} from '../package-validation.mjs';
+import {within} from '../skill-roots.mjs';
 
 const sensitive = name => credentialName(name) || /^(?:authorization|cookie|set-cookie|connectionString)$/i.test(name);
 const privatePath = path => /(?:^|[\\/])(?:\.env(?:\..*)?|\.aws|\.ssh|\.auth)(?:[\\/]|$)/i.test(path) || /\.(?:key|pfx|p12|dpapi)$/i.test(path);
@@ -101,6 +102,7 @@ export async function readFileContext(roots, source, options = {}) {
   requireThat(['repository', 'file'].includes(source.kind) && typeof source.path === 'string' && source.path.length > 0 && !/[\x00-\x1f]/.test(source.path), 'Context source needs an explicitly selected path.');
   requireThat(!privatePath(source.path), 'Credential stores cannot be context sources.');
   const path = source.kind === 'repository' ? consumerPath(roots, source.path) : resolve(roots.projectRoot, source.path);
+  requireThat(source.authority !== 'reviewed' || source.kind === 'repository' && within(resolve(roots.projectRoot, '.harness/knowledge'), path), 'Only resolved reviewed consumer knowledge can have reviewed authority.');
   let bytes;
   try {
     const actual = realpathSync(path); requireThat(!privatePath(actual), 'Credential stores cannot be context sources.');

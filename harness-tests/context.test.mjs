@@ -132,6 +132,8 @@ test('reviewed facts conflict visibly with current source; observations cannot p
   const result = await updateContext(roots, request([located('reviewed', '.harness/knowledge/url.txt', 'Old destination', 'reviewed'), located('current', 'app.txt', 'Current destination', 'current')]));
   assert(result.snapshot.facts.every(fact => fact.status === 'conflicting')); assert.equal(result.snapshot.status, 'partial');
   await assert.rejects(retrieveContext(roots, request([located('untrusted', 'app.txt', 'Current destination', 'reviewed', 'file')])), /reviewed/);
+  put(roots, '.harness/knowledge-candidates/observation.txt', 'Unreviewed fact');
+  await assert.rejects(retrieveContext(roots, request([located('alias', '.harness/knowledge/../knowledge-candidates/observation.txt', 'Unreviewed fact', 'reviewed')])), /reviewed/);
 });
 test('captured read ignores malformed integration config and performs no file or verification writes', async t => {
   const {roots} = fixture(t); put(roots, 'one.txt', 'Captured only'); await updateContext(roots, request([source('one', 'one.txt')]));
