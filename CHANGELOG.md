@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 3.7.0 — Readable report history and unified Allure
 
 ### Upgrade actions
 
