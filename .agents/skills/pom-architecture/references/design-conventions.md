@@ -29,7 +29,7 @@ deliberate adaptation from the Java originals, so reviewers can trace why a rule
     or `process.env`, never secrets (formerly `resources/config/`).
 - **Run-lifecycle scripts** (`global-setup.ts` / `global-teardown.ts`) belong to the
   technical family alongside `utils/` (`try`/`catch`, loops, console allowed). Scope is
-  strictly run hygiene: clear stale `allure-results/` before the run; generate/open the
+  strictly run hygiene: clear stale `reports/allure-results/` before the run; generate/open the
   Allure report after it, honoring `AUTO_ALLURE_OPEN`. NEVER business logic and NEVER
   data seeding/cleanup — global setup runs once per run, not per test (iron law 8).
   Detailed rules: [utility-classes](../../utility-classes/SKILL.md).
@@ -363,17 +363,22 @@ the assertion-message poll check accepts a `message:` token anywhere inside the 
 ## Report output contract
 
 The retained example workflow produces `reports/playwright-report/` (HTML),
-`reports/json-report/test-results.json`, `reports/junit/results.xml`, the CTRF JSON
+`reports/json-report/test-results.json`, `reports/junit/results.xml`, CTRF JSON
 (`ctrf/ctrf-report.json`), and raw Allure staging at the configured `resultsDir`
-(default `allure-results/`). After reporter flush, `src/utils/AllureReport.ts`
-preserves raw evidence and generates one canonical native report at
-`reports/allure-history/YYYY-MM-DD_HH-mm-ssZ[-NNN]/index.html`. UTC seconds retain
-`Z`, omit milliseconds and add a numeric suffix only for collisions. The shared
-history root's `latest.html` is a relative redirect/link published atomically after
-completion. CI uploads the entire root, including its target and evidence.
-`HARNESS_ALLURE_HISTORY` overrides the consumer-relative history root under
-`reports/`; the ordinary starter otherwise uses `allureConfig.historyDir`.
-There is no duplicate latest HTML/archive copy or verification wrapper page.
+(default `reports/allure-results/`). After flush, immutable capture, native HTML
+and receipts live under `.harness/runs/allure/YYYY-MM-DD_HH-mm-ssZ[-NNN]/`.
+Publish the complete current HTML at `reports/allure-report/index.html`;
+archive only older HTML in `reports/allure-history/<timestamp>[-NNN].html` when
+its replacement completes. Publication is serialized and atomic; failed generation
+preserves current. Reopening older evidence cannot replace latest. UTC seconds
+retain `Z`, omit milliseconds, and add numeric suffixes for collisions.
+Consumer GitHub Actions uploads only current Allure HTML and the Playwright HTML
+folder with its supporting assets. Never upload/restore Allure history or raw
+results by default; harness CI is separate. `HARNESS_ALLURE_HISTORY` selects an
+older-HTML archive root under `reports/`; it cannot overlap current/raw folders.
+Allure video inclusion is opt-in (`ALLURE_ATTACH_VIDEO=true` or `attachVideo: true`);
+keep Playwright recording and its native attachments independent. Preserve screenshots,
+other attachments, locator-bearing steps, native outcomes and verification evidence.
 **Warning:** allure-playwright v3 uses `resultsDir`; `outputFolder` is unsupported.
 Any path change lands in lockstep across
 `playwright.config.ts` + global-setup/teardown + the README report table + the CI
@@ -381,8 +386,8 @@ artifact steps, in the same MR.
 
 For the sequential shared-runtime and generation workflow, follow
 [reporting](../../../../docs/reporting.md). Ordinary, standalone and verification
-Allure invocations share the canonical history root and retain their own raw
-captures and receipts. Two independent scoped greens keep two native reports.
+Allure invocations share current/archive publication and retain their own immutable
+raw captures and receipts. Two independent scoped greens keep two native reports.
 Automation/execution QA bundles remain separate under `reports/harness/`, with
 `automation-`/`execution-` timestamped names and unchanged internal IDs. Old reports
 and generic validated-runtime locations remain unchanged. Report validated verdicts;

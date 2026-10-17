@@ -12,8 +12,8 @@ metrics summarize consumer progress. Report delivery is separate from test succe
 | Validated runtime case report | `reports/harness/<run-id>-<unique-id>/` | Reassessed observations/evidence |
 | Execution QA case report | `reports/harness/execution-<timestamp>[-NNN]/index.html` | Assessed cases, attempts and defects |
 | Automation QA case report | `reports/harness/automation-<timestamp>[-NNN]/index.html` | Generation history, source-bound blockers and hash-bound native receipts |
-| Allure native report: ordinary, standalone or verification run | `reports/allure-history/<timestamp>[-NNN]/index.html` | One native test invocation's results, steps and attachments |
-| Latest Allure entry point | `reports/allure-history/latest.html` | Relative redirect/link to the last completed, published Allure report |
+| Current Allure report | `reports/allure-report/index.html` | Latest completed native invocation; standalone single-file HTML |
+| Older Allure reports | `reports/allure-history/<timestamp>[-NNN].html` | Previously published HTML only; no latest link or raw evidence |
 | Starter Playwright HTML | `reports/playwright-report/` | Native results |
 | Starter JSON | `reports/json-report/test-results.json` | Native results |
 | Starter JUnit XML | `reports/junit/results.xml` | Native outcomes for CI test-result ingestion |
@@ -32,20 +32,22 @@ including parallel processes. Existing folders are never overwritten or renamed.
 Internal execution, report and verification IDs remain unchanged in their records;
 the generic validated-runtime report location also remains unchanged.
 
-The Allure history root defaults to `reports/allure-history/`.
-`HARNESS_ALLURE_HISTORY` selects a shared consumer-relative root under `reports/`
-for all three Allure entry points. The ordinary starter also reads
-`allureConfig.historyDir` when that environment override is absent. Keep a single
-root across the starter and scoped commands. `latest.html` travels with its target
-using relative links; copy or upload the entire root to preserve navigation.
+The current Allure report is published at `reports/allure-report/index.html`.
+When a new report completes, the previous current HTML is archived under
+`reports/allure-history/<timestamp>[-NNN].html`. The history root may be selected
+with `HARNESS_ALLURE_HISTORY` (or the starter's `allureConfig.historyDir`); it must
+remain separate from the current report and raw staging. Consumer GitHub Actions
+uploads only the current Allure HTML and `reports/playwright-report/`, including
+Playwright's supporting assets. It does not upload or restore report history or raw
+Allure results. The harness's own validation/release workflows are unchanged.
 
 Supporting artifacts are retained separately from the report inventory:
 
 | Artifact | Default consumer location | Purpose |
 |---|---|---|
 | QA companions | Beside each QA `index.html` | `summary.md`, `defects.md`, internal result records and final integrity `manifest.json` |
-| Ordinary Allure raw staging | `allure-results/`, or the configured `resultsDir` | Native reporter output; copied into the run bundle after flush before the next setup clears staging |
-| Preserved Allure run evidence | `reports/allure-history/<timestamp>[-NNN]/` | `run.json`, `allure-results/`, `capture.json`, optional `verification.json`, and `generation.json` |
+| Ordinary Allure raw staging | `reports/allure-results/`, or the configured `resultsDir` | Native reporter output; copied into the run bundle after flush before the next setup clears staging |
+| Preserved Allure run evidence | `.harness/runs/allure/<timestamp>[-NNN]/` | Immutable native HTML, `run.json`, `allure-results/`, `capture.json`, optional `verification.json`, and `generation.json`; not a CI upload |
 | Native Playwright evidence | `test-results/`, according to configuration | Traces, screenshots and videos |
 | Generation verification receipts | `.harness/state/generation/<source-id>/<verification-id>/` | Collection/execution receipts, selected scope and native verification evidence |
 
@@ -58,8 +60,9 @@ Legacy `allure-report/`, `reports/allure/<unique-id>/`,
 `reports/generation/verify-<uuid>/` and older timestamped Allure copies remain
 untouched. Existing captures and their recorded report paths remain readable;
 pass a legacy capture's recorded directory to `generate-allure` when needed.
-New runs use the shared history location, without a duplicate latest HTML copy,
-separate archive copy or verification wrapper page.
+New runs keep internal evidence outside the published report folders. Existing
+3.7.0 timestamped history bundles and their `latest.html` remain untouched; new
+history entries contain only older HTML files. No verification wrapper is created.
 
 Artifacts stay ignored. Existing consumers can retain custom paths. Update reporter
 configuration, lifecycle scripts, consumer README and CI uploads together.
@@ -330,7 +333,7 @@ report feature itself; they do not publish a consumer session report.
 
 ```sh
 npx --no pom-harness generate verify --id <source-id> --allure
-npx --no pom-harness generate-allure --input reports/allure-history/<timestamp>[-NNN]
+npx --no pom-harness generate-allure --input .harness/runs/allure/<timestamp>[-NNN]
 ```
 
 Use the exact recording directory returned by `verify` as `--input`; do not derive
@@ -353,6 +356,7 @@ resultsDir/detail/suiteTitle, not unsupported outputFolder.
 | verification.json | Recorded generation reference |
 | index.html | Official single-file native Allure report |
 | generation.json | Separate report-job receipt/hashes |
+| publication.json | Successful publication receipt; permits retry after delivery failure without republishing older reports |
 
 Generation rejects empty/changed/incomplete captures and rechecks hash-linked history
 and review artifacts. Missing verification references fail. Native success may coexist
@@ -360,14 +364,17 @@ with verifier FAIL when a helper catches a failed assertion; `verification.json`
 generation receipt and the separate QA report preserve that outcome. No wrapper page
 reclassifies native results. Reports never upgrade readiness or replace core verdicts.
 
-The history directory owns the single generated HTML for that invocation, including
-failed test runs with a complete capture. Repeating generation validates and reuses
-its receipt instead of allocating another report. After the HTML and generation
-receipt are complete, publication atomically replaces `latest.html` with a portable
-relative redirect and fallback link. Concurrent completion order determines latest;
-failed or interrupted generation leaves the previous link intact. Reopening an older
-completed report does not move latest backwards. A link-publication failure retains
-the completed report and reports the delivery problem separately.
+Each invocation retains immutable HTML and receipts in its capture directory,
+including failed tests with a complete capture. Repeating generation validates and
+reuses that receipt; reopening an older report never republishes it as current.
+After HTML and receipt completion, a serialized publisher archives the previous
+current HTML and atomically replaces `reports/allure-report/index.html`. The
+published file is a complete report, not a redirect. History filenames never
+replace existing files. Concurrent completion order determines latest; failed
+generation leaves the previous current report intact. Publication failure retains
+the immutable evidence and reports delivery separately. Publication uses a bounded
+`.harness/runs/allure/.publication.lock`; inspect owner PID before removing a
+lock left by an interrupted process.
 
 Rendering uses an exclusive per-invocation `.generation.lock`; completion is rechecked
 after acquiring it. A job terminated without cleanup can leave its PID/invocation
@@ -398,19 +405,26 @@ reference locators. Setup does not overwrite existing code; business methods/tes
 bodies/Allure steps/attachments need no migration. Scoped capture uses maintained
 capture only without its onExit, or official capture when the utility is absent.
 
-Merge `allureConfig.historyDir` and remove the obsolete `reportDir`/`keepHistory`
-settings and `ALLURE_HISTORY` environment flag. `ALLURE_HISTORY=false` no longer
-suppresses canonical history: history now contains the sole report, rather than an
-optional archive copy. To disable optional Allure reporting, remove the ordinary
-Allure reporter or omit `--allure` for verification. The ordinary reporter respects
-its configured `resultsDir`, preserves those raw results in the run bundle after
-flush and generates directly in that bundle. Setup preserves existing customized
-code/configuration; review these changes explicitly. Update CI uploads to include
-the whole history root and `latest.html` with its target, even after failed tests.
+Merge `allureConfig.historyDir`, `resultsDir: 'reports/allure-results'` and
+`attachVideo` from the starter. Remove obsolete `reportDir`/`keepHistory` and
+`ALLURE_HISTORY` settings. To disable optional Allure output, remove the ordinary
+reporter or omit verification's `--allure`. The reporter preserves raw results in
+immutable evidence after flush before the next setup clears staging. Setup preserves
+customized consumer code and configuration; merge the updated utility explicitly.
+Update consumer CI to upload `reports/allure-report/index.html` and the current
+Playwright HTML folder only. Existing report folders are not migrated or deleted.
+
+Allure excludes `video/*` attachments by default, both at step and test level.
+Set `ALLURE_ATTACH_VIDEO=true` or reporter option `attachVideo: true` to include
+them; an explicit reporter option takes precedence. Screenshots and other
+attachments remain. Playwright's `use.video` setting and its original attachment
+arrays are unchanged, so its HTML report can still contain recorded videos. This
+reduces Allure copies and embedded report size; it does not disable recording or
+remove Playwright's videos. Use `video: 'off'` separately when recording is unwanted.
 
 Native non-generation tests may resolve `scripts/lib/reporting/allure-reporter.mjs`
-from the installed package. Optional directory must be fresh under reports; otherwise
-`reports/allure-history/<timestamp>[-NNN]` is used. Generate from that returned
+from the installed package. An explicit directory must be fresh under `reports/`;
+otherwise `.harness/runs/allure/<timestamp>[-NNN]` is used. Generate from that returned
 recording directory with `generate-allure --input <recording-directory>` after
 Playwright returns. It does not forward test-plan filtering/status overrides.
 Ordinary native scope stays with Playwright; generation adds mandatory verification.

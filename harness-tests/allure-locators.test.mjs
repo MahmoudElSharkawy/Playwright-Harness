@@ -23,7 +23,7 @@ test('locator views preserve native events, parent identity and completed metada
   const parentView = allureStep(parent), childView = allureStep(child);
   assert.equal(childView.title, "Click locator('#submit')"); assert.equal(childView.parent, parentView);
   assert.equal(child.title, 'Click'); assert.equal(child.parent, parent);
-  child.duration = 12; child.error = {message: 'Synthetic failure'}; child.attachments = [{name: 'Synthetic attachment'}];
+  child.duration = 12; child.error = {message: 'Synthetic failure'}; child.attachments = [{name: 'Synthetic attachment', contentType: 'text/plain'}];
   assert.equal(allureStep(child), childView); assert.equal(childView.duration, 12);
   assert.equal(childView.error, child.error); assert.equal(childView.attachments, child.attachments);
   for (const step of [

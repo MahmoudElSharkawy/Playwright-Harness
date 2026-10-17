@@ -57,7 +57,7 @@ export async function generateAllure(inputRoots, directory, {configuration} = {}
   let phase = 'CAPTURE', generationLock, lockFile;
   try {
     const roots = consumerRoots(inputRoots.projectRoot, inputRoots.packageRoot);
-    requireThat(typeof directory === 'string' && directory.startsWith('reports/') && !/[\\:\r\n]/.test(directory) && directory.split('/').every(p => p && !['.', '..'].includes(p)), 'Use a relative captured report directory.');
+    requireThat(typeof directory === 'string' && (directory.startsWith('reports/') || directory.startsWith('.harness/runs/allure/')) && !/[\\:\r\n]/.test(directory) && directory.split('/').every(p => p && !['.', '..'].includes(p)), 'Use a relative captured report directory.');
     const path = consumerPath(roots, directory), captureFile = consumerPath(roots, `${directory}/capture.json`);
     const manifest = data(JSON.parse(readFileSync(captureFile, 'utf8')));
     requireThat(manifest.status === 'CAPTURED' && manifest.source === 'playwright-native' && manifest.tests > 0, 'Allure capture is incomplete or empty.');
@@ -77,9 +77,9 @@ export async function generateAllure(inputRoots, directory, {configuration} = {}
     configuration = configuration === undefined ? fileURLToPath(new URL('./allurerc.json', import.meta.url)) : consumerPath(roots, configuration);
     if (run && verification) requireThat(run.id === verification.id, 'Allure report directory belongs to another invocation.');
     const receiptFile = consumerPath(roots, `${directory}/generation.json`);
-    const latest = () => {
-      if (!run) return undefined;
-      try {return publishLatest(roots, run);} catch {return {status: 'FAILED', reason: 'Latest Allure link could not be published; the completed report is retained.'};}
+    const latest = async () => {
+      if (!run || run.version === 1) return undefined;
+      try {return await publishLatest(roots, run);} catch {return {status: 'FAILED', reason: 'Latest Allure report could not be published; the completed evidence is retained.'};}
     };
     phase = 'GENERATION';
     lockFile = consumerPath(roots, `${directory}/.generation.lock`); generationLock = openSync(lockFile, 'wx', 0o600);
@@ -98,7 +98,8 @@ export async function generateAllure(inputRoots, directory, {configuration} = {}
         requireThat(bytes.length === artifact.bytes && digest(bytes) === artifact.sha256, 'Generated Allure report changed.');
       }
       // Re-opening an older completed report must not move the latest pointer backwards.
-      return receipt;
+      const delivery = run?.version === 2 && !existsSync(join(path, 'publication.json')) ? await latest() : undefined;
+      return {...receipt, ...(delivery ? {latest: delivery} : {})};
     }
     // Pinned official CLI, bound argv and an explicit package config: consumer
     // discovery cannot enable publishing, result filters, known issues or quality gates.
@@ -134,7 +135,7 @@ export async function generateAllure(inputRoots, directory, {configuration} = {}
       receipt.verification = {id: verification.id, revision: verification.revision, status: verification.status, ...(verification.gate ? {gate: verification.gate} : {})};
     }
     writeFileSync(receiptFile, JSON.stringify(receipt, null, 2), {flag: 'wx', mode: 0o600, flush: true});
-    const delivery = latest(); return {...receipt, ...(delivery ? {latest: delivery} : {})};
+    const delivery = await latest(); return {...receipt, ...(delivery ? {latest: delivery} : {})};
   } catch {return {status: 'FAILED', phase, reason: 'Allure capture, dependency or generation is unavailable or already in progress; execution verdicts are unchanged.'};}
   finally {
     if (generationLock !== undefined) {

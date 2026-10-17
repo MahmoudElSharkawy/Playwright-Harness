@@ -48,7 +48,8 @@ Consumed by the `utils/` facades and the root lifecycle scripts
 | Flag | Consumed by | Default | Effect |
 |---|---|---|---|
 | `AUTO_ALLURE_OPEN` | `src/utils/AllureReport.ts` | on (opt-out) | Set to `false` to skip auto-opening the generated Allure report after the run. |
-| `HARNESS_ALLURE_HISTORY` | Ordinary and scoped Allure reporters | `reports/allure-history` | Shared consumer-relative history root under `reports/`; overrides the ordinary starter's `allureConfig.historyDir`. |
+| `HARNESS_ALLURE_HISTORY` | Ordinary and scoped Allure reporters | `reports/allure-history` | Older HTML archive root under `reports/`; separate from current report and raw staging. |
+| `ALLURE_ATTACH_VIDEO` | Ordinary and scoped Allure reporters | off | Set to `true` to include video attachments in Allure; Playwright recording remains independent. |
 | `API_CONSOLE_LOGS` | `utils/ApiActions.ts` | off (opt-in) | Set to `true` to mirror every API request/response to the console (report attachments are always written). |
 | `DB_CONSOLE_LOGS` | `utils/DBActions.ts` | off (opt-in) | Set to `true` to mirror every SQL query/result to the console (report attachments are always written). |
 
@@ -73,23 +74,29 @@ One run produces (mirrors the `reporter` array in `playwright.config.ts`):
 |---|---|---|
 | Console list | terminal output | `list` reporter |
 | Playwright HTML report | `reports/playwright-report/` | `html` reporter (`open: 'always'` locally) |
-| Allure raw results | `allure-results/` (explicit `resultsDir`; `outputFolder` is unsupported) | `src/utils/AllureReport.ts`, extending `allure-playwright` |
-| Allure 3 single-file HTML | `reports/allure-history/YYYY-MM-DD_HH-mm-ssZ[-NNN]/index.html` — one report per native invocation | `src/utils/AllureReport.ts`, after all reporters flush |
-| Latest Allure link | `reports/allure-history/latest.html` — relative redirect/link to the last completed report | Published atomically after report generation succeeds |
+| Allure raw results | `reports/allure-results/` (explicit `resultsDir`; `outputFolder` is unsupported) | `src/utils/AllureReport.ts`, extending `allure-playwright` |
+| Current Allure single-file HTML | `reports/allure-report/index.html` | Published after all reporters flush and report generation succeeds |
+| Older Allure HTML | `reports/allure-history/YYYY-MM-DD_HH-mm-ssZ[-NNN].html` | Previous current report archived when its replacement completes |
 | JSON results | `reports/json-report/test-results.json` | `json` reporter |
 | JUnit XML (CI Tests tab) | `reports/junit/results.xml` | `junit` reporter |
 | CTRF JSON | `ctrf/ctrf-report.json` | `playwright-ctrf-json-reporter` |
 
-Allure names use UTC seconds with `Z`, without milliseconds. Same-second runs add
-`-001`, `-002`, and so on without overwriting prior output. The run bundle retains
-`run.json`, its own `allure-results/`, `capture.json` and `generation.json` alongside
-the single HTML report. Raw staging is copied after reporter flush, then the next
-setup can clear it safely. Failed test runs also retain their completed reports;
-failed report generation leaves the previous latest link intact. Upload or copy the
-entire history root so `latest.html` keeps working with its relative target.
+Allure archive names use UTC seconds with `Z`, without milliseconds. Collisions
+add a numeric suffix without overwriting older files. Raw staging is copied after
+reporter flush to immutable capture evidence under `.harness/runs/allure/`, then
+the next setup can clear staging safely. Failed tests still produce reports;
+failed generation preserves the previous current HTML. Consumer CI uploads only
+`reports/allure-report/index.html` and `reports/playwright-report/`, including
+Playwright supporting assets. History and raw results remain local.
 
-The optional harness workflows use the same Allure history root for standalone and
-generation verification captures. Pass the returned recording directory to
+Allure video attachments default off. Enable with `ALLURE_ATTACH_VIDEO=true` or
+reporter option `attachVideo: true`; an explicit option takes precedence. This
+leaves Playwright's recording policy and its HTML attachments unchanged. Disable
+Playwright recording separately with `video: 'off'` when desired. Screenshots and
+other Allure attachments remain available.
+
+The optional harness workflows use the same current/archive publication for
+standalone and generation verification captures. Pass the returned recording directory to
 `npx --no pom-harness generate-allure --input <recording-directory>` after the run.
 Two independent verification runs retain two native reports. Harness QA reports
 remain separate under `reports/harness/automation-<timestamp>[-NNN]/` and
@@ -112,11 +119,12 @@ is contained in the class. Replace the separate `allure-playwright` and generato
 entries with one `./src/utils/AllureReport.ts` entry before the HTML reporter,
 preserving the official reporter's options. Apply the count-comparison message update
 in `Expects.ts`; setup does not overwrite consumer customizations.
-Merge `historyDir` from `src/config/reporting.ts` and remove old `reportDir`,
+Merge `historyDir`, `resultsDir` and `attachVideo` from `src/config/reporting.ts`
+and remove old `reportDir`,
 `keepHistory` and `ALLURE_HISTORY` settings. `ALLURE_HISTORY=false` no longer skips
 the canonical report. To disable optional Allure output, remove its ordinary
 reporter or omit `--allure` for verification. Old `allure-report/` and scoped
-report directories remain untouched; new CI uploads use the entire history root.
+report directories remain untouched; new CI uploads contain only current reports.
 It runs on Node, without Java. Tests and action methods retain their existing
 `allure-js-commons` calls. The report keeps epic/feature/story grouping, embedded
 attachments and native outcomes. Generation occurs in the reporter's

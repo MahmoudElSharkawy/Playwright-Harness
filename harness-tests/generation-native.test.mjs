@@ -299,8 +299,7 @@ if (process.env.HARNESS_ALLURE_LOCATOR_PROOF === '1') for (const fails of [false
     const normal = spawnSync(process.execPath, [join(packageRoot, 'examples/node_modules/playwright/cli.js'), 'test', '--config', f.input.config, '--grep', 'adds'],
       {cwd: f.roots.projectRoot, env: {...process.env, AUTO_ALLURE_OPEN: 'false', ALLURE_HISTORY: 'false'}, encoding: 'utf8', windowsHide: true, timeout: 90000});
     assert.equal(normal.status, fails ? 1 : 0, normal.stdout + normal.stderr);
-    const history = join(f.roots.projectRoot, 'reports/allure-history'), normalDirectory = readdirSync(history).find(name => /^\d{4}-/.test(name));
-    const normalHtml = readFileSync(join(history, normalDirectory, 'index.html'), 'utf8');
+    const normalHtml = readFileSync(join(f.roots.projectRoot, 'reports/allure-report/index.html'), 'utf8');
     const scoped = await verifyGeneration(f.roots, f.source.id, {allure: true});
     assert.equal(scoped.status, fails ? 'FAIL' : 'PASS', JSON.stringify(scoped)); assert.equal(scoped.reporting.links, 'CONFIGURED');
     const generated = await generateAllure(f.roots, scoped.reporting.directory);

@@ -1,5 +1,18 @@
 # Changelog
 
+## 3.7.1 — Current reports and optional Allure video
+
+### Upgrade actions
+
+- Merge the updated `AllureReport.ts`, reporting configuration and run-start hygiene into customized consumers. Use `resultsDir: 'reports/allure-results'`. Current Allure HTML is `reports/allure-report/index.html`; new history entries contain older HTML files only. Existing reports and 3.7.0 captures remain untouched.
+- Update consumer CI artifact uploads to the current Allure HTML and Playwright report folder only; do not upload history or raw results. Harness CI is unchanged.
+- Allure video attachments are now off by default. Set `ALLURE_ATTACH_VIDEO=true` or reporter option `attachVideo: true` to include them. Playwright recording and native attachments remain independent.
+
+### Changes
+
+- Publish complete current Allure HTML directly, archive the previous HTML only after its replacement is ready, serialize concurrent publication and preserve prior output on generation failure. Keep immutable capture and verification evidence under `.harness/runs/allure/`.
+- Move ordinary raw Allure results under `reports/`; preserve screenshots, non-video attachments, native statuses and independent verification evidence.
+
 ## 3.7.0 — Readable report history and unified Allure
 
 ### Upgrade actions

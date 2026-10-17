@@ -10,11 +10,13 @@ import * as os from 'node:os';
  */
 export const allureConfig = {
   /** Raw results dir, explicitly passed through allure-playwright's resultsDir option. */
-  resultsDir: 'allure-results',
+  resultsDir: 'reports/allure-results',
   /** Explicit Allure 3 config; no Java, remote publishing or verdict overrides. */
   generatorConfig: 'allurerc.json',
-  /** One native report per run: `<historyDir>/<UTC timestamp>/index.html`; latest.html links to it. */
+  /** Published current HTML; older HTML files alone live under historyDir. */
   historyDir: 'reports/allure-history',
+  /** Include video in Allure only when explicitly enabled; Playwright recording is independent. */
+  attachVideo: process.env.ALLURE_ATTACH_VIDEO === 'true',
 } as const;
 
 /**

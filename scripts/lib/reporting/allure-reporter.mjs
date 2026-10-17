@@ -8,9 +8,9 @@ import {validateAllureLinks} from '../convention-source.mjs';
 /** Concrete optional adapter for the installed official Allure reporter, not a verdict engine. */
 export default class HarnessAllureReporter {
   constructor(options = {}) {
-    this.failed = false; this.tests = 0;
+    this.failed = false; this.tests = 0; this.stepViews = new WeakMap();
     try {
-      this.roots = consumerRoots();
+      this.roots = consumerRoots(); this.attachVideo = options.attachVideo ?? process.env.ALLURE_ATTACH_VIDEO === 'true';
       const reserved = process.env.HARNESS_ALLURE_DIRECTORY;
       const run = reserved ? readAllureRun(this.roots, reserved, process.env.HARNESS_GENERATION_INVOCATION)
         : reserveAllureReport(this.roots, {directory: options.directory, historyRoot: options.historyRoot});
@@ -29,6 +29,7 @@ export default class HarnessAllureReporter {
       const linkInput = options.links ?? (process.env.HARNESS_ALLURE_LINKS ? JSON.parse(process.env.HARNESS_ALLURE_LINKS) : undefined);
       const links = linkInput === undefined ? undefined : validateAllureLinks(linkInput);
       this.delegate = new Reporter({resultsDir: join(this.path, 'allure-results'), detail: true, suiteTitle: true,
+        attachVideo: this.attachVideo,
         ...(links === undefined ? {} : {links}),
         environmentInfo: {node_version: process.version, result_source: 'Native Playwright Test; harness execution verdicts are attached separately'}});
       if (this.delegate.version() !== 'v2') throw new Error('Unsupported native reporter interface.');
@@ -47,11 +48,20 @@ export default class HarnessAllureReporter {
     } catch {this.failed = true;}
   }
   onConfigure(config) {this.forward('onConfigure', [config]);}
+  attachments(view) {
+    return this.attachVideo || !view?.attachments ? view : {...view, attachments: view.attachments.filter(item => !item.contentType.startsWith('video/'))};
+  }
+  stepView(step) {
+    let view = this.stepViews.get(step);
+    if (!view) {view = {...step}; this.stepViews.set(step, view);}
+    Object.assign(view, this.attachments(step), {parent: step.parent ? this.stepView(step.parent) : undefined});
+    return view;
+  }
   onBegin(suite) {this.forward('onBegin', [suite]);}
   onTestBegin(test, result) {this.forward('onTestBegin', [test, result]);}
-  onStepBegin(test, result, step) {this.forward('onStepBegin', [test, result, step]);}
-  onStepEnd(test, result, step) {this.forward('onStepEnd', [test, result, step]);}
-  async onTestEnd(test, result) {this.tests++; await this.forward('onTestEnd', [test, result]);}
+  onStepBegin(test, result, step) {this.forward('onStepBegin', [test, result, this.stepView(step)]);}
+  onStepEnd(test, result, step) {this.forward('onStepEnd', [test, result, this.stepView(step)]);}
+  async onTestEnd(test, result) {this.tests++; await this.forward('onTestEnd', [test, this.attachments(result)]);}
   onError(error) {this.forward('onError', [error]);}
   async onEnd(result) {
     await this.forward('onEnd', [result]);
