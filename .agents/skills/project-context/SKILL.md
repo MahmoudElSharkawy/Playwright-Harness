@@ -34,6 +34,12 @@ Save the choice through the existing integration configuration. Exclusions win; 
 work stays eligible. Unknown selectors need repair before content retrieval. Linked
 attachments of excluded items are not ingested. See the workflow for exact commands.
 
+Use `context read` for a compact captured overview, then bounded `context search`
+for task-relevant evidence (8 results / 16 KiB by default). Page source receipts via
+`search --catalog sources`; use returned cursors with the same revision/query/limits.
+Never load the full corpus into the prompt or rebuild an index during ordinary reads.
+Use explicit `context export --out` only for a requested complete logical snapshot.
+
 Use `context retrieve` for transient context. Saving is opt-in: when requested, route to
 [context-update](../context-update/SKILL.md), which creates missing initial context too.
 Do not save a transient map as a side effect. Return the concise map, source references,

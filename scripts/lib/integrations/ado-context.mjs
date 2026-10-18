@@ -2,7 +2,7 @@ import {adoId, requireValue} from './config.mjs';
 import {validateContextPolicy, validateContextScope, selector} from './context-policy.mjs';
 export {validateContextPolicy, validateContextScope} from './context-policy.mjs';
 
-const classification = ['System.Id', 'System.TeamProject', 'System.WorkItemType', 'System.State', 'System.AreaPath'];
+const classification = ['System.Id', 'System.Rev', 'System.TeamProject', 'System.WorkItemType', 'System.State', 'System.AreaPath'];
 const find = (values, key) => values.find(value => value.id === key) ?? values.find(value => value.name === key);
 const matches = (values, item) => values.some(value => value === item.id || value === item.name);
 const inScope = (fields, scope) => !scope.areaPath || typeof fields['System.AreaPath'] === 'string' && (fields['System.AreaPath'].toLowerCase() === scope.areaPath.toLowerCase() || fields['System.AreaPath'].toLowerCase().startsWith(`${scope.areaPath.toLowerCase()}\\`));
@@ -52,7 +52,7 @@ export function createAdoContextSource(client) {
     requireValue(new Set(types.map(type => type.id)).size === types.length && new Set(types.map(type => type.name)).size === types.length, 'ADO context types are ambiguous.');
     return {types};
   }
-  async function retrieve({policy: input, scope = {}, previousMetadata} = {}) {
+  async function retrieve({policy: input, scope = {}, previousMetadata, reuse = () => false, allowPartial = false} = {}) {
     scope = validateContextScope(scope);
     const current = await metadata(), changes = metadataChanges(previousMetadata, current);
     if (input === undefined) return {status: 'SELECTION_REQUIRED', metadata: current, metadataChanges: changes,
@@ -77,25 +77,30 @@ export function createAdoContextSource(client) {
       for (const item of response.value) {
         const id = adoId(item.id); requireValue(page.includes(id) && !found.has(id), 'ADO context classification scope mismatch.'); found.add(id);
         await client.requireWorkItemProject(item);
+        const rev = item.fields['System.Rev'] ?? item.rev;
+        requireValue(Number.isSafeInteger(rev) && rev > 0, 'ADO context revision classification is incomplete.');
         requireValue(!scope.areaPath || selector(item.fields['System.AreaPath']), 'ADO context area scope classification is incomplete.');
         const type = find(current.types, item.fields['System.WorkItemType']), state = type && find(type.states, item.fields['System.State']);
         requireValue(type && state, 'ADO context metadata changed during classification; retrieve again.');
-        const reason = inScope(item.fields, scope) ? selected(policy, type, state) : 'outside-area-scope'; decisions.push({id, type: type.id, state: state.id, included: reason === 'included', reason});
+        const reason = inScope(item.fields, scope) ? selected(policy, type, state) : 'outside-area-scope'; decisions.push({id, rev, type: type.id, state: state.id, included: reason === 'included', reason});
       }
     }
     decisions.sort((a, b) => a.id - b.id);
-    const items = [];
+    const items = [], reused = [], unavailable = [];
     for (const decision of decisions.filter(item => item.included)) {
+      if (reuse(decision)) {reused.push(decision); continue;}
+      try {
       const item = await client.read(`wit/workitems/${decision.id}?$expand=relations&api-version=7.1`);
-      requireValue(adoId(item.id) === decision.id && Number.isSafeInteger(item.rev) && item.rev > 0 && item.fields && (item.relations === undefined || Array.isArray(item.relations)), 'ADO context item is incomplete.');
+      requireValue(adoId(item.id) === decision.id && Number.isSafeInteger(item.rev) && item.rev === decision.rev && item.fields && (item.relations === undefined || Array.isArray(item.relations)), 'ADO context item is incomplete or changed after revision classification.');
       await client.requireWorkItemProject(item);
       requireValue(inScope(item.fields, scope), 'ADO context item moved outside the requested scope; retrieve again.');
       const type = find(current.types, item.fields['System.WorkItemType']), state = type && find(type.states, item.fields['System.State']);
       requireValue(type && state && type.id === decision.type && state.id === decision.state, 'ADO context item changed after selection; retrieve again.');
       items.push(item);
+      } catch (error) {if (!allowPartial) throw error; unavailable.push(decision);}
     }
-    return {status: 'READY', metadata: current, metadataChanges: changes, policy, scope, items,
-      selection: {includedCount: items.length, excludedCount: decisions.length - items.length, items: decisions}};
+    return {status: 'READY', metadata: current, metadataChanges: changes, policy, scope, items, reused, unavailable,
+      selection: {complete: true, includedCount: decisions.filter(item => item.included).length, excludedCount: decisions.filter(item => !item.included).length, items: decisions}};
   }
   return Object.freeze({metadata, retrieve});
 }

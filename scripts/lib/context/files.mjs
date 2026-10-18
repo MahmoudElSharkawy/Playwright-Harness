@@ -6,21 +6,22 @@ import {data, digest, fingerprint, requireThat} from '../execution-core/data.mjs
 import {keys} from '../project-config.mjs';
 import {credentialName, secretFindings} from '../package-validation.mjs';
 import {within} from '../skill-roots.mjs';
+import {RECIPE} from './model.mjs';
 
 const sensitive = name => credentialName(name) || /^(?:authorization|cookie|set-cookie|connectionString)$/i.test(name);
 const privatePath = path => /(?:^|[\\/])(?:\.env(?:\..*)?|\.aws|\.ssh|\.auth)(?:[\\/]|$)/i.test(path) || /\.(?:key|pfx|p12|dpapi)$/i.test(path);
 const textual = new Set(['txt', 'md', 'ts', 'js', 'mjs', 'cjs', 'yaml', 'yml', 'xml', 'html', 'sql', 'log']);
 export function contextParts(parts, authority = 'observation') {
-  requireThat(Array.isArray(parts) && parts.length <= 1000, 'Context extraction needs at most 1000 located parts.');
+  requireThat(Array.isArray(parts) && parts.length <= 20000, 'Context extraction needs at most 20000 located parts.');
   let redacted = 0;
   const contributions = [], seen = new Set();
   for (const part of parts) {
     keys(part, ['location', 'text', 'topic'], 'context extraction part');
-    requireThat(typeof part.location === 'string' && part.location.trim() && part.location.length <= 500 && typeof part.text === 'string' && part.text.trim() && part.text.length <= 16000, 'Context parts need bounded text and precise locations.');
+    requireThat(typeof part.location === 'string' && part.location.trim() && part.location.length <= 500 && typeof part.text === 'string' && part.text.trim() && Buffer.byteLength(part.text) <= 8 * 1024 * 1024, 'Context parts need bounded text and precise locations.');
     requireThat(part.topic === undefined || typeof part.topic === 'string' && part.topic.trim() && part.topic.length <= 200, 'Invalid context fact topic.');
     // Scan original excerpts before JSON escaping can hide quoted assignments.
     if ([part.text, part.location, part.topic ?? ''].some(text => secretFindings('context.txt', text).length)) {redacted++; continue;}
-    try {data(part);} catch {redacted++; continue;}
+    try {data(part, 16 * 1024 * 1024);} catch {redacted++; continue;}
     const value = {topic: part.topic ?? `content-${fingerprint(part.text)}`, text: part.text, location: part.location, authority};
     const key = fingerprint(value); if (!seen.has(key)) {contributions.push(value); seen.add(key);}
   }
@@ -29,14 +30,14 @@ export function contextParts(parts, authority = 'observation') {
 function jsonParts(bytes) {
   const input = JSON.parse(bytes), parts = []; let omitted = 0, incomplete = false;
   function visit(value, location, depth) {
-    if (depth > 25 || parts.length >= 1000) {incomplete = true; return;}
+    if (depth > 25 || parts.length >= 20000) {incomplete = true; return;}
     if (value && typeof value === 'object') for (const [key, child] of Object.entries(value)) {
       if (sensitive(key)) {omitted++; continue;}
       visit(child, Array.isArray(value) ? `${location}[${key}]` : `${location}[${JSON.stringify(key)}]`, depth + 1);
     }
     else {
       const text = typeof value === 'string' ? value : JSON.stringify(value);
-      if (text?.trim()) {if (text.length > 16000) incomplete = true; else parts.push({location, text});}
+      if (text?.trim()) parts.push({location, text});
     }
   }
   visit(input, '$', 0); return {parts, coverage: incomplete ? 'partial' : 'complete', redacted: omitted};
@@ -53,7 +54,7 @@ function csvParts(text, delimiter) {
     else if (character === delimiter) {row.push(cell); cell = ''; closed = false;}
     else if (character === '\n' || character === '\r') {if (character === '\r' && text[index + 1] === '\n') index++; row.push(cell); rows.push(row); row = []; cell = ''; closed = false;}
     else {requireThat(!closed && character !== '"', 'CSV quoting is incomplete.'); cell += character;}
-    requireThat(rows.length <= 1000 && cell.length <= 16000, 'CSV exceeds the bounded reader; use a scoped host reader.');
+    requireThat(rows.length <= 20000, 'CSV exceeds the bounded reader; use a scoped host reader.');
   }
   requireThat(!quoted, 'CSV quoting is incomplete.'); if (cell || row.length || closed) {row.push(cell); rows.push(row);}
   const header = rows.shift() ?? [], parts = []; requireThat(header.length <= 200, 'CSV column scope is too large.');
@@ -62,7 +63,7 @@ function csvParts(text, delimiter) {
     requireThat(rows[index].length === header.length, 'CSV has inconsistent row widths.');
     rows[index].forEach((text, column) => {if (text.trim() && !sensitive(header[column].trim())) parts.push({location: `row ${index + 2}, column ${column + 1} (${header[column]})`, text});});
   }
-  requireThat(parts.length <= 1000, 'CSV exceeds the bounded reader; use a scoped host reader.');
+  requireThat(parts.length <= 20000, 'CSV exceeds the bounded reader; use a scoped host reader.');
   return {parts, coverage: 'complete'};
 }
 function nativeExtraction(bytes, extension, source) {
@@ -71,15 +72,20 @@ function nativeExtraction(bytes, extension, source) {
   if (['csv', 'tsv'].includes(extension)) return csvParts(text, source.delimiter ?? (extension === 'tsv' ? '\t' : ','));
   const lines = text.split(/\r?\n/), parts = []; let incomplete = false;
   for (let index = 0; index < lines.length; index++) if (lines[index].trim()) {
-    if (parts.length >= 1000 || lines[index].length > 16000) incomplete = true;
+    if (parts.length >= 20000) incomplete = true;
     else parts.push({location: `lines ${index + 1}-${index + 1}`, text: lines[index]});
   }
   return {parts, coverage: incomplete ? 'partial' : 'complete'};
 }
-export async function extractContextBytes(source, bytes, {readers = {}, now = new Date().toISOString()} = {}) {
+export async function extractContextBytes(source, bytes, {readers = {}, now = new Date().toISOString(), previous} = {}) {
   requireThat(Buffer.isBuffer(bytes) && bytes.length <= 8 * 1024 * 1024, 'Context file exceeds the 8 MiB reader bound.');
   const hash = digest(bytes), extension = extname(source.path ?? source.name ?? '').slice(1).toLowerCase();
-  const record = {id: source.id, kind: source.kind, origin: source.origin ?? 'user-supplied', ...(source.path ? {path: source.path} : {}), ...(source.parentId ? {parentId: source.parentId} : {}), ...(source.collection ? {collection: source.collection} : {}), hash, retrievedAt: now};
+  if (source.extraction) requireThat(source.extraction.hash === hash, 'Context extraction hash does not match current file bytes.');
+  const native = textual.has(extension) || ['json', 'csv', 'tsv'].includes(extension);
+  const extractionRecipe = source.extraction ? fingerprint(source.extraction) : readers[extension] ? fingerprint(String(readers[extension].recipe ?? readers[extension])) : native ? 'native' : previous?.extractionRecipe ?? 'host-required';
+  const recipe = fingerprint({version: RECIPE, extension, extractionRecipe, encoding: source.encoding ?? 'utf-8', delimiter: source.delimiter ?? null, authority: source.authority ?? null});
+  const record = {id: source.id, kind: source.kind, origin: source.origin ?? 'user-supplied', ...(source.path ? {path: source.path} : {}), ...(source.name ? {name: source.name} : {}), ...(source.parentId ? {parentId: source.parentId} : {}), ...(source.collection ? {collection: source.collection} : {}), hash, recipe, recipeVersion: RECIPE, extractionRecipe, retrievedAt: now};
+  if (previous?.status === 'verified' && previous.coverage === 'complete' && previous.hash === hash && previous.recipe === recipe) return {...previous, ...record, verifiedAt: now};
   let extraction = source.extraction;
   if (!extraction && readers[extension]) {
     try {extraction = await readers[extension]({bytes, hash, source: structuredClone(source)});} catch {return {...record, status: 'unverified', coverage: 'reader-failed', contributions: []};}

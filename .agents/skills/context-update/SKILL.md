@@ -11,12 +11,16 @@ or ask for duplicate approval. Resolve the real skill path and consumer roots us
 and [context contract](../../../docs/project-context.md). This skill owns refresh;
 it does not promote reviewed knowledge, change test scope or deliver to external systems.
 
-Read the current captured snapshot first with `context read --id <id>`. Match consumer,
+Read the compact overview first with `context read --id <id>`. Page source receipts
+with `context search --id <id> --catalog sources` when rebuilding the refresh request. Match consumer,
 application and environment identity. For missing initial context, retrieve the requested
 sources and create it. Otherwise refresh only requested sources, preserving unrelated
 sources and custom content. When no narrower scope is requested, reuse the snapshot's
-selected repository/file sources and configured ADO context sources. Re-read current
-bytes and metadata; old extraction receipts are not proof for changed bytes.
+selected repository/file sources and configured ADO context sources. Rehash local
+bytes and revalidate live metadata/membership/revisions. Reuse complete unchanged
+extraction; old receipts are not proof for changed bytes. Verify the configured ADO
+organization and resolved project GUID before retrieval; never reuse another project
+under the same context ID. Owner notes live in `custom.json` and retain history.
 
 Before ADO content reads, refresh metadata and validate supplied/saved filters. Reuse
 valid choices. Missing policy requires live multi-select/text exclusions with **Exclude

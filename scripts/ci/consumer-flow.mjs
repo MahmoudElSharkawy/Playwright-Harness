@@ -138,7 +138,11 @@ flow('C1', 'An empty folder gets the harness and the starter', () => {
   assert.equal(retrieved.snapshot.status, 'complete'); assert(!existsSync(join(c1, '.harness/context')), 'Transient context was saved.');
   const captured = parse(harness(c1, 'context', 'update', '--request', '.harness/runs/context-request.json')); assert.equal(captured.saved, true);
   const contextPath = join(c1, '.harness/context/synthetic-qa/current.json'), contextBefore = readFileSync(contextPath, 'utf8');
-  assert.equal(parse(harness(c1, 'context', 'read', '--id', 'synthetic-qa')).snapshot.revision, captured.snapshot.revision); assert.equal(readFileSync(contextPath, 'utf8'), contextBefore);
+  assert.equal(parse(harness(c1, 'context', 'read', '--id', 'synthetic-qa')).revision, captured.snapshot.revision); assert.equal(readFileSync(contextPath, 'utf8'), contextBefore);
+  const searched = parse(harness(c1, 'context', 'search', '--id', 'synthetic-qa', '--query', 'synthetic'));
+  assert(searched.results.some(result => result.excerpt.includes('Reviewed synthetic knowledge') && result.authority === 'reviewed'));
+  assert.equal(parse(harness(c1, 'context', 'export', '--id', 'synthetic-qa', '--out', '.harness/runs/context-export.json')).status, 'EXPORTED');
+  assert.equal(JSON.parse(readFileSync(join(c1, '.harness/runs/context-export.json'))).facts.length, 1);
   commit(c1, 'Adopt the harness');
   assert(git(c1, 'ls-files', `.harness/vendor/${name}`).trim(), 'The vendored archive is not committed.');
   for (const file of ['project.json', 'targets.json', 'integrations.json', 'links.json', 'sources/scenarios.json', 'knowledge/reviewed.md'])

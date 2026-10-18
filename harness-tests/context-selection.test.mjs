@@ -12,7 +12,7 @@ function project() {
     async requireWorkItemProject(item) {assert.equal(item.fields['System.TeamProject'], 'demo');},
     async list(route) {calls.push(['metadata', route]); if (route === 'wit/workitemtypes?api-version=7.1') return structuredClone(types); const name = decodeURIComponent(route.match(/workitemtypes\/([^/]+)\/states/)[1]); return structuredClone(states[name]);},
     async wiql(query) {calls.push(['query', query]); const cursor = Number(query.match(/\[System.Id\] > (\d+)/)?.[1] ?? 0); return {workItems: [...items.keys()].filter(id => id > cursor).map(id => ({id}))};},
-    async workItems(ids, fields) {calls.push(['classify', ids, fields]); assert(!fields.includes('System.Description')); return {value: ids.map(id => ({id, rev: 1, fields: Object.fromEntries(fields.map(name => [name, items.get(id).fields[name]]))}))};},
+    async workItems(ids, fields) {calls.push(['classify', ids, fields]); assert(!fields.includes('System.Description')); return {value: ids.map(id => ({id, rev: items.get(id).rev, fields: Object.fromEntries(fields.map(name => [name, items.get(id).fields[name]]))}))};},
     async read(route) {const id = Number(route.match(/workitems\/(\d+)/)[1]); calls.push(['content', id]); return structuredClone(items.get(id));}};
   return {client, calls, types, states, items, source: createAdoContextSource(client)};
 }

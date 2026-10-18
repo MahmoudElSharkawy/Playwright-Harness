@@ -2,7 +2,8 @@
 
 Run installed commands from the consumer: `npx --no pom-harness context ...`.
 For package development use `node <package>/scripts/project-context.mjs ... --project-root <consumer>`.
-The CLI validates consumer/package separation. No indexer or background ingestion is needed.
+The CLI validates consumer/package separation. Saved context uses a local SQLite FTS5
+index built only during explicit update; no server or background ingestion is needed.
 
 ## Discover and prepare
 
@@ -40,7 +41,7 @@ Use transient `context retrieve --request .harness/runs/context-request.json` to
 byte hashes and native JSON/CSV/text extraction. Text receipts cite lines, JSON paths
 or CSV row/column. For CSV specify `encoding`/`delimiter` when the source requires it;
 ambiguous, inconsistent or malformed input is unverified. Native reads are bounded to
-8 MiB and 1000 parts; use a scoped host reader for larger readable inputs and report gaps.
+8 MiB and 20,000 parts; use a scoped host reader for larger readable inputs and report gaps.
 
 ## Format readers and located facts
 
@@ -82,7 +83,10 @@ files and work items remain observations. Use `current` for verified source code
 ## ADO metadata and policy
 
 Add `"ado": {"sourceId": "backlog"}` to select the configured ADO context source.
-The existing `.harness/integrations.json` remains authoritative:
+Keep the token in ignored `.env`; select organization and project in the existing
+`.harness/integrations.json`, which remains authoritative. The resolved organization
+and project GUID bind the capture before content reads. A different project needs a
+different context ID. Legacy environment settings apply only without modern config:
 
 ```json
 {
@@ -137,8 +141,10 @@ Selection runs before full item/attachment reads. Included items' textual busine
 fields contribute located observations. To read their binary attachments with host
 tools, run `context stage --request <request>`. Only attachments of included items
 are fetched, from verified configured-collection attachment endpoints, into ignored
-`.harness/runs/context/<context-id>/`. The returned `localPath`, `attachmentId`, source
-`id` and hash identify exact bytes. Staging writes evidence files, not a saved context.
+`.harness/runs/context/<context-id>/`. The compact `sources.sample` receipts return `localPath`, `attachmentId`, source
+`id` and hash for exact bytes. Omitted sources require a narrower request, or an
+explicitly saved context followed by `context search --id <id> --catalog sources`
+and its revision-bound cursor. Staging writes evidence files, not a saved context.
 
 Read each staged file with its available format reader. Supply receipts in request
 `ado.attachments`: `[{"id":"<returned source ID>","attachmentId":"<GUID>","extraction":{...}}]`.
@@ -164,6 +170,23 @@ deletions). A partial refresh points to the last complete revision. Atomic publi
 protects current on failure; an orphan history record is harmless. Investigate an
 interrupted `writer.lock` before retrying; do not delete an active writer's lock.
 
-`context read --id <id>` reads only captured content. It does not load credentials,
-retrieve referenced sources or modify dates. Downstream consumers cite snapshot
-revision plus fact/source/location; references convey provenance, not fetch permission.
+Start captured reading with `context read --id <id>`: identity, revision, counts,
+freshness, conflicts and gaps only. Use `context search --id <id> --query <text>`,
+`--work-item <id>`, `--source <source-id>` or `--topic <topic>` for evidence.
+Use `--catalog sources` to page source receipts when preparing a refresh. Defaults
+are 8 results / 16 KiB total output; explicit maxima are 25 / 64 KiB. Repeat the same
+arguments plus `--cursor <returned-cursor>` for more. Stop on no evidence; do not
+load unrelated material. Search neither fetches originals nor changes verification.
+
+Use `context export --id <id> --out <new-consumer-file>` only when a full logical
+snapshot is explicitly needed. Stream/process that file locally; do not inject the
+whole corpus into the conversation. Evidence citations include snapshot revision,
+source/fact/chunk IDs, original location and offsets, authority and freshness.
+
+Version 2 uses a bounded manifest, immutable JSON objects and a rebuildable SQLite
+index. Edit owner notes in `custom.json`; updates retain sanitized note history.
+Missing/corrupt indexes require explicit update, never a silent search repair. The
+first update of v1 backs up original current/history and stages v2; legacy ADO sources
+require complete fresh ownership verification/recapture. Failure leaves v1 current
+intact. Unchanged items use membership/revision checks; unchanged files still rehash
+their bytes. Revision checks never pretend attachment bytes were downloaded again.

@@ -13,6 +13,13 @@
 
 ### Changes
 
+- Context CLI output is now compact. Use `context search` for bounded evidence and
+  `context export --out` for complete JSON. The first explicit update migrates v1
+  into scoped immutable JSON objects and a derived SQLite FTS5 index, preserving
+  original backups and history. Legacy ADO migration requires fresh recapture.
+- Add bounded English/Arabic lexical search, source catalog pagination and selective
+  ADO/file refresh. Keep the PAT in `.env` and organization/project/credentialRef in
+  `.harness/integrations.json`; each context binds to one organization and project GUID.
 - Retrieve and refresh scoped consumer context with located repository/file facts,
   explicit authority/status, deduplicated provenance, partial/stale coverage and
   recoverable snapshots. Reuse available host readers for image/office/PDF sources.

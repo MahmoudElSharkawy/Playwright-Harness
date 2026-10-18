@@ -17,7 +17,7 @@ test('transient retrieval is read-only; saved refresh is scoped, repeatable and 
   const transient = await retrieveContext(roots, input, {now: '2026-10-01T00:00:00.000Z'}); assert.equal(transient.snapshot.facts.length, 2);
   assert(!existsSync(join(roots.projectRoot, '.harness/context')));
   await updateContext(roots, input, {now: '2026-10-01T00:00:00.000Z'});
-  const path = join(roots.projectRoot, '.harness/context/checkout/current.json'), current = JSON.parse(readFileSync(path)); current.custom = {note: 'Owner-written content'}; writeFileSync(path, JSON.stringify(current));
+  const path = join(roots.projectRoot, '.harness/context/checkout/current.json'), current = JSON.parse(readFileSync(path)); current.custom = {note: 'Owner-written content'}; put(roots, '.harness/context/checkout/custom.json', JSON.stringify(current.custom));
   const result = await updateContext(roots, request([source('one', 'one.json')]), {now: '2026-10-02T00:00:00.000Z'});
   assert.deepEqual(result.changes.added, []); assert.deepEqual(result.changes.removed, []); assert.deepEqual(result.snapshot.custom, current.custom);
   assert.equal(result.snapshot.sources.find(s => s.id === 'two').verifiedAt, '2026-10-01T00:00:00.000Z');
@@ -79,10 +79,10 @@ function adoClient() {
   const calls = [], attachmentId = '00000000-0000-4000-8000-000000000001';
   const items = new Map([[1, {id: 1, rev: 1, fields: {'System.TeamProject': 'demo', 'System.AreaPath': 'demo\\Checkout', 'System.WorkItemType': 'Demande', 'System.State': 'Terminé', 'System.Title': 'Shared fact'}, relations: [{rel: 'AttachedFile', url: `https://ado.example.test/demo/_apis/wit/attachments/${attachmentId}`, attributes: {name: 'guide.txt'}}]}]]);
   const configuration = {organizationUrl: 'https://ado.example.test', project: 'demo', credentialRef: 'ADO_ACCESS', context: {sources: {backlog: {policy: {excludeTypes: [], excludeStates: []}, scope: {areaPath: 'demo\\Checkout'}}}}};
-  const client = {configuration, async projectIdentity() {return {name: 'demo', id: 'project-id'};}, async requireWorkItemProject(item) {assert.equal(item.fields['System.TeamProject'], 'demo');},
+  const client = {configuration, async projectIdentity() {return {name: 'demo', id: '11111111-1111-4111-8111-111111111111'};}, async requireWorkItemProject(item) {assert.equal(item.fields['System.TeamProject'], 'demo');},
     async list(route) {calls.push(['metadata', route]); return route.includes('/states?') ? [{id: 'done', name: 'Terminé'}, {id: 'drop', name: 'Abandonné'}] : [{name: 'Demande', referenceName: 'Custom.Request'}];},
     async wiql() {calls.push(['query']); return {workItems: [...items.keys()].map(id => ({id}))};},
-    async workItems(ids, fields) {calls.push(['classify', ids]); return {value: ids.map(id => ({id, fields: Object.fromEntries(fields.map(key => [key, items.get(id).fields[key]]))}))};},
+    async workItems(ids, fields) {calls.push(['classify', ids]); return {value: ids.map(id => ({id, rev: items.get(id).rev, fields: Object.fromEntries(fields.map(key => [key, items.get(id).fields[key]]))}))};},
     async read(route) {calls.push(['content', route]); return structuredClone(items.get(Number(route.match(/workitems\/(\d+)/)[1])));},
     async attachment(id) {calls.push(['attachment', id]); return Buffer.from('Independent attachment fact');}};
   return {client, calls, items, attachmentId};
@@ -140,7 +140,9 @@ test('captured read ignores malformed integration config and performs no file or
   put(roots, '.harness/integrations.json', 'invalid'); unlinkSync(join(roots.projectRoot, 'one.txt'));
   const path = join(roots.projectRoot, '.harness/context/checkout/current.json'), before = readFileSync(path, 'utf8');
   const result = spawnSync(process.execPath, [join(roots.packageRoot, 'scripts/project-context.mjs'), 'read', '--id', 'checkout', '--project-root', roots.projectRoot], {encoding: 'utf8', windowsHide: true});
-  assert.equal(result.status, 0, result.stderr); assert.equal(JSON.parse(result.stdout).snapshot.facts[0].text, 'Captured only'); assert.equal(readFileSync(path, 'utf8'), before);
+  assert.equal(result.status, 0, result.stderr); assert.equal(JSON.parse(result.stdout).counts.facts, 1); assert.equal(JSON.parse(result.stdout).snapshot, undefined);
+  const searched = spawnSync(process.execPath, [join(roots.packageRoot, 'scripts/project-context.mjs'), 'search', '--id', 'checkout', '--query', 'Captured', '--project-root', roots.projectRoot], {encoding: 'utf8', windowsHide: true});
+  assert.equal(searched.status, 0, searched.stderr); assert.equal(JSON.parse(searched.stdout).results[0].excerpt, 'Captured only'); assert.equal(readFileSync(path, 'utf8'), before);
 });
 test('corrupt context inputs and snapshots report parse failures without disclosing input excerpts', t => {
   const {roots} = fixture(t), marker = `ZQPV${crypto.randomUUID()}`, malformed = `x${marker}`;
