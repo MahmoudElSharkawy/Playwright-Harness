@@ -179,6 +179,10 @@ The CLI `update` command also stages included attachments so every saved source
 receipt exposes its `localPath` through the paginated source catalog. Existing
 staged bytes are hash-checked before reuse; altered copies remain untouched while
 fresh bytes receive a new path.
+When changed bytes still need extraction, receipts expose `attemptedHash` for those
+bytes while `hash` continues identifying retained stale evidence. Bind the next
+reader receipt to `attemptedHash` when present, otherwise `hash`; successful
+extraction replaces the retained evidence and clears `attemptedHash`.
 
 Version 1 reads remain nonmutating. The first explicit update backs up the original
 current/history files under `legacy/<original-fingerprint>/`, validates the source/fact

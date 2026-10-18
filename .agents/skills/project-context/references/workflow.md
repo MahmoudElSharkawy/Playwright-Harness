@@ -52,6 +52,12 @@ embedded content. If the host lacks a reader, retain the source as unsupported; 
 not claim success or manufacture a converted file. Password protection, corrupt files,
 unread sheets/pages, low confidence or truncation require partial/uncertain coverage.
 
+For current bytes use the source receipt's `attemptedHash` when present, otherwise
+`hash`. When extraction is incomplete after bytes change, `hash` still identifies
+retained stale evidence; `attemptedHash` identifies the new file or staged bytes.
+After successful extraction, the new evidence replaces the old hash and the
+attempted hash is cleared.
+
 After reading, add an `extraction` receipt to that source in the request:
 
 ```json
@@ -148,7 +154,7 @@ fields contribute located observations. To read their binary attachments with ho
 tools, run `context stage --request <request>`. Only attachments of included items
 are fetched, from verified configured-collection attachment endpoints, into ignored
 `.harness/runs/context/<context-id>/`. The compact `sources.sample` receipts return `localPath`, `attachmentId`, source
-`id` and hash for exact bytes. Omitted sources require a narrower request, or an
+`id`, `hash` and optional `attemptedHash`. Use `attemptedHash ?? hash` for exact bytes. Omitted sources require a narrower request, or an
 explicitly saved context followed by `context search --id <id> --catalog sources`
 and its revision-bound cursor. CLI `update` also stages included attachment bytes,
 so every saved receipt exposes the verified `localPath`. Staging alone writes

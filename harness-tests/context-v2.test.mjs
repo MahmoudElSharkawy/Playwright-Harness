@@ -113,6 +113,33 @@ test('staging rechecks cached local bytes and repairs a changed staged copy with
   assert.deepEqual(readFileSync(current(roots)), before); assert.equal(staged.saved, false);
 });
 
+test('CLI staged receipts distinguish changed bytes from retained evidence and accept extraction for the new hash', async t => {
+  const {roots} = fixture(t), f = adoFixture(), input = {...request(), ado: {sourceId: 'backlog'}};
+  f.items.get(1).relations.find(relation => relation.rel === 'AttachedFile').attributes.name = 'guide.docx';
+  await updateContext(roots, input, {client: f.client, readers: {docx: async ({hash}) => ({hash, reader: 'fixture', coverage: 'complete', parts: [{location: 'section 1', text: 'Old document evidence'}]})}});
+  const oldHash = readContext(roots, 'checkout').sources.find(item => item.kind === 'attachment').hash;
+  f.items.get(1).rev++; const newBytes = 'Changed synthetic document bytes';
+  put(roots, '.harness/integrations.json', JSON.stringify({version: 1, ado: f.client.configuration})); put(roots, 'request.json', JSON.stringify(input));
+  function transport(url, options) {
+    if (url.includes('/attachments/')) return new Response(data.bytes);
+    const body = url.includes('/projects/') ? data.project : url.includes('/states?') ? {value: [{name: 'Active'}]}
+      : url.includes('/workitemtypes?') ? {value: [{name: 'Story', referenceName: 'Custom.Story'}]}
+      : url.includes('/wiql?') ? {workItems: data.items.map(item => ({id: item.id}))}
+      : url.includes('/workitemsbatch?') ? {value: JSON.parse(options.body).ids.map(id => {const item = data.items.find(item => item.id === id); return {...item, fields: {...item.fields, 'System.Rev': item.rev}};})}
+      : data.items.find(item => item.id === Number(url.match(/workitems\/(\d+)/i)[1]));
+    return new Response(JSON.stringify(body));
+  }
+  const mock = 'data:text/javascript,' + encodeURIComponent('const data = ' + JSON.stringify({project: f.project, items: [...f.items.values()], bytes: newBytes}) + '; globalThis.fetch = ' + transport.toString());
+  const cli = (...args) => spawnSync(process.execPath, ['--import', mock, join(roots.packageRoot, 'scripts/project-context.mjs'), ...args, '--project-root', roots.projectRoot], {encoding: 'utf8', windowsHide: true, env: {...process.env, ADO_ACCESS: crypto.randomUUID()}});
+  const staged = cli('stage', '--request', 'request.json'); assert.equal(staged.status, 2, staged.stderr);
+  const receipt = JSON.parse(staged.stdout).sources.sample.find(item => item.kind === 'attachment');
+  assert.equal(receipt.hash, oldHash); assert.equal(receipt.attemptedHash, digest(newBytes));
+  assert.equal(digest(readFileSync(join(roots.projectRoot, receipt.localPath))), receipt.attemptedHash);
+  input.ado.attachments = [{id: receipt.id, attachmentId: receipt.attachmentId, extraction: {hash: receipt.attemptedHash, reader: 'fixture', coverage: 'complete', parts: [{location: 'section 1', text: 'New document evidence'}]}}];
+  put(roots, 'request.json', JSON.stringify(input)); const saved = cli('update', '--request', 'request.json'); assert.equal(saved.status, 0, saved.stderr);
+  const attachment = readContext(roots, 'checkout').sources.find(item => item.kind === 'attachment'); assert.equal(attachment.hash, digest(newBytes)); assert.equal(attachment.attemptedHash, undefined); assert.equal(attachment.contributions[0].text, 'New document evidence');
+});
+
 test('CLI save exposes staged attachment paths beyond the preview through every bounded catalog page', async t => {
   const {roots} = fixture(t), input = {...request(), ado: {sourceId: 'backlog'}};
   put(roots, 'request.json', JSON.stringify(input));
