@@ -20,6 +20,9 @@
 - Add bounded English/Arabic lexical search, source catalog pagination and selective
   ADO/file refresh. Keep the PAT in `.env` and organization/project/credentialRef in
   `.harness/integrations.json`; each context binds to one organization and project GUID.
+- Page complete live type/state choices with `context metadata`. CLI updates stage
+  included attachments for paginated reader receipts; reuse checks reader recipes
+  and staged byte hashes before accepting cached attachment evidence.
 - Retrieve and refresh scoped consumer context with located repository/file facts,
   explicit authority/status, deduplicated provenance, partial/stale coverage and
   recoverable snapshots. Reuse available host readers for image/office/PDF sources.

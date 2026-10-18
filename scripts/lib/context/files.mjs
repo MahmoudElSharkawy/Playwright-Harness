@@ -77,13 +77,18 @@ function nativeExtraction(bytes, extension, source) {
   }
   return {parts, coverage: incomplete ? 'partial' : 'complete'};
 }
+export function contextReaderRecipe(source, readers = {}, previous) {
+  const extension = extname(source.path ?? source.name ?? '').slice(1).toLowerCase();
+  const native = textual.has(extension) || ['json', 'csv', 'tsv'].includes(extension);
+  const extractionRecipe = source.extraction ? fingerprint(source.extraction) : readers[extension] ? fingerprint(String(readers[extension].recipe ?? readers[extension])) : native ? 'native' : previous?.extractionRecipe ?? 'host-required';
+  const recipe = fingerprint({version: RECIPE, extension, extractionRecipe, encoding: source.encoding ?? 'utf-8', delimiter: source.delimiter ?? null, authority: source.authority ?? null});
+  return {recipe, extractionRecipe};
+}
 export async function extractContextBytes(source, bytes, {readers = {}, now = new Date().toISOString(), previous} = {}) {
   requireThat(Buffer.isBuffer(bytes) && bytes.length <= 8 * 1024 * 1024, 'Context file exceeds the 8 MiB reader bound.');
   const hash = digest(bytes), extension = extname(source.path ?? source.name ?? '').slice(1).toLowerCase();
   if (source.extraction) requireThat(source.extraction.hash === hash, 'Context extraction hash does not match current file bytes.');
-  const native = textual.has(extension) || ['json', 'csv', 'tsv'].includes(extension);
-  const extractionRecipe = source.extraction ? fingerprint(source.extraction) : readers[extension] ? fingerprint(String(readers[extension].recipe ?? readers[extension])) : native ? 'native' : previous?.extractionRecipe ?? 'host-required';
-  const recipe = fingerprint({version: RECIPE, extension, extractionRecipe, encoding: source.encoding ?? 'utf-8', delimiter: source.delimiter ?? null, authority: source.authority ?? null});
+  const {recipe, extractionRecipe} = contextReaderRecipe(source, readers, previous);
   const record = {id: source.id, kind: source.kind, origin: source.origin ?? 'user-supplied', ...(source.path ? {path: source.path} : {}), ...(source.name ? {name: source.name} : {}), ...(source.parentId ? {parentId: source.parentId} : {}), ...(source.collection ? {collection: source.collection} : {}), hash, recipe, recipeVersion: RECIPE, extractionRecipe, retrievedAt: now};
   if (previous?.status === 'verified' && previous.coverage === 'complete' && previous.hash === hash && previous.recipe === recipe) return {...previous, ...record, verifiedAt: now};
   let extraction = source.extraction;

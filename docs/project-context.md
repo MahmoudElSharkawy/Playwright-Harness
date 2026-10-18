@@ -13,6 +13,7 @@ a selected-source request in the consumer's ignored `.harness/runs/`:
 
 ```sh
 npx --no pom-harness context retrieve --request .harness/runs/context-request.json
+npx --no pom-harness context metadata --request .harness/runs/context-request.json
 npx --no pom-harness context update --request .harness/runs/context-request.json
 npx --no pom-harness context read --id checkout-qa
 npx --no pom-harness context search --id checkout-qa --query "payment validation"
@@ -91,6 +92,12 @@ targets become gaps; their URLs never trigger another retrieval.
 Metadata discovery reads the selected project's current types and each type's states
 on every retrieval/update. Stable reference names/IDs are preferred; display names
 are exact fallbacks. No type, state or completion category is assumed irrelevant.
+Use `context metadata --request <request>` to page every type/state before selecting
+a policy. It returns up to eight flat type/state records within 16 KiB, with type
+IDs on state records and a continuation cursor. Repeat with `--cursor` until absent;
+changed metadata or project identity invalidates the cursor. Discovery reads no
+work-item content and saves neither context nor policy. Selection/repair previews
+point to this command when their metadata is abbreviated.
 
 A policy has required `excludeTypes` and `excludeStates` arrays, and optional
 `includeTypes` and `includeStates` restrictions. State rules name a type or explicitly
@@ -168,6 +175,10 @@ incomplete inputs require narrower extraction and explicit coverage gaps.
 Transient retrieval remains unsaved. Its bounded preview includes source/hash receipts,
 evidence and omission counts. Narrow large requests or explicitly save and page/search
 the capture. Staging writes only selected attachment bytes into ignored run storage.
+The CLI `update` command also stages included attachments so every saved source
+receipt exposes its `localPath` through the paginated source catalog. Existing
+staged bytes are hash-checked before reuse; altered copies remain untouched while
+fresh bytes receive a new path.
 
 Version 1 reads remain nonmutating. The first explicit update backs up the original
 current/history files under `legacy/<original-fingerprint>/`, validates the source/fact

@@ -1,4 +1,4 @@
-import {existsSync, mkdirSync, openSync, closeSync, unlinkSync, writeSync, linkSync} from 'node:fs';
+import {existsSync, mkdirSync, openSync, closeSync, unlinkSync, writeSync, linkSync, lstatSync, readFileSync} from 'node:fs';
 import {dirname, extname} from 'node:path';
 import {consumerPath} from '../consumer-paths.mjs';
 import {identifier, keys} from '../project-config.mjs';
@@ -8,7 +8,7 @@ import {createAdoClient} from '../integrations/ado-client.mjs';
 import {loadAdoConfiguration, adoGuid, readConsumerJson, validateAdoConfiguration} from '../integrations/config.mjs';
 import {createAdoContextSource, validateContextPolicy, validateContextScope, resolveContextPolicy} from '../integrations/ado-context.mjs';
 import {htmlToText} from '../integrations/ado-steps.mjs';
-import {readFileContext, extractContextBytes, contextParts} from './files.mjs';
+import {readFileContext, extractContextBytes, contextParts, contextReaderRecipe} from './files.mjs';
 import {randomUUID} from 'node:crypto';
 import {contextData, facts, inactive, RECIPE, restoreText} from './model.mjs';
 import {contextFile, readManifest, loadSnapshot, baseline, prepareSnapshot, backupLegacy, storeFor, capturedCustom} from './storage.mjs';
@@ -58,6 +58,13 @@ function destination(url, client, project, resource) {
   }
 }
 const projectKey = project => fingerprint({organizationUrl: project.organizationUrl, id: project.id});
+function stagedBytesMatch(roots, source, contextId) {
+  if (!source.localPath?.startsWith('.harness/runs/context/' + contextId + '/')) return false;
+  try {
+    const path = consumerPath(roots, source.localPath), stat = lstatSync(path);
+    return stat.isFile() && stat.size <= 8 * 1024 * 1024 && digest(readFileSync(path)) === source.hash;
+  } catch {return false;}
+}
 async function bindProject(roots, input, manifest, options) {
   const legacyAdo = manifest?.version === 1 && manifest.sources.some(source => source.collection);
   if (!input.ado && !manifest?.adoProject && !legacyAdo) return {};
@@ -87,9 +94,12 @@ async function adoRecords(roots, input, previous, options, now) {
   const reuse = decision => {
     const source = old.get(collection + '-item-' + decision.id);
     return previous?.version === 2 && source?.status === 'verified' && source.coverage === 'complete' && source.recipeVersion === RECIPE && source.version === String(decision.rev)
-      && source.projectKey === projectKey(project) && (children.get(source.id) ?? []).every(child => child.status === 'verified' && child.coverage === 'complete' && child.recipeVersion === RECIPE && child.parentRevision === source.version && child.relationBinding
-        && (!input.attachments?.some(receipt => receipt.id === child.id) || fingerprint(input.attachments.find(receipt => receipt.id === child.id).extraction) === child.extractionRecipe)
-        && (!options.stageAttachments || child.localPath && existsSync(consumerPath(roots, child.localPath))));
+      && source.projectKey === projectKey(project) && (children.get(source.id) ?? []).every(child => {
+        const receipt = input.attachments?.find(entry => entry.id === child.id && entry.attachmentId.toLowerCase() === child.attachmentId);
+        return child.status === 'verified' && child.coverage === 'complete' && child.recipeVersion === RECIPE && child.parentRevision === source.version && child.relationBinding
+          && child.recipe === contextReaderRecipe({...child, extraction: receipt?.extraction}, options.readers, child).recipe
+          && (!options.stageAttachments || stagedBytesMatch(roots, child, options.contextId));
+      });
   };
   const result = await createAdoContextSource(client).retrieve({policy: input.policy ?? configuration.policy, scope: input.scope ?? configuration.scope ?? {}, previousMetadata: prior?.metadata, reuse, allowPartial: true});
   if (result.status !== 'READY') return {selectionRequired: {...result, sourceId: collection}};
@@ -128,7 +138,10 @@ async function adoRecords(roots, input, previous, options, now) {
       try {bytes = await client.attachment(attachmentId);} catch {records.push({...source, ...binding, attachmentId, status: 'unverified', coverage: 'attachment-inaccessible', retrievedAt: now, contributions: []}); continue;}
       let localPath;
       if (options.stageAttachments) {
-        const extension = extname(name).slice(1).toLowerCase(); localPath = '.harness/runs/context/' + options.contextId + '/' + attachmentSourceId + '-' + digest(bytes) + (/^[a-z0-9]{1,10}$/.test(extension) ? '.' + extension : '.bin');
+        const hash = digest(bytes), extension = extname(name).slice(1).toLowerCase(), suffix = /^[a-z0-9]{1,10}$/.test(extension) ? '.' + extension : '.bin';
+        const base = '.harness/runs/context/' + options.contextId + '/' + attachmentSourceId + '-' + hash; localPath = base + suffix;
+        // Preserve an altered local copy while publishing fresh, hash-verified reader input.
+        if (existsSync(consumerPath(roots, localPath)) && !stagedBytesMatch(roots, {localPath, hash}, options.contextId)) localPath = base + '-' + randomUUID() + suffix;
         const path = consumerPath(roots, localPath); if (!existsSync(path)) publishExclusive(path, bytes);
       }
       records.push({...await extractContextBytes(source, bytes, {...options, now, previous: old.get(attachmentSourceId)}), ...binding, attachmentId, ...(localPath ? {localPath} : {})});
@@ -142,6 +155,15 @@ async function adoRecords(roots, input, previous, options, now) {
   return {records, selection: {sourceId: collection, origin, project, scope: result.scope, effectivePolicy: result.policy, metadata: result.metadata, metadataVerifiedAt: now, metadataChanges: result.metadataChanges, ...result.selection}};
 }
 const withoutVerification = source => Object.fromEntries(Object.entries(source).filter(([key]) => !['retrievedAt', 'verifiedAt', 'revisionVerifiedAt', 'membershipVerifiedAt'].includes(key)));
+
+/** Discover live selectors without loading evidence, selecting items, or saving a context. */
+export async function readContextMetadata(roots, input, options = {}) {
+  validateRequest(input); requireThat(input.ado, 'Metadata discovery needs an ADO context request.');
+  const manifest = readManifest(roots, input.contextId);
+  if (manifest) requireThat(fingerprint(manifest.identity) === fingerprint(input.identity) && fingerprint(manifest.scope) === fingerprint(input.scope), 'Captured context identity/scope differs; choose the matching context identifier.');
+  const {client, project} = await bindProject(roots, input, manifest, options);
+  return {status: 'METADATA', saved: false, contextId: input.contextId, identity: input.identity, scope: input.scope, sourceId: input.ado.sourceId, adoProject: project, metadata: await createAdoContextSource(client).metadata()};
+}
 
 /** Live reads are explicit. Captured search/read never call this composition. */
 export async function retrieveContext(roots, input, options = {}) {

@@ -23,7 +23,8 @@ organization and resolved project GUID before retrieval; never reuse another pro
 under the same context ID. Owner notes live in `custom.json` and retain history.
 
 Before ADO content reads, refresh metadata and validate supplied/saved filters. Reuse
-valid choices. Missing policy requires live multi-select/text exclusions with **Exclude
+valid choices. Page all live selectors with `context metadata --request <request>`
+and its cursor before presenting an abbreviated selection. Missing policy requires live multi-select/text exclusions with **Exclude
 nothing**; unanswered prompts do not select everything. Request repair for unknown or
 removed selectors without discarding valid choices. New values follow the include/exclude
 semantics. Exclusions win, including conflicting includes; completion alone excludes nothing.

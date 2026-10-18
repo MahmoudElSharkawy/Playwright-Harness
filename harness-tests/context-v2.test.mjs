@@ -83,6 +83,97 @@ test('ADO refresh verifies membership/revisions and downloads only changed conte
   await assert.rejects(updateContext(roots, input, {client: f.client}), /project.*(identity|differs|mismatch)/i); assert(!f.calls.some(c => ['metadata', 'query', 'content', 'attachment'].includes(c[0]))); assert.deepEqual(readFileSync(current(roots)), before);
 });
 
+test('ADO attachment reuse checks the current reader recipe even when the parent revision is unchanged', async t => {
+  const {roots} = fixture(t), f = adoFixture(), input = {...request(), ado: {sourceId: 'backlog'}};
+  f.items.get(1).relations.find(relation => relation.rel === 'AttachedFile').attributes.name = 'guide.docx';
+  const read = version => Object.assign(async ({hash}) => ({hash, reader: version, coverage: 'complete', parts: [{location: 'section 1', text: `Attachment extraction ${version}`}]}), {recipe: version});
+  await updateContext(roots, input, {client: f.client, readers: {docx: read('docx-v1')}, now: '2026-10-01T00:00:00Z'});
+  f.calls.length = 0;
+  await updateContext(roots, input, {client: f.client, readers: {docx: read('docx-v2')}, now: '2026-10-02T00:00:00Z'});
+  assert.deepEqual(f.calls.filter(call => call[0] === 'content').map(call => call[1]), [1]);
+  assert.equal(f.calls.filter(call => call[0] === 'attachment').length, 1);
+  const attachment = readContext(roots, 'checkout').sources.find(item => item.kind === 'attachment');
+  assert.equal(attachment.reader, 'docx-v2'); assert.equal(attachment.verifiedAt, '2026-10-02T00:00:00Z');
+  assert.equal(attachment.contributions[0].text, 'Attachment extraction docx-v2');
+  f.calls.length = 0;
+  await updateContext(roots, input, {client: f.client, readers: {docx: read('docx-v2')}, now: '2026-10-03T00:00:00Z'});
+  assert(!f.calls.some(call => ['content', 'attachment'].includes(call[0])));
+  assert.equal(readContext(roots, 'checkout').sources.find(item => item.kind === 'attachment').verifiedAt, attachment.verifiedAt);
+});
+
+test('staging rechecks cached local bytes and repairs a changed staged copy without changing the saved snapshot', async t => {
+  const {roots} = fixture(t), f = adoFixture(), input = {...request(), ado: {sourceId: 'backlog'}};
+  await updateContext(roots, input, {client: f.client, stageAttachments: true});
+  const before = readFileSync(current(roots)), attachment = readContext(roots, 'checkout').sources.find(item => item.kind === 'attachment');
+  put(roots, attachment.localPath, 'Changed local bytes'); f.calls.length = 0;
+  const staged = await retrieveContext(roots, input, {client: f.client, stageAttachments: true});
+  const repaired = staged.snapshot.sources.find(item => item.kind === 'attachment');
+  assert(f.calls.some(call => call[0] === 'attachment'));
+  assert.equal(digest(readFileSync(join(roots.projectRoot, repaired.localPath))), repaired.hash);
+  assert.deepEqual(readFileSync(current(roots)), before); assert.equal(staged.saved, false);
+});
+
+test('CLI save exposes staged attachment paths beyond the preview through every bounded catalog page', async t => {
+  const {roots} = fixture(t), input = {...request(), ado: {sourceId: 'backlog'}};
+  put(roots, 'request.json', JSON.stringify(input));
+  put(roots, '.harness/integrations.json', JSON.stringify({version: 1, ado: {organizationUrl: 'https://ado.example.test', project: 'demo', credentialRef: 'ADO_ACCESS', context: {sources: {backlog: {policy: {excludeTypes: [], excludeStates: []}}}}}}));
+  function transport(url, options) {
+    const attachmentId = id => `00000000-0000-4000-8000-${String(id).padStart(12, '0')}`;
+    const item = id => ({id, rev: 1, fields: {'System.Id': id, 'System.Rev': 1, 'System.TeamProject': 'demo', 'System.WorkItemType': 'Story', 'System.State': 'Active', 'System.Title': `Story ${id}`}, relations: id > 8 ? [{rel: 'AttachedFile', url: `https://ado.example.test/demo/_apis/wit/attachments/${attachmentId(id)}`, attributes: {name: 'guide.docx'}}] : []});
+    if (url.includes('/attachments/')) return new Response('Synthetic document bytes');
+    const body = url.includes('/projects/') ? {id: '11111111-1111-4111-8111-111111111111', name: 'demo'}
+      : url.includes('/states?') ? {value: [{name: 'Active'}]}
+      : url.includes('/workitemtypes?') ? {value: [{name: 'Story', referenceName: 'Custom.Story'}]}
+      : url.includes('/wiql?') ? {workItems: Array.from({length: 20}, (_, index) => ({id: index + 1})).filter(entry => entry.id > Number(JSON.parse(options.body).query.match(/\[System.Id\] > (\d+)/)[1]))}
+      : url.includes('/workitemsbatch?') ? {value: JSON.parse(options.body).ids.map(item)}
+      : item(Number(url.match(/workitems\/(\d+)/i)[1]));
+    return new Response(JSON.stringify(body));
+  }
+  const mock = 'data:text/javascript,' + encodeURIComponent('globalThis.fetch = ' + transport.toString());
+  const cli = (...args) => spawnSync(process.execPath, ['--import', mock, join(roots.packageRoot, 'scripts/project-context.mjs'), ...args, '--project-root', roots.projectRoot], {encoding: 'utf8', windowsHide: true, env: {...process.env, ADO_ACCESS: crypto.randomUUID()}});
+  const staged = cli('stage', '--request', 'request.json'); assert.equal(staged.status, 2, staged.stderr); assert(!existsSync(current(roots))); assert(Buffer.byteLength(staged.stdout) <= 16384);
+  const saved = cli('update', '--request', 'request.json'); assert.equal(saved.status, 2, saved.stderr); assert.equal(JSON.parse(saved.stdout).saved, true);
+  const receipts = []; let cursor;
+  do {
+    const page = cli('search', '--id', 'checkout', '--catalog', 'sources', '--limit', '3', ...(cursor ? ['--cursor', cursor] : []));
+    assert.equal(page.status, 0, page.stderr); assert(Buffer.byteLength(page.stdout) <= 16384);
+    const result = JSON.parse(page.stdout); assert(result.results.length <= 3); receipts.push(...result.results); cursor = result.cursor;
+  } while (cursor);
+  assert.equal(receipts.length, 32); const attachments = receipts.filter(item => item.kind === 'attachment'); assert.equal(attachments.length, 12);
+  for (const attachment of attachments) {
+    assert(attachment.localPath, 'Every saved attachment must expose its staged bytes to the host reader.');
+    assert.equal(digest(readFileSync(join(roots.projectRoot, attachment.localPath))), attachment.hash);
+  }
+});
+
+test('CLI live metadata pages expose every type/state before policy selection and reject changed-metadata cursors', t => {
+  const {roots} = fixture(t), input = {...request(), ado: {sourceId: 'backlog'}};
+  put(roots, 'request.json', JSON.stringify(input));
+  const configuration = JSON.stringify({version: 1, ado: {organizationUrl: 'https://ado.example.test', project: 'demo', credentialRef: 'ADO_ACCESS'}});
+  put(roots, '.harness/integrations.json', configuration);
+  function transport(url) {
+    const body = url.includes('/projects/') ? {id: '11111111-1111-4111-8111-111111111111', name: 'demo'}
+      : url.includes('/states?') ? {value: Array.from({length: process.env.CHANGED_METADATA ? 10 : 9}, (_, index) => ({id: 'state-' + (index + 1), name: 'State ' + (index + 1)}))}
+      : url.includes('/workitemtypes?') ? {value: Array.from({length: 9}, (_, index) => ({referenceName: 'Custom.Type' + (index + 1), name: 'Type ' + (index + 1)}))} : undefined;
+    if (!body) throw new Error('Metadata discovery must not read work items or attachments.');
+    return new Response(JSON.stringify(body));
+  }
+  const mock = 'data:text/javascript,' + encodeURIComponent('globalThis.fetch = ' + transport.toString());
+  const cli = (args, extra = {}) => spawnSync(process.execPath, ['--import', mock, join(roots.packageRoot, 'scripts/project-context.mjs'), ...args, '--project-root', roots.projectRoot], {encoding: 'utf8', windowsHide: true, env: {...process.env, ADO_ACCESS: crypto.randomUUID(), CHANGED_METADATA: '', ...extra}});
+  const selection = cli(['retrieve', '--request', 'request.json']); assert.equal(selection.status, 2, selection.stderr);
+  assert.match(JSON.parse(selection.stdout).metadataContinuation, /context metadata/);
+  const entries = []; let cursor, firstCursor;
+  do {
+    const page = cli(['metadata', '--request', 'request.json', ...(cursor ? ['--cursor', cursor] : [])]);
+    assert.equal(page.status, 0, page.stderr); assert(Buffer.byteLength(page.stdout) <= 16384);
+    const result = JSON.parse(page.stdout); assert.equal(result.total, 90); assert(result.results.length <= 8); entries.push(...result.results); cursor = result.cursor; firstCursor ??= cursor;
+  } while (cursor);
+  assert.equal(entries.length, 90); assert.equal(entries.filter(item => item.kind === 'type').length, 9);
+  assert(entries.some(item => item.kind === 'state' && item.typeId === 'Custom.Type9' && item.id === 'state-9'));
+  const stale = cli(['metadata', '--request', 'request.json', '--cursor', firstCursor], {CHANGED_METADATA: '1'}); assert.equal(stale.status, 1); assert.match(stale.stderr, /cursor/i);
+  assert(!existsSync(current(roots))); assert.equal(readFileSync(join(roots.projectRoot, '.harness/integrations.json'), 'utf8'), configuration);
+});
+
 test('incomplete membership retains stale support; foreign and excluded links are never followed', async t => {
   const {roots} = fixture(t), f = adoFixture(), input = {...request(), ado: {sourceId: 'backlog'}};
   f.items.get(1).relations.push({rel: 'System.LinkTypes.Related', url: 'https://other.example.test/foreign/_apis/wit/workItems/99'});

@@ -82,6 +82,12 @@ files and work items remain observations. Use `current` for verified source code
 
 ## ADO metadata and policy
 
+Use `context metadata --request <request>` to discover every live type/state in
+bounded pages. Each state record names its type ID. Follow every returned cursor
+before presenting grouped multi-select/text choices; an omitted value is not an
+exclusion. This command reads no work-item content and saves no context or policy.
+Changed project metadata invalidates its cursor; restart discovery in that case.
+
 Add `"ado": {"sourceId": "backlog"}` to select the configured ADO context source.
 Keep the token in ignored `.env`; select organization and project in the existing
 `.harness/integrations.json`, which remains authoritative. The resolved organization
@@ -144,7 +150,10 @@ are fetched, from verified configured-collection attachment endpoints, into igno
 `.harness/runs/context/<context-id>/`. The compact `sources.sample` receipts return `localPath`, `attachmentId`, source
 `id` and hash for exact bytes. Omitted sources require a narrower request, or an
 explicitly saved context followed by `context search --id <id> --catalog sources`
-and its revision-bound cursor. Staging writes evidence files, not a saved context.
+and its revision-bound cursor. CLI `update` also stages included attachment bytes,
+so every saved receipt exposes the verified `localPath`. Staging alone writes
+evidence files without saving context. Existing staged copies are hash-checked;
+an altered copy is preserved and fresh bytes are staged at a new path.
 
 Read each staged file with its available format reader. Supply receipts in request
 `ado.attachments`: `[{"id":"<returned source ID>","attachmentId":"<GUID>","extraction":{...}}]`.
