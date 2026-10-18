@@ -20,6 +20,7 @@ export const DISCOVERY_DIRS=['.agents/skills','.claude/skills'];
 export const LINKS_FILE='.harness/links.json';
 const BLOCK_START='<!-- playwright-pom-harness -->',BLOCK_END='<!-- /playwright-pom-harness -->';
 const instruction=`${BLOCK_START}\nUse the harness skills linked under \`.claude/skills\` and \`.agents/skills\`; resolve linked skills to their real package path for references. To install, update or configure the harness, follow the \`harness-setup\` skill. If the harness skills are missing, run \`npx --no pom-harness setup\`. Keep package content immutable and consumer state under \`.harness\`. Preserve this project's existing instructions and code. Imported team libraries are derive-only.\n\n`+
+  `Use \`project-context\` for explicit source retrieval and \`context-update\` to save, update or refresh project/application context. Ordinary questions about captured context read the snapshot only; they do not refresh sources or write files.\n\n`+
   `Never commit or push directly to the default branch. Reuse the ongoing feature branch and add commits; otherwise create one named \`automation/<source-id>-<slug>\` for generated suites, \`harness/<topic>\` for harness setup or updates, \`feature/<topic>\` for new framework code, or \`fix/<topic>\` for fixes. Deliver through a pull request, and commit, push or open one only with the user's authorization.\n${BLOCK_END}`;
 /** The managed block this version writes; releases record its digest in scripts/managed-digests.json. */
 export const INSTRUCTION_BLOCK=instruction;
@@ -209,7 +210,7 @@ export function adoptProject({projectRoot,installedRoot=packageRoot,environment,
     planFile(file,(normalized.slice(0,start)+instruction+normalized.slice(end+BLOCK_END.length)).replaceAll('\n',eol),{merge:true});
   }
   const ignorePath=consumerPath(roots,'.gitignore'),ignore=existsSync(ignorePath)?readFileSync(ignorePath,'utf8'):'';
-  const ignoreLines=['/.harness/runs/','/.harness/state/','/.harness/knowledge-candidates/','/.harness/installation.json',
+  const ignoreLines=['/.harness/runs/','/.harness/state/','/.harness/context/','/.harness/knowledge-candidates/','/.harness/installation.json',
     '.env','.env.*','!.env.example','.claude/settings.local.json','*.pfx','*.key',
     'node_modules/','test-results/','playwright-report/','blob-report/','playwright/.cache/','playwright/.auth/',
     'allure-report/','allure-results/','reports/','ctrf/','.playwright-cli/','/executions/','/execution-tests/','/test/',

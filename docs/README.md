@@ -14,6 +14,7 @@ explains how the harness and the automation it helps you author fit together.
 | Install, check readiness, update or roll back | [Getting started](getting-started.md) |
 | Understand the expected POM code and project ownership | [Architecture](architecture.md) |
 | Configure environments, targets, secrets and project knowledge | [Configuration](configuration.md) |
+| Retrieve or refresh project/application context with traceable sources | [Project context](project-context.md) |
 | Turn local scenarios or ADO cases into reviewed automation | [Automation workflow](PIPELINE.md) |
 | Run ADO manual cases without generating code | [Manual execution](manual-execution.md) |
 | Connect Azure DevOps and deliver results or code | [Azure DevOps integration](azure-devops.md) |

@@ -1,5 +1,35 @@
 # Changelog
 
+## Unreleased — Project context retrieval and refresh
+
+### Upgrade actions
+
+- Re-run setup after upgrading to expose `project-context` and `context-update` to
+  Claude Code and Codex. Existing customized instructions and skills still require
+  a reviewed merge. Captured context/history is local and ignored by default.
+- Optional ADO context policies live under `ado.context.sources` in the existing
+  `.harness/integrations.json`. Choose exclusions from live metadata once per source;
+  no type/state or completion filter is assumed.
+
+### Changes
+
+- Context CLI output is now compact. Use `context search` for bounded evidence and
+  `context export --out` for complete JSON. The first explicit update migrates v1
+  into scoped immutable JSON objects and a derived SQLite FTS5 index, preserving
+  original backups and history. Legacy ADO migration requires fresh recapture.
+- Add bounded English/Arabic lexical search, source catalog pagination and selective
+  ADO/file refresh. Keep the PAT in `.env` and organization/project/credentialRef in
+  `.harness/integrations.json`; each context binds to one organization and project GUID.
+- Page complete live type/state choices with `context metadata`. CLI updates stage
+  included attachments for paginated reader receipts; reuse checks reader recipes
+  and staged byte hashes before accepting cached attachment evidence.
+- Retrieve and refresh scoped consumer context with located repository/file facts,
+  explicit authority/status, deduplicated provenance, partial/stale coverage and
+  recoverable snapshots. Reuse available host readers for image/office/PDF sources.
+- Classify ADO work items before ingesting descriptions or linked attachments;
+  validate live metadata and report missing/invalid policy selections. Keep ordinary
+  snapshot questions read-only, without source retrieval or verification-date writes.
+
 ## 3.7.1 — Current reports and optional Allure video
 
 ### Upgrade actions

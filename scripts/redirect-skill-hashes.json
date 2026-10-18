@@ -142,5 +142,11 @@
   ],
   ".claude/skills/maintain-test/SKILL.md": [
     "aab1f72a20480d025dc515dc25f42c76fdfc75e25463bebb96ac82fcc02ad53c"
+  ],
+  ".claude/skills/project-context/SKILL.md": [
+    "9158e336c0538910e5f6265c5977f1b2cb7fb3d9225f7bc1b4e7bea800faf866"
+  ],
+  ".claude/skills/context-update/SKILL.md": [
+    "f17d98d1b20de5f49164915f8635baddadbc1153e2bc6f59e355518c19331cb3"
   ]
 }

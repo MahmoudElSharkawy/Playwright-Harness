@@ -193,6 +193,7 @@ inline definitions are valid peers; catalog registration is not a prerequisite.
 |---|---|
 | `.harness/project.json`, `.harness/targets.json` | Consumer settings with secret references only |
 | `.harness/integrations.json` | Optional [ADO settings](azure-devops.md) |
+| `.harness/context/` | Captured [project context](project-context.md), source provenance and immutable history; ignored by default |
 | `.harness/sources/` | Versioned scenario inputs |
 | `.harness/knowledge/` | Reviewed, sanitized knowledge |
 | `.harness/knowledge-candidates/` | Unreviewed observations; ignored |
