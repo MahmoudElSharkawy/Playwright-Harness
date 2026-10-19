@@ -1,0 +1,5 @@
+interface:
+  display_name: "Captured Context Q&A"
+  short_description: "Answer only from a saved project snapshot"
+policy:
+  allow_implicit_invocation: false

@@ -52,7 +52,7 @@ router) and follow its routing table.
 | "Install / update the harness", "configure the harness with my project information", add an environment, target, secret or CI pipeline, roll the harness back | `harness-setup` |
 | Folder layout, naming, where new code belongs, or a full MR/code review | `pom-architecture` |
 | Retrieve source-backed project/application context | `project-context` |
-| Answer natural-language project questions, summaries or related follow-ups from captured context, even when evidence is missing | `context-qa` — clarify ambiguous scope; never fetch outside evidence or refresh silently |
+| Explicitly invoke snapshot-only Q&A | `context-qa` — only for the invoked request and its clarifications; ordinary questions and later messages use normal workflows |
 | Save, update or refresh project/application context | `context-update` — ordinary captured-context questions do not refresh sources |
 
 ## Automation workflow

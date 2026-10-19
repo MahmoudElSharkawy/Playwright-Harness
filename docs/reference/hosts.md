@@ -23,10 +23,13 @@ Both hosts expose canonical `project-context`, `context-update` and `context-qa`
 the same [context contract](../project-context.md), metadata-driven ADO selection and
 hash-bound file-reader receipts. Reader availability varies by host; unsupported or
 partial extraction stays visible. Source retrieval and refresh are explicit workflows;
-ordinary captured-context questions read saved snapshots without fetching references.
-The managed instructions route natural-language project questions and related
-follow-ups to `context-qa`, even when the answer is absent. Both hosts use the same
-local read/search commands and [captured-only Q&A boundary](../context-qa.md).
+explicitly invoked Q&A reads saved snapshots without fetching references.
+The managed instructions activate `context-qa` only on explicit user invocation.
+Claude Code uses `disable-model-invocation: true` in the canonical skill frontmatter;
+Codex uses `policy.allow_implicit_invocation: false` in its `agents/openai.yaml`.
+Ordinary project, Git, business and general questions use normal workflows. The
+[captured-only Q&A boundary](../context-qa.md) covers only the invoked request and
+necessary clarifications; another snapshot-only answer requires reinvocation.
 
 Discovery alone is not behavioral proof. A host must actually load/read the canonical
 skill and references, execute the requested task and leave package content unchanged.
