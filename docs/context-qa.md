@@ -33,6 +33,11 @@ Explicit invocation uses the discovered `context-qa` name, for example
 
 ## Evidence and answers
 
+Call `<resolved-package-root>/scripts/project-context.mjs` with Node and an explicit
+`--project-root <consumer>` for `read` and `search`. Do not launch Q&A through a
+package manager: even `npx --no` can consult a registry for a missing command.
+If the installed runner is absent, report that limitation without downloading it.
+
 Read a compact overview, then search captured terms, source IDs, topics or work-item
 IDs. Use bounded pages and preserve the revision across one answer. A follow-up
 can reuse the selected scope but must obtain evidence supporting its own claims.

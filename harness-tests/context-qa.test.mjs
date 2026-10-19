@@ -7,7 +7,7 @@ import net from 'node:net';
 import childProcess from 'node:child_process';
 import {syncBuiltinESMExports} from 'node:module';
 import {join, dirname, resolve, relative, isAbsolute} from 'node:path';
-import {fileURLToPath} from 'node:url';
+import {fileURLToPath, pathToFileURL} from 'node:url';
 import {fixture} from './fixtures/execution-core.mjs';
 import {updateContext, readContextOverview, searchContext} from '../scripts/lib/context/index.mjs';
 import {readManifest, storeFor} from '../scripts/lib/context/storage.mjs';
@@ -139,6 +139,47 @@ test('missing, empty and corrupt context or indexes fail without retrieval, repa
   fs.writeFileSync(file, '{corrupt'); const corrupt = files(roots.projectRoot);
   capturedOnly(roots, () => assert.throws(() => readContextOverview(roots, 'login-qa'), /unreadable|invalid/i));
   assert.deepEqual(files(roots.projectRoot), corrupt);
+});
+
+test('direct installed CLI reads captured data without source/configuration reads, network, subprocesses or writes', async t => {
+  const {roots} = fixture(t); put(roots, 'login.txt', 'Login requires an employee ID.');
+  await updateContext(roots, request([source('login', 'login.txt')]));
+  fs.unlinkSync(join(roots.projectRoot, 'login.txt'));
+  put(roots, '.npmrc', 'invalid package manager configuration must not be read');
+  const preload = put(roots, '.harness/runs/qa-audit.mjs', `
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import http from 'node:http';
+import https from 'node:https';
+import net from 'node:net';
+import child from 'node:child_process';
+import {syncBuiltinESMExports} from 'node:module';
+import {resolve, relative, isAbsolute} from 'node:path';
+const captured = ${JSON.stringify(join(roots.projectRoot, '.harness/context/login-qa'))};
+const consumer = ${JSON.stringify(roots.projectRoot)};
+const read = fs.readFileSync;
+fs.readFileSync = (path, ...args) => {
+  if (typeof path !== 'number') {
+    const file = resolve(String(path)), rel = relative(consumer, file);
+    if (!isAbsolute(rel) && rel !== '..' && !rel.startsWith('..' + (process.platform === 'win32' ? '\\\\' : '/')))
+      assert(file.startsWith(captured + (process.platform === 'win32' ? '\\\\' : '/')), 'Outside captured data read');
+  }
+  return read(path, ...args);
+};
+const deny = () => {throw new Error('Forbidden Q&A activity');};
+for (const key of ['writeFileSync','appendFileSync','mkdirSync','renameSync','unlinkSync','rmSync','copyFileSync']) fs[key] = deny;
+for (const object of [http,https]) for (const key of ['request','get']) object[key] = deny;
+for (const key of ['connect','createConnection']) net[key] = deny;
+for (const key of ['spawn','spawnSync','exec','execSync','execFile','execFileSync']) child[key] = deny;
+globalThis.fetch = deny; syncBuiltinESMExports();
+`);
+  const before = files(roots.projectRoot);
+  for (const args of [['read'], ['search', '--query', 'employee']]) {
+    const result = childProcess.spawnSync(process.execPath, ['--import', pathToFileURL(preload).href, join(roots.packageRoot, 'scripts/project-context.mjs'), ...args, '--id', 'login-qa', '--project-root', roots.projectRoot], {encoding: 'utf8', windowsHide: true, timeout: 30000});
+    assert.equal(result.status, 0, result.stderr); const output = JSON.parse(result.stdout);
+    assert(['CAPTURED', 'MATCHES'].includes(output.status)); assert.equal(output.contextId, 'login-qa');
+  }
+  assert.deepEqual(files(roots.projectRoot), before);
 });
 
 test('explicit update is separate; subsequent Q&A identifies the new revision and rejects old citations/cursors', async t => {

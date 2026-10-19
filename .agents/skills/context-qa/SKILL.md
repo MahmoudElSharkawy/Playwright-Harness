@@ -24,14 +24,17 @@ never as evidence about the consumer project.
    If the project, application, environment or follow-up referent is ambiguous,
    ask one focused clarification before reading evidence. Do not scan other
    projects or choose the first snapshot. If no ID is established, ask for it.
-2. Run the existing local commands from that consumer, using the installed package:
+2. Call the existing installed script directly. Substitute the resolved package
+   path and selected consumer root:
 
    ```sh
-   npx --no pom-harness context read --id <context-id>
-   npx --no pom-harness context search --id <context-id> --query "<captured terms>"
+   node "<package-root>/scripts/project-context.mjs" read --id <context-id> --project-root "<consumer>"
+   node "<package-root>/scripts/project-context.mjs" search --id <context-id> --query "<captured terms>" --project-root "<consumer>"
    ```
 
-   An explicit `--project-root <consumer>` is available. Check the overview's
+   Do not use a package manager to discover or launch the runner: `npx --no` can
+   consult a registry before refusing a missing package. An absent installed
+   script is a limitation, never permission to download it. Check the overview's
    identity, scope, revision, capture date, coverage and gaps against the intended
    project. A mismatch requires clarification, never a cross-project fallback.
 3. Search only the selected capture. Use bounded queries, captured synonyms,
