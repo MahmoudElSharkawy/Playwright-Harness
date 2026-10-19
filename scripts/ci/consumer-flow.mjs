@@ -127,7 +127,7 @@ flow('C1', 'An empty folder gets the harness and the starter', () => {
   assert(!existsSync(join(c1, name)), 'The downloaded archive stayed in the project folder.');
   const report = check(c1); assert.equal(report.exit, 0, report.errors.join(' ')); noDrift(report);
   for (const prefix of ['skills', 'generation verification']) assert.equal(feature(report, prefix), 'ready', `${prefix} is not ready.`);
-  for (const rel of ['.claude/skills/test-data', '.agents/skills/harness-setup', '.claude/skills/project-context', '.agents/skills/context-update']) assert.equal(linked(c1, rel), installedSkill(c1, rel.split('/').pop()));
+  for (const rel of ['.claude/skills/test-data', '.agents/skills/harness-setup', '.claude/skills/project-context', '.agents/skills/context-update', '.claude/skills/context-qa', '.agents/skills/context-qa']) assert.equal(linked(c1, rel), installedSkill(c1, rel.split('/').pop()));
   assert.equal(run([join(c1, 'node_modules/typescript/bin/tsc'), '--noEmit', '-p', 'tsconfig.json'], c1).status, 'PASS', 'The starter does not typecheck.');
   assert.equal(run([join(c1, 'node_modules/@playwright/test/cli.js'), 'test', '--list', '--pass-with-no-tests'], c1).status, 'PASS', 'The starter cannot list tests.');
   write(c1, {'.harness/sources/scenarios.json': JSON.stringify({version: 1, id: 'synthetic', title: 'Synthetic suite', scenarios: [{id: 'case-1', title: 'Synthetic observation', steps: [{action: 'Observe the fixture', expected: ['The fixture is visible']}]}]}) + '\n',
