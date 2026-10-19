@@ -155,17 +155,22 @@ import net from 'node:net';
 import child from 'node:child_process';
 import {syncBuiltinESMExports} from 'node:module';
 import {resolve, relative, isAbsolute} from 'node:path';
+import {fileURLToPath} from 'node:url';
 const captured = ${JSON.stringify(join(roots.projectRoot, '.harness/context/login-qa'))};
 const consumer = ${JSON.stringify(roots.projectRoot)};
-const read = fs.readFileSync;
-fs.readFileSync = (path, ...args) => {
-  if (typeof path !== 'number') {
-    const file = resolve(String(path)), rel = relative(consumer, file);
-    if (!isAbsolute(rel) && rel !== '..' && !rel.startsWith('..' + (process.platform === 'win32' ? '\\\\' : '/')))
-      assert(file.startsWith(captured + (process.platform === 'win32' ? '\\\\' : '/')), 'Outside captured data read');
-  }
-  return read(path, ...args);
-};
+for (const key of ['readFileSync','openSync']) {
+  const original = fs[key];
+  fs[key] = (...args) => {
+    const path = args[0];
+    if (typeof path !== 'number') {
+      const file = resolve(path instanceof URL ? fileURLToPath(path) : String(path)), rel = relative(consumer, file);
+      if (!isAbsolute(rel) && rel !== '..' && !rel.startsWith('..' + (process.platform === 'win32' ? '\\\\' : '/')))
+        assert(file.startsWith(captured + (process.platform === 'win32' ? '\\\\' : '/')), 'Outside captured data read');
+    }
+    if (key === 'openSync') assert(['r','rs'].includes(args[1]), 'Q&A must open files read-only');
+    return original(...args);
+  };
+}
 const deny = () => {throw new Error('Forbidden Q&A activity');};
 for (const key of ['writeFileSync','appendFileSync','mkdirSync','renameSync','unlinkSync','rmSync','copyFileSync']) fs[key] = deny;
 for (const object of [http,https]) for (const key of ['request','get']) object[key] = deny;
@@ -178,6 +183,12 @@ globalThis.fetch = deny; syncBuiltinESMExports();
     const result = childProcess.spawnSync(process.execPath, ['--import', pathToFileURL(preload).href, join(roots.packageRoot, 'scripts/project-context.mjs'), ...args, '--id', 'login-qa', '--project-root', roots.projectRoot], {encoding: 'utf8', windowsHide: true, timeout: 30000});
     assert.equal(result.status, 0, result.stderr); const output = JSON.parse(result.stdout);
     assert(['CAPTURED', 'MATCHES'].includes(output.status)); assert.equal(output.contextId, 'login-qa');
+  }
+  const outside = JSON.stringify(pathToFileURL(join(roots.projectRoot, '.npmrc')).href);
+  const captured = JSON.stringify(pathToFileURL(join(roots.projectRoot, '.harness/context/login-qa/current.json')).href);
+  for (const attack of [`fs.openSync(new URL(${outside}), 'r')`, `fs.readFileSync(new URL(${outside}))`, `fs.openSync(new URL(${captured}), 'w')`]) {
+    const result = childProcess.spawnSync(process.execPath, ['--import', pathToFileURL(preload).href, '--input-type=module', '--eval', `import fs from 'node:fs'; ${attack}`], {encoding: 'utf8', windowsHide: true, timeout: 30000});
+    assert.notEqual(result.status, 0); assert.match(result.stderr, /Outside captured data read|Q&A must open files read-only/);
   }
   assert.deepEqual(files(roots.projectRoot), before);
 });
