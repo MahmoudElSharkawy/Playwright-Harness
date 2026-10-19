@@ -1,6 +1,6 @@
 ---
 name: project-context
-description: "Retrieve traceable context for a consumer harness project or application: configuration, reusable POM methods, conventions, reviewed knowledge, selected ADO work items and supplied files. Use for project onboarding or an explicit source retrieval request. Ordinary questions about an existing captured snapshot do not trigger retrieval or writes; refresh requests use context-update."
+description: "Retrieve traceable context for a consumer harness project or application: configuration, reusable POM methods, conventions, reviewed knowledge, selected ADO work items and supplied files. Use for project onboarding or an explicit source retrieval request. Ordinary questions and follow-ups about the project use context-qa, including missing answers; they do not trigger retrieval or writes. Refresh requests use context-update."
 ---
 
 # Project context

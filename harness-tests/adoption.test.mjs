@@ -36,7 +36,7 @@ test('adoption links every canonical skill for both hosts, initializes consumer 
  const result=adopt(root);assert.equal(result.skills,shipped.length);
  assert.equal(readFileSync(join(root,'test/ado-suite-10/tc-7.md'),'utf8'),'Existing refinement');assert(!existsSync(join(root,'execution-tests')));
  assert(shipped.includes('automate-test'));assert(shipped.includes('maintain-test'));assert(!shipped.includes('automate-suite'));
- assert(shipped.includes('project-context'));assert(shipped.includes('context-update'));
+ assert(shipped.includes('project-context'));assert(shipped.includes('context-update'));assert(shipped.includes('context-qa'));
  for(const dir of ['.agents/skills','.claude/skills']) {
   for(const name of shipped)assert.equal(realpathSync(join(root,dir,name)),realpathSync(join(packageRoot,'.agents/skills',name)));
   assert.match(readFileSync(join(root,dir,'ROOTS.md'),'utf8'),/Read \[ROOTS\.md in the installed harness\]\(.+\.agents\/skills\/ROOTS\.md\)/);

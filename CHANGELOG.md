@@ -1,10 +1,10 @@
 # Changelog
 
-## Unreleased — Project context retrieval and refresh
+## 4.0.0 — Captured project context and Q&A
 
 ### Upgrade actions
 
-- Re-run setup after upgrading to expose `project-context` and `context-update` to
+- Re-run setup after upgrading to expose `project-context`, `context-update` and `context-qa` to
   Claude Code and Codex. Existing customized instructions and skills still require
   a reviewed merge. Captured context/history is local and ignored by default.
 - Optional ADO context policies live under `ado.context.sources` in the existing
@@ -13,6 +13,10 @@
 
 ### Changes
 
+- Automatically route project questions and related follow-ups to the read-only
+  `context-qa` skill on both hosts. Reuse local captured-context search, cite the
+  selected revision and located evidence, preserve uncertainty and disclose gaps
+  without reading original sources or silently refreshing.
 - Context CLI output is now compact. Use `context search` for bounded evidence and
   `context export --out` for complete JSON. The first explicit update migrates v1
   into scoped immutable JSON objects and a derived SQLite FTS5 index, preserving

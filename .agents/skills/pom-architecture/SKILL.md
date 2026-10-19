@@ -63,5 +63,6 @@ utils; nothing reaches upward or skips a layer (a spec never calls `page.locator
 | An `Apis<Domain>` or `Dbs<Domain>` service class | [service-classes](../service-classes/SKILL.md) |
 | Technical plumbing in `utils/` (logging, attachments, connections) | [utility-classes](../utility-classes/SKILL.md) |
 | Installing, updating or configuring the harness itself — environments, targets, secrets, CI | [harness-setup](../harness-setup/SKILL.md) |
+| Answer project questions or follow-ups from already captured context, including missing answers | [context-qa](../context-qa/SKILL.md) |
 | Retrieve source-backed project/application context | [project-context](../project-context/SKILL.md) |
 | Save, update or refresh project/application context | [context-update](../context-update/SKILL.md) |

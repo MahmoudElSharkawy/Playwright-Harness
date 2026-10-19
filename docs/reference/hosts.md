@@ -19,11 +19,14 @@ containment. Custom skills/instructions/settings are preserved; conflicts requir
 review. Mutable sources, knowledge and evidence belong to the consumer.
 See [ROOTS.md](../../.agents/skills/ROOTS.md).
 
-Both hosts expose canonical `project-context` and `context-update` skills. They share
+Both hosts expose canonical `project-context`, `context-update` and `context-qa` skills. They share
 the same [context contract](../project-context.md), metadata-driven ADO selection and
 hash-bound file-reader receipts. Reader availability varies by host; unsupported or
 partial extraction stays visible. Source retrieval and refresh are explicit workflows;
 ordinary captured-context questions read saved snapshots without fetching references.
+The managed instructions route natural-language project questions and related
+follow-ups to `context-qa`, even when the answer is absent. Both hosts use the same
+local read/search commands and [captured-only Q&A boundary](../context-qa.md).
 
 Discovery alone is not behavioral proof. A host must actually load/read the canonical
 skill and references, execute the requested task and leave package content unchanged.
