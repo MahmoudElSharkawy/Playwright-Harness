@@ -1,6 +1,7 @@
 ---
 name: context-qa
-description: Compatibility entrypoint for context-qa; use the canonical skill.
+description: Explicit-only captured-context Q&A; use the canonical skill when invoked.
+disable-model-invocation: true
 ---
 
 # context-qa — compatibility reference

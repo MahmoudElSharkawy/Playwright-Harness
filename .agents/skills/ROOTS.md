@@ -26,10 +26,11 @@ skill requires a reviewed merge; do not replace it with a package link silently.
 Templates in skill assets are starting points, never live state. Knowledge promotion
 requires review and sanitization; observations do not silently update reviewed facts.
 
-For ordinary project questions and follow-ups, use [context-qa](context-qa/SKILL.md).
-Its evidence comes only from one selected captured snapshot through local context
-read/search. The source discovery and live verification guidance below applies to
-retrieval, refresh and implementation workflows, not captured-only answers.
+Use [context-qa](context-qa/SKILL.md) only when the user explicitly invokes it for a
+snapshot-only answer. Its evidence comes only from one selected capture through
+local context read/search. This boundary ends when that request is answered;
+ordinary messages and later follow-ups use normal workflows. The source discovery
+and live verification guidance below does not apply inside explicit Q&A.
 
 For unfamiliar code or recurring project facts, use the host's existing file search
 (for example, `rg`) within the relevant consumer source/test folders and

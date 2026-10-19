@@ -2,9 +2,10 @@
 
 Project context captures a scoped, traceable view of a consumer project. Use
 `project-context` to retrieve it and `context-update` to create or refresh a saved
-snapshot. Ordinary questions about a captured snapshot do not retrieve sources or
-write files. [Context-only Q&A](context-qa.md) uses the `context-qa` skill and the
-existing local read/search commands, including when a relevant answer is missing.
+snapshot. Explicit [context-only Q&A](context-qa.md) invocation uses the
+`context-qa` skill and existing local read/search commands, including when an
+answer is missing. Ordinary messages do not activate Q&A or silently refresh
+saved context.
 
 Ask **"Retrieve the project context for checkout on qa"**, then **"Save this context"**
 or **"Refresh the context for checkout"** when needed. The skills execute the shared
@@ -194,7 +195,8 @@ and leaves the old current file intact. No history is automatically deleted.
 This release changes the CLI contract: `read` is an overview and other commands return
 summaries, not complete snapshots. Consumers needing full JSON must use explicit
 `export --out`. Existing save/refresh skills remain the entry points for updates;
-`context-qa` answers questions from one selected capture without following sources.
+Explicitly invoked `context-qa` answers from one selected capture without following
+sources. Its evidence boundary lasts only for that request and its clarifications.
 
 ## Validation scope
 

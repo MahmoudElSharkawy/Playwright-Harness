@@ -1,5 +1,26 @@
 # Changelog
 
+## 4.0.1 — Explicit-only captured-context Q&A
+
+### Upgrade actions
+
+- Upgrade to the 4.0.1 archive and re-run setup in each consumer project to replace
+  recognized 4.0.0 managed instructions in `AGENTS.md` and `CLAUDE.md`. Preserve
+  customized blocks through the existing reviewed merge process, then reload skills
+  or restart the host to load the updated invocation policy.
+- Explicitly invoke the discovered `context-qa` command/skill when a saved-snapshot
+  answer is required. Ordinary messages and later follow-ups use normal workflows;
+  there is no persistent context-only mode. Existing snapshots/history need no migration.
+
+### Changes
+
+- Fix #100: stop automatic Q&A activation and the resulting context-selection or
+  authorization prompts on ordinary Git, project, business and general questions.
+  Use Claude Code and Codex native explicit-only invocation controls.
+- Keep snapshot-only retrieval, citations and isolation unchanged for explicitly
+  invoked requests and their necessary clarifications. Update shared routing,
+  consumer instructions and upgrade coverage without adding an intent classifier.
+
 ## 4.0.0 — Captured project context and Q&A
 
 ### Upgrade actions

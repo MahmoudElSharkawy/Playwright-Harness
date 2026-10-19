@@ -46,5 +46,6 @@ explicit source removal, or a successful ADO scope/selection reconciliation. Ret
 independent support and history. Failed publication leaves current intact; inspect
 recovery state before retrying an interrupted writer. Present partial results honestly.
 
-Ordinary questions about captured context use [context-qa](../context-qa/SKILL.md) and its saved content and references only.
-They do not invoke this workflow, fetch original sources or write verification dates.
+Snapshot-only answers require explicit [context-qa](../context-qa/SKILL.md)
+invocation, including after a refresh. Ordinary questions do not activate either
+context workflow or silently write verification dates.
