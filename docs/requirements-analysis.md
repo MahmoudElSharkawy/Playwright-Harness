@@ -261,11 +261,11 @@ POST: changes after the last read remain a documented race.
 Durable attempts and authenticated delivery receipts retain request identity and
 acknowledged comment IDs. Uncertain outcomes cannot be automatically replayed.
 Verification tolerates only optional quote delimiters around nonempty HTML
-attribute values that can safely be unquoted, as defined by the
-[HTML attribute syntax](https://html.spec.whatwg.org/multipage/syntax.html#attributes-2).
+attribute values that can safely be unquoted.
 All other text, markup and attribute names/values remain strict; unsupported or
 malformed markup retains exact comparison. The approved payload/fingerprint and
-analysis data are unchanged. Reconciliation verifies destination/content/mention IDs and never treats an
+analysis data are unchanged. Reconciliation verifies destination/content/mention
+IDs and never treats an
 identical new comment alone as proof of authorship. Declined publication, missing
 access and local-only review keep their saved drafts. No story fields, cases,
 results or test expectations are modified.
