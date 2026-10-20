@@ -45,10 +45,11 @@ function requireBusinessText(draft) {
   requireThat(draft.findings.every(finding => !internal.test(finding.id)), message);
   const quotes = [...new Set(draft.findings.flatMap(finding => finding.sources.map(reference => reference.quote)))];
   for (const text of [...draft.findings.flatMap(finding => [finding.finding, finding.question]), draft.comment ?? '']) {
-    if (!internal.test(text)) continue;
     // Literal requirement passages remain source authority, including technical terms.
-    const unquoted = quotes.reduce((value, quote) => value.replaceAll(quote, ''), text);
-    requireThat(!internal.test(unquoted), message);
+    for (const match of text.matchAll(new RegExp(internal.source, 'gi'))) requireThat(quotes.some(quote => {
+      const start = text.lastIndexOf(quote, match.index);
+      return start >= 0 && start + quote.length >= match.index + match[0].length;
+    }), message);
   }
 }
 

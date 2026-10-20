@@ -63,6 +63,14 @@ test('literal technical source quotations remain exact in findings, manual text 
   assert(comment.text.includes(quote)); assert(comment.html.includes(quote)); assert.equal(input.findings[0].sources[0].quote, quote);
 });
 
+test('a partial source quotation cannot exempt a longer internal identifier in manual text', () => {
+  for (const [quote, text, comment] of [['System', 'The System saves addresses.', 'Source: story / System.Description.'], ['req', 'A required address.', 'See ' + reportedId]]) {
+    const f = displayFixture(); f.source.parts[0].text = text; f.state.inventory[0].end = text.length;
+    const finding = {...f.draft.findings[0], sources: [{requirementId: f.state.inventory[0].id, quote}]};
+    assert.throws(() => validateReviewInput(chatInput(f.state, [finding], {comment}), f.state, f.source), /internal|readable/i);
+  }
+});
+
 test('rejected display edits preserve the current draft and its traceability references', async () => {
   const roots = consumerRoots(mkdtempSync(join(tmpdir(), 'pom-display-'))); put(roots, 'story.md', 'Save the address.');
   const source = await captureRequirements(roots, {version: 1, project: 'shop', application: 'addresses', sources: [{id: 'notes', path: 'story.md', kind: 'file'}]});
