@@ -5,7 +5,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {consumerRoots} from '../scripts/lib/consumer-paths.mjs';
 import {captureRequirements, prepareRequirements, updateInventory, planningHandoff, readRequirements} from '../scripts/lib/requirements/index.mjs';
-import {validateFindings} from '../scripts/lib/requirements/gapcue.mjs';
+import {validateFindings} from '../scripts/lib/requirements/review.mjs';
 import {fingerprint} from '../scripts/lib/execution-core/data.mjs';
 import {putRequirementFile as put} from './fixtures/requirements.mjs';
 
@@ -18,9 +18,9 @@ for (const story of stories) test(`quality corpus preserves inventory/acceptance
   assert.equal(state.inventory.length, story.text.split('\n').length);
   assert.equal(new Set(state.inventory.map(entry => entry.id)).size, source.parts.length);
   assert.deepEqual(new Set(state.inventory.map(entry => entry.partId)), new Set(source.parts.map(part => part.id)));
-  const findings = story.findings.map(({lines, ...finding}) => ({...finding, requirementIds: lines.map(line => state.inventory[line - 1].id)}));
-  validateFindings(findings, state.inventory);
-  for (const finding of findings) for (const anchor of finding.anchors) assert(story.text.includes(anchor.text));
+  const findings = story.findings.map(finding => ({...finding, sources: finding.sources.map(({line, quote}) => ({requirementId: state.inventory[line - 1].id, quote}))}));
+  validateFindings(findings, state.inventory, source);
+  for (const finding of findings) for (const reference of finding.sources) assert(story.text.includes(reference.quote));
   for (const line of story.acceptedByOwner) {
     const entry = state.inventory[line - 1], decision = {version: 1, authority: 'owner', actor: 'Synthetic owner fixture', consumer: state.consumer, snapshot: state.snapshot, requirementId: entry.id, content: entry.content, disposition: 'accepted', statement: source.parts[line - 1].text};
     const path = `owner-${line}.json`; put(roots, path, decision);

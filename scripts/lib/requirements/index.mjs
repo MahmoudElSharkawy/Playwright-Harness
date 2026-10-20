@@ -1,13 +1,12 @@
-import {existsSync, mkdirSync, openSync, closeSync, unlinkSync, readFileSync, lstatSync} from 'node:fs';
+import {existsSync, mkdirSync, openSync, closeSync, unlinkSync} from 'node:fs';
 import {dirname, join} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {consumerPath} from '../consumer-paths.mjs';
-import {fingerprint, digest, id, requireThat} from '../execution-core/data.mjs';
+import {fingerprint, id, requireThat} from '../execution-core/data.mjs';
 import {contextData} from '../context/model.mjs';
-import {writeJson, readBounded, publishExclusive} from '../execute/storage.mjs';
+import {writeJson, readBounded} from '../execute/storage.mjs';
 import {captureRequirements, consumerIdentity} from './sources.mjs';
-import {GAPCUE, resolveGapCue, validateFindings, validateDecisions, buildGapCue, escapeHtml} from './gapcue.mjs';
-import {within} from '../skill-roots.mjs';
+import {validateReviewInput, validateFindings, renderChatTable} from './review.mjs';
 export {captureRequirements} from './sources.mjs';
 
 export const requirementBase = (roots, analysisId) => {id(analysisId); return consumerPath(roots, `.harness/state/requirements/${analysisId}`);};
@@ -15,18 +14,6 @@ const file = (roots, analysisId, name) => consumerPath(roots, join(requirementBa
 function inventoryEntry(part, requirementId, start = 0, end = part.text.length) {
   return {id: requirementId, partId: part.id, start, end, location: part.location, revision: part.revision, partContent: fingerprint(part), content: fingerprint({part, start, end}), kind: part.kind,
     disposition: part.kind === 'discussion' ? 'needs-decision' : 'unknown', evidence: [], assumptions: [], questions: [], constraints: [], dependencies: []};
-}
-function nativeIdentity(roots, review) {
-  const input = contextData(readBounded(consumerPath(roots, review.input)));
-  requireThat(fingerprint(input) === review.inputFingerprint && input.id === review.storyId, 'Review input identity/content changed.');
-  const base = `${review.root}/${review.storyId}/v1`, storyFile = consumerPath(roots, base + '/story.json'), page = consumerPath(roots, base + '/index.html');
-  const {version, reviewedAt, ...native} = contextData(readBounded(storyFile));
-  requireThat(version === 1 && fingerprint(native) === review.inputFingerprint, 'Native review input changed; retain the original export and source.');
-  requireThat(lstatSync(page).isFile() && lstatSync(page).size <= 2 * 1024 * 1024, 'Native review page is incomplete.');
-  return {storySha256: digest(readFileSync(storyFile)), pageSha256: digest(readFileSync(page))};
-}
-function verifyNative(roots, review) {
-  requireThat(review.nativeIdentity && fingerprint(nativeIdentity(roots, review)) === fingerprint(review.nativeIdentity), 'Native review content changed or build is incomplete; preserve the last valid handoff.');
 }
 export function lockRequirements(roots, analysisId) {
   const path = file(roots, analysisId, 'lock'); mkdirSync(dirname(path), {recursive: true});
@@ -119,96 +106,60 @@ export function updateInventory(roots, analysisId, raw) {
     return saveRequirements(roots, analysisId, state);
   } finally {release();}
 }
-export function startRequirementsReview(roots, analysisId, {gapcue, findings}) {
-  const dependency = resolveGapCue(gapcue), release = lockRequirements(roots, analysisId);
-  try {
-    requireThat(!within(roots.packageRoot, dependency.root), 'GapCue must be separately installed outside the immutable harness package.');
-    const state = readRequirements(roots, analysisId); requireThat(state && !state.review, 'This snapshot already has a review or is unprepared. Resume its existing UI/export rather than invoking analysis again.');
-    const source = readRequirementsSource(roots, state), values = validateFindings(findings, state.inventory), reviewId = randomUUID();
-    const storyId = 'req-' + fingerprint({consumer: state.consumer, snapshot: state.snapshot, dependency: dependency.content, reviewId}).slice(0, 48);
-    const story = {id: storyId, title: source.parts.find(part => part.location === 'System.Title')?.text ?? `${state.project}: ${state.application}`,
-      sections: source.parts.map(part => ({heading: part.location, html: '<p>' + escapeHtml(part.text).replaceAll('\n', '<br>') + '</p>'})),
-      images: [], findings: values.map(({requirementIds, ...finding}) => finding)};
-    const relative = `.harness/state/requirements/${analysisId}/reviews/${reviewId}`, root = consumerPath(roots, relative), input = consumerPath(roots, relative + '/input.json');
-    writeJson(input, story, {exclusive: true});
-    state.review = {reviewId, storyId, snapshot: state.snapshot, dependency: {version: dependency.version, commit: dependency.commit, content: dependency.content}, input: relative + '/input.json', inputFingerprint: fingerprint(story), root: relative + '/native',
-      findingIds: values.map(value => value.id), findingLinks: Object.fromEntries(values.map(value => [value.id, value.requirementIds])), status: 'incomplete', handoff: null};
-    state.analysisInvocations++;
-    // Commit incomplete first: a killed build cannot look like a completed handoff.
-    const saved = saveRequirements(roots, analysisId, state);
-    buildGapCue(dependency, input, consumerPath(roots, state.review.root));
-    saved.review.nativeIdentity = nativeIdentity(roots, saved.review);
-    const built = saveRequirements(roots, analysisId, saved);
-    return {...built, differences: reviewDifferences(roots, built), page: `${state.review.root}/${storyId}/v1/index.html`, serve: {script: join(dependency.root, 'scripts/review.mjs'), args: ['--serve', '--root', consumerPath(roots, state.review.root), '--no-open']}};
-  } finally {release();}
+export function readChatReview(roots, state, review = state.review) {
+  requireThat(review?.format === 'chat-v1', 'Legacy review artifacts are preserved. Create a chat draft after inspecting them; legacy exports/approvals cannot authorize publication.');
+  const draft = contextData(readBounded(consumerPath(roots, review.path)));
+  requireThat(fingerprint(draft) === review.revision && draft.version === 1 && draft.consumer === state.consumer && draft.analysisId === state.analysisId && draft.snapshot === review.snapshot && draft.reviewId === review.reviewId, 'Chat draft content or consumer/source/review binding changed.');
+  const source = readRequirementsSource(roots, {...state, snapshot: review.snapshot});
+  validateFindings(draft.findings, state.snapshot === review.snapshot ? state.inventory : draft.inventory, source);
+  return draft;
 }
-export function resumeRequirementsReview(roots, analysisId, {gapcue}) {
-  const dependency = resolveGapCue(gapcue), release = lockRequirements(roots, analysisId);
-  try {
-    const state = readRequirements(roots, analysisId), review = state?.review;
-    requireThat(review && review.snapshot === state.snapshot && review.dependency.content === dependency.content, 'Existing review/dependency/source binding is incompatible; preserve its original artifacts.');
-    const input = contextData(readBounded(consumerPath(roots, review.input)));
-    requireThat(fingerprint(input) === review.inputFingerprint && input.id === review.storyId, 'Review input identity/content changed.');
-    let page = `${review.root}/${review.storyId}/v1/index.html`;
-    if (!existsSync(consumerPath(roots, page)) || !review.nativeIdentity) {
-      // Rebuild only the same saved input in a new root; never replace partial/native decisions.
-      const previous = review.root, recovery = previous + '-recovery-' + randomUUID();
-      buildGapCue(dependency, consumerPath(roots, review.input), consumerPath(roots, recovery));
-      review.recoveryRoots = [...(review.recoveryRoots ?? []), previous]; review.root = recovery;
-      review.nativeIdentity = nativeIdentity(roots, review);
-      const saved = saveRequirements(roots, analysisId, state); Object.assign(state, saved);
-      page = `${review.root}/${review.storyId}/v1/index.html`;
-    } else verifyNative(roots, review);
-    return {...state, differences: reviewDifferences(roots, state), page, serve: {script: join(dependency.root, 'scripts/review.mjs'), args: ['--serve', '--root', consumerPath(roots, review.root), '--no-open']}};
-  } finally {release();}
-}
-export function readReviewHandoff(roots, state, review = state.review) {
-  requireThat(review?.handoff && review.status === 'complete', 'Review handoff is incomplete. Use GapCue Download decisions, then import its complete native export.');
-  requireThat(review.dependency?.version === GAPCUE.version && review.dependency.commit === GAPCUE.commit && review.dependency.content === fingerprint(GAPCUE.files), 'Saved review dependency is incompatible; retain its original artifacts.');
-  verifyNative(roots, review);
-  const bytes = readFileSync(consumerPath(roots, review.handoff.path));
-  requireThat(digest(bytes) === review.handoff.sha256, 'Retained native export changed.');
-  return validateDecisions(JSON.parse(bytes), review);
-}
-export function importDecisions(roots, analysisId, path) {
+export function saveChatReview(roots, analysisId, raw) {
   const release = lockRequirements(roots, analysisId);
   try {
-    const state = readRequirements(roots, analysisId), review = state?.review;
-    requireThat(review && review.snapshot === state.snapshot, 'Prepare a bound review before importing a handoff.');
-    requireThat(review.dependency?.version === GAPCUE.version && review.dependency.commit === GAPCUE.commit && review.dependency.content === fingerprint(GAPCUE.files), 'Saved review dependency is incompatible; prior handoff is preserved.');
-    verifyNative(roots, review);
-    const input = contextData(readBounded(consumerPath(roots, review.input)));
-    requireThat(fingerprint(input) === review.inputFingerprint && input.id === review.storyId, 'Review input identity/content changed.');
-    const filePath = consumerPath(roots, path); readBounded(filePath);
-    const bytes = readFileSync(filePath); validateDecisions(JSON.parse(bytes), review);
-    const sha256 = digest(bytes), retained = `.harness/state/requirements/${analysisId}/imports/${sha256}.json`;
-    if (!existsSync(consumerPath(roots, retained))) publishExclusive(consumerPath(roots, retained), bytes);
-    review.handoff = {path: retained, sha256}; review.status = 'complete';
-    return saveRequirements(roots, analysisId, state);
+    const state = readRequirements(roots, analysisId); requireThat(state, 'Prepare requirements before reviewing.');
+    const source = readRequirementsSource(roots, state), input = validateReviewInput(raw, state, source);
+    const previous = state.review?.format === 'chat-v1' ? state.review : null;
+    if (previous) readChatReview(roots, state);
+    else {
+      if (state.review) state.priorReviews.push({...state.review, stale: true});
+      state.analysisInvocations++;
+    }
+    const reviewId = previous?.reviewId ?? randomUUID();
+    // Retain slice boundaries only to validate historical findings after a source refresh.
+    const draft = {version: 1, analysisId, consumer: state.consumer, snapshot: state.snapshot, reviewId,
+      parent: previous?.revision ?? null, inventory: state.inventory.map(({id, partId, start, end}) => ({id, partId, start, end})), ...input};
+    const revision = fingerprint(draft), path = `.harness/state/requirements/${analysisId}/reviews/${reviewId}/${revision}.json`;
+    if (!existsSync(consumerPath(roots, path))) writeJson(consumerPath(roots, path), draft, {exclusive: true});
+    state.review = {format: 'chat-v1', reviewId, snapshot: state.snapshot, revision, path, status: 'draft'};
+    const saved = saveRequirements(roots, analysisId, state);
+    return {...saved, draft, table: renderChatTable(draft, saved, source), differences: reviewDifferences(roots, saved)};
   } finally {release();}
+}
+export function resumeRequirementsReview(roots, analysisId) {
+  const state = readRequirements(roots, analysisId); requireThat(state?.review, 'Prepare and save a chat review before resuming.');
+  const draft = readChatReview(roots, state), source = readRequirementsSource(roots, state);
+  return {...state, draft, table: renderChatTable(draft, state, source), differences: reviewDifferences(roots, state)};
 }
 export function reviewDifferences(roots, state) {
   const previous = state.priorReviews.at(-1);
   if (!previous) return null;
-  function effective(review) {
-    if (!review) return [];
-    const input = contextData(readBounded(consumerPath(roots, review.input))), saved = review.handoff ? readReviewHandoff(roots, state, review) : null;
-    return [...input.findings.map(finding => ({...finding, q: saved?.qEdit[finding.id] ?? finding.q})), ...(saved?.custom ?? [])];
-  }
-  const before = effective(previous), after = effective(state.review);
+  const oldDraft = previous.format === 'chat-v1' ? readChatReview(roots, state, previous) : null;
+  const newDraft = state.review?.format === 'chat-v1' ? readChatReview(roots, state) : null;
+  const before = oldDraft?.findings ?? [], after = newDraft?.findings ?? [];
   const oldFindings = new Map(before.map(finding => [finding.id, finding])), newFindings = new Map(after.map(finding => [finding.id, finding]));
   const changedFindingIds = [...new Set([...oldFindings.keys(), ...newFindings.keys()])].filter(id => !oldFindings.has(id) || !newFindings.has(id) || fingerprint(oldFindings.get(id)) !== fingerprint(newFindings.get(id)));
-  const affectedFindingIds = [...new Set([...changedFindingIds, ...Object.entries(previous.findingLinks).filter(([, requirements]) => requirements.some(id => state.staleRequirementIds.includes(id))).map(([id]) => id)])];
-  return {previousSnapshot: previous.snapshot, currentSnapshot: state.snapshot, changedSource: previous.snapshot !== state.snapshot, staleRequirementIds: state.staleRequirementIds, changedFindingIds, affectedFindingIds,
-    previousComment: previous.handoff ? readReviewHandoff(roots, state, previous).comment : null,
-    currentComment: state.review?.handoff ? readReviewHandoff(roots, state).comment : null, beforeFindings: before, afterFindings: after, carriedDecisions: [],
-    action: 'Reassess referenced source and finding meaning in the current review; preserve manual text and confirm replacement final text.'};
+  const affectedFindingIds = [...new Set([...changedFindingIds, ...before.filter(finding => finding.sources.some(reference => state.staleRequirementIds.includes(reference.requirementId))).map(finding => finding.id)])];
+  return {previousSnapshot: previous.snapshot, currentSnapshot: state.snapshot, changedSource: previous.snapshot !== state.snapshot,
+    staleRequirementIds: state.staleRequirementIds, changedFindingIds, affectedFindingIds, previousComment: oldDraft?.comment ?? null, currentComment: newDraft?.comment ?? null,
+    beforeFindings: before, afterFindings: after, carriedDecisions: [], ...(oldDraft ? {} : {legacyArtifacts: previous}),
+    action: 'Reassess source passages and finding meaning; preserve manual text and obtain approval for the exact current comment and recipients.'};
 }
 export function planningHandoff(roots, analysisId, previous) {
   const state = readRequirements(roots, analysisId); requireThat(state, 'Prepare requirements before planning.');
   const source = readRequirementsSource(roots, state);
   return {version: 1, consumer: state.consumer, snapshot: state.snapshot, inventory: state.inventoryPath,
     requirements: state.inventory.map(({id, partId, start, end, revision, content, disposition, evidence, assumptions, questions, constraints, dependencies}) => ({id, partId, start, end, revision, content, disposition, evidence, assumptions, questions, constraints, dependencies})),
-    omissions: source.omissions, review: state.review ? {reviewId: state.review.reviewId, root: state.review.root, status: state.review.status} : null,
+    omissions: source.omissions, review: state.review ? {reviewId: state.review.reviewId, path: state.review.path ?? state.review.root, format: state.review.format ?? 'legacy', status: state.review.status} : null,
     staleReferences: previous ? previous.consumer !== state.consumer || previous.snapshot !== state.snapshot || previous.inventory !== state.inventoryPath : false, staleRequirementIds: state.staleRequirementIds, analysisInvocations: state.analysisInvocations};
 }

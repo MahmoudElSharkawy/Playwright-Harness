@@ -5,7 +5,7 @@
   "sources": [
     {
       "scope": "Issue 62 requirements analysis",
-      "status": "Project-authored orchestration, inventory, source/delivery adapters and synthetic fixtures. GapCue 0.3.0 is separately installed and unmodified at commit 54fa0180fe17ea5034825a14dbd1201fc129aabf; no upstream implementation or skill is copied, forked or patched. AgenTeX and SHAFT references in issue 62 informed orchestration boundaries only.",
+      "status": "Project-authored chat review, inventory, source/delivery adapters and synthetic fixtures. Official Microsoft project-team, membership, mention and comment documentation informed API/markup shapes. No external analysis integration, copied upstream implementation or new dependency is included; prior consumer artifacts remain intact.",
       "targetLicense": "MIT",
       "thirdPartyCodeCopied": false
     },

@@ -1,103 +1,123 @@
 ---
 name: requirements-analysis
-description: Analyze supplied requirements or an ADO story with separately installed GapCue, preserve acceptance traceability and resumable review, and optionally post the user's confirmed story comment.
+description: Analyze supplied requirements or an ADO story, review an editable findings table in chat, preserve acceptance traceability, and optionally post the user's approved story comment with requested team-member mentions.
 ---
 
 # Requirements analysis
 
-Resolve this linked skill to its real path. Follow [ROOTS.md](../ROOTS.md) and
-the [workflow and formats](../../../docs/requirements-analysis.md). The consumer
-owns all mutable sources, inventory, reviews, decisions and delivery receipts.
+Resolve this linked skill to its real path. Follow [ROOTS.md](../ROOTS.md) and the
+[workflow/formats](../../../docs/requirements-analysis.md). The host AI performs
+analysis and chat review; deterministic scripts capture, validate, save and deliver.
+The consumer owns sources, inventory, drafts and receipts. No external analyzer,
+browser review UI, server or HTML download/import is needed.
 
-## Capture and inventory
+## Capture and analyze
 
-Resolve known project/application, story, supplied paths, configured adapters and
-prior analysis ID from the conversation and project. Bundle only genuinely missing
-choices. Never ask the user to repaste accessible sources. Create a consumer JSON
-request and run `pom-harness requirements prepare --id <id> --request <file>`.
-Local mode never resolves ADO credentials. ADO mode automatically reads title,
-description, acceptance criteria, paginated discussion and supplied attachments
-through the existing authenticated transport and context readers. Inspect omissions;
-use supported host readers for unsupported attachments, with content-bound extraction
-receipts. Sanitize sensitive material before review; do not recover redacted secrets.
+Resolve known project/application, story, supplied files and prior analysis ID from
+the conversation/project. Bundle only genuinely missing choices; do not ask users
+to repaste accessible content. Create a consumer request and run `pom-harness
+requirements prepare --id <id> --request <file>`. Local mode never resolves ADO
+credentials. ADO mode loads available title, description, AC, paginated discussion
+and supplied attachments through existing adapters. Inspect omissions; use supported
+host readers with content-bound extraction receipts for unsupported attachments.
+Sanitize before analysis; never reconstruct redacted secrets.
 
-Read the prepared source and single inventory. Each located statement is recorded
-once. Keep source statements in the source, acceptance/trace mappings in the
-inventory, findings/review decisions in GapCue. Before analysis, split compound
-statements into independent, exact source slices using `inventory` partitions;
-cover every statement once and retain stable IDs when matching existing rules.
-Each slice has its own disposition and full-span acceptance evidence. Keep constraints,
-dependencies, assumptions and unanswered discussion concerns on their entries.
-Do not repeat unanswered discussion in outgoing questions automatically.
+Read the captured source and single inventory. Before review, partition compound
+statements into independent exact slices with `inventory`, covering every supplied
+statement once and retaining stable IDs where appropriate. Source statements remain
+source authority; inventory owns acceptance/trace mappings; chat drafts own findings
+and final questions. Keep assumptions, constraints, dependencies and unanswered
+discussion concerns on their inventory entries. Do not automatically repeat an
+unanswered existing question in the outgoing comment.
 
-Use `requirements inventory` to record accepted source criteria or explicit owner
-decisions with exact evidence. Otherwise retain `proposed`, `unknown` or
-`needs-decision`. Missing preconditions/data, measurable performance targets,
-unspecified inclusive boundaries and conflicting rules remain unresolved. Finding
-approval, dismissal, out-of-scope or accepted plan logistics never accept a business
-rule, test assertion or invented default. Preserve source/test expectations.
+Record `accepted` only with exact source-criterion evidence or an explicit current
+owner decision bound to requirement content. Otherwise retain `proposed`, `unknown`
+or `needs-decision`. Missing preconditions/data, nonfunctional targets, boundary
+semantics and conflicts remain unresolved. A finding/question/plan approval never
+accepts an unstated business rule or executable assertion. Preserve source and test
+expectations; allowed spaces/special characters stay allowed.
 
-## One GapCue pass and its existing UI
+Analyze the current snapshot once for evidenced gaps and contradictions. Zero
+findings is valid; no quotas. Questions ask Business for missing decisions rather
+than asserting invented defaults. A contradiction cites both conflicting passages.
 
-Resolve the separately installed skill with `requirements dependency --gapcue
-<directory>`. Missing/incompatible content stops analysis/UI invocation while keeping
-prepared sources and previous reviews. Follow the exact pinned GapCue SKILL.md for
-one host-AI analysis pass and its existing review UI; there is no analyzer API.
-Use the known consumer review root below rather than asking again where to save.
-Do not copy, patch, fork or replace upstream files or add another analyzer/UI.
+## Review in chat
 
-The harness acceptance contract controls the scope: upstream suggested finding
-counts are not quotas, zero findings is valid, allowed spaces/special characters
-stay allowed, and upstream filtering/default assumptions are not accepted business
-rules. Keep filtered but unanswered discussion concerns in the inventory. Report
-only evidenced gaps and contradictions, and distinguish questions from expectations.
+Save a version-1 draft with current `consumer`, `snapshot`, `head`, `findings`,
+plain-text `comment` (null for the generated table) and requested `mentions`. Each
+finding has stable `id`, `type` (Gap or Contradiction), `finding`, exact located
+`sources` (`requirementId` + `quote`) and `question`. Run `requirements review --id
+<id> --input <file>` and render its returned table directly in chat, with exactly:
 
-Write that pass's native findings array, adding `requirementIds` to link each finding
-to the existing inventory. Run `requirements review --id <id> --gapcue <directory>
---findings <file>` once per source snapshot. It builds the native review and prints
-the native serve script/arguments. Start that server and give its actual URL and
-consumer folder to the user. The UI supports edited questions, custom findings and
-a manually edited rich comment. Do not publish from an Approved click.
+| Findings | Type | Source material text | Question/Comment for Business |
+|---|---|---|---|
+| Stable ID and concise issue | Gap or Contradiction | Exact quoted description/AC/other passage and location; both sides for conflicts | Proposed business question/comment |
 
-## Resume and source changes
+The row above describes the format, not an actual finding. Never present invented
+source text as evidence. Keep IDs stable so “remove F-02” or “edit F-01” is clear.
+User requests can add/remove/edit findings, questions, manual final text or mentions.
+Re-read current state, save the full revised draft with `requirements edit --id <id>
+--input <file>` and re-display the table/current final comment. Removing a row removes
+it from the generated outgoing table. Preserve requested manual final text; do not
+silently replace it when the table changes. Explain when an edit creates a mismatch.
 
-Reuse `requirements read --id <id>` and the existing native UI.
-`requirements resume --id <id> --gapcue <directory>` reopens the same bound review
-without analysis; an interrupted build uses the saved input and a fresh native
-root while preserving partial files. Load any retained native export in that UI.
-Require GapCue's **Download decisions**, then `requirements import --id <id> --input <file>` for a
-complete identity-bound handoff. Retain the original export. Browser-only edits,
-an initial disk state, lost/partial exports or an unsaved review remain incomplete.
-Never synthesize an export to pretend the user's review was saved.
+`requirements resume --id <id>` restores the current draft/table without reanalysis.
+Stale/foreign/malformed edits or changed artifact bytes must preserve valid state.
+Draft saves and conversational agreement alone never authorize publication. Show
+rendered content in chat, not raw JSON, fingerprints or wire HTML.
 
-Refresh with the original request before reusing current acceptance or publishing.
-Every changed snapshot invalidates accepted evidence until reassessed against the
-current source and discussion, even if a criterion's own words did not change.
-Changed sources invalidate affected links and start a separate review. Inspect
-prior source excerpts, finding meaning and saved custom findings/questions/comment;
-matching IDs or version numbers do not prove equivalence. Prior exports/history
-remain available. Reassess through the one new source pass, then have the user
-reconsider decisions in the current native UI; do not automatically carry approvals.
-Preserve manual final text as the starting point. Show old/new text and affected
-source/finding differences before confirming any replacement final comment.
+## Requested mentions
 
-Planning uses `requirements plan --id <id>` read-only. Link its existing inventory
-path, stable IDs, revisions, evidence and review; no copied acceptance authority,
-automatic rule resolution, second GapCue invocation or remote write.
+Only include people the user requested. Resolve exact display name, account/email
+or ADO identity GUID against authenticated membership in the originating project's
+teams. Use `requirements members --id <id>` to find candidates when needed. Treat
+results as scoped to returned teams/access. Duplicate names require account/GUID
+selection; role-only requests such as “the BA” require a named person. Never guess,
+pick the first match, infer an identity from role, or silently downgrade to plain
+`@Name`. Bundle missing selections. No directory reads for local-only review or
+when no mentions are requested.
 
-## Optional discussion delivery
+Save chosen selectors in the draft. Preview shows resolved names/accounts/IDs;
+scripts deduplicate people across teams, escape text, generate supported ADO person
+mentions and revalidate recipients before posting. Renamed/removed/inactive or
+ambiguous identities require resolution and a new preview. A roster access failure
+does not authorize a guessed recipient. Do not promise notification delivery from
+synthetic readback alone.
 
-Only when requested, run `requirements preview --id <id>`. Show the exact returned
-HTML/text, destination/story URL, reviewed snapshot/discussion, differences from
-the prior manual comment and the ordered single POST. Bundle any remaining choices
-before this preview. Obtain one final confirmation of this unchanged payload, then
-pass that preview's fingerprint to `requirements post --id <id> --approval <hash>`.
-Existing authorization applies only if it covers that exact preview. A changed
-payload/source/discussion needs a new preview and confirmation.
+## Refresh and handoff
 
-The deterministic adapter rechecks freshness, durably records dispatch and verifies
-the comment ID/URL. On uncertain results use `requirements reconcile`; never retry
-blindly. An identical new comment is only a reconciliation candidate. Ask the owner
-to identify it before `reconcile --comment-id <id>` if no durable acknowledgement
-identifies the write. Missing access/destination, declined publication and local
-requirements remain saved locally. No story-field, case, result or other writes.
+Refresh using the original request before reusing acceptance or publishing. Changed
+source/discussion invalidates current evidence and moves prior drafts to history.
+Reassess referenced text and finding meaning; matching IDs do not prove freshness.
+Preserve custom questions/manual comments as starting points, show relevant old/new
+text and obtain approval for current replacement text. Do not carry approvals.
+
+Earlier prerelease review artifacts remain intact. `read` exposes their references;
+legacy exports/UI approvals cannot authorize chat publication. Inspect retained
+text, propose any carryover in chat and save a new draft after review. No dependency
+installation or legacy browser UI is required.
+
+`requirements plan --id <id>` exposes the existing inventory, IDs/revisions,
+acceptance evidence, constraints/dependencies and unresolved decisions read-only.
+Link these records; do not duplicate acceptance authority, invoke another analysis
+or let plan approval resolve a business-rule question.
+
+## Optional story comment
+
+When the user requests delivery, run `requirements preview --id <id>`. Show exact
+returned final text/table, resolved mention recipients, originating story URL,
+reviewed source and the single ordered comment POST. Resolve missing choices before
+this final preview. An explicit “approve and post” for the unchanged preview is one
+authorization; do not ask again when existing authorization covers that exact text,
+destination and people. Pass its fingerprint to `requirements post --id <id>
+--approval <hash>`. Any changed payload, source/discussion or recipient requires a
+new preview and approval. A null comment with zero findings has nothing to post;
+only an explicit user-requested manual comment can override that.
+
+The adapter rechecks freshness and durably records dispatch, comment ID/URL and
+mention readback. On uncertainty run `requirements reconcile`; never retry blindly.
+An identical new comment is only a candidate. Ask the owner to identify its exact ID
+before `reconcile --comment-id <id>` when no durable acknowledgement identifies it.
+Mismatched mention readback remains unresolved. Missing access/destination, declined
+publication and local-only requirements remain saved. Return the verified comment
+link/receipt when completed. No story-field, case, result or other remote writes.

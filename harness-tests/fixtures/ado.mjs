@@ -79,7 +79,7 @@ export async function adoFixture(t, overrides = {}) {
   t.after(() => new Promise(resolve => { server.close(resolve); server.closeAllConnections(); }));
   const fetchImpl = (url, init) => {
     const parsed = new URL(url);
-    if (parsed.origin !== new URL(config.organizationUrl).origin || !(parsed.pathname.startsWith(projectPrefix) || parsed.pathname === `/collection/_apis/projects/${encodeURIComponent(config.project)}`)) throw new Error('Unexpected fixture destination');
+    if (parsed.origin !== new URL(config.organizationUrl).origin || !(parsed.pathname.startsWith(projectPrefix) || parsed.pathname === `/collection/_apis/projects/${encodeURIComponent(config.project)}` || parsed.pathname.startsWith(`/collection/_apis/projects/${project.id}/teams`))) throw new Error('Unexpected fixture destination');
     return fetch(`http://127.0.0.1:${server.address().port}${parsed.pathname}${parsed.search}`, init);
   };
   const client = createAdoClient({configuration: {...config, ...overrides}, roots: core.roots, resolveCredential: () => credential, fetchImpl});
