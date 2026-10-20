@@ -176,8 +176,10 @@ its current inventory slice. Contradictions require two distinct source passages
 Finding IDs are unique and stable across edits. Scripts validate evidence binding;
 the AI/user still judge whether a gap or contradiction is meaningful.
 `questionFocus` is optional presentation metadata: a nonempty, exact substring of
-`question` without surrounding whitespace. It bolds each exact occurrence without
-changing the question. Omit it for plain text; older drafts need no migration.
+`question` without surrounding whitespace. Adjacent occurrences share one bold
+span. Punctuation embedded inside a word stays plain in both views when Markdown
+cannot emphasize it without adding visible markers. The question stays unchanged.
+Omit the hint for plain text; older drafts need no migration.
 Changing emphasis requires a fresh exact preview/approval before posting.
 
 ```sh

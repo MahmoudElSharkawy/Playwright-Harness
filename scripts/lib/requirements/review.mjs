@@ -61,7 +61,7 @@ function sourceLabel(part, source) {
 const severityRank = {High: 0, Medium: 1, Low: 2};
 const severityDots = {High: '🔴', Medium: '🟠', Low: '🔵'};
 const severityLabel = severity => severityDots[severity] ? `${severityDots[severity]} ${severity}` : 'Unrated';
-const markdownStrong = text => `**${text}**`, htmlStrong = text => `<strong>${text}</strong>`;
+const markdownStrong = text => text.replace(/^(\s*)([\s\S]*?)(\s*)$/, (_, before, value, after) => `${before}**${value}**${after}`), htmlStrong = text => `<strong>${text}</strong>`;
 const orderedFindings = findings => findings.toSorted((left, right) => (severityRank[left.severity] ?? 3) - (severityRank[right.severity] ?? 3));
 const findingTitle = finding => (finding.id.startsWith('req-') ? '' : finding.id + ': ') + finding.finding;
 function reviewSummaryLines(draft, encode, strong) {
@@ -77,16 +77,29 @@ function reviewSummaryLines(draft, encode, strong) {
     : `${strong(text('First priority:'))} ${strong(text(findingTitle(findings[0])))}`;
   return [strong(text(overview)), counts.join(' · '), priority];
 }
-export const renderReviewSummary = draft => reviewSummaryLines(draft, markdownCell, markdownStrong).join('\n');
+export const renderReviewSummary = draft => reviewSummaryLines(draft, markdownCell, markdownStrong).join('\\\n');
+function questionText(finding, text, strong) {
+  const {question, questionFocus: focus} = finding;
+  if (!focus) return text(question);
+  const parts = []; let cursor = 0, start;
+  while ((start = question.indexOf(focus, cursor)) !== -1) {
+    let end = start + focus.length;
+    while (question.startsWith(focus, end)) end += focus.length;
+    const phrase = question.slice(start, end), before = question.slice(0, start), after = question.slice(end);
+    // Markdown cannot emphasize punctuation inside a word; preserve it literally in both views.
+    const opens = !/^[\p{P}\p{S}]/u.test(phrase) || !before || /[\s\p{P}\p{S}]$/u.test(before);
+    const closes = !/[\p{P}\p{S}]$/u.test(phrase) || !after || /^[\s\p{P}\p{S}]/u.test(after);
+    parts.push(text(question.slice(cursor, start)), opens && closes ? strong(text(phrase)) : text(phrase)); cursor = end;
+  }
+  return parts.join('') + text(question.slice(cursor));
+}
 function rows(draft, state, source, text, strong) {
   return orderedFindings(draft.findings).map(finding => [
     strong(text(findingTitle(finding))), text(finding.type), strong(text(severityLabel(finding.severity))),
     text(finding.sources.map(reference => {
       const entry = state.inventory.find(item => item.id === reference.requirementId), part = source.parts.find(part => part.id === entry.partId);
       return `${sourceLabel(part, source)}: “${reference.quote}”`;
-    }).join('\n')), finding.questionFocus
-      ? finding.question.split(finding.questionFocus).map(text).join(strong(text(finding.questionFocus)))
-      : text(finding.question)
+    }).join('\n')), questionText(finding, text, strong)
   ]);
 }
 const columns = ['Findings', 'Type', 'Severity', 'Source material text', 'Question/Comment for Business'];

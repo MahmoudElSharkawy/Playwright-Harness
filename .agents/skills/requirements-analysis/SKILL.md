@@ -60,6 +60,9 @@ Type/Severity and first priority concern) before its table in chat, with exactly
 Show the renderer's three-line summary: bold totals/type counts, colored severity
 dots with bold named counts, then the bold first-priority concern. Keep Type,
 source quotations and ordinary text plain; no CSS colors or whole-row styling.
+Preserve the summary's Markdown hard breaks. Adjacent focus matches share one bold
+span; punctuation embedded inside a word stays plain in both views when Markdown
+cannot safely emphasize it. Never add visible formatting markers to business text.
 Emphasis is presentation only. Preserve literal source/manual wording and existing
 drafts; add an exact focus hint in an explicit edit without reanalysis when needed.
 

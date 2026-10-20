@@ -54,7 +54,7 @@ test('chat final comment is previewed exactly, with zero writes until exact conf
   const f = await setup(t), options = {client: f.client};
   const preview = await previewRequirementsComment(f.roots, 'checkout', options);
   assert.equal(preview.comment, preview.summary + '\n\n' + f.decisions.comment);
-  assert.match(preview.summary, /^\*\*Summary: 1 finding — 1 gap, 0 contradictions\*\*\n🔴 \*\*High: 0\*\* · 🟠 \*\*Medium: 1\*\* · 🔵 \*\*Low: 0\*\*/);
+  assert.match(preview.summary, /^\*\*Summary: 1 finding — 1 gap, 0 contradictions\*\*\\\n🔴 \*\*High: 0\*\* · 🟠 \*\*Medium: 1\*\* · 🔵 \*\*Low: 0\*\*/);
   assert(preview.writes[0].body.text.endsWith('<p>' + f.decisions.comment + '</p>')); assert.equal(preview.destination.storyId, 200);
   assert(preview.writes[0].body.text.indexOf('Summary: 1 finding') < preview.writes[0].body.text.indexOf(f.decisions.comment));
   assert.equal(f.posts().length, 0); assert.equal(f.receipts().length, 0);

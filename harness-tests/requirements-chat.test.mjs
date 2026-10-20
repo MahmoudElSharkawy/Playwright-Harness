@@ -72,7 +72,7 @@ test('refresh retains manual draft history, exposes changed meaning and never ca
   const findings = [{...f.findings[0], finding: 'Inactivity duration unspecified', sources: [{requirementId: refreshed.inventory[0].id, quote: 'unspecified inactivity period'}]}];
   const next = saveChatReview(f.roots, 'checkout', input(refreshed, findings)), diff = reviewDifferences(f.roots, next);
   assert(diff.changedFindingIds.includes('F-01')); assert.equal(diff.previousComment, 'My manual final question.'); assert.deepEqual(diff.carriedDecisions, []);
-  assert.match(next.summary, /^\*\*Summary: 1 finding — 1 gap, 0 contradictions\*\*\n🔴 \*\*High: 0\*\* · 🟠 \*\*Medium: 1\*\* · 🔵 \*\*Low: 0\*\*/);
+  assert.match(next.summary, /^\*\*Summary: 1 finding — 1 gap, 0 contradictions\*\*\\\n🔴 \*\*High: 0\*\* · 🟠 \*\*Medium: 1\*\* · 🔵 \*\*Low: 0\*\*/);
   assert.match(next.summary, /\*\*First priority:\*\* \*\*F-01: Inactivity duration unspecified\*\*/);
   assert.equal(next.review.status, 'draft'); assert.equal(next.analysisInvocations, 2);
 });

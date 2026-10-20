@@ -81,3 +81,25 @@ test('emphasis escapes literal markup before wrapping focus text and keeps manua
   const manual = renderComment({...draft, comment: 'Keep **my** <manual> wording.'}, f.state, f.source, []);
   assert(manual.text.endsWith('Keep **my** <manual> wording.')); assert(manual.html.endsWith('<p>Keep **my** &lt;manual&gt; wording.</p>'));
 });
+
+test('Markdown emphasis preserves punctuation, adjacent focus matches and title whitespace', () => {
+  const f = displayFixture(), finding = {...f.draft.findings[0], finding: 'Retry policy '};
+  for (const [question, questionFocus, markdown, html] of [
+    ['Use ABAB?', 'AB', 'Use **ABAB**?', 'Use <strong>ABAB</strong>?'],
+    ['Test ** x?', '*', 'Test **\\*\\*** x?', 'Test <strong>**</strong> x?'],
+    ['Use C++ rules?', '++', 'Use C++ rules?', 'Use C++ rules?'],
+    ['Use ++C rules?', '++', 'Use ++C rules?', 'Use ++C rules?'],
+    ['Does **retry count** apply?', 'retry count', 'Does \\*\\***retry count**\\*\\* apply?', 'Does **<strong>retry count</strong>** apply?']
+  ]) {
+    const draft = {...f.draft, findings: [{...finding, question, questionFocus}]}, comment = renderComment(draft, f.state, f.source, []);
+    assert(comment.text.includes(` | ${markdown} |`), question);
+    assert(comment.html.includes(`<td>${html}</td>`), question);
+    assert(comment.text.includes('| **F-01: Retry policy**  |'));
+    assert.equal(draft.findings[0].finding, 'Retry policy '); assert.equal(draft.findings[0].question, question);
+  }
+});
+
+test('chat summary uses explicit Markdown hard breaks for three visible lines', () => {
+  const f = displayFixture(), summary = renderReviewSummary(f.draft);
+  assert.equal(summary.split('\\\n').length, 3);
+});
