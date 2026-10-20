@@ -1,6 +1,7 @@
 import {createHash} from 'node:crypto';
 import {assessRun, requireAssessedResult} from '../execution-core/index.mjs';
 import {adoId, requireValue} from './config.mjs';
+import {editAdoCases} from './ado-case-edits.mjs';
 
 const publications = new WeakMap();
 const outcomes = Object.freeze({PASS: 'Passed', FAIL: 'Failed', BLOCKED: 'Blocked', SKIPPED: 'NotExecuted', NEEDS_REVIEW: 'Blocked'});
@@ -75,6 +76,7 @@ export function createAdoTestManagement(client) {
     } catch { throw delivery.incomplete(); }
   }
   return Object.freeze({
+    editCases: input => editAdoCases(client, workItem, input),
     async publish({publication, planId, suiteId, pointIds = {}, execute = false, name, resumeRunId, onIdentity, onReceipt, points: providedPoints}) {
       requireValue(publications.has(publication), 'Use a validated publication input.'); planId = adoId(planId); suiteId = adoId(suiteId);
       requireValue(Object.keys(pointIds).every(id => publication.some(row => row.caseId === adoId(id))), 'Point selections contain cases outside publication scope.');

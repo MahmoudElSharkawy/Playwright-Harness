@@ -11,11 +11,12 @@ import {createAdoSourceControl} from './ado-delivery.mjs';
 import {slugify, pascalCase, renderSpec, selfTest} from './ado-steps.mjs';
 
 const options = {
-  'fetch-ado-suite': {values: ['plan', 'suite', 'list-suites', 'org', 'org-url', 'project', 'env', 'out', 'source-out'], flags: ['list-plans', 'force', 'dry-run', 'json']},
-  'fetch-ado-story': {values: ['story', 'links', 'org', 'org-url', 'project', 'env', 'out', 'source-out'], flags: ['force', 'dry-run', 'json']},
+  'fetch-ado-suite': {values: ['plan', 'suite', 'list-suites', 'org', 'org-url', 'project', 'env', 'out', 'source-out'], flags: ['list-plans', 'force', 'dry-run', 'json', 'revisions']},
+  'fetch-ado-story': {values: ['story', 'links', 'org', 'org-url', 'project', 'env', 'out', 'source-out'], flags: ['force', 'dry-run', 'json', 'revisions']},
   'publish-ado-results': {values: ['plan', 'suite', 'value', 'point-map'], flags: ['mark-automated', 'all', 'dry-run', 'execute']},
   'tag-ado-workitem': {values: ['id', 'ids', 'tag'], flags: ['dry-run', 'execute']},
   'relink-ado-story': {values: ['id', 'ids', 'story'], flags: ['dry-run', 'execute']},
+  'edit-ado-cases': {values: ['input', 'approval'], flags: ['dry-run', 'execute']},
   'ado-pr': {values: ['title', 'description', 'description-file', 'source', 'target', 'repository'], flags: ['draft', 'dry-run', 'execute', 'json']}
 };
 function argumentsFor(command, args) {
@@ -86,18 +87,22 @@ export async function runCompatibility(command, argv, dependencies = {}) {
     const source = createAdoTestSource(client);
     if (opt['list-plans']) return source.listPlans();
     if (opt['list-suites']) return source.listSuites(opt['list-suites']);
-    const suite = await source.fetchSuite(opt.plan ?? config.planId, opt.suite);
+    const suite = await source.fetchSuite(opt.plan ?? config.planId, opt.suite, {includeRevisions: Boolean(opt.revisions)});
     return writeFetched(roots, opt, config, {name: `ado-suite-${suite.suiteId}`, scope: suite, title: suite.suiteName, same: previous => sameDestination(previous, config, suite.planId, suite.suiteId), convert: adoSuiteToSource});
   }
   if (command === 'fetch-ado-story') {
     requireValue(opt.story, 'Supply --story.');
     // Exclusions are reported and recorded but never fingerprinted: an unrelated Task link must not invalidate verification.
-    const {excluded, ...story} = await createAdoTestSource(client).fetchStory(opt.story, opt.links?.split(',').map(value => value.trim()));
+    const {excluded, ...story} = await createAdoTestSource(client).fetchStory(opt.story, opt.links?.split(',').map(value => value.trim()), {includeRevisions: Boolean(opt.revisions)});
     const same = previous => requireValue((previous.orgUrl ?? previous.organizationUrl) === config.organizationUrl && previous.project === config.project && previous.storyId === story.storyId
       && previous.planId === undefined && previous.suiteId === undefined, 'Story manifest does not match the configured ADO destination and scope.');
     return {...writeFetched(roots, opt, config, {name: `ado-story-${story.storyId}`, scope: story, title: story.storyTitle, same, convert: adoStoryToSource, extra: {excluded}}), excluded};
   }
   const management = createAdoTestManagement(client);
+  if (command === 'edit-ado-cases') {
+    requireValue(opt.input, 'Supply --input with a consumer case-edit proposal.');
+    return management.editCases({input: readConsumerJson(roots, opt.input), execute: opt.execute ?? false, approval: opt.approval});
+  }
   if (command === 'tag-ado-workitem' || command === 'relink-ado-story') {
     requireValue(!(opt.id && opt.ids) && (opt.id || opt.ids), 'Supply --id or --ids.'); const ids = (opt.ids ?? opt.id).split(',').map(value => adoId(value.trim()));
     return command === 'tag-ado-workitem' ? management.tag({ids, tag: opt.tag, execute: opt.execute ?? false}) : management.relink({ids, storyId: opt.story, execute: opt.execute ?? false});
@@ -124,7 +129,7 @@ export function compatibilityDiagnostic(error) {
   return error instanceof AdoError ? error.message : error.code ? 'Local input or IO failed; check consumer paths/configuration.' : error.message;
 }
 export function compatibilityMain(command) {
-  runCompatibility(command, process.argv.slice(2)).then(result => { if (result !== undefined) console.log(JSON.stringify(result, null, 2)); }).catch(error => {
+  runCompatibility(command, process.argv.slice(2)).then(result => { if (result !== undefined) console.log(JSON.stringify(result, null, 2)); if (result?.mode === 'incomplete') process.exitCode = 1; }).catch(error => {
     // Never expose transport stacks, response bodies, credential values or filesystem error detail.
     console.error(`[${command}] ${compatibilityDiagnostic(error)}`); process.exitCode = 1;
   });

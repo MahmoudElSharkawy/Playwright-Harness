@@ -85,7 +85,7 @@ export function createAdoClient({configuration, roots, resolveCredential, fetchI
   }
   function delivery(kind, execute, sourceFingerprint) {
     requireValue(execute === true, 'External ADO writes require explicit execution authorization.');
-    requireValue(['outcomes', 'automation', 'tags', 'relations', 'pull-request', 'bugs'].includes(kind), 'Unknown ADO delivery kind.');
+    requireValue(['outcomes', 'automation', 'tags', 'relations', 'pull-request', 'bugs', 'case-edits'].includes(kind), 'Unknown ADO delivery kind.');
     const id = randomUUID(), receipt = `.harness/state/integrations/${id}.jsonl`;
     const file = consumerPath(roots, receipt); mkdirSync(dirname(file), {recursive: true});
     // Recheck after mkdir and use exclusive creation; each event is flushed before dispatch.
@@ -111,8 +111,10 @@ export function createAdoClient({configuration, roots, resolveCredential, fetchI
           data = result.data;
         } catch (error) {
           stopped = true;
-          record({event: 'incomplete', operation, requestFingerprint, effect: dispatched ? 'uncertain' : 'not-executed', code: error instanceof AdoError ? error.code : 'local-failure'});
-          throw new Error(`ADO delivery incomplete; inspect receipt ${receipt}. No automatic replay.`);
+          const rejected = error instanceof AdoError && [400, 401, 403, 404, 409, 412, 413, 415, 422].includes(error.status);
+          const effect = dispatched && !rejected ? 'uncertain' : 'not-executed';
+          record({event: 'incomplete', operation, requestFingerprint, effect, code: error instanceof AdoError ? error.code : 'local-failure'});
+          throw Object.assign(new Error(`ADO delivery incomplete; inspect receipt ${receipt}. No automatic replay.`), {delivery: {effect}});
         }
         // The acknowledgement is durable. A local callback failure must not rewrite a confirmed effect as uncertain.
         if (identity) await onIdentity?.(identity); return data;
