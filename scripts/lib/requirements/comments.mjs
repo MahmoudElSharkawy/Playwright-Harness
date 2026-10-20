@@ -9,6 +9,12 @@ import {renderChatTable, renderComment, renderReviewSummary} from './review.mjs'
 import {projectMentionCandidates, resolveTeamMentions, verifyCommentMentions} from './mentions.mjs';
 
 const pendingPath = (roots, id) => consumerPath(roots, `.harness/state/requirements/${id}/comment-attempt.json`);
+function severityIconText(text) {
+  return text.replace(/&#(x[0-9a-f]+|[0-9]+);/gi, (entity, value) => {
+    const point = value[0].toLowerCase() === 'x' ? Number.parseInt(value.slice(1), 16) : Number(value);
+    return [128308, 128309, 128992].includes(point) ? String.fromCodePoint(point) : entity;
+  });
+}
 function attributeQuoteKey(html) {
   const tag = /<(\/?)([a-z][a-z0-9-]*)/iy;
   const attribute = /[ \t\r\n\f]+[a-z_:][a-z0-9_.:-]*(?:[ \t\r\n\f]*=[ \t\r\n\f]*("[^"]*"|'[^']*'|[^ \t\r\n\f"'`=<>]+))?/iy;
@@ -16,8 +22,8 @@ function attributeQuoteKey(html) {
   let key = '', at = 0;
   while (at < html.length) {
     const open = html.indexOf('<', at);
-    if (open < 0) return key + html.slice(at);
-    key += html.slice(at, open); tag.lastIndex = open;
+    if (open < 0) return key + severityIconText(html.slice(at));
+    key += severityIconText(html.slice(at, open)); tag.lastIndex = open;
     const head = tag.exec(html);
     // Raw text, foreign content, comments and malformed markup retain exact comparison.
     if (!head || /^(script|style|title|textarea|xmp|iframe|noembed|noframes|noscript|plaintext|svg|math)$/i.test(head[2])) return null;

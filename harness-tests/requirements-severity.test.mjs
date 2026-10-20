@@ -23,10 +23,10 @@ async function fixture() {
   return {roots, state, findings, gap};
 }
 
-test('three-line styled summary counts types/severities and table sorts High to Low with stable ties and IDs', async () => {
+test('two-line styled summary counts types/severities and table sorts High to Low with stable ties and IDs', async () => {
   const f = await fixture(), saved = saveChatReview(f.roots, 'checkout', input(f.state, f.findings));
   assert.equal(saved.review.format, 'chat-v2'); assert.equal(saved.draft.version, 2);
-  assert.deepEqual(saved.summary.split('\\\n'), ['**Summary: 4 findings — 3 gaps, 1 contradiction**', '🔴 **High: 2** · 🟠 **Medium: 1** · 🔵 **Low: 1**', '**First priority:** **F-high-first: Core retry limit conflicts**']);
+  assert.deepEqual(saved.summary.split('\\\n'), ['**Summary: 4 findings — 3 gaps, 1 contradiction**', '🔴 **High: 2** · 🟠 **Medium: 1** · 🔵 **Low: 1**']);
   assert.equal(saved.table.split('\n')[0], '| Findings | Type | Severity | Source material text | Question/Comment for Business |');
   const ids = [...saved.table.matchAll(/\| \*\*(F-[a-z-]+):/g)].map(match => match[1]);
   assert.deepEqual(ids, ['F-high-first', 'F-high-second', 'F-medium', 'F-low']);
@@ -67,7 +67,7 @@ test('zero-finding summary preserves unresolved acceptance and never creates an 
   assert.throws(() => renderComment(saved.draft, saved, {}, []), /Zero findings/);
 });
 
-test('summary precedes final table/body and escapes source-derived priority text in ADO markup', async () => {
+test('summary precedes final table/body and source-derived finding titles stay escaped in ADO markup', async () => {
   const f = await fixture(); f.findings[1].finding = 'Core <Admin> & retry | conflict';
   const saved = saveChatReview(f.roots, 'checkout', input(f.state, f.findings)), source = await captureRequirements(f.roots, {version: 1, project: 'shop', application: 'checkout', sources: [{id: 'story', kind: 'file', path: 'story.md'}]});
   const result = renderComment(saved.draft, saved, source, []);
@@ -78,16 +78,16 @@ test('summary precedes final table/body and escapes source-derived priority text
   assert.equal(manual.text, saved.summary + '\n\nKeep my <manual> wording.'); assert.match(manual.html, /<p>Keep my &lt;manual&gt; wording\.<\/p>/);
 });
 
-test('multiline Markdown in the priority cannot consume the chat table or double-escape ADO text', async () => {
+test('multiline finding titles stay outside the summary and cannot consume the chat table or double-escape ADO text', async () => {
   const f = await fixture(), finding = 'Missing <Admin> & | marker\n```'; f.findings[1].finding = finding;
   const saved = saveChatReview(f.roots, 'checkout', input(f.state, f.findings));
-  assert.equal(saved.summary.split('\n').length, 3); assert(!saved.summary.includes('\n```'));
-  assert(saved.summary.includes('\\`\\`\\`')); assert(saved.summary.includes('&lt;Admin&gt; &amp; &#124; marker; '));
+  assert.equal(saved.summary.split('\n').length, 2); assert(!saved.summary.includes('Missing')); assert(!saved.summary.includes('First priority'));
+  assert(saved.table.includes('\\`\\`\\`')); assert(saved.table.includes('&lt;Admin&gt; &amp; &#124; marker; '));
   assert.equal(readChatReview(f.roots, saved).findings[0].finding, finding);
   const source = await captureRequirements(f.roots, {version: 1, project: 'shop', application: 'checkout', sources: [{id: 'story', kind: 'file', path: 'story.md'}]});
   const comment = renderComment(saved.draft, saved, source, []);
   assert.equal(comment.text, saved.summary + '\n\n' + saved.table);
-  assert(comment.html.includes('Missing &lt;Admin&gt; &amp; | marker; ```'));
+  assert(comment.html.includes('Missing &lt;Admin&gt; &amp; | marker<br>```'));
   assert(!comment.html.includes('&amp;lt;Admin')); assert(!comment.html.includes('\\`\\`\\`'));
 });
 

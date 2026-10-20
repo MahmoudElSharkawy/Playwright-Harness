@@ -69,7 +69,7 @@ test('chat final comment is previewed exactly, with zero writes until exact conf
   assert.equal(repeated.commentId, 2); assert.equal(f.posts().length, 1);
 });
 
-test('changed source, discussion, inventory, final text, severity or summary priority rejects old confirmation', async t => {
+test('changed source, discussion, inventory, final text, severity or finding rejects old confirmation', async t => {
   for (const change of ['source', 'discussion', 'inventory', 'text', 'severity', 'finding']) {
     const f = await setup(t), options = {client: f.client}, preview = await previewRequirementsComment(f.roots, 'checkout', options);
     if (change === 'source') {f.state.items.get(200).rev++; f.state.items.get(200).fields['System.Description'] = 'Changed rule';}
@@ -79,7 +79,9 @@ test('changed source, discussion, inventory, final text, severity or summary pri
     if (change === 'severity' || change === 'finding') {
       const state = readRequirements(f.roots, 'checkout'), findings = f.decisions.findings.map(finding => ({...finding, [change]: change === 'severity' ? 'High' : 'Revised business concern'}));
       saveChatReview(f.roots, 'checkout', chatInput(state, findings, {comment: f.decisions.comment}));
-      assert.notEqual((await previewRequirementsComment(f.roots, 'checkout', options)).summary, preview.summary);
+      const revised = await previewRequirementsComment(f.roots, 'checkout', options);
+      if (change === 'severity') assert.notEqual(revised.summary, preview.summary);
+      else {assert.equal(revised.summary, preview.summary); assert.notEqual(revised.table, preview.table);}
     }
     await assert.rejects(publishRequirementsComment(f.roots, 'checkout', {...options, approval: preview.fingerprint}), /confirmation|changed|freshness/);
     assert.equal(f.posts().length, 0);
@@ -204,7 +206,7 @@ test('one approved story comment contains the chat table and native resolved per
   const options = {client: f.client}, preview = await previewRequirementsComment(f.roots, 'checkout', options);
   assert.equal(preview.mentions.length, 1); assert.equal(preview.mentions[0].id, analystId); assert.match(preview.table, /^\| Findings \| Type \| Severity \|/);
   assert.equal(preview.comment, preview.summary + '\n\n' + preview.table);
-  assert.match(preview.table, /Description: /);
+  assert.match(preview.table, /\*\*Description:\*\* /);
   for (const output of [preview.comment, preview.writes[0].body.text]) {
     assert(!/System\.Description|Microsoft\.VSTS|story \/|\(revision /.test(output));
     for (const entry of readRequirements(f.roots, 'checkout').inventory) assert(!output.includes(entry.id));
@@ -257,13 +259,14 @@ test('zero findings, declined review and a local destination never create an aut
   await assert.rejects(previewRequirementsComment(f.roots, 'local', {client: f.client}), /no originating/); assert.equal(f.posts().length, 0);
 });
 
-test('same-severity reordering invalidates approval and changes the summary priority with manual wording retained', async t => {
+test('same-severity reordering invalidates approval while retaining summary counts and manual wording', async t => {
   const f = await setup(t), options = {client: f.client};
   const findings = [f.decisions.findings[0], {...f.decisions.findings[0], id: 'F-02', finding: 'Second unresolved concern'}];
   const first = edit(f, {findings}), preview = await previewRequirementsComment(f.roots, 'checkout', options);
   const next = edit(f, {findings: findings.toReversed()}), revised = await previewRequirementsComment(f.roots, 'checkout', options);
-  assert.equal(next.draft.comment, first.draft.comment); assert.notEqual(revised.summary, preview.summary);
-  assert.match(revised.summary, /\*\*First priority:\*\* \*\*F-02:/);
+  assert.equal(next.draft.comment, first.draft.comment); assert.equal(revised.summary, preview.summary);
+  assert.notEqual(revised.table, preview.table); assert(revised.table.indexOf('F-02:') < revised.table.indexOf('F-01:'));
+  assert(!revised.summary.includes('First priority'));
   await assert.rejects(publishRequirementsComment(f.roots, 'checkout', {...options, approval: preview.fingerprint}), /confirmation/);
   assert.equal(f.posts().length, 0);
 });
@@ -310,6 +313,7 @@ test('older rated drafts with internal-looking text preview and post after norma
 
 const legacyComment = '<p>Approved questions.</p><ul>' + ['password-policy', 'address-format', 'retry-limit', 'expiry-time'].map(value => `<li data-q="${value}">Clarify ${value}.</li>`).join('') + '</ul>';
 const removeDataQuotes = html => html.replace(/(data-(?:q|vss-mention))="([^"\s<>]+)"/g, '$1=$2');
+const numericSeverityIcons = (html, hex = false) => html.replace(/[🔴🟠🔵]/gu, icon => `&#${hex ? 'X000' + icon.codePointAt(0).toString(16).toUpperCase() : '000' + icon.codePointAt(0)};`);
 async function pendingLegacyComment(f, sent, stored, {acknowledged = true, receipt = false} = {}) {
   const {mode, differences, fingerprint: previousFingerprint, ...payload} = await previewRequirementsComment(f.roots, 'checkout', {client: f.client});
   payload.writes[0].body.text = sent;
@@ -398,12 +402,85 @@ test('quote formatting never hides changed wording, attributes, unsafe values or
 
 test('optional attribute quote recovery retains destination, comment identity and mention readback checks', async t => {
   for (const kind of ['mentions', 'identity', 'story']) {
-    const f = await setup(t); roster(f); edit(f, {mentions: [analystId]}); f.control.transformComment = removeDataQuotes;
+    const f = await setup(t); roster(f); edit(f, {mentions: [analystId]}); f.control.transformComment = html => numericSeverityIcons(removeDataQuotes(html));
     const original = f.state.fault;
     f.state.fault = input => input.path === 'wit/workitems/200/comments/2' ? (input.send({...f.discussion.at(-1), ...(kind === 'mentions' ? {mentions: []} : kind === 'identity' ? {id: 99} : {workItemId: 999})}), true) : original(input);
     const options = {client: f.client}, preview = await previewRequirementsComment(f.roots, 'checkout', options);
     assert.equal((await publishRequirementsComment(f.roots, 'checkout', {...options, approval: preview.fingerprint})).mode, 'uncertain');
     await assert.rejects(reconcileRequirementsComment(f.roots, 'checkout', options), kind === 'mentions' ? /mention readback/ : /readback mismatch/); assert.equal(f.posts().length, 1);
+  }
+});
+
+test('numeric severity entities in acknowledgements and direct readback verify the approved payload without changing reviews', async t => {
+  for (const stage of ['acknowledgement', 'readback']) for (const hex of [false, true]) {
+    const f = await setup(t); roster(f); edit(f, {comment: null, mentions: [analystId]});
+    const transform = html => numericSeverityIcons(removeDataQuotes(html), hex);
+    if (stage === 'acknowledgement') f.control.transformComment = transform;
+    else {
+      const original = f.state.fault;
+      f.state.fault = input => input.path === 'wit/workitems/200/comments/2' ? (input.send({...f.discussion.at(-1), text: transform(f.discussion.at(-1).text)}), true) : original(input);
+    }
+    const state = readRequirements(f.roots, 'checkout'), draft = readChatReview(f.roots, state), bytes = readFileSync(join(f.roots.projectRoot, state.review.path), 'utf8');
+    const options = {client: f.client}, preview = await previewRequirementsComment(f.roots, 'checkout', options);
+    for (const icon of ['🔴', '🟠', '🔵']) assert(preview.writes[0].body.text.includes(icon));
+    const result = await publishRequirementsComment(f.roots, 'checkout', {...options, approval: preview.fingerprint});
+    assert.equal(result.mode, 'completed'); assert.equal(result.commentId, 2); assert.equal(f.posts().length, 1);
+    assert.equal(f.posts()[0].body.text, preview.writes[0].body.text); assert.deepEqual(readRequirements(f.roots, 'checkout'), state);
+    assert.deepEqual(readChatReview(f.roots, state), draft); assert.equal(readFileSync(join(f.roots.projectRoot, state.review.path), 'utf8'), bytes);
+    assert.equal((await publishRequirementsComment(f.roots, 'checkout', {...options, approval: preview.fingerprint})).commentId, 2); assert.equal(f.posts().length, 1);
+  }
+});
+
+test('numeric severity entities recover saved older three-line attempts by ID, receipt or owner selection without reposting', async t => {
+  const oldSummary = '**Summary: 3 findings — 3 gaps, 0 contradictions**\n🔴 High: 1 · 🟠 Medium: 1 · 🔵 Low: 1\n**First priority:** **F-01: Approved questions**';
+  const sent = '<p><strong>Summary: 3 findings — 3 gaps, 0 contradictions</strong><br>🔴 High: 1 · 🟠 Medium: 1 · 🔵 Low: 1<br><strong>First priority:</strong> <strong>F-01: Approved questions</strong></p>' + legacyComment;
+  for (const identity of ['saved-id', 'receipt', 'selected']) {
+    const f = await setup(t), options = {client: f.client};
+    const attempt = await pendingLegacyComment(f, sent, numericSeverityIcons(removeDataQuotes(sent), identity === 'receipt'), {acknowledged: identity !== 'selected', receipt: identity === 'receipt'});
+    const {fingerprint: priorFingerprint, ...payload} = attempt.plan;
+    payload.summary = oldSummary; payload.comment = oldSummary + '\n\nApproved questions.';
+    attempt.plan = {...payload, fingerprint: fingerprint(payload)};
+    const attemptPath = '.harness/state/requirements/checkout/comment-attempt.json'; put(f.roots, attemptPath, attempt);
+    const current = edit(f, {comment: 'A different current draft.'});
+    const state = readRequirements(f.roots, 'checkout'), draft = readChatReview(f.roots, state), bytes = readFileSync(join(f.roots.projectRoot, state.review.path), 'utf8');
+    const receipt = readFileSync(join(f.roots.projectRoot, attempt.receipt), 'utf8');
+    assert(!current.summary.includes('First priority'));
+    let result;
+    if (identity === 'selected') {
+      const pending = await reconcileRequirementsComment(f.roots, 'checkout', options);
+      assert.equal(pending.mode, 'reconciliation-required'); assert.deepEqual(pending.candidates.map(item => item.commentId), [2]);
+      await assert.rejects(reconcileRequirementsComment(f.roots, 'checkout', {...options, commentId: 1}), /does not match/);
+      result = await reconcileRequirementsComment(f.roots, 'checkout', {...options, commentId: 2});
+    } else result = await publishRequirementsComment(f.roots, 'checkout', {...options, approval: 'different-current-draft'});
+    assert.equal(result.mode, 'completed'); assert.equal(result.reconciled, true); assert.equal(result.commentId, 2); assert.equal(result.fingerprint, attempt.plan.fingerprint);
+    assert.equal(f.posts().length, 0); assert.deepEqual(readRequirements(f.roots, 'checkout'), state); assert.deepEqual(readChatReview(f.roots, state), draft);
+    const stored = JSON.parse(readFileSync(join(f.roots.projectRoot, attemptPath), 'utf8'));
+    assert.equal(stored.status, 'completed'); assert.deepEqual(stored.plan, attempt.plan);
+    assert.equal(readFileSync(join(f.roots.projectRoot, state.review.path), 'utf8'), bytes); assert.equal(readFileSync(join(f.roots.projectRoot, attempt.receipt), 'utf8'), receipt);
+  }
+});
+
+test('numeric severity comparison rejects unrelated entities, changed text or markup and encoded attributes', async t => {
+  const cases = [
+    ['<p>🔴 High</p>', '<p>&#128309; High</p>'],
+    ['<p>🔴 High</p>', '<p>&#128308; Changed</p>'],
+    ['<strong>🔴</strong>', '<b>&#128308;</b>'],
+    ['<p>🟠</p>', '<p>&#128992</p>'],
+    ['<p>🟠</p>', '<p>&#+128992;</p>'],
+    ['<p>🔴</p>', '<p>&amp;#128308;</p>'],
+    ['<p>&amp;#128308;</p>', '<p>&#128308;</p>'],
+    ['<p>&amp;</p>', '<p>&#38;</p>'],
+    ['<p>🟡</p>', '<p>&#128993;</p>'],
+    ['<p title="🔴">Text</p>', '<p title="&#128308;">Text</p>'],
+    ['<a href="https://example.test/🔴">Text</a>', '<a href="https://example.test/&#128308;">Text</a>'],
+    ['<script>🔴</script>', '<script>&#128308;</script>'],
+    ['<!-- 🔴 -->', '<!-- &#128308; -->'],
+    ['<svg><text>🔴</text></svg>', '<svg><text>&#128308;</text></svg>']
+  ];
+  for (const [sent, stored] of cases) {
+    const f = await setup(t); await pendingLegacyComment(f, sent, stored);
+    await assert.rejects(reconcileRequirementsComment(f.roots, 'checkout', {client: f.client}), /does not match/); assert.equal(f.posts().length, 0);
+    assert.equal(JSON.parse(readFileSync(join(f.roots.projectRoot, '.harness/state/requirements/checkout/comment-attempt.json'), 'utf8')).status, 'uncertain');
   }
 });
 

@@ -75,10 +75,10 @@ function reviewSummaryLines(draft, encode, strong) {
   const unrated = findings.filter(finding => !finding.severity).length;
   if (unrated) counts.push(strong(text(`Unrated: ${unrated}`)));
   const overview = `Summary: ${total} ${total === 1 ? 'finding' : 'findings'} — ${gaps} ${gaps === 1 ? 'gap' : 'gaps'}, ${contradictions} ${contradictions === 1 ? 'contradiction' : 'contradictions'}`;
-  const priority = !total ? text('No evidenced gaps or contradictions in the reviewed material. Unresolved inventory decisions/source omissions still apply.')
-    : unrated ? text('Assign severity to unrated findings before choosing the first priority or posting a new draft.')
-    : `${strong(text('First priority:'))} ${strong(text(findingTitle(findings[0])))}`;
-  return [strong(text(overview)), counts.join(' · '), priority];
+  const lines = [strong(text(overview)), counts.join(' · ')];
+  if (!total) lines.push(text('No evidenced gaps or contradictions in the reviewed material. Unresolved inventory decisions/source omissions still apply.'));
+  else if (unrated) lines.push(text('Assign severity to unrated findings before posting a new draft.'));
+  return lines;
 }
 export const renderReviewSummary = draft => reviewSummaryLines(draft, markdownCell, markdownStrong).join('\\\n');
 function questionText(finding, text, strong) {
@@ -100,10 +100,10 @@ function questionText(finding, text, strong) {
 function rows(draft, state, source, text, strong) {
   return orderedFindings(draft.findings).map(finding => [
     strong(text(findingTitle(finding))), text(finding.type), strong(text(severityLabel(finding.severity))),
-    text(finding.sources.map(reference => {
+    finding.sources.map(reference => {
       const entry = state.inventory.find(item => item.id === reference.requirementId), part = source.parts.find(part => part.id === entry.partId);
-      return `${sourceLabel(part, source)}: “${reference.quote}”`;
-    }).join('\n')), questionText(finding, text, strong)
+      return strong(text(`${sourceLabel(part, source)}:`)) + text(` “${reference.quote}”`);
+    }).join(text('\n')), questionText(finding, text, strong)
   ]);
 }
 const columns = ['Findings', 'Type', 'Severity', 'Source material text', 'Question/Comment for Business'];

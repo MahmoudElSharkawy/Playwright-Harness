@@ -36,16 +36,18 @@ attempts/receipts. Resolve package files through [ROOTS](../.agents/skills/ROOTS
 An illustrative review, for a story containing the quoted text:
 
 **Summary: 2 findings — 1 gap, 1 contradiction**\
-🔴 **High: 1** · 🟠 **Medium: 1** · 🔵 **Low: 0**\
-**First priority:** **F-02: Conflicting retry limits**
+🔴 **High: 1** · 🟠 **Medium: 1** · 🔵 **Low: 0**
 
 | Findings | Type | Severity | Source material text | Question/Comment for Business |
 |---|---|---|---|---|
-| **F-02: Conflicting retry limits** | Contradiction | **🔴 High** | Description: “Three attempts”; AC 2: “Five attempts” | Which **retry limit** applies? |
-| **F-01: Expiry duration unspecified** | Gap | **🟠 Medium** | Description: “The link expires.” | How long should the **link remain valid**? |
+| **F-02: Conflicting retry limits** | Contradiction | **🔴 High** | **Description:** “Three attempts”; **Acceptance Criteria:** “Five attempts” | Which **retry limit** applies? |
+| **F-01: Expiry duration unspecified** | Gap | **🟠 Medium** | **Description:** “The link expires.” | How long should the **link remain valid**? |
 
-The same controlled emphasis appears in chat and ADO: bold summary totals/priority,
-finding titles and named severity dots. Type and source quotations stay plain.
+The same controlled emphasis appears in chat and ADO: bold summary counts,
+finding titles, named severity dots and readable source labels including their
+colons. Type and quoted source passages stay plain. The normal summary has two
+lines; the severity-sorted table supplies the priority order without a separate
+First priority line. Zero-finding and unrated-draft warnings remain when applicable.
 An optional `questionFocus` names one exact phrase in the unchanged question to
 bold; without it, the question stays plain. No CSS colors or row backgrounds are
 added. Formatting is applied after escaping text, preserving literal Markdown,
@@ -74,7 +76,7 @@ Use readable provenance: **Title**, **Description**, **Acceptance Criteria**,
 passage. Internal ADO field paths, source/requirement IDs and revision hashes stay
 in saved traceability records. Finding labels such as `F-01` remain useful for
 conversation. When a stored finding label is a generated `req-...` ID, the table
-and first-priority summary omit that label without changing its stored ID.
+omits that label without changing its stored ID.
 
 Source quotations, finding/question wording and manual final comments retain
 their exact text. There is no identifier/namespace scan or rejection of older
@@ -191,9 +193,8 @@ pom-harness requirements resume --id checkout
 `review` and `edit` save the full current selection, so removing a finding removes
 its row. Re-read before editing and pass the latest head; stale/foreign/malformed
 edits cannot overwrite valid state. Save/edit/read/resume return a derived `summary`
-with total findings, counts by Type and Severity, and the first highest-severity
-finding as the priority concern. No separate summary input or acceptance authority
-is stored. Edits recalculate counts, priority and ordering from the current findings.
+with total findings and counts by Type and Severity. No separate summary input or
+acceptance authority is stored. Edits recalculate counts and ordering from the current findings.
 With zero findings, the summary limits the conclusion to reviewed material and
 retains unresolved inventory decisions/source omissions.
 
@@ -276,15 +277,25 @@ POST: changes after the last read remain a documented race.
 
 Durable attempts and authenticated delivery receipts retain request identity and
 acknowledged comment IDs. Uncertain outcomes cannot be automatically replayed.
-Verification tolerates only optional quote delimiters around nonempty HTML
-attribute values that can safely be unquoted.
+Verification tolerates optional quote delimiters around nonempty HTML attribute
+values that can safely be unquoted, and equivalent complete decimal/hex numeric
+references for only 🔴, 🟠 and 🔵 in normal HTML text nodes. Attribute values,
+other entities and literal double-encoded references are not decoded.
 All other text, markup and attribute names/values remain strict; unsupported or
 malformed markup retains exact comparison. The approved payload/fingerprint and
-analysis data are unchanged. Reconciliation verifies destination/content/mention
+analysis data are unchanged by this comparison. Reconciliation verifies destination/content/mention
 IDs and never treats an
 identical new comment alone as proof of authorship. Declined publication, missing
 access and local-only review keep their saved drafts. No story fields, cases,
 results or test expectations are modified.
+
+After installing the fix, reconcile an older uncertain attempt using its saved
+analysis ID. Verification uses the stored attempted comment, including its old
+First priority line, rather than replacing it with the current rendering. Recovery
+sends no new POST and preserves the saved payload, current draft and receipt.
+For a newly formatted comment, obtain a fresh exact preview/approval separately.
+ADO acceptance alone is not verified completion: report an uncertain attempt as
+accepted but unverified until the harness completes reconciliation.
 
 ## Refresh, legacy artifacts and planning
 
@@ -297,7 +308,7 @@ decisions never automatically carry into the current draft.
 
 Earlier chat-v1 drafts remain readable without rewriting their saved bytes. Missing
 severity displays as **Unrated**, with an unrated count and a request to assign it;
-no automatic rating or priority is invented. Before preview/post, inspect the old
+no automatic rating is invented. Before preview/post, inspect the old
 draft and explicitly assign every finding a severity in a version-2 edit using the
 latest state head. This retains the review ID, manual wording/mentions when supplied
 and parent history without another analysis pass. Obtain approval for the new

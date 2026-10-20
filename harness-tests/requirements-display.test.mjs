@@ -22,12 +22,16 @@ function displayFixture() {
   return {source, state, draft: {findings, comment: null, mentions: []}};
 }
 
-test('chat and posted table use readable source labels without field paths, source IDs or revision hashes', () => {
+test('chat and posted table use bold readable source labels with plain exact quotes and no internal provenance', () => {
   const f = displayFixture(), before = structuredClone(f), table = renderChatTable(f.draft, f.state, f.source), comment = renderComment(f.draft, f.state, f.source, []);
   for (const output of [table, comment.text, comment.html]) {
     for (const label of ['Title:', 'Description:', 'Acceptance Criteria:', 'Discussion comment 17:', 'rules &amp; limits.pdf', 'requirements &amp; limits.md', 'page 2 paragraph 1', 'lines 2-3']) assert(output.includes(label), label);
     for (const internal of ['System.Title', 'System.Description', 'Microsoft.VSTS.Common.AcceptanceCriteria', 'story /', 'notes-machine-ref', 'ado-attachment-', 'comment:17', 'revision', 'a'.repeat(64), ...f.state.inventory.map(item => item.id)]) assert(!output.includes(internal), internal);
   }
+  for (const label of ['Title', 'Description', 'Acceptance Criteria', 'Discussion comment 17', 'Attachment: rules &amp; limits.pdf (page 2 paragraph 1)', 'File: requirements &amp; limits.md (lines 2-3)']) {
+    assert(table.includes(`**${label}:**`), label); assert(comment.html.includes(`<strong>${label}:</strong>`), label);
+  }
+  for (const part of f.source.parts) assert(comment.html.includes(`</strong> “${part.text}”`));
   assert.deepEqual(f, before); assert.match(table, /F-01: Clarify/);
 });
 
@@ -43,7 +47,7 @@ test('generated finding IDs stay internal while readable labels and stored refer
   for (const output of [renderChatTable(f.draft, f.state, f.source), renderReviewSummary(f.draft)]) assert(!output.includes(reportedId));
   const draft = validateReviewInput(chatInput(f.state, f.draft.findings), f.state, f.source), comment = renderComment(draft, f.state, f.source, []);
   for (const output of [comment.text, comment.html]) {assert(!output.includes(reportedId)); assert(output.includes('F-02: Clarify'));}
-  assert.match(comment.text, /\*\*First priority:\*\* \*\*Clarify supported behavior\*\*/);
+  assert(comment.text.includes('**Clarify supported behavior**')); assert(!comment.text.includes('First priority:'));
   assert.equal(draft.findings[0].id, reportedId); assert.deepEqual(f, before);
 });
 
@@ -54,7 +58,7 @@ test('free-form findings, questions, manual comments and source quotes retain te
   const draft = validateReviewInput(chatInput(f.state, [finding], {comment: text}), f.state, f.source), comment = renderComment(draft, f.state, f.source, []);
   assert.deepEqual(draft.findings, [finding]); assert.equal(draft.comment, text); assert(comment.text.includes(text));
   assert(comment.html.includes(`See _${reportedId}_ and System.Description &lt;current&gt;.`));
-  assert(renderChatTable(draft, f.state, f.source).includes('Title: “System.Description”'));
+  assert(renderChatTable(draft, f.state, f.source).includes('**Title:** “System.Description”'));
 });
 
 test('emphasis uses bold titles, named severity dots and only the selected question phrase in chat and ADO', () => {
@@ -67,7 +71,7 @@ test('emphasis uses bold titles, named severity dots and only the selected quest
   assert(comment.html.includes('<td><strong>F-01: Clarify supported behavior</strong></td><td>Gap</td><td><strong>🔴 High</strong></td>'));
   assert(comment.html.includes('What is the <strong>maximum retry count</strong>?'));
   assert(comment.html.includes('<p><strong>Summary: 3 findings — 3 gaps, 0 contradictions</strong><br>🔴 <strong>High: 1</strong>'));
-  assert(comment.html.includes('<td>Title: “Manage saved addresses”</td>')); assert(!/style=|<font|background|<span/.test(comment.html));
+  assert(comment.html.includes('<td><strong>Title:</strong> “Manage saved addresses”</td>')); assert(!/style=|<font|background|<span/.test(comment.html));
   assert.deepEqual(f, before);
 });
 
@@ -103,9 +107,9 @@ test('Markdown emphasis preserves punctuation, adjacent focus matches and title 
   }
 });
 
-test('chat summary uses explicit Markdown hard breaks for three visible lines', () => {
+test('two-line chat summary has one hard break and no First priority concern', () => {
   const f = displayFixture(), summary = renderReviewSummary(f.draft);
-  assert.equal(summary.split('\\\n').length, 3);
+  assert.equal(summary.split('\\\n').length, 2); assert(!summary.includes('First priority')); assert(!summary.includes('Clarify supported behavior'));
 });
 
 test('GFM strikethrough markers stay literal in generated source quotes and focused questions', () => {
@@ -113,10 +117,10 @@ test('GFM strikethrough markers stay literal in generated source quotes and focu
   f.source.parts[0].text = quote; f.state.inventory[0].end = quote.length;
   Object.assign(finding, {finding: 'Keep ~~title~~ literal', sources: [{requirementId: f.state.inventory[0].id, quote}], question: 'Does ~~literal~~ apply?', questionFocus: 'literal'});
   const comment = renderComment({...f.draft, findings: [finding]}, f.state, f.source, []);
-  assert(comment.text.includes('Title: “\\~\\~literal\\~\\~”'));
+  assert(comment.text.includes('**Title:** “\\~\\~literal\\~\\~”'));
   assert(comment.text.includes('Does \\~\\~**literal**\\~\\~ apply?'));
   assert(comment.text.includes('**F-01: Keep \\~\\~title\\~\\~ literal**'));
-  assert(comment.html.includes('<td>Title: “~~literal~~”</td>'));
+  assert(comment.html.includes('<td><strong>Title:</strong> “~~literal~~”</td>'));
   assert(comment.html.includes('Does ~~<strong>literal</strong>~~ apply?'));
   assert(comment.html.includes('<strong>F-01: Keep ~~title~~ literal</strong>'));
   assert.equal(finding.sources[0].quote, quote);

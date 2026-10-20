@@ -51,15 +51,17 @@ Medium or Low), `finding`, exact located
 to the exact decision phrase to emphasize, without changing `question`; omit the
 hint for plain text. Run `requirements review --id
 <id> --input <file>`. Show the returned short `summary` (total findings, counts by
-Type/Severity and first priority concern) before its table in chat, with exactly:
+Type/Severity) before its table in chat, with exactly:
 
 | Findings | Type | Severity | Source material text | Question/Comment for Business |
 |---|---|---|---|---|
-| **Stable ID and concise issue** | Gap or Contradiction | **🔴 High**, **🟠 Medium** or **🔵 Low** | Exact quoted description/AC/other passage and location; both sides for conflicts | Proposed question with only its **decision phrase** emphasized |
+| **Stable ID and concise issue** | Gap or Contradiction | **🔴 High**, **🟠 Medium** or **🔵 Low** | **Readable source label:** Exact quoted passage; both sides for conflicts | Proposed question with only its **decision phrase** emphasized |
 
-Show the renderer's three-line summary: bold totals/type counts, colored severity
-dots with bold named counts, then the bold first-priority concern. Keep Type,
-source quotations and ordinary text plain; no CSS colors or whole-row styling.
+Show the renderer's two-line normal summary: bold totals/type counts, then colored
+severity dots with bold named counts. No First priority line; table order supplies
+priority. Preserve zero-finding/unrated warnings when applicable. Bold readable
+source labels including the colon; keep Type, quoted passages and ordinary text
+plain. No CSS colors or whole-row styling.
 Preserve the summary's Markdown hard breaks. Adjacent focus matches share one bold
 span; punctuation embedded inside a word stays plain in both views when Markdown
 cannot safely emphasize it. Never add visible formatting markers to business text.
@@ -158,6 +160,11 @@ only an explicit user-requested manual comment can override that.
 
 The adapter rechecks freshness and durably records dispatch, comment ID/URL and
 mention readback. On uncertainty run `requirements reconcile`; never retry blindly.
+The verifier accepts only equivalent complete numeric references for the three
+severity icons in normal HTML text, alongside safe optional attribute quotes.
+Older attempts reconcile against their saved payload, including the old summary;
+do not replace it with the current rendering or send another POST. If ADO accepted
+a comment but harness verification failed, report it as accepted but unverified.
 Do not bypass an unresolved attempt with a direct API post. A result with
 `reconciled: true` recovers the earlier comment; it does not post a different current
 draft. For another comment, refresh changed sources, preview and obtain approval
