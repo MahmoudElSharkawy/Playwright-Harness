@@ -204,6 +204,11 @@ test('one approved story comment contains the chat table and native resolved per
   const options = {client: f.client}, preview = await previewRequirementsComment(f.roots, 'checkout', options);
   assert.equal(preview.mentions.length, 1); assert.equal(preview.mentions[0].id, analystId); assert.match(preview.table, /^\| Findings \| Type \| Severity \|/);
   assert.equal(preview.comment, preview.summary + '\n\n' + preview.table);
+  assert.match(preview.table, /Description: /);
+  for (const output of [preview.comment, preview.writes[0].body.text]) {
+    assert(!/System\.Description|Microsoft\.VSTS|story \/|\(revision /.test(output));
+    for (const entry of readRequirements(f.roots, 'checkout').inventory) assert(!output.includes(entry.id));
+  }
   assert.match(preview.writes[0].body.text, /<table>/); assert.match(preview.writes[0].body.text, new RegExp('data-vss-mention="version:2.0,' + analystId));
   assert.equal(f.posts().length, 0);
   const result = await publishRequirementsComment(f.roots, 'checkout', {...options, approval: preview.fingerprint});
@@ -278,4 +283,20 @@ test('unrated chat-v1 drafts cannot preview or dispatch until rated, and their s
   const preview = await previewRequirementsComment(f.roots, 'checkout', options);
   assert.equal((await publishRequirementsComment(f.roots, 'checkout', {...options, approval: preview.fingerprint})).mode, 'completed');
   assert.equal(f.posts().length, 1);
+});
+
+test('older drafts with internal references cannot preview or post and retain their exact saved bytes', async t => {
+  const leakedId = 'req-70d3b394275978d0a3db7e54b2d900711ed8cb8bf61fc67d';
+  for (const kind of ['finding-id', 'question', 'manual']) {
+    const f = await setup(t), options = {client: f.client}, state = readRequirements(f.roots, 'checkout'), draft = structuredClone(f.decisions);
+    if (kind === 'finding-id') draft.findings[0].id = leakedId;
+    if (kind === 'question') draft.findings[0].question = 'Clarify story / Microsoft.VSTS.Common.AcceptanceCriteria.';
+    if (kind === 'manual') draft.comment = 'See ' + leakedId;
+    const revision = fingerprint(draft), path = `.harness/state/requirements/checkout/reviews/${draft.reviewId}/${revision}.json`, bytes = JSON.stringify(draft, null, 4) + '\n';
+    put(f.roots, path, bytes); const saved = saveRequirements(f.roots, 'checkout', {...state, review: {...state.review, revision, path}});
+    await assert.rejects(previewRequirementsComment(f.roots, 'checkout', options), /internal|readable/i);
+    await assert.rejects(publishRequirementsComment(f.roots, 'checkout', {...options, approval: 'earlier-approval'}), /internal|readable/i);
+    assert.equal(f.posts().length, 0); assert.equal(f.receipts().length, 0); assert.equal(readRequirements(f.roots, 'checkout').head, saved.head);
+    assert.equal(readFileSync(join(f.roots.projectRoot, path), 'utf8'), bytes);
+  }
 });

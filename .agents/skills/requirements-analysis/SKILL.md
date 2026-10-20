@@ -65,6 +65,15 @@ Zero findings describes only reviewed material and leaves acceptance/omissions o
 
 The row above describes the format, not an actual finding. Never present invented
 source text as evidence. Keep IDs stable so “remove F-02” or “edit F-01” is clear.
+Show readable source labels: Title, Description, Acceptance Criteria, Discussion
+comment, or a supplied filename and located passage. ADO field paths, generated
+requirement/source IDs and revision hashes belong only in internal trace records.
+Keep `sources.requirementId` intact in JSON; do not copy it into a finding label,
+question, summary or manual final body. Preserve literal technical terms inside
+exact source quotations. Use readable finding labels such as `F-01`; if an older
+draft misuses a `req-...` ID as its finding label, propose a readable label in an
+explicit revised draft while retaining the earlier revision. Validation blocks
+stray internal references before saving or posting, without silently rewriting text.
 User requests can add/remove/edit findings, severity, questions, manual final text
 or mentions.
 Re-read current state, save the full revised draft with `requirements edit --id <id>

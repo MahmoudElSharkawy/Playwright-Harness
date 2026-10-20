@@ -60,6 +60,20 @@ input order, including an explicitly requested reorder.
 The agent presents rendered text and recipient names in chat, not raw JSON,
 fingerprints or wire HTML. The commands/formats below are its deterministic tools.
 
+Use readable provenance: **Title**, **Description**, **Acceptance Criteria**,
+**Discussion comment 17**, or a supplied file/attachment name and its located
+passage. Internal ADO field paths, source/requirement IDs and revision hashes stay
+in saved traceability records. Do not copy them into findings, questions, summary
+prose or manual final comments. Finding labels such as `F-01` remain useful for
+conversation; generated `req-...` IDs are not finding labels.
+
+New edits and outgoing comment rendering reject stray `req-...` identifiers and
+ADO field namespaces with an actionable correction. Exact referenced source
+quotations retain their original technical terms; the validator does not rewrite
+source evidence or manual text. Older drafts remain readable and byte-identical,
+but a draft containing internal references needs an explicit corrected edit and a
+new final preview before posting. Previously posted comments are not rewritten.
+
 ## Capture and acceptance inventory
 
 From an installed consumer, use `npx --no pom-harness requirements ...`. From source,
