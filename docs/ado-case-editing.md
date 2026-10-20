@@ -38,7 +38,7 @@ Ordinary email addresses remain literal text; standalone `@Parameter` references
 are unsupported for content editing.
 Insertion advances `last`; removal/reordering never reuse previously allocated IDs.
 
-Unknown fields, duplicate IDs, empty titles/actions, malformed XML, contradictory
+Unknown fields, duplicate IDs, empty or over-255-character titles, empty actions, malformed XML, contradictory
 removals, parameters/shared references and unsupported embedded content refuse
 content editing. Title-only changes do not parse or rewrite steps/parameter data.
 Input is limited to 2 MiB, 100 selected cases and 1,000 steps per case; individual
@@ -100,3 +100,4 @@ preservation, conflicts, bounds, partial batches and uncertain readback. They do
 not establish live-tenant write compatibility; optional tenant proof is separate.
 
 The revision guard follows Microsoft's [Work Items Update REST 7.1 contract](https://learn.microsoft.com/en-us/rest/api/azure/devops/wit/work-items/update?view=azure-devops-rest-7.1).
+Title bounds follow the [documented work-item limit](https://learn.microsoft.com/en-us/azure/devops/boards/work-items/about-work-items?view=azure-devops).

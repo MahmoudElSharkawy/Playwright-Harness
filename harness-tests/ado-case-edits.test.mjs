@@ -179,6 +179,13 @@ test('malformed proposals, unknown fields and bounded request failures mutate no
   assert.equal(writes(f).length, 0);
 });
 
+test('ADO title limit permits 255 characters and rejects 256 before any selected case is written', async t => {
+  const f = await setup(t);
+  await assert.rejects(f.management.editCases({input: proposal({id: 101, revision: 1, title: 'First'}, {id: 102, revision: 1, title: 'x'.repeat(256)})}), /255/);
+  assert.equal(writes(f).length, 0); assert.equal(f.state.requests.length, 0);
+  assert.equal((await apply(f, proposal({id: 101, revision: 1, title: 'x'.repeat(255)}))).mode, 'execute');
+});
+
 test('partial batches retain verified effects and classify rejection, lost response and readback failure', async t => {
   for (const failure of ['permission', 'lost-before-write', 'lost-after-write', 'readback', 'mismatch']) {
     const f = await setup(t), input = proposal(...[101, 102, 200].map(id => ({id, revision: 1, title: `Update ${id}`}))), preview = await f.management.editCases({input});

@@ -17,7 +17,7 @@ function validate(input) {
     requireValue(Number.isSafeInteger(row.revision) && row.revision > 0 && row.revision <= 2147483647, 'Every case edit needs a positive expected revision.');
     requireValue(row.title !== undefined || row.steps !== undefined, 'Supply a title or ordered steps for each selected case.');
     requireValue(row.removeStepIds === undefined || row.steps !== undefined, 'Step removals require a complete ordered steps list.');
-    if (row.title !== undefined) requireValue(typeof row.title === 'string' && row.title.trim() && row.title.length <= 256 && !/[\x00-\x1f\ufffe\uffff]/.test(row.title), 'Case title must be nonempty, at most 256 characters and contain no control characters.');
+    if (row.title !== undefined) requireValue(typeof row.title === 'string' && row.title.trim() && row.title.length <= 255 && !/[\x00-\x1f\ufffe\uffff]/.test(row.title), 'Case title must be nonempty, at most 255 characters and contain no control characters.');
   }
   requireValue(new Set(input.cases.map(row => adoId(row.id))).size === input.cases.length, 'Selected case IDs must be unique.');
 }
