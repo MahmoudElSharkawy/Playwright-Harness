@@ -107,3 +107,17 @@ test('chat summary uses explicit Markdown hard breaks for three visible lines', 
   const f = displayFixture(), summary = renderReviewSummary(f.draft);
   assert.equal(summary.split('\\\n').length, 3);
 });
+
+test('GFM strikethrough markers stay literal in generated source quotes and focused questions', () => {
+  const f = displayFixture(), quote = '~~literal~~', finding = f.draft.findings[0];
+  f.source.parts[0].text = quote; f.state.inventory[0].end = quote.length;
+  Object.assign(finding, {finding: 'Keep ~~title~~ literal', sources: [{requirementId: f.state.inventory[0].id, quote}], question: 'Does ~~literal~~ apply?', questionFocus: 'literal'});
+  const comment = renderComment({...f.draft, findings: [finding]}, f.state, f.source, []);
+  assert(comment.text.includes('Title: “\\~\\~literal\\~\\~”'));
+  assert(comment.text.includes('Does \\~\\~**literal**\\~\\~ apply?'));
+  assert(comment.text.includes('**F-01: Keep \\~\\~title\\~\\~ literal**'));
+  assert(comment.html.includes('<td>Title: “~~literal~~”</td>'));
+  assert(comment.html.includes('Does ~~<strong>literal</strong>~~ apply?'));
+  assert(comment.html.includes('<strong>F-01: Keep ~~title~~ literal</strong>'));
+  assert.equal(finding.sources[0].quote, quote);
+});

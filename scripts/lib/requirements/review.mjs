@@ -107,7 +107,7 @@ function rows(draft, state, source, text, strong) {
   ]);
 }
 const columns = ['Findings', 'Type', 'Severity', 'Source material text', 'Question/Comment for Business'];
-const markdownCell = value => escapeHtml(value).replaceAll('|', '&#124;').replace(/[\\`*_\[\]{}]/g, '\\$&').replace(/\r\n?|\n/g, '; ');
+const markdownCell = value => escapeHtml(value).replaceAll('|', '&#124;').replace(/[\\`*_~\[\]{}]/g, '\\$&').replace(/\r\n?|\n/g, '; ');
 export function renderChatTable(draft, state, source) {
   return [...[columns, columns.map(() => '---')].map(row => row.map(markdownCell)), ...rows(draft, state, source, markdownCell, markdownStrong)].map(row => '| ' + row.join(' | ') + ' |').join('\n');
 }
