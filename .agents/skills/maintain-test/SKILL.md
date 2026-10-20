@@ -20,6 +20,13 @@ Resolve requested cases from existing sources and history first. Confirm only mi
 scope/environment information that cannot be inferred. A blocked case may have no
 generated test. Investigate selected cases and resume their owning workflow.
 
+For direct requests to update original ADO case titles, actions, expected results
+or step order, follow [case editing](../../../docs/ado-case-editing.md) first. That
+workflow edits only selected source cases. Refetch with `--revisions` into a fresh
+output folder; preserve old snapshots/failures and record accepted requirement
+evidence before maintaining changed expectations. A source edit never verifies
+automation or resets repair budgets.
+
 ## Assess before editing
 
 1. Capture case/scenario IDs, source identity and revisions, consumer commit and

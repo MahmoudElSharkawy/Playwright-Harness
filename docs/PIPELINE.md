@@ -23,6 +23,12 @@ All three source routes follow the same workflow. Standalone
 produces reports without generating POM code. Dated native-host proof and limits
 are retained in the [validation archive](archive/milestones/M15-VALIDATION.md).
 
+To update original ADO case titles, actions or expected results, use the separate
+[case-editing workflow](ado-case-editing.md). Refetch with `--revisions` into a fresh
+output folder and preserve the executed source/history. Revised expectations still
+need accepted requirement evidence and the existing maintenance/revision gates;
+editing the source does not make automation READY.
+
 ```text
 SOURCE → REFINE → EXPLORE → PREPARE → AUTHOR → CANDIDATE → REVIEW → VERIFY ×2 → READY → DELIVER
                                         ▲                    │        │                 (optional)

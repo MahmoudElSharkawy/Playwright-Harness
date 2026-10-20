@@ -51,6 +51,11 @@ export function htmlToText(html) {
   return t.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').replace(/[ \t]{2,}/g, ' ').trim();
 }
 
+/** False-formatted values contain XML-escaped literal text, not an HTML fragment. */
+export function parameterizedText(value, formatted = true) {
+  return formatted ? htmlToText(value) : decodeEntities(value);
+}
+
 export function parseStepsXml(xml) {
   const out = [];
   if (!xml) return out;
@@ -71,8 +76,8 @@ export function parseStepsXml(xml) {
     const type = (attrs.match(/type="([^"]*)"/) || [, ''])[1];
     // Same self-closing-first shape: an empty <parameterizedString/> keeps its
     // positional slot (action vs expected) instead of shifting the next one into it.
-    const params = [...inner.matchAll(/<parameterizedString\b[^>]*?(?:\/\s*>|>([\s\S]*?)<\/parameterizedString\s*>)/g)]
-      .map((p) => htmlToText(p[1] || ''));
+    const params = [...inner.matchAll(/<parameterizedString\b([^>]*?)(?:\/\s*>|>([\s\S]*?)<\/parameterizedString\s*>)/g)]
+      .map((p) => parameterizedText(p[2] || '', !/\bisformatted\s*=\s*(?:"false"|'false')/.test(p[1])));
     out.push({
       kind: 'step',
       type,

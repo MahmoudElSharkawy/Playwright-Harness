@@ -10,6 +10,13 @@ const fields = ['System.Id', 'System.Title', 'System.TeamProject', 'System.State
 const storyLinks = Object.freeze({'tested-by': 'Microsoft.VSTS.Common.TestedBy-Forward', child: 'System.LinkTypes.Hierarchy-Forward', related: 'System.LinkTypes.Related'});
 const discovery = ['System.Id', 'System.WorkItemType', 'System.TeamProject'];
 
+/** Use process metadata, including custom/localized case types, rather than a label. */
+export async function adoTestCaseType(client) {
+  const category = await client.read('wit/workitemtypecategories/Microsoft.TestCaseCategory?api-version=7.1'), kinds = category.workItemTypes;
+  requireValue(String(category.referenceName).toLowerCase() === 'microsoft.testcasecategory' && Array.isArray(kinds) && kinds.length > 0 && kinds.length <= 100 && kinds.every(kind => typeof kind?.name === 'string' && kind.name.trim()), 'ADO test-case category is unavailable or incomplete.');
+  return type => typeof type === 'string' && kinds.some(kind => kind.name.toLowerCase() === type.toLowerCase());
+}
+
 export function createAdoTestSource(client) {
   async function batch(ids, select = fields, owned = true) {
     const items = new Map();
@@ -24,7 +31,7 @@ export function createAdoTestSource(client) {
     }
     return items;
   }
-  async function readCases(ids, {tolerant = false} = {}) {
+  async function readCases(ids, {tolerant = false, includeRevisions = false} = {}) {
     const items = await batch(ids), shared = new Map();
     let dependencies, sharedParameters;
     async function expand(xml, trail = []) {
@@ -64,8 +71,9 @@ export function createAdoTestSource(client) {
       cases.push({id, title: f['System.Title'], state: f['System.State'] ?? '', priority: f['Microsoft.VSTS.Common.Priority'] ?? null,
         tags: String(f['System.Tags'] ?? '').split(';').map(tag => tag.trim()).filter(Boolean), steps: await expand(f['Microsoft.VSTS.TCM.Steps']),
         parameters: f['Microsoft.VSTS.TCM.Parameters'] ?? null, dataTable, ...(dataTableXml === null ? {} : {dataTableXml}),
-        ...(tolerant ? {rev: items.get(id).rev, contentSha256: fingerprint({title: f['System.Title'], steps: f['Microsoft.VSTS.TCM.Steps'], parameters: f['Microsoft.VSTS.TCM.Parameters'] ?? null, dataTable: dataTableXml}), sharedRevisions: dependencies, sharedParameters: [...sharedParameters]} : {})});
-      if (tolerant) requireValue(Number.isInteger(items.get(id).rev) && items.get(id).rev > 0, 'ADO case revision is incomplete.');
+        ...(tolerant || includeRevisions ? {rev: items.get(id).rev} : {}),
+        ...(tolerant ? {contentSha256: fingerprint({title: f['System.Title'], steps: f['Microsoft.VSTS.TCM.Steps'], parameters: f['Microsoft.VSTS.TCM.Parameters'] ?? null, dataTable: dataTableXml}), sharedRevisions: dependencies, sharedParameters: [...sharedParameters]} : {})});
+      if (tolerant || includeRevisions) requireValue(Number.isInteger(items.get(id).rev) && items.get(id).rev > 0, 'ADO case revision is incomplete.');
       } catch (error) {
         if (!tolerant || error instanceof AdoError || error.ownershipFatal) throw error;
         if (cases.at(-1)?.id === id) cases.pop();
@@ -101,9 +109,7 @@ export function createAdoTestSource(client) {
       await client.requireWorkItemProject(item);
       requireValue(typeof item.fields['System.Title'] === 'string' && item.fields['System.Title'].trim(), 'ADO story title is missing.');
       // The process defines its test-case types, so custom and localized processes need no assumed name.
-      const category = await client.read('wit/workitemtypecategories/Microsoft.TestCaseCategory?api-version=7.1'), kinds = category.workItemTypes;
-      requireValue(String(category.referenceName).toLowerCase() === 'microsoft.testcasecategory' && Array.isArray(kinds) && kinds.length > 0 && kinds.length <= 100 && kinds.every(kind => typeof kind?.name === 'string' && kind.name.trim()), 'ADO test-case category is unavailable or incomplete.');
-      const testCase = type => typeof type === 'string' && kinds.some(kind => kind.name.toLowerCase() === type.toLowerCase());
+      const testCase = await adoTestCaseType(client);
       requireValue(!testCase(item.fields['System.WorkItemType']), 'ADO story ID names a test case; supply the user story ID.');
       const identity = await client.projectIdentity(), linked = new Set();
       for (const relation of item.relations ?? []) if (relations.includes(relation?.rel)) {

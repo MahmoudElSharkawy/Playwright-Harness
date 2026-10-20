@@ -1,6 +1,6 @@
 ---
 name: pom-architecture
-description: "Use when designing, structuring, extending, or reviewing anything in this Playwright/TypeScript test framework — folder layout, POM layering, naming conventions, business-vs-technical separation, Allure reporting strategy, or deciding where new code belongs. Also use when asked to \"automate\", \"script\", or \"create scripts for\" a test case, test suite, user story, or an Azure DevOps suite/test-case id — that request spans layers and starts here. This is the entry point and router — start here, then follow the specialist skill it routes you to."
+description: "Use when designing, structuring, extending, or reviewing anything in this Playwright/TypeScript test framework — folder layout, POM layering, naming conventions, business-vs-technical separation, Allure reporting strategy, updating existing ADO test-case content, or deciding where new code belongs. Also use when asked to \"automate\", \"script\", or \"create scripts for\" a test case, test suite, user story, or an Azure DevOps suite/test-case id — that request spans layers and starts here. This is the entry point and router — start here, then follow the specialist skill it routes you to."
 ---
 
 # POM Architecture (Entry Point & Router)
@@ -52,6 +52,7 @@ utils; nothing reaches upward or skips a layer (a spec never calls `page.locator
 |---|---|
 | Automating story-linked cases, an ADO suite or local scenarios into durable POM code | [automate-test](../automate-test/SKILL.md) |
 | Executing ADO manual cases interactively, with reports and optional bug/result delivery | [execute-test](../execute-test/SKILL.md) |
+| Updating existing ADO case titles, actions, expected results or ordinary-step ordering | [Case editing](../../../docs/ado-case-editing.md) |
 | Diagnosing failed/flaky tests, accepted source changes, or resuming blocked cases | [maintain-test](../maintain-test/SKILL.md) |
 | A page class (new page, header/footer/skeleton area, refactor) | [page-classes](../page-classes/SKILL.md) |
 | Finding, naming, or repairing an element locator | [element-locators](../element-locators/SKILL.md) |

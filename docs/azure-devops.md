@@ -58,6 +58,9 @@ Fetch writes `_suite.json` and case Markdown under
 `--out` selects a parent; `--dry-run` previews without files. Fetch never mutates ADO.
 `--source-out` also exports neutral automation input. Refinement logs are preserved
 unless `--force`; previous destination identity is checked before reuse.
+`--revisions` includes current case revisions in suite/story manifests without
+changing the default legacy output. Use a fresh `--out` folder when comparing
+edited cases with frozen execution sources.
 
 Nested shared steps have cycle/depth limits. Missing/partial content fails rather
 than inventing assertions. Parameter metadata/table XML is retained; parameterized
@@ -89,6 +92,15 @@ and included cases, excluding unrelated exclusions. Metrics/tracker include both
 source kinds: shared cases count once using newest verification; conflicting recorded
 results become no-state and tracker sync warns/skips them. Story retrieval supplies
 cases, while outcome publication needs suite test points.
+
+## Edit existing source cases
+
+For requests such as "update this ADO case title", "change its expected result",
+or "reorder the selected case's steps", follow the [case-editing contract](ado-case-editing.md).
+`edit-cases --input <consumer.json>` previews the exact destination, revisions and
+before/after content. After authorization, repeat with `--execute --approval
+<preview-fingerprint>`. Only selected test-case titles and ordinary steps are
+editable. Case edits do not accept new requirements or verify automation.
 
 ## Preview and deliver automation outcomes
 
