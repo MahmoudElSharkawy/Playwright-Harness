@@ -64,6 +64,9 @@ const severityLabel = severity => severityDots[severity] ? `${severityDots[sever
 const markdownStrong = text => text.replace(/^(\s*)([\s\S]*?)(\s*)$/, (_, before, value, after) => `${before}**${value}**${after}`), htmlStrong = text => `<strong>${text}</strong>`;
 const orderedFindings = findings => findings.toSorted((left, right) => (severityRank[left.severity] ?? 3) - (severityRank[right.severity] ?? 3));
 const findingTitle = finding => (finding.id.startsWith('req-') ? '' : finding.id + ': ') + finding.finding;
+const markdownPunctuation = value => /[\p{P}\p{S}]/u.test(value);
+// Some Markdown renderers split astral symbols at delimiter boundaries; keep those fragments plain.
+const markdownBoundary = value => /\s/u.test(value) || (value.length === 1 && markdownPunctuation(value));
 function reviewSummaryLines(draft, encode, strong) {
   const text = value => encode(value.replace(/\r\n?|\n/g, '; '));
   const findings = orderedFindings(draft.findings), total = findings.length;
@@ -85,10 +88,11 @@ function questionText(finding, text, strong) {
   while ((start = question.indexOf(focus, cursor)) !== -1) {
     let end = start + focus.length;
     while (question.startsWith(focus, end)) end += focus.length;
-    const phrase = question.slice(start, end), before = question.slice(0, start), after = question.slice(end);
+    const phrase = question.slice(start, end), characters = [...phrase];
+    const before = [...question.slice(Math.max(0, start - 2), start)].at(-1) ?? ' ', after = [...question.slice(end, end + 2)][0] ?? ' ';
     // Markdown cannot emphasize punctuation inside a word; preserve it literally in both views.
-    const opens = !/^[\p{P}\p{S}]/u.test(phrase) || !before || /[\s\p{P}\p{S}]$/u.test(before);
-    const closes = !/[\p{P}\p{S}]$/u.test(phrase) || !after || /^[\s\p{P}\p{S}]/u.test(after);
+    const opens = !markdownPunctuation(characters[0]) || markdownBoundary(before);
+    const closes = !markdownPunctuation(characters.at(-1)) || markdownBoundary(after);
     parts.push(text(question.slice(cursor, start)), opens && closes ? strong(text(phrase)) : text(phrase)); cursor = end;
   }
   return parts.join('') + text(question.slice(cursor));

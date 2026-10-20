@@ -89,6 +89,10 @@ test('Markdown emphasis preserves punctuation, adjacent focus matches and title 
     ['Test ** x?', '*', 'Test **\\*\\*** x?', 'Test <strong>**</strong> x?'],
     ['Use C++ rules?', '++', 'Use C++ rules?', 'Use C++ rules?'],
     ['Use ++C rules?', '++', 'Use ++C rules?', 'Use ++C rules?'],
+    ['😀*?', '*', '😀\\*?', '😀*?'],
+    ['😀x', '😀', '😀x', '😀x'],
+    ['*😀', '*', '\\*😀', '*😀'],
+    ['€++', '++', '€**++**', '€<strong>++</strong>'],
     ['Does **retry count** apply?', 'retry count', 'Does \\*\\***retry count**\\*\\* apply?', 'Does **<strong>retry count</strong>** apply?']
   ]) {
     const draft = {...f.draft, findings: [{...finding, question, questionFocus}]}, comment = renderComment(draft, f.state, f.source, []);
