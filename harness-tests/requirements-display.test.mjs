@@ -1,13 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtempSync, readFileSync} from 'node:fs';
-import {tmpdir} from 'node:os';
-import {join} from 'node:path';
-import {consumerRoots} from '../scripts/lib/consumer-paths.mjs';
-import {captureRequirements, prepareRequirements, readRequirements, readChatReview, saveChatReview, saveRequirements, resumeRequirementsReview} from '../scripts/lib/requirements/index.mjs';
-import {renderChatTable, renderComment, validateReviewInput} from '../scripts/lib/requirements/review.mjs';
+import {renderChatTable, renderComment, renderReviewSummary, validateReviewInput} from '../scripts/lib/requirements/review.mjs';
 import {fingerprint} from '../scripts/lib/execution-core/data.mjs';
-import {putRequirementFile as put, chatInput} from './fixtures/requirements.mjs';
+import {chatInput} from './fixtures/requirements.mjs';
 
 const reportedId = 'req-70d3b394275978d0a3db7e54b2d900711ed8cb8bf61fc67d';
 function displayFixture() {
@@ -42,64 +37,22 @@ test('attachment provenance remains readable when an old snapshot lacks a filena
   assert.match(output, /Attachment.*page 2 paragraph 1/); assert(!output.includes('ado-attachment-'));
 });
 
-test('new drafts reject internal IDs and ADO field paths outside exact source quotations', () => {
-  const f = displayFixture();
-  const cases = [
-    {findings: [{...f.draft.findings[0], id: reportedId}]},
-    {findings: [{...f.draft.findings[0], finding: 'Issue in ' + reportedId}]},
-    {findings: [{...f.draft.findings[0], question: 'Clarify req-address-limit.'}]},
-    {findings: [{...f.draft.findings[0], question: 'Clarify Microsoft.VSTS.Common.AcceptanceCriteria.'}]},
-    {comment: 'See story / System.Description.'}, {comment: 'Source requirement: ' + reportedId}
-  ];
-  for (const extra of cases) assert.throws(() => validateReviewInput(chatInput(f.state, f.draft.findings, extra), f.state, f.source), /internal|readable/i);
+test('generated finding IDs stay internal while readable labels and stored references remain intact', () => {
+  const f = displayFixture(); f.draft.findings[0].id = reportedId;
+  const before = structuredClone(f);
+  for (const output of [renderChatTable(f.draft, f.state, f.source), renderReviewSummary(f.draft)]) assert(!output.includes(reportedId));
+  const draft = validateReviewInput(chatInput(f.state, f.draft.findings), f.state, f.source), comment = renderComment(draft, f.state, f.source, []);
+  for (const output of [comment.text, comment.html]) {assert(!output.includes(reportedId)); assert(output.includes('F-02: Clarify'));}
+  assert.match(comment.text, /First priority: Clarify supported behavior/);
+  assert.equal(draft.findings[0].id, reportedId); assert.deepEqual(f, before);
 });
 
-test('literal technical source quotations remain exact in findings, manual text and outgoing HTML', () => {
-  const f = displayFixture(), quote = 'The payload includes System.Description and literal ' + reportedId + ' values.';
-  f.source.parts[0].text = quote; f.state.inventory[0].end = quote.length;
-  const finding = {...f.draft.findings[0], sources: [{requirementId: f.state.inventory[0].id, quote}], question: `Does “${quote}” apply to every payload?`};
-  const input = validateReviewInput(chatInput(f.state, [finding], {comment: `Please clarify “${quote}”.`}), f.state, f.source);
-  const comment = renderComment(input, f.state, f.source, []);
-  assert(comment.text.includes(quote)); assert(comment.html.includes(quote)); assert.equal(input.findings[0].sources[0].quote, quote);
-});
-
-test('a partial source quotation cannot exempt a longer internal identifier in manual text', () => {
-  for (const [quote, text, comment] of [['System', 'The System saves addresses.', 'Source: story / System.Description.'], ['req', 'A required address.', 'See ' + reportedId]]) {
-    const f = displayFixture(); f.source.parts[0].text = text; f.state.inventory[0].end = text.length;
-    const finding = {...f.draft.findings[0], sources: [{requirementId: f.state.inventory[0].id, quote}]};
-    assert.throws(() => validateReviewInput(chatInput(f.state, [finding], {comment}), f.state, f.source), /internal|readable/i);
-  }
-});
-
-test('formatting underscores cannot hide internal references in new drafts or final comments', () => {
-  const f = displayFixture();
-  for (const extra of [{comment: `See _${reportedId}_.`}, {comment: 'See _System.Description_.'}, {findings: [{...f.draft.findings[0], id: '_' + reportedId}]}, {findings: [{...f.draft.findings[0], question: 'Clarify _Microsoft.VSTS.Common.AcceptanceCriteria_.'}]}]) {
-    assert.throws(() => validateReviewInput(chatInput(f.state, f.draft.findings, extra), f.state, f.source), /internal|readable/i);
-    assert.throws(() => renderComment({...f.draft, ...extra}, f.state, f.source, []), /internal|readable/i);
-  }
-});
-
-test('exact technical source terms remain valid beside ordinary punctuation and formatting', () => {
+test('free-form findings, questions, manual comments and source quotes retain technical wording without scanning', () => {
   const f = displayFixture(), quote = 'System.Description'; f.source.parts[0].text = quote; f.state.inventory[0].end = quote.length;
-  const finding = {...f.draft.findings[0], sources: [{requirementId: f.state.inventory[0].id, quote}]};
-  for (const comment of ['Please keep System.Description.', 'Please keep _System.Description_.']) {
-    const draft = validateReviewInput(chatInput(f.state, [finding], {comment}), f.state, f.source);
-    assert(renderComment(draft, f.state, f.source, []).html.includes(comment));
-  }
-});
-
-test('rejected display edits preserve the current draft and its traceability references', async () => {
-  const roots = consumerRoots(mkdtempSync(join(tmpdir(), 'pom-display-'))); put(roots, 'story.md', 'Save the address.');
-  const source = await captureRequirements(roots, {version: 1, project: 'shop', application: 'addresses', sources: [{id: 'notes', path: 'story.md', kind: 'file'}]});
-  const state = prepareRequirements(roots, 'addresses', source), finding = {id: 'F-01', type: 'Gap', severity: 'Medium', finding: 'Address format unspecified', sources: [{requirementId: state.inventory[0].id, quote: 'Save the address.'}], question: 'Which address formats are supported?'};
-  const first = saveChatReview(roots, 'addresses', chatInput(state, [finding])), bytes = readFileSync(join(roots.projectRoot, first.review.path), 'utf8');
-  assert.throws(() => saveChatReview(roots, 'addresses', chatInput(first, [finding], {comment: 'See ' + reportedId})), /internal|readable/i);
-  assert.equal(readRequirements(roots, 'addresses').head, first.head); assert.equal(readFileSync(join(roots.projectRoot, first.review.path), 'utf8'), bytes);
-  assert.equal(readChatReview(roots, first).findings[0].sources[0].requirementId, state.inventory[0].id);
-
-  const oldDraft = {...first.draft, comment: 'Previously saved internal reference ' + reportedId}, revision = fingerprint(oldDraft), path = `.harness/state/requirements/addresses/reviews/${oldDraft.reviewId}/${revision}.json`, oldBytes = JSON.stringify(oldDraft, null, 4) + '\n';
-  put(roots, path, oldBytes); const old = saveRequirements(roots, 'addresses', {...readRequirements(roots, 'addresses'), review: {...first.review, revision, path}});
-  assert.equal(resumeRequirementsReview(roots, 'addresses').draft.comment, oldDraft.comment);
-  assert.throws(() => renderComment(readChatReview(roots, old), old, source, []), /internal|readable/i);
-  assert.equal(readFileSync(join(roots.projectRoot, path), 'utf8'), oldBytes);
+  const finding = {...f.draft.findings[0], finding: 'Discuss ' + reportedId, question: 'Clarify Microsoft.VSTS.Common.AcceptanceCriteria.', sources: [{requirementId: f.state.inventory[0].id, quote}]};
+  const text = `See _${reportedId}_ and System.Description <current>.`;
+  const draft = validateReviewInput(chatInput(f.state, [finding], {comment: text}), f.state, f.source), comment = renderComment(draft, f.state, f.source, []);
+  assert.deepEqual(draft.findings, [finding]); assert.equal(draft.comment, text); assert(comment.text.includes(text));
+  assert(comment.html.includes(`See _${reportedId}_ and System.Description &lt;current&gt;.`));
+  assert(renderChatTable(draft, f.state, f.source).includes('Title: “System.Description”'));
 });

@@ -35,22 +35,7 @@ export function validateReviewInput(raw, state, source) {
   const findings = validateFindings(input.findings, state.inventory, source), comment = input.comment ?? null, mentions = input.mentions === undefined ? [] : input.mentions;
   if (comment !== null) boundedText(comment, 'Final comment');
   requireThat(Array.isArray(mentions) && mentions.length <= 30 && mentions.every(value => typeof value === 'string' && value.trim() === value && value.length > 0 && value.length <= 320 && !/[\r\n\x00-\x1f<>]/.test(value)) && new Set(mentions.map(value => value.toLowerCase())).size === mentions.length, 'Requested mentions need distinct exact names, account names or ADO identity IDs.');
-  requireBusinessText({findings, comment});
   return {findings: orderedFindings(findings), comment, mentions};
-}
-
-function requireBusinessText(draft) {
-  const internal = /(?<![a-z0-9])(?:req-[a-z0-9](?:[a-z0-9_-]*[a-z0-9])?|(?:System|Microsoft\.VSTS)(?:\.[a-z0-9_]*[a-z0-9])+)/i;
-  const message = 'Replace internal requirement IDs and ADO field paths with readable finding labels and business text before saving or posting. Saved drafts and exact source quotations remain unchanged.';
-  requireThat(draft.findings.every(finding => !internal.test(finding.id)), message);
-  const quotes = [...new Set(draft.findings.flatMap(finding => finding.sources.map(reference => reference.quote)))];
-  for (const text of [...draft.findings.flatMap(finding => [finding.finding, finding.question]), draft.comment ?? '']) {
-    // Literal requirement passages remain source authority, including technical terms.
-    for (const match of text.matchAll(new RegExp(internal.source, 'gi'))) requireThat(quotes.some(quote => {
-      const start = text.lastIndexOf(quote, match.index);
-      return start >= 0 && start + quote.length >= match.index + match[0].length;
-    }), message);
-  }
 }
 
 function sourceLabel(part, source) {
@@ -71,6 +56,7 @@ function sourceLabel(part, source) {
 
 const severityRank = {High: 0, Medium: 1, Low: 2};
 const orderedFindings = findings => findings.toSorted((left, right) => (severityRank[left.severity] ?? 3) - (severityRank[right.severity] ?? 3));
+const findingTitle = finding => (finding.id.startsWith('req-') ? '' : finding.id + ': ') + finding.finding;
 function reviewSummaryLines(draft) {
   const findings = orderedFindings(draft.findings), total = findings.length;
   const gaps = findings.filter(finding => finding.type === 'Gap').length, contradictions = total - gaps;
@@ -80,13 +66,13 @@ function reviewSummaryLines(draft) {
   const overview = `${total} ${total === 1 ? 'finding' : 'findings'}: ${gaps} ${gaps === 1 ? 'gap' : 'gaps'}, ${contradictions} ${contradictions === 1 ? 'contradiction' : 'contradictions'}. Severity: ${counts.join(', ')}.`;
   const priority = !total ? 'No evidenced gaps or contradictions in the reviewed material. Unresolved inventory decisions/source omissions still apply.'
     : unrated ? 'Assign severity to unrated findings before choosing the first priority or posting a new draft.'
-    : `First priority: ${findings[0].id}: ${findings[0].finding}`;
+    : `First priority: ${findingTitle(findings[0])}`;
   return [overview, priority.replace(/\r\n?|\n/g, '; ')];
 }
 export const renderReviewSummary = draft => reviewSummaryLines(draft).map(markdownCell).join('\n');
 function rows(draft, state, source) {
   return orderedFindings(draft.findings).map(finding => [
-    finding.id + ': ' + finding.finding, finding.type, finding.severity ?? 'Unrated',
+    findingTitle(finding), finding.type, finding.severity ?? 'Unrated',
     finding.sources.map(reference => {
       const entry = state.inventory.find(item => item.id === reference.requirementId), part = source.parts.find(part => part.id === entry.partId);
       return `${sourceLabel(part, source)}: “${reference.quote}”`;
@@ -100,7 +86,6 @@ export function renderChatTable(draft, state, source) {
 }
 export function renderComment(draft, state, source, mentions) {
   requireThat(draft.comment !== null || draft.findings.length > 0, 'Zero findings has no outgoing comment. Save an explicit final comment only if the user requests one.');
-  requireBusinessText(draft);
   const htmlText = value => escapeHtml(value).replace(/\r\n?|\n/g, '<br>');
   const body = draft.comment === null
     ? '<table><thead><tr>' + columns.map(value => `<th>${value}</th>`).join('') + '</tr></thead><tbody>' + rows(draft, state, source).map(row => '<tr>' + row.map(value => `<td>${htmlText(value)}</td>`).join('') + '</tr>').join('') + '</tbody></table>'
