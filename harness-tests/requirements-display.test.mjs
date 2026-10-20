@@ -104,6 +104,14 @@ test('terminal manual newlines do not expose a Markdown hard-break marker', () =
   assert(comment.html.endsWith('<p>Keep literal.<br><br></p>')); assert.equal(draft.comment, raw);
 });
 
+test('manual URL wording cannot become GFM links or expose escaped punctuation', () => {
+  const f = displayFixture(), raw = 'https://example.test/a?x=1&y=2\nhttp://localhost/path\n<https://example.test/path>\nwww.example.test';
+  const draft = {...f.draft, comment: raw}, comment = renderComment(draft, f.state, f.source, []);
+  assert(comment.text.endsWith('https\\://example\\.test/a?x=1&amp;y=2\\\nhttp\\://localhost/path\\\n&lt;https\\://example\\.test/path&gt;\\\nwww\\.example\\.test'));
+  assert(comment.html.endsWith('<p>https://example.test/a?x=1&amp;y=2<br>http://localhost/path<br>&lt;https://example.test/path&gt;<br>www.example.test</p>'));
+  assert.equal(draft.comment, raw);
+});
+
 test('Markdown emphasis preserves punctuation, adjacent focus matches and title whitespace', () => {
   const f = displayFixture(), finding = {...f.draft.findings[0], finding: 'Retry policy '};
   for (const [question, questionFocus, markdown, html] of [
