@@ -35,13 +35,22 @@ attempts/receipts. Resolve package files through [ROOTS](../.agents/skills/ROOTS
 
 An illustrative review, for a story containing the quoted text:
 
-2 findings: 1 gap, 1 contradiction. Severity: High 1, Medium 1, Low 0.
-First priority: F-02: Conflicting retry limits
+**Summary: 2 findings — 1 gap, 1 contradiction**\
+🔴 **High: 1** · 🟠 **Medium: 1** · 🔵 **Low: 0**\
+**First priority:** **F-02: Conflicting retry limits**
 
 | Findings | Type | Severity | Source material text | Question/Comment for Business |
 |---|---|---|---|---|
-| F-02: Conflicting retry limits | Contradiction | High | Description: “Three attempts”; AC 2: “Five attempts” | Which retry limit applies? |
-| F-01: Expiry duration unspecified | Gap | Medium | Description: “The link expires.” | How long should the link remain valid? |
+| **F-02: Conflicting retry limits** | Contradiction | **🔴 High** | Description: “Three attempts”; AC 2: “Five attempts” | Which **retry limit** applies? |
+| **F-01: Expiry duration unspecified** | Gap | **🟠 Medium** | Description: “The link expires.” | How long should the **link remain valid**? |
+
+The same controlled emphasis appears in chat and ADO: bold summary totals/priority,
+finding titles and named severity dots. Type and source quotations stay plain.
+An optional `questionFocus` names one exact phrase in the unchanged question to
+bold; without it, the question stays plain. No CSS colors or row backgrounds are
+added. Formatting is applied after escaping text, preserving literal Markdown,
+HTML, source quotations and manual final wording. Existing draft bytes are not
+rewritten and analysis/severity/order decisions do not change.
 
 Assign severity from the evidenced business impact, independent of Type:
 
@@ -151,7 +160,8 @@ Use the returned current `consumer`, `snapshot` and `head`; do not invent them.
       "sources": [
         {"requirementId": "<existing inventory ID>", "quote": "The link expires."}
       ],
-      "question": "How long should the link remain valid?"
+      "question": "How long should the link remain valid?",
+      "questionFocus": "link remain valid"
     }
   ],
   "comment": null,
@@ -165,6 +175,10 @@ source quote must occur within
 its current inventory slice. Contradictions require two distinct source passages.
 Finding IDs are unique and stable across edits. Scripts validate evidence binding;
 the AI/user still judge whether a gap or contradiction is meaningful.
+`questionFocus` is optional presentation metadata: a nonempty, exact substring of
+`question` without surrounding whitespace. It bolds each exact occurrence without
+changing the question. Omit it for plain text; older drafts need no migration.
+Changing emphasis requires a fresh exact preview/approval before posting.
 
 ```sh
 pom-harness requirements review --id checkout --input draft.json

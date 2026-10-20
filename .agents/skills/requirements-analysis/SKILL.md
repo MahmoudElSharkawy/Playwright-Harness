@@ -47,13 +47,21 @@ Save a version-2 draft with current `consumer`, `snapshot`, `head`, `findings`,
 plain-text `comment` (null for the generated table) and requested `mentions`. Each
 finding has stable `id`, `type` (Gap or Contradiction), explicit `severity` (High,
 Medium or Low), `finding`, exact located
-`sources` (`requirementId` + `quote`) and `question`. Run `requirements review --id
+`sources` (`requirementId` + `quote`) and `question`. Optionally set `questionFocus`
+to the exact decision phrase to emphasize, without changing `question`; omit the
+hint for plain text. Run `requirements review --id
 <id> --input <file>`. Show the returned short `summary` (total findings, counts by
 Type/Severity and first priority concern) before its table in chat, with exactly:
 
 | Findings | Type | Severity | Source material text | Question/Comment for Business |
 |---|---|---|---|---|
-| Stable ID and concise issue | Gap or Contradiction | High, Medium or Low | Exact quoted description/AC/other passage and location; both sides for conflicts | Proposed business question/comment |
+| **Stable ID and concise issue** | Gap or Contradiction | **🔴 High**, **🟠 Medium** or **🔵 Low** | Exact quoted description/AC/other passage and location; both sides for conflicts | Proposed question with only its **decision phrase** emphasized |
+
+Show the renderer's three-line summary: bold totals/type counts, colored severity
+dots with bold named counts, then the bold first-priority concern. Keep Type,
+source quotations and ordinary text plain; no CSS colors or whole-row styling.
+Emphasis is presentation only. Preserve literal source/manual wording and existing
+drafts; add an exact focus hint in an explicit edit without reanalysis when needed.
 
 Use evidenced business impact: High blocks a core decision or has clear security/
 data-integrity impact; Medium affects a supported scenario/expected outcome; Low

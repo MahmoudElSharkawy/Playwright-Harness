@@ -54,9 +54,9 @@ test('chat final comment is previewed exactly, with zero writes until exact conf
   const f = await setup(t), options = {client: f.client};
   const preview = await previewRequirementsComment(f.roots, 'checkout', options);
   assert.equal(preview.comment, preview.summary + '\n\n' + f.decisions.comment);
-  assert.match(preview.summary, /^1 finding: 1 gap, 0 contradictions\. Severity: High 0, Medium 1, Low 0\./);
+  assert.match(preview.summary, /^\*\*Summary: 1 finding — 1 gap, 0 contradictions\*\*\n🔴 \*\*High: 0\*\* · 🟠 \*\*Medium: 1\*\* · 🔵 \*\*Low: 0\*\*/);
   assert(preview.writes[0].body.text.endsWith('<p>' + f.decisions.comment + '</p>')); assert.equal(preview.destination.storyId, 200);
-  assert(preview.writes[0].body.text.indexOf('1 finding:') < preview.writes[0].body.text.indexOf(f.decisions.comment));
+  assert(preview.writes[0].body.text.indexOf('Summary: 1 finding') < preview.writes[0].body.text.indexOf(f.decisions.comment));
   assert.equal(f.posts().length, 0); assert.equal(f.receipts().length, 0);
   await assert.rejects(publishRequirementsComment(f.roots, 'checkout', options), /confirmation/);
   await assert.rejects(publishRequirementsComment(f.roots, 'checkout', {...options, approval: 'yes'}), /confirmation/);
@@ -263,7 +263,7 @@ test('same-severity reordering invalidates approval and changes the summary prio
   const first = edit(f, {findings}), preview = await previewRequirementsComment(f.roots, 'checkout', options);
   const next = edit(f, {findings: findings.toReversed()}), revised = await previewRequirementsComment(f.roots, 'checkout', options);
   assert.equal(next.draft.comment, first.draft.comment); assert.notEqual(revised.summary, preview.summary);
-  assert.match(revised.summary, /First priority: F-02:/);
+  assert.match(revised.summary, /\*\*First priority:\*\* \*\*F-02:/);
   await assert.rejects(publishRequirementsComment(f.roots, 'checkout', {...options, approval: preview.fingerprint}), /confirmation/);
   assert.equal(f.posts().length, 0);
 });
@@ -405,4 +405,18 @@ test('optional attribute quote recovery retains destination, comment identity an
     assert.equal((await publishRequirementsComment(f.roots, 'checkout', {...options, approval: preview.fingerprint})).mode, 'uncertain');
     await assert.rejects(reconcileRequirementsComment(f.roots, 'checkout', options), kind === 'mentions' ? /mention readback/ : /readback mismatch/); assert.equal(f.posts().length, 1);
   }
+});
+
+test('question emphasis changes invalidate old approval while preserving raw analysis, mentions and exact posting', async t => {
+  const f = await setup(t); roster(f); edit(f, {comment: null, mentions: [analystId]});
+  const options = {client: f.client}, first = await previewRequirementsComment(f.roots, 'checkout', options);
+  const state = readRequirements(f.roots, 'checkout'), draft = readChatReview(f.roots, state);
+  const next = edit(f, {findings: draft.findings.map(finding => ({...finding, questionFocus: 'accepted target'}))});
+  assert.equal(next.analysisInvocations, state.analysisInvocations); assert.equal(next.draft.findings[0].question, draft.findings[0].question);
+  const preview = await previewRequirementsComment(f.roots, 'checkout', options);
+  assert.notEqual(preview.fingerprint, first.fingerprint); assert.deepEqual(preview.mentions, first.mentions);
+  assert(preview.writes[0].body.text.includes('What is the <strong>accepted target</strong>?'));
+  await assert.rejects(publishRequirementsComment(f.roots, 'checkout', {...options, approval: first.fingerprint}), /confirmation/); assert.equal(f.posts().length, 0);
+  assert.equal((await publishRequirementsComment(f.roots, 'checkout', {...options, approval: preview.fingerprint})).mode, 'completed');
+  assert.equal(f.posts().length, 1); assert.equal(f.posts()[0].body.text, preview.writes[0].body.text);
 });

@@ -9,11 +9,15 @@ export function validateFindings(raw, inventory, source, {legacy = false} = {}) 
   const findings = contextData(raw), ids = new Set();
   requireThat(Array.isArray(findings) && findings.length <= 500, 'Findings must be a bounded array; zero is valid.');
   for (const finding of findings) {
-    keys(finding, ['id', 'type', 'severity', 'finding', 'sources', 'question'], 'finding');
+    keys(finding, ['id', 'type', 'severity', 'finding', 'sources', 'question', 'questionFocus'], 'finding');
     requireThat(typeof finding.id === 'string' && /^[A-Za-z0-9_-]{1,100}$/.test(finding.id) && !['__proto__', 'constructor', 'prototype'].includes(finding.id) && !ids.has(finding.id), 'Duplicate or invalid finding ID.'); ids.add(finding.id);
     requireThat(['Gap', 'Contradiction'].includes(finding.type), 'Finding Type must be Gap or Contradiction.');
     requireThat((legacy && finding.severity === undefined) || ['High', 'Medium', 'Low'].includes(finding.severity), 'Finding Severity must be explicitly High, Medium or Low.');
     boundedText(finding.finding, 'Finding'); boundedText(finding.question, 'Question/Comment for Business');
+    if (finding.questionFocus !== undefined) {
+      boundedText(finding.questionFocus, 'Question focus');
+      requireThat(finding.questionFocus.trim() === finding.questionFocus && finding.question.includes(finding.questionFocus), 'Question focus must be an exact phrase within the unchanged question, without surrounding whitespace.');
+    }
     requireThat(Array.isArray(finding.sources) && finding.sources.length > 0 && finding.sources.length <= 20, 'A finding requires located source material.');
     const quotes = new Set();
     for (const reference of finding.sources) {
@@ -55,42 +59,48 @@ function sourceLabel(part, source) {
 }
 
 const severityRank = {High: 0, Medium: 1, Low: 2};
+const severityDots = {High: '🔴', Medium: '🟠', Low: '🔵'};
+const severityLabel = severity => severityDots[severity] ? `${severityDots[severity]} ${severity}` : 'Unrated';
+const markdownStrong = text => `**${text}**`, htmlStrong = text => `<strong>${text}</strong>`;
 const orderedFindings = findings => findings.toSorted((left, right) => (severityRank[left.severity] ?? 3) - (severityRank[right.severity] ?? 3));
 const findingTitle = finding => (finding.id.startsWith('req-') ? '' : finding.id + ': ') + finding.finding;
-function reviewSummaryLines(draft) {
+function reviewSummaryLines(draft, encode, strong) {
+  const text = value => encode(value.replace(/\r\n?|\n/g, '; '));
   const findings = orderedFindings(draft.findings), total = findings.length;
   const gaps = findings.filter(finding => finding.type === 'Gap').length, contradictions = total - gaps;
-  const counts = ['High', 'Medium', 'Low'].map(severity => `${severity} ${findings.filter(finding => finding.severity === severity).length}`);
+  const counts = ['High', 'Medium', 'Low'].map(severity => `${severityDots[severity]} ${strong(text(`${severity}: ${findings.filter(finding => finding.severity === severity).length}`))}`);
   const unrated = findings.filter(finding => !finding.severity).length;
-  if (unrated) counts.push(`Unrated ${unrated}`);
-  const overview = `${total} ${total === 1 ? 'finding' : 'findings'}: ${gaps} ${gaps === 1 ? 'gap' : 'gaps'}, ${contradictions} ${contradictions === 1 ? 'contradiction' : 'contradictions'}. Severity: ${counts.join(', ')}.`;
-  const priority = !total ? 'No evidenced gaps or contradictions in the reviewed material. Unresolved inventory decisions/source omissions still apply.'
-    : unrated ? 'Assign severity to unrated findings before choosing the first priority or posting a new draft.'
-    : `First priority: ${findingTitle(findings[0])}`;
-  return [overview, priority.replace(/\r\n?|\n/g, '; ')];
+  if (unrated) counts.push(strong(text(`Unrated: ${unrated}`)));
+  const overview = `Summary: ${total} ${total === 1 ? 'finding' : 'findings'} — ${gaps} ${gaps === 1 ? 'gap' : 'gaps'}, ${contradictions} ${contradictions === 1 ? 'contradiction' : 'contradictions'}`;
+  const priority = !total ? text('No evidenced gaps or contradictions in the reviewed material. Unresolved inventory decisions/source omissions still apply.')
+    : unrated ? text('Assign severity to unrated findings before choosing the first priority or posting a new draft.')
+    : `${strong(text('First priority:'))} ${strong(text(findingTitle(findings[0])))}`;
+  return [strong(text(overview)), counts.join(' · '), priority];
 }
-export const renderReviewSummary = draft => reviewSummaryLines(draft).map(markdownCell).join('\n');
-function rows(draft, state, source) {
+export const renderReviewSummary = draft => reviewSummaryLines(draft, markdownCell, markdownStrong).join('\n');
+function rows(draft, state, source, text, strong) {
   return orderedFindings(draft.findings).map(finding => [
-    findingTitle(finding), finding.type, finding.severity ?? 'Unrated',
-    finding.sources.map(reference => {
+    strong(text(findingTitle(finding))), text(finding.type), strong(text(severityLabel(finding.severity))),
+    text(finding.sources.map(reference => {
       const entry = state.inventory.find(item => item.id === reference.requirementId), part = source.parts.find(part => part.id === entry.partId);
       return `${sourceLabel(part, source)}: “${reference.quote}”`;
-    }).join('\n'), finding.question
+    }).join('\n')), finding.questionFocus
+      ? finding.question.split(finding.questionFocus).map(text).join(strong(text(finding.questionFocus)))
+      : text(finding.question)
   ]);
 }
 const columns = ['Findings', 'Type', 'Severity', 'Source material text', 'Question/Comment for Business'];
 const markdownCell = value => escapeHtml(value).replaceAll('|', '&#124;').replace(/[\\`*_\[\]{}]/g, '\\$&').replace(/\r\n?|\n/g, '; ');
 export function renderChatTable(draft, state, source) {
-  return [columns, columns.map(() => '---'), ...rows(draft, state, source)].map(row => '| ' + row.map(markdownCell).join(' | ') + ' |').join('\n');
+  return [...[columns, columns.map(() => '---')].map(row => row.map(markdownCell)), ...rows(draft, state, source, markdownCell, markdownStrong)].map(row => '| ' + row.join(' | ') + ' |').join('\n');
 }
 export function renderComment(draft, state, source, mentions) {
   requireThat(draft.comment !== null || draft.findings.length > 0, 'Zero findings has no outgoing comment. Save an explicit final comment only if the user requests one.');
   const htmlText = value => escapeHtml(value).replace(/\r\n?|\n/g, '<br>');
   const body = draft.comment === null
-    ? '<table><thead><tr>' + columns.map(value => `<th>${value}</th>`).join('') + '</tr></thead><tbody>' + rows(draft, state, source).map(row => '<tr>' + row.map(value => `<td>${htmlText(value)}</td>`).join('') + '</tr>').join('') + '</tbody></table>'
+    ? '<table><thead><tr>' + columns.map(value => `<th>${value}</th>`).join('') + '</tr></thead><tbody>' + rows(draft, state, source, htmlText, htmlStrong).map(row => '<tr>' + row.map(value => `<td>${value}</td>`).join('') + '</tr>').join('') + '</tbody></table>'
     : '<p>' + htmlText(draft.comment) + '</p>';
   const recipients = mentions.length ? '<p>' + mentions.map(person => `<a href="#" data-vss-mention="version:2.0,${person.id}">@${escapeHtml(person.displayName)}</a>`).join(' ') + '</p>' : '';
   const summary = renderReviewSummary(draft);
-  return {text: summary + '\n\n' + (draft.comment ?? renderChatTable(draft, state, source)), html: recipients + '<p>' + htmlText(reviewSummaryLines(draft).join('\n')) + '</p>' + body};
+  return {text: summary + '\n\n' + (draft.comment ?? renderChatTable(draft, state, source)), html: recipients + '<p>' + reviewSummaryLines(draft, htmlText, htmlStrong).join('<br>') + '</p>' + body};
 }

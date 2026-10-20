@@ -43,7 +43,7 @@ test('generated finding IDs stay internal while readable labels and stored refer
   for (const output of [renderChatTable(f.draft, f.state, f.source), renderReviewSummary(f.draft)]) assert(!output.includes(reportedId));
   const draft = validateReviewInput(chatInput(f.state, f.draft.findings), f.state, f.source), comment = renderComment(draft, f.state, f.source, []);
   for (const output of [comment.text, comment.html]) {assert(!output.includes(reportedId)); assert(output.includes('F-02: Clarify'));}
-  assert.match(comment.text, /First priority: Clarify supported behavior/);
+  assert.match(comment.text, /\*\*First priority:\*\* \*\*Clarify supported behavior\*\*/);
   assert.equal(draft.findings[0].id, reportedId); assert.deepEqual(f, before);
 });
 
@@ -55,4 +55,29 @@ test('free-form findings, questions, manual comments and source quotes retain te
   assert.deepEqual(draft.findings, [finding]); assert.equal(draft.comment, text); assert(comment.text.includes(text));
   assert(comment.html.includes(`See _${reportedId}_ and System.Description &lt;current&gt;.`));
   assert(renderChatTable(draft, f.state, f.source).includes('Title: “System.Description”'));
+});
+
+test('emphasis uses bold titles, named severity dots and only the selected question phrase in chat and ADO', () => {
+  const f = displayFixture(); f.draft.findings = f.draft.findings.slice(0, 3);
+  for (const [index, severity] of ['High', 'Medium', 'Low'].entries()) Object.assign(f.draft.findings[index], {severity, question: 'What is the maximum retry count?', questionFocus: 'maximum retry count'});
+  const before = structuredClone(f), table = renderChatTable(f.draft, f.state, f.source), comment = renderComment(f.draft, f.state, f.source, []);
+  assert.match(table, /\| \*\*F-01: Clarify supported behavior\*\* \| Gap \| \*\*🔴 High\*\*/);
+  for (const severity of ['🟠 Medium', '🔵 Low']) assert(table.includes(`**${severity}**`));
+  assert(table.includes('What is the **maximum retry count**?')); assert(!table.includes('**What is the'));
+  assert(comment.html.includes('<td><strong>F-01: Clarify supported behavior</strong></td><td>Gap</td><td><strong>🔴 High</strong></td>'));
+  assert(comment.html.includes('What is the <strong>maximum retry count</strong>?'));
+  assert(comment.html.includes('<p><strong>Summary: 3 findings — 3 gaps, 0 contradictions</strong><br>🔴 <strong>High: 1</strong>'));
+  assert(comment.html.includes('<td>Title: “Manage saved addresses”</td>')); assert(!/style=|<font|background|<span/.test(comment.html));
+  assert.deepEqual(f, before);
+});
+
+test('emphasis escapes literal markup before wrapping focus text and keeps manual bodies verbatim', () => {
+  const f = displayFixture(), finding = f.draft.findings[0];
+  Object.assign(finding, {finding: '<strong>literal</strong> **words**', question: 'Does <Admin> & **literal** apply?', questionFocus: '<Admin> & **literal**'});
+  const draft = validateReviewInput(chatInput(f.state, [finding]), f.state, f.source), comment = renderComment(draft, f.state, f.source, []);
+  assert(comment.text.includes('Does **&lt;Admin&gt; &amp; \\*\\*literal\\*\\*** apply?'));
+  assert(comment.html.includes('Does <strong>&lt;Admin&gt; &amp; **literal**</strong> apply?'));
+  assert(!comment.html.includes('<Admin>')); assert(!comment.html.includes('<strong>literal</strong>'));
+  const manual = renderComment({...draft, comment: 'Keep **my** <manual> wording.'}, f.state, f.source, []);
+  assert(manual.text.endsWith('Keep **my** <manual> wording.')); assert(manual.html.endsWith('<p>Keep **my** &lt;manual&gt; wording.</p>'));
 });
