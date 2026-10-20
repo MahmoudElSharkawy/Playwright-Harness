@@ -175,6 +175,14 @@ roles are not identities. Missing, inactive, deleted and group identities cannot
 silently converted into plain `@Name` text. Preview each selected display name,
 account and identity ID; a changed selection/name invalidates approval.
 
+Person classification needs a known user descriptor (`aad.` or `msa.`) or an
+explicit `isContainer: false` on older typed responses. Group descriptors override
+legacy flags; unknown active identity types stop resolution. Retain the descriptor
+in the preview fingerprint so identity-type changes cannot reuse approval.
+Inactive/deleted flags are honored when returned by the team API. Team membership
+does not independently prove an account's current sign-in status; no external
+directory/account-status service is queried.
+
 The adapter generates Microsoft's native person-mention markup only from resolved
 identities. All source, question, manual-comment and display-name text is escaped.
 Roster resolution is repeated before dispatch and exact person IDs must appear in

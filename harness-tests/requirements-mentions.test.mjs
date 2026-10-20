@@ -6,7 +6,7 @@ import {renderComment} from '../scripts/lib/requirements/review.mjs';
 
 const BA = '11111111-1111-1111-1111-111111111111', DEV = '22222222-2222-2222-2222-222222222222';
 const TEAM1 = '33333333-3333-3333-3333-333333333333', TEAM2 = '44444444-4444-4444-4444-444444444444';
-const person = (id = BA, displayName = 'Alex Analyst', uniqueName = 'alex@example.test') => ({identity: {id, displayName, uniqueName}});
+const person = (id = BA, displayName = 'Alex Analyst', uniqueName = 'alex@example.test') => ({identity: {id, displayName, uniqueName, descriptor: 'aad.' + Buffer.from(id).toString('base64url')}});
 async function fixture(t) {
   const f = await adoFixture(t), teams = [{id: TEAM1, name: 'Shop'}, {id: TEAM2, name: 'Business'}], members = new Map([[TEAM1, [person(), person(DEV, 'Dee Developer', 'dee@example.test')]], [TEAM2, [person()]]]);
   const control = {deny: false, repeat: false, malformed: false}, base = `projects/${f.state.project.id}/teams`;
@@ -65,4 +65,17 @@ test('comment readback must identify exactly the approved people', () => {
   const expected = [{id: BA}];
   verifyCommentMentions({mentions: [{artifactType: 'person', targetId: BA}]}, expected);
   for (const mentions of [undefined, [], [{artifactType: 'person', targetId: DEV}], [{artifactType: 'person', targetId: BA}, {artifactType: 'person', targetId: DEV}]]) assert.throws(() => verifyCommentMentions({mentions}, expected), /readback/);
+});
+
+test('descriptor evidence rejects groups and unknown identity types even when deprecated flags are absent', async t => {
+  for (const descriptor of ['vssgp.Z3JvdXA', 'aadgp.Z3JvdXA', 'adgp.Z3JvdXA']) {
+    const f = await fixture(t);
+    for (const list of f.members.values()) for (const row of list) if (row.identity.id === BA) row.identity.descriptor = descriptor;
+    await assert.rejects(resolveTeamMentions(f.client, [BA]), /missing|unresolved|type/);
+  }
+  const f = await fixture(t);
+  for (const list of f.members.values()) for (const row of list) if (row.identity.id === BA) delete row.identity.descriptor;
+  await assert.rejects(resolveTeamMentions(f.client, [BA]), /type|person/);
+  for (const list of f.members.values()) for (const row of list) if (row.identity.id === BA) row.identity.isContainer = false;
+  assert.equal((await resolveTeamMentions(f.client, [BA]))[0].id, BA);
 });

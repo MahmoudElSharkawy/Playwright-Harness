@@ -173,7 +173,7 @@ test('compound ADO criteria support separate source slices and independent accep
 
 const analystId = '77777777-7777-7777-7777-777777777777', developerId = '88888888-8888-8888-8888-888888888888', teamId = '99999999-9999-9999-9999-999999999999';
 function roster(f) {
-  const people = [{identity: {id: analystId, displayName: 'Sam Analyst', uniqueName: 'sam@example.test'}}, {identity: {id: developerId, displayName: 'Dev Engineer', uniqueName: 'dev@example.test'}}];
+  const people = [{identity: {id: analystId, displayName: 'Sam Analyst', uniqueName: 'sam@example.test', descriptor: 'aad.' + Buffer.from(analystId).toString('base64url')}}, {identity: {id: developerId, displayName: 'Dev Engineer', uniqueName: 'dev@example.test', descriptor: 'aad.' + Buffer.from(developerId).toString('base64url')}}];
   const original = f.state.fault, base = `projects/${f.state.project.id}/teams`;
   f.state.fault = input => {
     if (input.path === base || input.path === base + '/' + teamId + '/members') {

@@ -127,8 +127,8 @@ export function saveChatReview(roots, analysisId, raw) {
     }
     const reviewId = previous?.reviewId ?? randomUUID();
     // Retain slice boundaries only to validate historical findings after a source refresh.
-    const draft = {version: 1, analysisId, consumer: state.consumer, snapshot: state.snapshot, reviewId,
-      parent: previous?.revision ?? null, inventory: state.inventory.map(({id, partId, start, end}) => ({id, partId, start, end})), ...input};
+    const draft = contextData({version: 1, analysisId, consumer: state.consumer, snapshot: state.snapshot, reviewId,
+      parent: previous?.revision ?? null, inventory: state.inventory.map(({id, partId, start, end}) => ({id, partId, start, end})), ...input});
     const revision = fingerprint(draft), path = `.harness/state/requirements/${analysisId}/reviews/${reviewId}/${revision}.json`;
     if (!existsSync(consumerPath(roots, path))) writeJson(consumerPath(roots, path), draft, {exclusive: true});
     state.review = {format: 'chat-v1', reviewId, snapshot: state.snapshot, revision, path, status: 'draft'};

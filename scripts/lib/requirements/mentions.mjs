@@ -14,8 +14,13 @@ export async function projectMentionCandidates(client) {
       const person = member.identity;
       requireThat(person && adoGuid(person.id) && typeof person.displayName === 'string' && person.displayName.trim() && person.displayName.length <= 320 && typeof person.uniqueName === 'string' && person.uniqueName.trim() && person.uniqueName.length <= 320 && !/[\r\n\x00-\x1f]/.test(person.displayName + person.uniqueName), 'Incomplete team-member identity.');
       const id = person.id.toLowerCase(); requireThat(!membersSeen.has(id), 'Duplicate team-member identity; roster may be incomplete.'); membersSeen.add(id);
-      const value = contextData({id, displayName: person.displayName, uniqueName: person.uniqueName});
-      const eligible = !person.inactive && !person.isDeletedInOrigin && !person.isContainer, identity = {...value, eligible};
+      requireThat(['inactive', 'isDeletedInOrigin', 'isContainer'].every(key => person[key] === undefined || typeof person[key] === 'boolean') && (person.descriptor === undefined || typeof person.descriptor === 'string' && person.descriptor.length <= 2048), 'Team identity type/status is incomplete.');
+      const descriptor = person.descriptor ?? null, subjectType = descriptor?.split('.')[0].toLowerCase();
+      const group = person.isContainer === true || ['vssgp', 'aadgp', 'adgp'].includes(subjectType);
+      const knownPerson = person.isContainer === false || ['aad', 'msa'].includes(subjectType);
+      requireThat(group || knownPerson || person.inactive || person.isDeletedInOrigin, 'Team identity type does not establish a person. Resolve a typed user identity before mentioning anyone.');
+      const value = contextData({id, displayName: person.displayName, uniqueName: person.uniqueName, descriptor});
+      const eligible = knownPerson && !person.inactive && !person.isDeletedInOrigin && !group, identity = {...value, eligible};
       const before = identities.get(id); requireThat(!before || fingerprint(before) === fingerprint(identity), 'Team identity changed during roster lookup; resolve again.'); identities.set(id, identity);
       if (!eligible) continue;
       people.set(id, value);

@@ -90,3 +90,15 @@ test('legacy review artifacts remain intact and cannot authorize the new chat wo
   assert.equal(current.priorReviews.at(-1).reviewId, 'legacy'); assert.equal(current.review.status, 'draft');
   assert.equal(readFileSync(join(f.roots.projectRoot, 'old-export.json'), 'utf8'), original);
 });
+
+test('a near-limit input cannot save a draft that exceeds its resume envelope', async () => {
+  const f = await fixture(), saved = saveChatReview(f.roots, 'checkout', input(f.state, f.findings));
+  const findings = Array.from({length: 16}, (_, index) => ({...f.findings[0], id: 'F-' + index, question: index < 15 ? 'q'.repeat(65536) : 'q'}));
+  const raw = input(saved, findings), before = Buffer.byteLength(JSON.stringify(raw)), target = 1024 * 1024 - 16;
+  raw.findings[15].question = 'q'.repeat(target - before + 1);
+  assert.equal(Buffer.byteLength(JSON.stringify(raw)), target);
+  assert(raw.findings[15].question.length <= 65536);
+  assert.throws(() => saveChatReview(f.roots, 'checkout', raw), /byte limit/);
+  assert.equal(readRequirements(f.roots, 'checkout').head, saved.head);
+  assert.equal(resumeRequirementsReview(f.roots, 'checkout').draft.findings[0].question, f.findings[0].question);
+});
