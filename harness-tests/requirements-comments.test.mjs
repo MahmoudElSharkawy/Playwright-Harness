@@ -1,8 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {join} from 'node:path';
 import {adoFixture} from './fixtures/ado.mjs';
 import {putRequirementFile as put, bindChatReview, chatInput} from './fixtures/requirements.mjs';
-import {captureRequirements, prepareRequirements, readRequirements, readChatReview, saveChatReview, updateInventory, planningHandoff} from '../scripts/lib/requirements/index.mjs';
+import {captureRequirements, prepareRequirements, readRequirements, readChatReview, saveChatReview, saveRequirements, updateInventory, planningHandoff} from '../scripts/lib/requirements/index.mjs';
 import {readStoryComments} from '../scripts/lib/requirements/sources.mjs';
 import {previewRequirementsComment, publishRequirementsComment, reconcileRequirementsComment} from '../scripts/lib/requirements/comments.mjs';
 import {digest, fingerprint} from '../scripts/lib/execution-core/data.mjs';
@@ -51,7 +53,10 @@ test('story capture automatically includes criteria/discussion, and acceptance s
 test('chat final comment is previewed exactly, with zero writes until exact confirmation', async t => {
   const f = await setup(t), options = {client: f.client};
   const preview = await previewRequirementsComment(f.roots, 'checkout', options);
-  assert.equal(preview.comment, f.decisions.comment); assert.equal(preview.writes[0].body.text, '<p>' + f.decisions.comment + '</p>'); assert.equal(preview.destination.storyId, 200);
+  assert.equal(preview.comment, preview.summary + '\n\n' + f.decisions.comment);
+  assert.match(preview.summary, /^1 finding: 1 gap, 0 contradictions\. Severity: High 0, Medium 1, Low 0\./);
+  assert(preview.writes[0].body.text.endsWith('<p>' + f.decisions.comment + '</p>')); assert.equal(preview.destination.storyId, 200);
+  assert(preview.writes[0].body.text.indexOf('1 finding:') < preview.writes[0].body.text.indexOf(f.decisions.comment));
   assert.equal(f.posts().length, 0); assert.equal(f.receipts().length, 0);
   await assert.rejects(publishRequirementsComment(f.roots, 'checkout', options), /confirmation/);
   await assert.rejects(publishRequirementsComment(f.roots, 'checkout', {...options, approval: 'yes'}), /confirmation/);
@@ -64,13 +69,18 @@ test('chat final comment is previewed exactly, with zero writes until exact conf
   assert.equal(repeated.commentId, 2); assert.equal(f.posts().length, 1);
 });
 
-test('changed source, discussion, inventory or final text rejects the old confirmation', async t => {
-  for (const change of ['source', 'discussion', 'inventory', 'text']) {
+test('changed source, discussion, inventory, final text, severity or summary priority rejects old confirmation', async t => {
+  for (const change of ['source', 'discussion', 'inventory', 'text', 'severity', 'finding']) {
     const f = await setup(t), options = {client: f.client}, preview = await previewRequirementsComment(f.roots, 'checkout', options);
     if (change === 'source') {f.state.items.get(200).rev++; f.state.items.get(200).fields['System.Description'] = 'Changed rule';}
     if (change === 'discussion') f.discussion.push({id: 9, workItemId: 200, version: 1, text: 'New decision'});
     if (change === 'inventory') {const state = readRequirements(f.roots, 'checkout'); updateInventory(f.roots, 'checkout', {version: 1, snapshot: state.snapshot, changes: [{id: state.inventory[0].id, disposition: 'needs-decision', evidence: []}]});}
     if (change === 'text') {const state = readRequirements(f.roots, 'checkout'); saveChatReview(f.roots, 'checkout', chatInput(state, f.decisions.findings, {comment: 'Different final question.'}));}
+    if (change === 'severity' || change === 'finding') {
+      const state = readRequirements(f.roots, 'checkout'), findings = f.decisions.findings.map(finding => ({...finding, [change]: change === 'severity' ? 'High' : 'Revised business concern'}));
+      saveChatReview(f.roots, 'checkout', chatInput(state, findings, {comment: f.decisions.comment}));
+      assert.notEqual((await previewRequirementsComment(f.roots, 'checkout', options)).summary, preview.summary);
+    }
     await assert.rejects(publishRequirementsComment(f.roots, 'checkout', {...options, approval: preview.fingerprint}), /confirmation|changed|freshness/);
     assert.equal(f.posts().length, 0);
   }
@@ -192,7 +202,8 @@ function edit(f, extra) {
 test('one approved story comment contains the chat table and native resolved person mentions', async t => {
   const f = await setup(t); roster(f); edit(f, {comment: null, mentions: ['sam@example.test', analystId]});
   const options = {client: f.client}, preview = await previewRequirementsComment(f.roots, 'checkout', options);
-  assert.equal(preview.mentions.length, 1); assert.equal(preview.mentions[0].id, analystId); assert.match(preview.comment, /^\| Findings/);
+  assert.equal(preview.mentions.length, 1); assert.equal(preview.mentions[0].id, analystId); assert.match(preview.table, /^\| Findings \| Type \| Severity \|/);
+  assert.equal(preview.comment, preview.summary + '\n\n' + preview.table);
   assert.match(preview.writes[0].body.text, /<table>/); assert.match(preview.writes[0].body.text, new RegExp('data-vss-mention="version:2.0,' + analystId));
   assert.equal(f.posts().length, 0);
   const result = await publishRequirementsComment(f.roots, 'checkout', {...options, approval: preview.fingerprint});
@@ -239,4 +250,32 @@ test('zero findings, declined review and a local destination never create an aut
   const source = await captureRequirements(f.roots, {version: 1, project: 'local', application: 'local', sources: [{id: 'notes', kind: 'file', path: 'local.md'}]});
   prepareRequirements(f.roots, 'local', source); bindChatReview(f.roots, 'local');
   await assert.rejects(previewRequirementsComment(f.roots, 'local', {client: f.client}), /no originating/); assert.equal(f.posts().length, 0);
+});
+
+test('same-severity reordering invalidates approval and changes the summary priority with manual wording retained', async t => {
+  const f = await setup(t), options = {client: f.client};
+  const findings = [f.decisions.findings[0], {...f.decisions.findings[0], id: 'F-02', finding: 'Second unresolved concern'}];
+  const first = edit(f, {findings}), preview = await previewRequirementsComment(f.roots, 'checkout', options);
+  const next = edit(f, {findings: findings.toReversed()}), revised = await previewRequirementsComment(f.roots, 'checkout', options);
+  assert.equal(next.draft.comment, first.draft.comment); assert.notEqual(revised.summary, preview.summary);
+  assert.match(revised.summary, /First priority: F-02:/);
+  await assert.rejects(publishRequirementsComment(f.roots, 'checkout', {...options, approval: preview.fingerprint}), /confirmation/);
+  assert.equal(f.posts().length, 0);
+});
+
+test('unrated chat-v1 drafts cannot preview or dispatch until rated, and their saved bytes stay intact', async t => {
+  const f = await setup(t), options = {client: f.client}, state = readRequirements(f.roots, 'checkout');
+  const draft = {...f.decisions, version: 1, findings: f.decisions.findings.map(({severity, ...finding}) => finding)};
+  const revision = fingerprint(draft), path = `.harness/state/requirements/checkout/reviews/${draft.reviewId}/${revision}.json`, bytes = JSON.stringify(draft, null, 4) + '\n';
+  put(f.roots, path, bytes);
+  const saved = saveRequirements(f.roots, 'checkout', {...state, review: {...state.review, format: 'chat-v1', revision, path}}), requests = f.state.requests.length;
+  await assert.rejects(previewRequirementsComment(f.roots, 'checkout', options), /Assign severity/);
+  await assert.rejects(publishRequirementsComment(f.roots, 'checkout', {...options, approval: 'old-approval'}), /Assign severity/);
+  assert.equal(f.state.requests.length, requests); assert.equal(f.posts().length, 0); assert.equal(readRequirements(f.roots, 'checkout').head, saved.head);
+  const next = saveChatReview(f.roots, 'checkout', chatInput(saved, f.decisions.findings, {comment: draft.comment, mentions: draft.mentions}));
+  assert.equal(next.analysisInvocations, saved.analysisInvocations); assert.equal(next.review.reviewId, saved.review.reviewId);
+  assert.equal(readFileSync(join(f.roots.projectRoot, path), 'utf8'), bytes);
+  const preview = await previewRequirementsComment(f.roots, 'checkout', options);
+  assert.equal((await publishRequirementsComment(f.roots, 'checkout', {...options, approval: preview.fingerprint})).mode, 'completed');
+  assert.equal(f.posts().length, 1);
 });

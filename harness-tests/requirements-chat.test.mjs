@@ -13,24 +13,24 @@ async function fixture() {
   writeFileSync(join(roots.projectRoot, 'story.md'), 'The link expires.\nAllow three attempts.\nAllow five attempts.\n');
   const request = {version: 1, project: 'shop', application: 'checkout', sources: [{id: 'story', kind: 'file', path: 'story.md'}]};
   const state = prepareRequirements(roots, 'checkout', await captureRequirements(roots, request));
-  const findings = [{id: 'F-01', type: 'Gap', finding: 'Expiry duration unspecified', sources: [{requirementId: state.inventory[0].id, quote: 'The link expires.'}], question: 'How long should the link remain valid?'}];
+  const findings = [{id: 'F-01', type: 'Gap', severity: 'Medium', finding: 'Expiry duration unspecified', sources: [{requirementId: state.inventory[0].id, quote: 'The link expires.'}], question: 'How long should the link remain valid?'}];
   return {roots, state, request, findings};
 }
-const input = (state, findings, extra = {}) => ({version: 1, consumer: state.consumer, snapshot: state.snapshot, head: state.head, findings, comment: null, mentions: [], ...extra});
+const input = (state, findings, extra = {}) => ({version: 2, consumer: state.consumer, snapshot: state.snapshot, head: state.head, findings, comment: null, mentions: [], ...extra});
 
-test('chat review renders exactly four columns with located exact source quotes and no UI/dependency', async () => {
+test('chat review renders exactly five columns with located exact source quotes and no UI/dependency', async () => {
   const f = await fixture(), result = saveChatReview(f.roots, 'checkout', input(f.state, f.findings));
-  assert.match(result.table, /^\| Findings \| Type \| Source material text \| Question\/Comment for Business \|/);
+  assert.match(result.table, /^\| Findings \| Type \| Severity \| Source material text \| Question\/Comment for Business \|/);
   assert.match(result.table, /F-01: Expiry duration unspecified/); assert.match(result.table, /The link expires\./);
   assert.match(result.table, /story.*lines 1-1/); assert.match(result.table, /How long/);
-  assert.equal(result.review.format, 'chat-v1'); assert.equal(result.analysisInvocations, 1);
+  assert.equal(result.review.format, 'chat-v2'); assert.equal(result.analysisInvocations, 1);
   assert(!result.page && !result.serve && !result.review.dependency);
   assert(result.inventory.every(entry => entry.disposition === 'unknown'));
 });
 
 test('conversational additions, removal, question and comment edits survive fresh-process resume', async () => {
   const f = await fixture(), first = saveChatReview(f.roots, 'checkout', input(f.state, f.findings));
-  const contradiction = {id: 'F-02', type: 'Contradiction', finding: 'Conflicting retry limits', sources: [
+  const contradiction = {id: 'F-02', type: 'Contradiction', severity: 'High', finding: 'Conflicting retry limits', sources: [
     {requirementId: first.inventory[1].id, quote: 'Allow three attempts.'}, {requirementId: first.inventory[2].id, quote: 'Allow five attempts.'}], question: 'Which retry limit applies?'};
   const next = saveChatReview(f.roots, 'checkout', input(first, [contradiction], {comment: 'Please clarify retries. Preserve spaces & <Admin>.', mentions: ['ba@example.test']}));
   const draft = readChatReview(f.roots, next);
@@ -72,6 +72,8 @@ test('refresh retains manual draft history, exposes changed meaning and never ca
   const findings = [{...f.findings[0], finding: 'Inactivity duration unspecified', sources: [{requirementId: refreshed.inventory[0].id, quote: 'unspecified inactivity period'}]}];
   const next = saveChatReview(f.roots, 'checkout', input(refreshed, findings)), diff = reviewDifferences(f.roots, next);
   assert(diff.changedFindingIds.includes('F-01')); assert.equal(diff.previousComment, 'My manual final question.'); assert.deepEqual(diff.carriedDecisions, []);
+  assert.match(next.summary, /^1 finding: 1 gap, 0 contradictions\. Severity: High 0, Medium 1, Low 0\./);
+  assert.match(next.summary, /First priority: F-01: Inactivity duration unspecified/);
   assert.equal(next.review.status, 'draft'); assert.equal(next.analysisInvocations, 2);
 });
 

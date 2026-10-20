@@ -6,7 +6,7 @@ import {fingerprint, id, requireThat} from '../execution-core/data.mjs';
 import {contextData} from '../context/model.mjs';
 import {writeJson, readBounded} from '../execute/storage.mjs';
 import {captureRequirements, consumerIdentity} from './sources.mjs';
-import {validateReviewInput, validateFindings, renderChatTable} from './review.mjs';
+import {validateReviewInput, validateFindings, renderChatTable, renderReviewSummary} from './review.mjs';
 export {captureRequirements} from './sources.mjs';
 
 export const requirementBase = (roots, analysisId) => {id(analysisId); return consumerPath(roots, `.harness/state/requirements/${analysisId}`);};
@@ -106,12 +106,13 @@ export function updateInventory(roots, analysisId, raw) {
     return saveRequirements(roots, analysisId, state);
   } finally {release();}
 }
+export const isChatReview = review => ['chat-v1', 'chat-v2'].includes(review?.format);
 export function readChatReview(roots, state, review = state.review) {
-  requireThat(review?.format === 'chat-v1', 'Legacy review artifacts are preserved. Create a chat draft after inspecting them; legacy exports/approvals cannot authorize publication.');
+  requireThat(isChatReview(review), 'Legacy review artifacts are preserved. Create a chat draft after inspecting them; legacy exports/approvals cannot authorize publication.');
   const draft = contextData(readBounded(consumerPath(roots, review.path)));
-  requireThat(fingerprint(draft) === review.revision && draft.version === 1 && draft.consumer === state.consumer && draft.analysisId === state.analysisId && draft.snapshot === review.snapshot && draft.reviewId === review.reviewId, 'Chat draft content or consumer/source/review binding changed.');
+  requireThat(fingerprint(draft) === review.revision && draft.version === (review.format === 'chat-v1' ? 1 : 2) && draft.consumer === state.consumer && draft.analysisId === state.analysisId && draft.snapshot === review.snapshot && draft.reviewId === review.reviewId, 'Chat draft content or consumer/source/review binding changed.');
   const source = readRequirementsSource(roots, {...state, snapshot: review.snapshot});
-  validateFindings(draft.findings, state.snapshot === review.snapshot ? state.inventory : draft.inventory, source);
+  validateFindings(draft.findings, state.snapshot === review.snapshot ? state.inventory : draft.inventory, source, {legacy: draft.version === 1});
   return draft;
 }
 export function saveChatReview(roots, analysisId, raw) {
@@ -119,7 +120,7 @@ export function saveChatReview(roots, analysisId, raw) {
   try {
     const state = readRequirements(roots, analysisId); requireThat(state, 'Prepare requirements before reviewing.');
     const source = readRequirementsSource(roots, state), input = validateReviewInput(raw, state, source);
-    const previous = state.review?.format === 'chat-v1' ? state.review : null;
+    const previous = isChatReview(state.review) ? state.review : null;
     if (previous) readChatReview(roots, state);
     else {
       if (state.review) state.priorReviews.push({...state.review, stale: true});
@@ -127,25 +128,25 @@ export function saveChatReview(roots, analysisId, raw) {
     }
     const reviewId = previous?.reviewId ?? randomUUID();
     // Retain slice boundaries only to validate historical findings after a source refresh.
-    const draft = contextData({version: 1, analysisId, consumer: state.consumer, snapshot: state.snapshot, reviewId,
+    const draft = contextData({version: 2, analysisId, consumer: state.consumer, snapshot: state.snapshot, reviewId,
       parent: previous?.revision ?? null, inventory: state.inventory.map(({id, partId, start, end}) => ({id, partId, start, end})), ...input});
     const revision = fingerprint(draft), path = `.harness/state/requirements/${analysisId}/reviews/${reviewId}/${revision}.json`;
     if (!existsSync(consumerPath(roots, path))) writeJson(consumerPath(roots, path), draft, {exclusive: true});
-    state.review = {format: 'chat-v1', reviewId, snapshot: state.snapshot, revision, path, status: 'draft'};
+    state.review = {format: 'chat-v2', reviewId, snapshot: state.snapshot, revision, path, status: 'draft'};
     const saved = saveRequirements(roots, analysisId, state);
-    return {...saved, draft, table: renderChatTable(draft, saved, source), differences: reviewDifferences(roots, saved)};
+    return {...saved, draft, summary: renderReviewSummary(draft), table: renderChatTable(draft, saved, source), differences: reviewDifferences(roots, saved)};
   } finally {release();}
 }
 export function resumeRequirementsReview(roots, analysisId) {
   const state = readRequirements(roots, analysisId); requireThat(state?.review, 'Prepare and save a chat review before resuming.');
   const draft = readChatReview(roots, state), source = readRequirementsSource(roots, state);
-  return {...state, draft, table: renderChatTable(draft, state, source), differences: reviewDifferences(roots, state)};
+  return {...state, draft, summary: renderReviewSummary(draft), table: renderChatTable(draft, state, source), differences: reviewDifferences(roots, state)};
 }
 export function reviewDifferences(roots, state) {
   const previous = state.priorReviews.at(-1);
   if (!previous) return null;
-  const oldDraft = previous.format === 'chat-v1' ? readChatReview(roots, state, previous) : null;
-  const newDraft = state.review?.format === 'chat-v1' ? readChatReview(roots, state) : null;
+  const oldDraft = isChatReview(previous) ? readChatReview(roots, state, previous) : null;
+  const newDraft = isChatReview(state.review) ? readChatReview(roots, state) : null;
   const before = oldDraft?.findings ?? [], after = newDraft?.findings ?? [];
   const oldFindings = new Map(before.map(finding => [finding.id, finding])), newFindings = new Map(after.map(finding => [finding.id, finding]));
   const changedFindingIds = [...new Set([...oldFindings.keys(), ...newFindings.keys()])].filter(id => !oldFindings.has(id) || !newFindings.has(id) || fingerprint(oldFindings.get(id)) !== fingerprint(newFindings.get(id)));

@@ -22,6 +22,7 @@
       {
         "id": "document-rules",
         "type": "Gap",
+        "severity": "Medium",
         "finding": "Document rules. The allowed input and rejection rules are not specified.",
         "question": "Which document types, size limits and rejection outcomes are accepted?",
         "sources": [
@@ -49,6 +50,7 @@
       {
         "id": "address-limit",
         "type": "Contradiction",
+        "severity": "High",
         "finding": "Conflicting address limits. Two supplied limits conflict.",
         "question": "Is the accepted maximum 3 or 5 saved addresses?",
         "sources": [
@@ -81,6 +83,7 @@
       {
         "id": "latency",
         "type": "Gap",
+        "severity": "Medium",
         "finding": "Measurable response target. Quickly is not measurable.",
         "question": "What response-time target, percentile, load and data conditions define acceptance?",
         "sources": [
@@ -108,6 +111,7 @@
       {
         "id": "threshold",
         "type": "Gap",
+        "severity": "Medium",
         "finding": "Threshold semantics. Eligibility exactly at the threshold is unspecified.",
         "question": "Does an order of exactly 100 units receive the discount?",
         "sources": [
@@ -150,6 +154,7 @@
       {
         "id": "address-limit",
         "type": "Contradiction",
+        "severity": "Medium",
         "finding": "Revised rule and old error message. The revised limit conflicts with the specified error message.",
         "question": "Should the error message now say 5, and which source owns that acceptance decision?",
         "sources": [

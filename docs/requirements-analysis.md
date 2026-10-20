@@ -15,13 +15,16 @@ attempts/receipts. Resolve package files through [ROOTS](../.agents/skills/ROOTS
 1. Resolve the project/application, story or supplied files from known context.
    Capture available title, description, AC, discussion and supplied attachments.
    Disclose omissions; never ask the user to repaste accessible content.
-2. Analyze the current snapshot once. Show a Markdown table in chat with exactly
-   **Findings**, **Type**, **Source material text**, and **Question/Comment for
-   Business** columns. Use stable IDs inside Findings. Quote exact source passages
-   and their locations; contradictions quote both sides. Zero findings is valid.
-3. Let the user add/remove/edit findings, questions, final text and requested
-   mentions by conversation. Save edits and re-display the current table. Resume
-   the saved draft in a fresh session without another analysis pass.
+2. Analyze the current snapshot once. Show the returned short summary before a
+   Markdown table with exactly **Findings**, **Type**, **Severity**, **Source material
+   text**, and **Question/Comment for Business** columns. Sort High → Medium → Low,
+   retaining order within a severity and stable IDs inside Findings. Quote exact
+   source passages and their locations; contradictions quote both sides. Zero
+   findings is valid and does not establish complete or accepted requirements.
+3. Let the user add/remove/edit findings, severity, questions, final text and
+   requested mentions by conversation. Save edits and re-display the recalculated
+   summary and sorted table. Resume the saved draft in a fresh session without
+   another analysis pass.
 4. When publication is requested, resolve selected people, preview the exact final
    comment, recipients, destination story and reviewed source, then obtain one
    explicit **approve and post** instruction for that unchanged payload. Saving
@@ -30,12 +33,29 @@ attempts/receipts. Resolve package files through [ROOTS](../.agents/skills/ROOTS
    comment link/receipt. Changed content, recipients, source or discussion needs a
    new preview and approval. Reconcile uncertain outcomes before another attempt.
 
-An illustrative table, for a story containing the quoted text:
+An illustrative review, for a story containing the quoted text:
 
-| Findings | Type | Source material text | Question/Comment for Business |
-|---|---|---|---|
-| F-01: Expiry duration unspecified | Gap | Description: “The link expires.” | How long should the link remain valid? |
-| F-02: Conflicting retry limits | Contradiction | Description: “Three attempts”; AC 2: “Five attempts” | Which retry limit applies? |
+2 findings: 1 gap, 1 contradiction. Severity: High 1, Medium 1, Low 0.
+First priority: F-02: Conflicting retry limits
+
+| Findings | Type | Severity | Source material text | Question/Comment for Business |
+|---|---|---|---|---|
+| F-02: Conflicting retry limits | Contradiction | High | Description: “Three attempts”; AC 2: “Five attempts” | Which retry limit applies? |
+| F-01: Expiry duration unspecified | Gap | Medium | Description: “The link expires.” | How long should the link remain valid? |
+
+Assign severity from the evidenced business impact, independent of Type:
+
+| Severity | Basis |
+|---|---|
+| High | Blocks a core business decision or has clear security/data-integrity impact. |
+| Medium | Affects a supported scenario or its expected outcome. |
+| Low | Localized ambiguity with limited impact. |
+
+Explain the impact in the finding when needed. Do not infer severity solely from
+Gap versus Contradiction or invent risk unsupported by the sources. If impact is
+unclear, resolve it with the user before saving a new rated draft. User severity
+edits are supported; sorting never renumbers IDs. Equal-severity rows keep their
+input order, including an explicitly requested reorder.
 
 The agent presents rendered text and recipient names in chat, not raw JSON,
 fingerprints or wire HTML. The commands/formats below are its deterministic tools.
@@ -106,7 +126,7 @@ Use the returned current `consumer`, `snapshot` and `head`; do not invent them.
 
 ```json
 {
-  "version": 1,
+  "version": 2,
   "consumer": "<current consumer fingerprint>",
   "snapshot": "<current source fingerprint>",
   "head": "<current state head>",
@@ -114,6 +134,7 @@ Use the returned current `consumer`, `snapshot` and `head`; do not invent them.
     {
       "id": "F-01",
       "type": "Gap",
+      "severity": "Medium",
       "finding": "Expiry duration unspecified",
       "sources": [
         {"requirementId": "<existing inventory ID>", "quote": "The link expires."}
@@ -126,7 +147,9 @@ Use the returned current `consumer`, `snapshot` and `head`; do not invent them.
 }
 ```
 
-`type` is exactly `Gap` or `Contradiction`. Every source quote must occur within
+`type` is exactly `Gap` or `Contradiction`; `severity` is explicitly `High`, `Medium`
+or `Low` on every finding. Missing or unknown severities reject the edit. Every
+source quote must occur within
 its current inventory slice. Contradictions require two distinct source passages.
 Finding IDs are unique and stable across edits. Scripts validate evidence binding;
 the AI/user still judge whether a gap or contradiction is meaningful.
@@ -139,10 +162,19 @@ pom-harness requirements resume --id checkout
 
 `review` and `edit` save the full current selection, so removing a finding removes
 its row. Re-read before editing and pass the latest head; stale/foreign/malformed
-edits cannot overwrite valid state. `comment: null` generates the outgoing table.
-A nonempty plain-text `comment` replaces that body with the user's manually edited
-final text. It is escaped, not interpreted as HTML/Markdown. An empty findings array
-has no generated outgoing comment; an explicit manual comment needs user intent.
+edits cannot overwrite valid state. Save/edit/read/resume return a derived `summary`
+with total findings, counts by Type and Severity, and the first highest-severity
+finding as the priority concern. No separate summary input or acceptance authority
+is stored. Edits recalculate counts, priority and ordering from the current findings.
+With zero findings, the summary limits the conclusion to reviewed material and
+retains unresolved inventory decisions/source omissions.
+
+`comment: null` generates the outgoing table. A nonempty plain-text `comment`
+replaces that body with the user's manually edited final text. The current summary
+is prepended to either body in preview/post. Manual wording stays intact; explain
+any mismatch with edited findings. Text is escaped, not interpreted as HTML/Markdown.
+An empty findings array has no generated outgoing comment; an explicit manual
+comment needs user intent.
 
 Drafts are immutable, content-addressed files linked by parent revision under
 `reviews/<review-id>/`. The current record links the latest draft. History retains
@@ -207,8 +239,8 @@ pom-harness requirements reconcile --id checkout
 pom-harness requirements reconcile --id checkout --comment-id <identified-id>
 ```
 
-The fingerprint binds draft/state, source snapshot, final text, resolved people,
-origin story and ordered single POST. Only `post` can issue that write. The API's
+The fingerprint binds draft/state, source snapshot, summary, severity/order, final
+text, resolved people, origin story and ordered single POST. Only `post` can issue that write. The API's
 HTML comment format carries the escaped table/text and generated mention anchors;
 it is never a separate review UI. Before dispatch the adapter rechecks originating
 project, source/discussion and recipients. ADO offers no atomic conditional comment
@@ -225,9 +257,18 @@ results or test expectations are modified.
 
 Refresh through `prepare` with the original request. A changed source/discussion
 invalidates current acceptance evidence and moves the prior review into history.
-Reassess source and finding meaning, even with reused IDs. Preserve manual text as
+Reassess source, finding meaning and severity, even with reused IDs. Recalculate the
+summary for the newly reviewed findings. Preserve manual text as
 the starting point and show changes before approving replacement final text. Old
 decisions never automatically carry into the current draft.
+
+Earlier chat-v1 drafts remain readable without rewriting their saved bytes. Missing
+severity displays as **Unrated**, with an unrated count and a request to assign it;
+no automatic rating or priority is invented. Before preview/post, inspect the old
+draft and explicitly assign every finding a severity in a version-2 edit using the
+latest state head. This retains the review ID, manual wording/mentions when supplied
+and parent history without another analysis pass. Obtain approval for the new
+summary/body and recipients; an old preview cannot authorize the changed payload.
 
 Earlier PR builds used GapCue. Their source/inventory/exports/pages are preserved,
 but the new workflow neither executes nor imports that integration. `read` exposes
@@ -245,7 +286,8 @@ review framework.
 
 ## Validation and limits
 
-Run `npm run test:requirements` for source/inventory, chat edit/resume, seven-story
+Run `npm run test:requirements` for source/inventory, summary/severity sorting,
+chat edit/resume, older unrated-draft preservation, seven-story
 quality-corpus boundaries, exact approval, mention resolution/readback and durable
 reconciliation regressions. The quality corpus is an authored acceptance fixture,
 not an automated benchmark of arbitrary AI analysis. Independent review must assess

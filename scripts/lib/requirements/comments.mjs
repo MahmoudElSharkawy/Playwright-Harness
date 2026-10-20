@@ -5,19 +5,20 @@ import {writeJson, readBounded} from '../execute/storage.mjs';
 import {adoId} from '../integrations/config.mjs';
 import {captureRequirements, requirementsClient, readStoryComments} from './sources.mjs';
 import {readRequirements, readRequirementsSource, readChatReview, lockRequirements, reviewDifferences} from './index.mjs';
-import {renderChatTable, renderComment} from './review.mjs';
+import {renderChatTable, renderComment, renderReviewSummary} from './review.mjs';
 import {projectMentionCandidates, resolveTeamMentions, verifyCommentMentions} from './mentions.mjs';
 
 const pendingPath = (roots, id) => consumerPath(roots, `.harness/state/requirements/${id}/comment-attempt.json`);
 async function planFor(roots, id, options) {
   const state = readRequirements(roots, id); requireThat(state?.review?.snapshot === state.snapshot, 'Review/source binding is incomplete.');
   const source = readRequirementsSource(roots, state), draft = readChatReview(roots, state);
+  requireThat(draft.version === 2, 'Assign severity and save a version-2 chat draft before posting. Previous unrated drafts remain readable.');
   requireThat(source.origin, 'Local requirements have no originating story destination; review remains local.');
   const client = requirementsClient(roots, options); await requireDestination(client, source.origin);
   const mentions = await resolveTeamMentions(client, draft.mentions), comment = renderComment(draft, state, source, mentions);
   const origin = source.origin, url = `${origin.organizationUrl}/${encodeURIComponent(origin.project)}/_workitems/edit/${origin.storyId}`;
   const payload = {version: 1, consumer: state.consumer, snapshot: state.snapshot, inventory: state.head, reviewId: state.review.reviewId, draft: state.review.revision,
-    destination: origin, url, mentions, comment: comment.text, table: renderChatTable(draft, state, source),
+    destination: origin, url, mentions, summary: renderReviewSummary(draft), comment: comment.text, table: renderChatTable(draft, state, source),
     writes: [{method: 'POST', route: `wit/workitems/${origin.storyId}/comments?format=html&api-version=7.1-preview.4`, body: {text: comment.html}}]};
   return {state, source, client, draft, plan: {...payload, fingerprint: fingerprint(payload)}};
 }

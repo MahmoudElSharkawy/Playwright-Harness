@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import {projectArgument, consumerPath} from './lib/consumer-paths.mjs';
 import {readBounded} from './lib/execute/storage.mjs';
-import {captureRequirements, prepareRequirements, readRequirements, updateInventory, saveChatReview, resumeRequirementsReview, planningHandoff, reviewDifferences} from './lib/requirements/index.mjs';
+import {captureRequirements, prepareRequirements, readRequirements, updateInventory, saveChatReview, resumeRequirementsReview, planningHandoff, reviewDifferences, isChatReview} from './lib/requirements/index.mjs';
 import {previewRequirementsComment, publishRequirementsComment, reconcileRequirementsComment, requirementsTeamMembers} from './lib/requirements/comments.mjs';
 
 const usage = `pom-harness requirements <prepare|read|inventory|review|edit|resume|members|plan|preview|post|reconcile>
@@ -12,7 +12,8 @@ const usage = `pom-harness requirements <prepare|read|inventory|review|edit|resu
   members --id <analysis>
   post --id <analysis> --approval <exact-preview-fingerprint>
   reconcile --id <analysis> [--comment-id <owner-identified-comment>]
-All state stays in the consumer. Render the returned four-column table in chat.
+All state stays in the consumer. Show the summary before the five-column table in chat.
+Version-2 drafts require explicit High, Medium or Low severity; highest severity first.
 Edit or resume the same saved draft. Review never accepts business requirements.
 Only post can dispatch one confirmed discussion comment. No writes occur on preview.`;
 try {
@@ -26,7 +27,7 @@ try {
   const load = name => {if (!options[name]) throw new Error('--' + name + ' is required.'); return readBounded(consumerPath(roots, options[name]));};
   let result;
   if (command === 'prepare') result = prepareRequirements(roots, options.id, await captureRequirements(roots, load('request')));
-  else if (command === 'read') {const state = readRequirements(roots, options.id); result = {state, ...(state?.review?.format === 'chat-v1' ? resumeRequirementsReview(roots, options.id) : state ? {differences: reviewDifferences(roots, state)} : {})};}
+  else if (command === 'read') {const state = readRequirements(roots, options.id); result = {state, ...(isChatReview(state?.review) ? resumeRequirementsReview(roots, options.id) : state ? {differences: reviewDifferences(roots, state)} : {})};}
   else if (command === 'inventory') result = updateInventory(roots, options.id, load('input'));
   else if (command === 'review' || command === 'edit') result = saveChatReview(roots, options.id, load('input'));
   else if (command === 'resume') result = resumeRequirementsReview(roots, options.id);
