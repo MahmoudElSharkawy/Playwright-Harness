@@ -7,6 +7,7 @@ import {htmlToText, decodeXmlText as decode} from './ado-steps.mjs';
 
 const fail = condition => requireValue(condition, 'Unsupported or malformed ADO step XML; use ordinary steps without shared references, parameters or embedded content.');
 const bounded = value => typeof value === 'string' && Buffer.byteLength(value) <= 65536;
+const hasParameter = value => /(?<![\p{L}\p{N}_.+-])@[A-Za-z_]/u.test(value);
 const xmlCharacters = value => !/[\x00-\x08\x0b\x0c\x0e-\x1f\ufffe\uffff]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(value);
 const escape = value => value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&apos;');
 /** Bounded XML fragments, with offsets for byte-preserving replacements. No DTD,
@@ -39,7 +40,7 @@ function xmlNodes(xml) {
   fail(stack.length === 0); return roots;
 }
 function formatted(html) {
-  fail(bounded(html) && !/@[A-Za-z_]/.test(htmlToText(html)));
+  fail(bounded(html) && !hasParameter(htmlToText(html)));
   // HTML fragments may use bare ampersands, NBSP and void BR. Validate a bounded
   // XHTML equivalent, but preserve the exact reviewed fragment in the payload.
   const validation = html.replace(/&nbsp;/g, '&#160;').replace(/&(?!(?:amp|lt|gt|quot|apos|#\d+|#x[\da-fA-F]+);)/g, '&amp;').replace(/<br[ \t\r\n]*>/gi, '<br/>');
@@ -61,7 +62,7 @@ function content(value, action = false) {
   requireValue(Object.keys(value).length === 1, 'Step content needs exactly one text or html value.');
   const text = value.text ?? value.html;
   requireValue(bounded(text) && xmlCharacters(text), 'Step content must be a valid string of at most 64 KiB.');
-  requireValue(!/@[A-Za-z_]/.test(value.html === undefined ? text : htmlToText(text)), 'Parameterized step content is unsupported.');
+  requireValue(!hasParameter(value.html === undefined ? text : htmlToText(text)), 'Parameterized step content is unsupported.');
   if (value.html !== undefined) formatted(value.html);
   requireValue(!action || (value.html === undefined ? value.text.trim() : htmlToText(value.html).trim()), 'Step action must not be empty.');
   return `<parameterizedString isformatted="${value.html !== undefined}">${escape(text)}</parameterizedString>`;
@@ -83,7 +84,7 @@ export function editableSteps(xml, fields = {}) {
       const inner = xml.slice(part.openEnd, part.closeStart);
       const html = part.children.length ? inner : decode(inner);
       if (part.children.length || part.attrs.isformatted === 'true') formatted(html);
-      fail(!/@[A-Za-z_]/.test(part.children.length || part.attrs.isformatted === 'true' ? htmlToText(html) : html));
+      fail(!hasParameter(part.children.length || part.attrs.isformatted === 'true' ? htmlToText(html) : html));
     }
     return {id, node, action, expected, raw: xml.slice(node.start, node.end)};
   });

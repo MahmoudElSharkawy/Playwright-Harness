@@ -34,6 +34,8 @@ removed IDs cannot also appear in `steps`. New IDs must exceed the source's
 `last` allocation counter and provide both action and expected result. At least
 one step remains. Each content value has exactly one of `text` or `html`.
 Plain text is XML-escaped; supported formatted HTML is validated and XML-escaped.
+Ordinary email addresses remain literal text; standalone `@Parameter` references
+are unsupported for content editing.
 Insertion advances `last`; removal/reordering never reuse previously allocated IDs.
 
 Unknown fields, duplicate IDs, empty titles/actions, malformed XML, contradictory

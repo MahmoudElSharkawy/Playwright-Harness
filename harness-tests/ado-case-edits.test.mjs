@@ -83,6 +83,13 @@ test('literal plain text survives preview, save and refetch without HTML strippi
   assert.equal(parseStepsXml(numeric)[1].expected, '&lt;Admin&gt;');
 });
 
+test('ordinary email text is not mistaken for a parameter reference', () => {
+  const changed = editStepsXml(steps, {}, [{id: 2, action: {text: 'Enter user@example.test or أحمد@example.test'}, expected: {html: '<p>Contact user@example.test</p>'}}, {id: 4}, {id: 6}]);
+  assert.equal(parseStepsXml(changed)[0].action, 'Enter user@example.test or أحمد@example.test');
+  assert.equal(parseStepsXml(changed)[0].expected, 'Contact user@example.test');
+  assert.throws(() => editStepsXml(steps, {}, [{id: 2, action: {text: 'Enter @Parameter'}}, {id: 4}, {id: 6}]), /Parameterized/);
+});
+
 test('title-only edits preserve shared, parameterized and opaque step/data metadata verbatim', async t => {
   const f = await setup(t), item = f.state.items.get(101);
   Object.assign(item.fields, {'Microsoft.VSTS.TCM.Steps': '<steps id="0" last="2"><compref id="2" ref="300"/></steps>', 'Microsoft.VSTS.TCM.Parameters': '<parameters><param name="User"/></parameters>', 'Microsoft.VSTS.TCM.LocalDataSource': '<NewDataSet><Table1><User>Private</User></Table1></NewDataSet>', 'Microsoft.VSTS.TCM.DataSource': 'shared-parameters'});
