@@ -3,40 +3,31 @@
 import {requireValue, adoId} from './config.mjs';
 import {keys} from '../project-config.mjs';
 import {emptyAdoMetadata} from './ado-metadata.mjs';
-import {htmlToText} from './ado-steps.mjs';
+import {htmlToText, decodeXmlText as decode} from './ado-steps.mjs';
 
 const fail = condition => requireValue(condition, 'Unsupported or malformed ADO step XML; use ordinary steps without shared references, parameters or embedded content.');
 const bounded = value => typeof value === 'string' && Buffer.byteLength(value) <= 65536;
 const xmlCharacters = value => !/[\x00-\x08\x0b\x0c\x0e-\x1f\ufffe\uffff]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(value);
 const escape = value => value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&apos;');
-function decode(value) {
-  fail(!/&(?!(?:amp|lt|gt|quot|apos|#\d+|#x[\da-fA-F]+);)/.test(value) && xmlCharacters(value));
-  return value.replace(/&(amp|lt|gt|quot|apos|#\d+|#x[\da-fA-F]+);/g, (_, name) => {
-    if (!name.startsWith('#')) return {amp: '&', lt: '<', gt: '>', quot: '"', apos: "'"}[name];
-    const code = name.startsWith('#x') ? parseInt(name.slice(2), 16) : Number(name.slice(1));
-    fail(Number.isInteger(code) && code > 0 && code <= 0x10ffff && !(code >= 0xd800 && code <= 0xdfff));
-    const result = String.fromCodePoint(code); fail(xmlCharacters(result)); return result;
-  });
-}
 /** Bounded XML fragments, with offsets for byte-preserving replacements. No DTD,
  * entities, comments, CDATA or processing instructions are accepted. */
 function xmlNodes(xml) {
   fail(typeof xml === 'string' && Buffer.byteLength(xml) <= 2 * 1024 * 1024 && xmlCharacters(xml));
   const roots = [], stack = []; let position = 0, count = 0;
-  const token = /<\/?([A-Za-z][\w.:-]*)(?:\s+[A-Za-z][\w.:-]*\s*=\s*(?:"[^"]*"|'[^']*'))*\s*\/?>/y;
+  const token = /<\/?([A-Za-z][\w.:-]*)(?:[ \t\r\n]+[A-Za-z][\w.:-]*[ \t\r\n]*=[ \t\r\n]*(?:"[^"]*"|'[^']*'))*[ \t\r\n]*\/?>/y;
   while (position < xml.length) {
     const next = xml.indexOf('<', position), end = next < 0 ? xml.length : next;
     const text = xml.slice(position, end); fail(!text.includes(']]>')); decode(text);
-    if (text.trim()) {fail(stack.length > 0); stack.at(-1).text = true;}
+    if (!/^[ \t\r\n]*$/.test(text)) {fail(stack.length > 0); stack.at(-1).text = true;}
     if (next < 0) break;
     token.lastIndex = next; const match = token.exec(xml); fail(match && ++count <= 25000);
     const raw = match[0], close = raw.startsWith('</'), self = raw.endsWith('/>'), name = match[1];
     if (close) {
-      fail(!self && /^<\/[A-Za-z][\w.:-]*\s*>$/.test(raw));
+      fail(!self && /^<\/[A-Za-z][\w.:-]*[ \t\r\n]*>$/.test(raw));
       const node = stack.pop(); fail(node && node.name === name); node.closeStart = next; node.end = token.lastIndex;
     } else {
       const attrs = {};
-      for (const attr of raw.matchAll(/([A-Za-z][\w.:-]*)\s*=\s*(?:"([^"]*)"|'([^']*)')/g)) {
+      for (const attr of raw.matchAll(/([A-Za-z][\w.:-]*)[ \t\r\n]*=[ \t\r\n]*(?:"([^"]*)"|'([^']*)')/g)) {
         fail(!Object.hasOwn(attrs, attr[1]) && !/[<>]/.test(attr[2] ?? attr[3])); attrs[attr[1]] = decode(attr[2] ?? attr[3]);
       }
       const node = {name, attrs, start: next, openEnd: token.lastIndex, closeStart: self ? token.lastIndex : undefined, end: self ? token.lastIndex : undefined, children: [], text: false};
@@ -51,7 +42,7 @@ function formatted(html) {
   fail(bounded(html) && !/@[A-Za-z_]/.test(htmlToText(html)));
   // HTML fragments may use bare ampersands, NBSP and void BR. Validate a bounded
   // XHTML equivalent, but preserve the exact reviewed fragment in the payload.
-  const validation = html.replace(/&nbsp;/g, '&#160;').replace(/&(?!(?:amp|lt|gt|quot|apos|#\d+|#x[\da-fA-F]+);)/g, '&amp;').replace(/<br\s*>/gi, '<br/>');
+  const validation = html.replace(/&nbsp;/g, '&#160;').replace(/&(?!(?:amp|lt|gt|quot|apos|#\d+|#x[\da-fA-F]+);)/g, '&amp;').replace(/<br[ \t\r\n]*>/gi, '<br/>');
   const allowed = new Set(['p', 'div', 'span', 'b', 'strong', 'i', 'em', 'u', 's', 'br', 'ol', 'ul', 'li', 'table', 'tbody', 'thead', 'tr', 'td', 'th', 'pre', 'code', 'sub', 'sup', 'a']);
   const visit = node => {
     fail(allowed.has(node.name.toLowerCase()));

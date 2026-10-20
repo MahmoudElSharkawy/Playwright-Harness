@@ -51,9 +51,21 @@ export function htmlToText(html) {
   return t.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').replace(/[ \t]{2,}/g, ' ').trim();
 }
 
+/** Decode XML once; numeric ampersands must not expose a second entity pass. */
+export function decodeXmlText(value) {
+  const valid = text => typeof text === 'string' && text.isWellFormed() && !/[\x00-\x08\x0b\x0c\x0e-\x1f\ufffe\uffff]/.test(text);
+  requireValue(valid(value) && !/&(?!(?:amp|lt|gt|quot|apos|#\d+|#x[\da-fA-F]+);)/.test(value), 'Unsupported or malformed ADO step XML text.');
+  return value.replace(/&(amp|lt|gt|quot|apos|#\d+|#x[\da-fA-F]+);/g, (_, name) => {
+    if (!name.startsWith('#')) return {amp: '&', lt: '<', gt: '>', quot: '"', apos: "'"}[name];
+    const code = name.startsWith('#x') ? parseInt(name.slice(2), 16) : Number(name.slice(1));
+    requireValue(Number.isInteger(code) && code > 0 && code <= 0x10ffff && !(code >= 0xd800 && code <= 0xdfff), 'Unsupported or malformed ADO step XML character.');
+    const decoded = String.fromCodePoint(code); requireValue(valid(decoded), 'Unsupported or malformed ADO step XML character.'); return decoded;
+  });
+}
+
 /** False-formatted values contain XML-escaped literal text, not an HTML fragment. */
 export function parameterizedText(value, formatted = true) {
-  return formatted ? htmlToText(value) : decodeEntities(value);
+  return formatted ? htmlToText(value) : decodeXmlText(value);
 }
 
 export function parseStepsXml(xml) {

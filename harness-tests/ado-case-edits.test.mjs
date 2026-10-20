@@ -4,6 +4,7 @@ import {adoFixture} from './fixtures/ado.mjs';
 import {createAdoTestManagement} from '../scripts/lib/integrations/ado-management.mjs';
 import {createAdoTestSource} from '../scripts/lib/integrations/ado-source.mjs';
 import {editableSteps, editStepsXml} from '../scripts/lib/integrations/ado-step-edit.mjs';
+import {parameterizedText, parseStepsXml} from '../scripts/lib/integrations/ado-steps.mjs';
 import {createAdoClient} from '../scripts/lib/integrations/ado-client.mjs';
 import {runCompatibility} from '../scripts/lib/integrations/compatibility.mjs';
 import {packageRoot} from '../scripts/lib/consumer-paths.mjs';
@@ -77,6 +78,9 @@ test('literal plain text survives preview, save and refetch without HTML strippi
   const saved = await createAdoTestSource(f.client).fetchSuite(1, 2, {includeRevisions: true});
   assert.equal(saved.cases[0].steps[0].action, action); assert.equal(saved.cases[0].steps[0].expected, expected);
   assert.throws(() => editableSteps(steps.replace('Old result', ']]>')));
+  assert.equal(parameterizedText('&#38;lt;Admin&#38;gt;', false), '&lt;Admin&gt;');
+  const numeric = steps.replace('isformatted="true">Old result', 'isformatted="false">&#38;lt;Admin&#38;gt;');
+  assert.equal(parseStepsXml(numeric)[1].expected, '&lt;Admin&gt;');
 });
 
 test('title-only edits preserve shared, parameterized and opaque step/data metadata verbatim', async t => {
@@ -147,7 +151,7 @@ test('custom/localized case category is honored and missing category metadata re
 });
 
 test('unsafe XML, embedded content, parameters and contradictory edits fail the entire batch', async t => {
-  const unsafe = [steps.replace('id="4"', 'id="2"'), steps.replace('last="6"', 'last="2"'), steps.replace('<description/>', '<attachment id="1"/>'), steps.replace('<description/>', '<description>Unknown content</description>'), steps.replace('<step id="6" type="ActionStep">', '<compref id="6" ref="800">').replace('</step></steps>', '</compref></steps>'), steps.replace('Old result', '&unknown;'), steps.replace('Old result', '&lt;img src="private.png"/&gt;'), steps.replace('</steps>', ''), '<!DOCTYPE steps>' + steps, steps.replace('Old result', '@Parameter')];
+  const unsafe = [steps.replace('id="4"', 'id="2"'), steps.replace('last="6"', 'last="2"'), steps.replace('<description/>', '<attachment id="1"/>'), steps.replace('<description/>', '<description>Unknown content</description>'), steps.replace('<step id="6" type="ActionStep">', '<compref id="6" ref="800">').replace('</step></steps>', '</compref></steps>'), steps.replace('Old result', '&unknown;'), steps.replace('Old result', '&lt;img src="private.png"/&gt;'), steps.replace('</steps>', ''), '<!DOCTYPE steps>' + steps, steps.replace('Old result', '@Parameter'), steps.replace('<step id=', '<step\u00a0id='), steps.replace('</step><step', '</step>\u00a0<step')];
   for (const source of unsafe) {
     const f = await setup(t); f.state.items.get(102).fields['Microsoft.VSTS.TCM.Steps'] = source;
     await assert.rejects(f.management.editCases({input: proposal({id: 101, revision: 1, title: 'Must not change'}, {id: 102, revision: 1, steps: [{id: 2}, {id: 4}, {id: 6}]})}), /refused/); assert.equal(writes(f).length, 0);
