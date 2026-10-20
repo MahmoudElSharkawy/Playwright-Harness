@@ -50,6 +50,7 @@ utils; nothing reaches upward or skips a layer (a spec never calls `page.locator
 
 | Working on | Specialist skill |
 |---|---|
+| Requirements/story gap analysis, resumable GapCue review and optional confirmed story comment | [requirements-analysis](../requirements-analysis/SKILL.md) |
 | Automating story-linked cases, an ADO suite or local scenarios into durable POM code | [automate-test](../automate-test/SKILL.md) |
 | Executing ADO manual cases interactively, with reports and optional bug/result delivery | [execute-test](../execute-test/SKILL.md) |
 | Updating existing ADO case titles, actions, expected results or ordinary-step ordering | [Case editing](../../../docs/ado-case-editing.md) |

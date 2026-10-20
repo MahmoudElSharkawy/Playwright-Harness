@@ -1,0 +1,51 @@
+[
+  {
+    "id": "complete",
+    "text": "Display the saved name exactly, including spaces, apostrophes and &.\nThe existing authenticated account fixture supplies the name.",
+    "acceptedByOwner": [1, 2],
+    "findings": [],
+    "assessment": {"usefulQuestions": 0, "inventedExpectations": 0, "unresolvedLines": [], "condition": "Complete within the supplied display-only scope; no added validation or quota."}
+  },
+  {
+    "id": "incomplete",
+    "text": "A user can upload a supporting document.",
+    "acceptedByOwner": [],
+    "findings": [{"id": "document-rules", "kind": "gap", "title": "Document rules", "why": "The allowed input and rejection rules are not specified.", "q": "Which document types, size limits and rejection outcomes are accepted?", "anchors": [{"text": "supporting document"}], "lines": [1]}],
+    "assessment": {"usefulQuestions": 1, "inventedExpectations": 0, "unresolvedLines": [1], "condition": "Ask for rules; do not assert guessed types or limits."}
+  },
+  {
+    "id": "contradictory",
+    "text": "A member can save at most 3 addresses.\nA member can save at most 5 addresses.",
+    "acceptedByOwner": [],
+    "findings": [{"id": "address-limit", "kind": "contra", "title": "Conflicting address limits", "why": "Two supplied limits conflict.", "q": "Is the accepted maximum 3 or 5 saved addresses?", "anchors": [{"text": "at most 3 addresses"}, {"text": "at most 5 addresses"}], "lines": [1, 2]}],
+    "assessment": {"usefulQuestions": 1, "inventedExpectations": 0, "unresolvedLines": [1, 2], "condition": "Neither conflicting rule is accepted by choosing a default."}
+  },
+  {
+    "id": "vague-nonfunctional",
+    "text": "Search results load quickly for authenticated users.",
+    "acceptedByOwner": [],
+    "findings": [{"id": "latency", "kind": "gap", "title": "Measurable response target", "why": "Quickly is not measurable.", "q": "What response-time target, percentile, load and data conditions define acceptance?", "anchors": [{"text": "load quickly"}], "lines": [1]}],
+    "assessment": {"usefulQuestions": 1, "inventedExpectations": 0, "unresolvedLines": [1], "condition": "No invented two-second assertion or unstated environment target."}
+  },
+  {
+    "id": "boundary",
+    "text": "A discount has a threshold of 100 units.",
+    "acceptedByOwner": [],
+    "findings": [{"id": "threshold", "kind": "gap", "title": "Threshold semantics", "why": "Eligibility exactly at the threshold is unspecified.", "q": "Does an order of exactly 100 units receive the discount?", "anchors": [{"text": "threshold of 100 units"}], "lines": [1]}],
+    "assessment": {"usefulQuestions": 1, "inventedExpectations": 0, "unresolvedLines": [1], "condition": "Boundary inclusiveness is a business decision, not a QA default."}
+  },
+  {
+    "id": "unanswered-discussion",
+    "text": "Exports include account details.\nDiscussion: Which fields must be excluded for privacy? No answer has been supplied.",
+    "acceptedByOwner": [],
+    "findings": [],
+    "assessment": {"usefulQuestions": 0, "inventedExpectations": 0, "unresolvedLines": [1, 2], "condition": "Existing unanswered concern stays in the inventory; it is not automatically repeated in the BA comment."}
+  },
+  {
+    "id": "revised",
+    "text": "The saved-address maximum is now 5.\nThe error message still states a maximum of 3.",
+    "acceptedByOwner": [],
+    "findings": [{"id": "address-limit", "kind": "contra", "title": "Revised rule and old error message", "why": "The revised limit conflicts with the specified error message.", "q": "Should the error message now say 5, and which source owns that acceptance decision?", "anchors": [{"text": "maximum is now 5"}, {"text": "maximum of 3"}], "lines": [1, 2]}],
+    "assessment": {"usefulQuestions": 1, "inventedExpectations": 0, "unresolvedLines": [1, 2], "condition": "Reused finding ID has changed meaning; old approval and edited comment do not prove freshness."}
+  }
+]

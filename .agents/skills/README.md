@@ -40,6 +40,7 @@ fetch sources or write files. See the [context contract](../../docs/project-cont
 
 | Skill | Use when |
 |---|---|
+| [requirements-analysis](requirements-analysis/SKILL.md) | GapCue-backed requirement/story analysis, resumable review, acceptance inventory and optional confirmed story comment |
 | [automate-test](automate-test/SKILL.md) | Turning story-linked cases, ADO suites or local scenarios into reviewed POM automation with two scoped green runs |
 | [execute-test](execute-test/SKILL.md) | Running ADO manual cases through live UI/API/DB runtimes and producing verified reports without generating POM code |
 | [maintain-test](maintain-test/SKILL.md) | Diagnosing failed/flaky/changed tests and resuming blocked cases while preserving evidence and repair budgets |

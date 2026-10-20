@@ -1,5 +1,14 @@
 # Provenance and release status
 
+Issue #62's requirements-analysis integration is project-authored. Its optional
+GapCue dependency remains separately installed and unmodified at 0.3.0, commit
+`54fa0180fe17ea5034825a14dbd1201fc129aabf`. The tested skill/builder/template hashes
+live in [the compatibility pin](../scripts/lib/requirements/gapcue.mjs), with
+[installation and proof limits](requirements-analysis.md). No upstream source or
+analysis skill is bundled and no new runtime dependency is added. Preserve GapCue's
+MIT copyright/license in its separate installation; AgenTeX/SHAFT are source-linked
+design inspiration only, not evidence of comparative analysis quality.
+
 The project license is [MIT](../LICENSE). On 2026-09-29 the owner confirmed the
 necessary rights to release the supplied original material under MIT. This attestation
 is recorded in [the provenance inventory](../scripts/provenance.json). The supplied

@@ -187,6 +187,7 @@ reports for cases that stop before execution or generated tests exist.
 | Understand POM layers and project ownership | [Architecture](docs/architecture.md) |
 | Configure environments, targets, secrets and knowledge | [Configuration](docs/configuration.md) |
 | Retrieve or refresh captured project/application context | [Project context](docs/project-context.md) |
+| Analyze requirements with GapCue and optionally confirm a story comment | [Requirements analysis](docs/requirements-analysis.md) |
 | Explicitly invoke Q&A using only saved snapshot facts | [Captured project questions](docs/context-qa.md) |
 | Generate automation or execute manual cases | [Automation workflow](docs/PIPELINE.md) · [Manual execution](docs/manual-execution.md) |
 | Connect ADO, retrieve cases or deliver results | [Azure DevOps](docs/azure-devops.md) |

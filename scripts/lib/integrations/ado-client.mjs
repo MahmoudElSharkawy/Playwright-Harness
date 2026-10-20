@@ -85,7 +85,7 @@ export function createAdoClient({configuration, roots, resolveCredential, fetchI
   }
   function delivery(kind, execute, sourceFingerprint) {
     requireValue(execute === true, 'External ADO writes require explicit execution authorization.');
-    requireValue(['outcomes', 'automation', 'tags', 'relations', 'pull-request', 'bugs', 'case-edits'].includes(kind), 'Unknown ADO delivery kind.');
+    requireValue(['outcomes', 'automation', 'tags', 'relations', 'pull-request', 'bugs', 'case-edits', 'story-comment'].includes(kind), 'Unknown ADO delivery kind.');
     const id = randomUUID(), receipt = `.harness/state/integrations/${id}.jsonl`;
     const file = consumerPath(roots, receipt); mkdirSync(dirname(file), {recursive: true});
     // Recheck after mkdir and use exclusive creation; each event is flushed before dispatch.
@@ -105,7 +105,7 @@ export function createAdoClient({configuration, roots, resolveCredential, fetchI
         record({event: 'prepared', operation, requestFingerprint}); let data, identity;
         try {
           const result = await request(route, {method, body, patch, raw, contentType, beforeDispatch() {record({event: 'dispatching', operation, requestFingerprint, effect: 'uncertain'}); dispatched = true;}});
-          const key = {'create-run': 'runId', 'create-bug': 'workItemId', 'upload-attachment': 'attachmentId', 'create-pull-request': 'pullRequestId'}[operation], value = key === 'pullRequestId' ? result.data.pullRequestId : result.data.id;
+          const key = {'create-run': 'runId', 'create-bug': 'workItemId', 'upload-attachment': 'attachmentId', 'create-pull-request': 'pullRequestId', 'create-comment': 'commentId'}[operation], value = key === 'pullRequestId' ? result.data.pullRequestId : key === 'commentId' ? result.data.id ?? result.data.commentId : result.data.id;
           identity = key && ((Number.isSafeInteger(value) && value > 0) || adoGuid(value)) ? {[key]: value} : undefined;
           record({event: 'acknowledged', operation, requestFingerprint, effect: 'confirmed', ...(identity ? {identity} : {})});
           data = result.data;

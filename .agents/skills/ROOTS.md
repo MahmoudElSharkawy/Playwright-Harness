@@ -13,6 +13,7 @@ and mutable state. Never derive consumer paths from a skill's installation direc
 | `.harness/context/` | Consumer captured context, provenance and recoverable history; separate from reviewed knowledge |
 | `.harness/sources/` | Versioned local scenario specifications |
 | `.harness/state/review/class-ledger.md` | Consumer review finding history |
+| `.harness/state/requirements/` | Sanitized source snapshots, the acceptance inventory, native GapCue reviews/imports and comment receipts |
 | `.harness/state/tracker/` | Consumer plan registries and append-only history |
 | `.harness/knowledge/prerequisites.md` | Reviewed prerequisite facts |
 | `.harness/knowledge/ui/` | Reviewed UI facts |
