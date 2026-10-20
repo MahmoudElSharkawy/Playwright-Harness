@@ -75,7 +75,7 @@ test('summary precedes final table/body and source-derived finding titles stay e
   assert(result.html.indexOf('Summary: 4 findings') < result.html.indexOf('<table>')); assert.match(result.html, /<th>Type<\/th><th>Severity<\/th>/);
   assert.match(result.html, /Core &lt;Admin&gt; &amp; retry \| conflict/); assert(!result.html.includes('<Admin>'));
   const manual = renderComment({...saved.draft, comment: 'Keep my <manual> wording.'}, saved, source, []);
-  assert.equal(manual.text, saved.summary + '\n\nKeep my <manual> wording.'); assert.match(manual.html, /<p>Keep my &lt;manual&gt; wording\.<\/p>/);
+  assert.equal(manual.text, saved.summary + '\n\nKeep my &lt;manual&gt; wording\\.'); assert.match(manual.html, /<p>Keep my &lt;manual&gt; wording\.<\/p>/);
 });
 
 test('multiline finding titles stay outside the summary and cannot consume the chat table or double-escape ADO text', async () => {

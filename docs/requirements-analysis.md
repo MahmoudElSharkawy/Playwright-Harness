@@ -5,6 +5,12 @@ story. The host AI reads the sources, identifies evidenced gaps and contradictio
 and reviews them with the user in chat. No external analysis skill, browser server,
 HTML review page or download/import step is required.
 
+ADO titles are plain text. Description, acceptance criteria and discussion are
+ordinary HTML: real markup is removed before decoding entities once. Encoded
+literal tags and nested references retain their wording; the legacy Steps XML
+decoder is not used for these fields. Previously captured ADO sources affected by
+that correction need refresh and a fresh preview/approval before a new post.
+
 The package owns the skill and deterministic capture, validation, persistence,
 rendering and delivery scripts. The consumer owns `.harness/state/requirements/`:
 sanitized source snapshots, one acceptance inventory, chat drafts and comment
@@ -202,6 +208,9 @@ retains unresolved inventory decisions/source omissions.
 replaces that body with the user's manually edited final text. The current summary
 is prepended to either body in preview/post. Manual wording stays intact; explain
 any mismatch with edited findings. Text is escaped, not interpreted as HTML/Markdown.
+The returned comment text is an escaped Markdown presentation with line breaks;
+the stored `draft.comment` and literal outgoing HTML retain the user's wording.
+Edit the raw draft rather than saving preview escape sequences back into it.
 An empty findings array has no generated outgoing comment; an explicit manual
 comment needs user intent.
 
@@ -277,6 +286,10 @@ POST: changes after the last read remain a documented race.
 
 Durable attempts and authenticated delivery receipts retain request identity and
 acknowledged comment IDs. Uncertain outcomes cannot be automatically replayed.
+Every saved attempted plan must still match its approval fingerprint before any
+recovery or completed-result shortcut. A mismatch stops before remote reads/writes
+and preserves the attempt; inspect the original payload rather than recomputing a
+hash to force verification.
 Verification tolerates optional quote delimiters around nonempty HTML attribute
 values that can safely be unquoted, and equivalent complete decimal/hex numeric
 references for only 🔴, 🟠 and 🔵 in normal HTML text nodes. Attribute values,

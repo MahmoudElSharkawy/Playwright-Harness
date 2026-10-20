@@ -9,6 +9,11 @@ import {renderChatTable, renderComment, renderReviewSummary} from './review.mjs'
 import {projectMentionCandidates, resolveTeamMentions, verifyCommentMentions} from './mentions.mjs';
 
 const pendingPath = (roots, id) => consumerPath(roots, `.harness/state/requirements/${id}/comment-attempt.json`);
+function readAttempt(path) {
+  const attempt = readBounded(path), {fingerprint: approved, ...payload} = attempt.plan ?? {};
+  requireThat(typeof approved === 'string' && approved === fingerprint(payload), 'Saved comment attempt fingerprint changed. Preserve the attempt and inspect its original approved payload before recovery.');
+  return attempt;
+}
 function severityIconText(text) {
   return text.replace(/&#(x[0-9a-f]+|[0-9]+);/gi, (entity, value) => {
     const point = value[0].toLowerCase() === 'x' ? Number.parseInt(value.slice(1), 16) : Number(value);
@@ -107,7 +112,7 @@ export async function reconcileRequirementsComment(roots, id, {commentId, ...opt
   const release = lockRequirements(roots, id);
   try {
     const path = pendingPath(roots, id); requireThat(existsSync(path), 'No comment attempt to reconcile.');
-    const attempt = readBounded(path); if (attempt.status === 'completed') return attempt.result;
+    const attempt = readAttempt(path); if (attempt.status === 'completed') return attempt.result;
     return await reconcile(roots, id, requirementsClient(roots, options), attempt, commentId);
   } finally {release();}
 }
@@ -115,7 +120,7 @@ export async function publishRequirementsComment(roots, id, {approval, ...option
   const release = lockRequirements(roots, id);
   try {
     // Resolve unfinished attempts first, even if the source/draft/roster has since changed.
-    const path = pendingPath(roots, id), previous = existsSync(path) ? readBounded(path) : null;
+    const path = pendingPath(roots, id), previous = existsSync(path) ? readAttempt(path) : null;
     if (previous && previous.status !== 'completed' && previous.status !== 'not-executed') return await reconcile(roots, id, requirementsClient(roots, options), previous);
     const {source, plan, client, draft} = await planFor(roots, id, options);
     requireThat(typeof approval === 'string' && approval === plan.fingerprint, 'Explicit confirmation must match the exact preview text, destination, reviewed source and ordered writes.');

@@ -3,11 +3,22 @@ import {contextData} from '../context/model.mjs';
 import {fingerprint, digest, requireThat, keys} from '../execution-core/data.mjs';
 import {createAdoClient} from '../integrations/ado-client.mjs';
 import {loadAdoConfiguration, adoId, adoGuid} from '../integrations/config.mjs';
-import {htmlToText} from '../integrations/ado-steps.mjs';
+import {decodeEntities} from '../integrations/ado-steps.mjs';
 
 export const consumerIdentity = (roots, project, application) => fingerprint({root: roots.projectRoot, project, application});
 export function requirementsClient(roots, options = {}) {
   return options.client ?? createAdoClient({...loadAdoConfiguration(roots, {}, options.environment), roots, fetchImpl: options.fetchImpl});
+}
+
+/** Strip real markup first; decode each entity alone so nested references stay literal. */
+function ordinaryHtmlText(html) {
+  const text = html.replace(/<!--[\s\S]*?-->|<(\/?)([A-Za-z][A-Za-z0-9:-]*)(?:[^"'<>]|"[^"]*"|'[^']*')*>/g, (_, closing, tag) => {
+    if (!tag) return '';
+    tag = tag.toLowerCase();
+    if (tag === 'br' || closing && /^(p|div|li|tr|h[1-6])$/.test(tag)) return '\n';
+    return !closing && tag === 'li' ? '- ' : '';
+  }).replace(/&(?:#[xX][\da-fA-F]+|#\d+|[A-Za-z]+);/g, entity => decodeEntities(entity.replace(/^&#X/, '&#x')));
+  return text.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').replace(/[ \t]{2,}/g, ' ').trim();
 }
 
 /** Comments have their own response-body pagination, unlike ADO value lists. */
@@ -56,14 +67,14 @@ export async function captureRequirements(roots, raw, options = {}) {
     origin = {organizationUrl: client.configuration.organizationUrl, projectId: project.id, project: project.name, storyId};
     for (const [field, kind] of [['System.Title', 'context'], ['System.Description', 'requirement'], ['Microsoft.VSTS.Common.AcceptanceCriteria', 'criterion']]) {
       const value = item.fields[field];
-      if (typeof value === 'string' && value.trim()) add('story', String(item.rev), [{location: field, text: htmlToText(value)}], kind);
+      if (typeof value === 'string' && value.trim()) add('story', String(item.rev), [{location: field, text: field === 'System.Title' ? value : ordinaryHtmlText(value)}], kind);
       else omissions.push({sourceId: 'story', location: field, reason: 'absent'});
     }
     revisions.push({id: 'story', revision: String(item.rev), content: fingerprint(item.fields)});
     try {
       const comments = await readStoryComments(client, storyId);
       revisions.push({id: 'discussion', revision: fingerprint(comments)});
-      for (const comment of comments) if (!comment.deleted) add('discussion', String(comment.version), [{location: `comment:${comment.id}`, text: htmlToText(comment.text)}], 'discussion');
+      for (const comment of comments) if (!comment.deleted) add('discussion', String(comment.version), [{location: `comment:${comment.id}`, text: ordinaryHtmlText(comment.text)}], 'discussion');
     } catch {omissions.push({sourceId: 'discussion', reason: 'inaccessible-or-incomplete'});}
     requireThat(item.relations === undefined || Array.isArray(item.relations), 'Story attachments are incomplete.');
     for (const [index, relation] of (item.relations ?? []).entries()) if (relation.rel === 'AttachedFile') {

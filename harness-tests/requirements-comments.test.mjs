@@ -50,6 +50,24 @@ test('story capture automatically includes criteria/discussion, and acceptance s
   assert.equal(plan.requirements.find(item => item.id === state.inventory.find(item => item.kind === 'discussion').id).disposition, 'needs-decision');
 });
 
+test('ordinary ADO HTML intake preserves literal tags, plain titles and one layer of entity decoding', async t => {
+  const f = await setup(t), before = readRequirements(f.roots, 'checkout');
+  Object.assign(f.state.items.get(200).fields, {
+    'System.Title': 'Display <Admin> &amp; names',
+    'System.Description': '<div title="a > b">Display &lt;Admin&gt; names.<br>Keep &amp;lt;code&amp;gt; and &#38;lt;limit&#38;gt; literal.</div>',
+    'Microsoft.VSTS.Common.AcceptanceCriteria': '<p>Allow x &lt; 2 and y &gt; 1.</p><ul><li>Show &quot;Admin&quot; &amp; &#X1F534;.</li></ul>'
+  });
+  f.discussion[0].text = '<p>Keep &amp;amp; &amp;lt;Admin&amp;gt; &#38;amp;.</p>';
+  const source = await captureRequirements(f.roots, f.request, {client: f.client});
+  assert.deepEqual(Object.fromEntries(source.parts.map(part => [part.location, part.text])), {
+    'System.Title': 'Display <Admin> &amp; names',
+    'System.Description': 'Display <Admin> names.\nKeep &lt;code&gt; and &lt;limit&gt; literal.',
+    'Microsoft.VSTS.Common.AcceptanceCriteria': 'Allow x < 2 and y > 1.\n- Show "Admin" & 🔴.',
+    'comment:1': 'Keep &amp; &lt;Admin&gt; &amp;.'
+  });
+  assert.deepEqual(readRequirements(f.roots, 'checkout'), before); assert.equal(f.posts().length, 0);
+});
+
 test('chat final comment is previewed exactly, with zero writes until exact confirmation', async t => {
   const f = await setup(t), options = {client: f.client};
   const preview = await previewRequirementsComment(f.roots, 'checkout', options);
@@ -300,7 +318,7 @@ test('older rated drafts with internal-looking text preview and post after norma
     const preview = await previewRequirementsComment(f.roots, 'checkout', options);
     if (kind === 'finding-id') assert(!preview.comment.includes(leakedId));
     if (kind === 'question') assert(preview.comment.includes(draft.findings[0].question));
-    if (kind === 'manual') assert(preview.comment.includes(draft.comment));
+    if (kind === 'manual') {assert(preview.comment.includes('See req\\-')); assert(preview.writes[0].body.text.includes(draft.comment));}
     await assert.rejects(publishRequirementsComment(f.roots, 'checkout', {...options, approval: 'earlier-approval'}), /confirmation/);
     assert.equal(f.posts().length, 0); assert.equal(f.receipts().length, 0); assert.equal(readRequirements(f.roots, 'checkout').head, saved.head);
     assert.equal(readFileSync(join(f.roots.projectRoot, path), 'utf8'), bytes);
@@ -324,6 +342,22 @@ async function pendingLegacyComment(f, sent, stored, {acknowledged = true, recei
   f.discussion.push({id: 2, workItemId: 200, version: 1, text: stored, mentions: []});
   return attempt;
 }
+
+test('changed saved attempt payloads fail before recovery or completed shortcuts without remote reads or state changes', async t => {
+  for (const action of ['reconcile', 'publish']) for (const status of ['uncertain', 'completed', 'not-executed']) {
+    const f = await setup(t), attempt = await pendingLegacyComment(f, legacyComment, legacyComment);
+    attempt.status = status;
+    if (status === 'completed') attempt.result = {mode: 'completed', fingerprint: attempt.plan.fingerprint, commentId: 2};
+    attempt.plan.writes[0].body.text = '<p>Changed after approval.</p>';
+    f.discussion.at(-1).text = attempt.plan.writes[0].body.text;
+    const path = '.harness/state/requirements/checkout/comment-attempt.json'; put(f.roots, path, attempt);
+    const bytes = readFileSync(join(f.roots.projectRoot, path), 'utf8'), requests = f.state.requests.length;
+    const operation = action === 'reconcile' ? reconcileRequirementsComment : publishRequirementsComment;
+    await assert.rejects(operation(f.roots, 'checkout', {client: f.client, approval: attempt.plan.fingerprint}), /saved.*fingerprint|attempt.*changed/i);
+    assert.equal(f.state.requests.length, requests); assert.equal(f.posts().length, 0);
+    assert.equal(readFileSync(join(f.roots.projectRoot, path), 'utf8'), bytes);
+  }
+});
 
 test('optional attribute quotes in POST acknowledgements and direct readback preserve approved mentions and review data', async t => {
   for (const stage of ['acknowledgement', 'readback']) {

@@ -1,13 +1,9 @@
 # Third-party notices and references
 
-The requirements-analysis workflow optionally consumes separately installed
-[GapCue](https://github.com/Red-Cloud2000/skills/tree/54fa0180fe17ea5034825a14dbd1201fc129aabf/GapCue)
-0.3.0, commit `54fa0180fe17ea5034825a14dbd1201fc129aabf`, by Abdelrahman Hesham
-(copyright 2026), under [MIT](https://github.com/Red-Cloud2000/skills/blob/54fa0180fe17ea5034825a14dbd1201fc129aabf/LICENSE).
-Keep its complete copyright/license with that distribution. The harness records
-content identities and original integration code; it does not redistribute or
-modify GapCue's skill, builder or UI. No new npm dependency is added. AgenTeX and
-SHAFT links in issue #62 are design references, not runtime dependencies or quality
+The requirements-analysis workflow is project-authored and has no external analysis
+integration or new npm dependency. The prerelease GapCue integration was removed
+before release; no GapCue implementation is copied or bundled. AgenTeX and SHAFT
+links in issue #62 are design references, not runtime dependencies or quality
 comparisons; no implementation is copied from them.
 
 The dependency security refresh uses Handlebars 4.7.10 (MIT) through the example's

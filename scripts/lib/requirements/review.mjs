@@ -108,6 +108,11 @@ function rows(draft, state, source, text, strong) {
 }
 const columns = ['Findings', 'Type', 'Severity', 'Source material text', 'Question/Comment for Business'];
 const markdownCell = value => escapeHtml(value).replaceAll('|', '&#124;').replace(/[\\`*_~\[\]{}]/g, '\\$&').replace(/\r\n?|\n/g, '; ');
+function markdownBody(value) {
+  const text = value.split(/\r\n?|\n/).map(line => escapeHtml(line).replace(/[\\`*_~\[\]{}#+.!()|>\-]/g, '\\$&').replace(/^[ \t]+/, space => space.replaceAll(' ', '&#32;').replaceAll('\t', '&#9;'))).join('\\\n');
+  // A collapsible final space keeps terminal hard breaks from becoming literal backslashes.
+  return text + (/[\r\n]$/.test(value) ? '&#32;' : '');
+}
 export function renderChatTable(draft, state, source) {
   return [...[columns, columns.map(() => '---')].map(row => row.map(markdownCell)), ...rows(draft, state, source, markdownCell, markdownStrong)].map(row => '| ' + row.join(' | ') + ' |').join('\n');
 }
@@ -119,5 +124,5 @@ export function renderComment(draft, state, source, mentions) {
     : '<p>' + htmlText(draft.comment) + '</p>';
   const recipients = mentions.length ? '<p>' + mentions.map(person => `<a href="#" data-vss-mention="version:2.0,${person.id}">@${escapeHtml(person.displayName)}</a>`).join(' ') + '</p>' : '';
   const summary = renderReviewSummary(draft);
-  return {text: summary + '\n\n' + (draft.comment ?? renderChatTable(draft, state, source)), html: recipients + '<p>' + reviewSummaryLines(draft, htmlText, htmlStrong).join('<br>') + '</p>' + body};
+  return {text: summary + '\n\n' + (draft.comment === null ? renderChatTable(draft, state, source) : markdownBody(draft.comment)), html: recipients + '<p>' + reviewSummaryLines(draft, htmlText, htmlStrong).join('<br>') + '</p>' + body};
 }

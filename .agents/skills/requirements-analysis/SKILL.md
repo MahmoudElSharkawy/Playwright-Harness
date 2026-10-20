@@ -21,6 +21,9 @@ credentials. ADO mode loads available title, description, AC, paginated discussi
 and supplied attachments through existing adapters. Inspect omissions; use supported
 host readers with content-bound extraction receipts for unsupported attachments.
 Sanitize before analysis; never reconstruct redacted secrets.
+Treat ADO titles as plain text and other fields/discussion as ordinary HTML, with
+markup removed before one entity decode. Preserve encoded literal tags. Refresh
+older affected captures before previewing a new comment; do not change Steps XML.
 
 Read the captured source and single inventory. Before review, partition compound
 statements into independent exact slices with `inventory`, covering every supplied
@@ -95,6 +98,9 @@ requested manual final text; do not
 silently replace it when the table changes. The current summary is automatically
 prepended to generated tables or manual final bodies in preview/post. Explain when
 an edit creates a mismatch.
+Manual comment previews are escaped Markdown with preserved line breaks, matching
+the literal ADO body. Edit raw `draft.comment`; never save preview escape sequences
+back into it. Stored wording and history remain unchanged.
 
 `requirements read|resume --id <id>` returns the current summary/draft/table without
 reanalysis.
@@ -160,6 +166,9 @@ only an explicit user-requested manual comment can override that.
 
 The adapter rechecks freshness and durably records dispatch, comment ID/URL and
 mention readback. On uncertainty run `requirements reconcile`; never retry blindly.
+Saved attempted plans must match their approval fingerprint before recovery or a
+completed shortcut. A mismatch preserves state and blocks remote calls; inspect
+the original approved payload rather than editing it or recomputing its hash.
 The verifier accepts only equivalent complete numeric references for the three
 severity icons in normal HTML text, alongside safe optional attribute quotes.
 Older attempts reconcile against their saved payload, including the old summary;

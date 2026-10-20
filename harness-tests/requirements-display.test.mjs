@@ -56,7 +56,8 @@ test('free-form findings, questions, manual comments and source quotes retain te
   const finding = {...f.draft.findings[0], finding: 'Discuss ' + reportedId, question: 'Clarify Microsoft.VSTS.Common.AcceptanceCriteria.', sources: [{requirementId: f.state.inventory[0].id, quote}]};
   const text = `See _${reportedId}_ and System.Description <current>.`;
   const draft = validateReviewInput(chatInput(f.state, [finding], {comment: text}), f.state, f.source), comment = renderComment(draft, f.state, f.source, []);
-  assert.deepEqual(draft.findings, [finding]); assert.equal(draft.comment, text); assert(comment.text.includes(text));
+  assert.deepEqual(draft.findings, [finding]); assert.equal(draft.comment, text);
+  assert(comment.text.includes('&lt;current&gt;')); assert(!comment.text.includes(`<current>`)); assert(comment.text.includes('\\_req\\-'));
   assert(comment.html.includes(`See _${reportedId}_ and System.Description &lt;current&gt;.`));
   assert(renderChatTable(draft, f.state, f.source).includes('**Title:** “System.Description”'));
 });
@@ -83,7 +84,24 @@ test('emphasis escapes literal markup before wrapping focus text and keeps manua
   assert(comment.html.includes('Does <strong>&lt;Admin&gt; &amp; **literal**</strong> apply?'));
   assert(!comment.html.includes('<Admin>')); assert(!comment.html.includes('<strong>literal</strong>'));
   const manual = renderComment({...draft, comment: 'Keep **my** <manual> wording.'}, f.state, f.source, []);
-  assert(manual.text.endsWith('Keep **my** <manual> wording.')); assert(manual.html.endsWith('<p>Keep **my** &lt;manual&gt; wording.</p>'));
+  assert(manual.text.endsWith('Keep \\*\\*my\\*\\* &lt;manual&gt; wording\\.')); assert(manual.html.endsWith('<p>Keep **my** &lt;manual&gt; wording.</p>'));
+});
+
+test('manual Markdown preview stays literal with multiline whitespace while stored wording and outgoing HTML remain unchanged', () => {
+  const f = displayFixture(), raw = '    <Admin> **literal**\n# Heading\n\n1. [link](target) ~~draft~~';
+  const draft = {...f.draft, comment: raw}, before = structuredClone(draft), comment = renderComment(draft, f.state, f.source, []);
+  assert(!comment.text.includes('<Admin>')); assert(!comment.text.includes('**literal**')); assert(!comment.text.includes('\n# Heading'));
+  assert(comment.text.includes('&#32;&#32;&#32;&#32;&lt;Admin&gt; \\*\\*literal\\*\\*\\\n\\# Heading'));
+  assert(comment.text.endsWith('1\\. \\[link\\]\\(target\\) \\~\\~draft\\~\\~'));
+  assert(comment.html.endsWith('<p>    &lt;Admin&gt; **literal**<br># Heading<br><br>1. [link](target) ~~draft~~</p>'));
+  assert.deepEqual(draft, before);
+});
+
+test('terminal manual newlines do not expose a Markdown hard-break marker', () => {
+  const f = displayFixture(), raw = 'Keep literal.\r\n\r\n', draft = {...f.draft, comment: raw};
+  const comment = renderComment(draft, f.state, f.source, []);
+  assert(comment.text.endsWith('Keep literal\\.\\\n\\\n&#32;'));
+  assert(comment.html.endsWith('<p>Keep literal.<br><br></p>')); assert.equal(draft.comment, raw);
 });
 
 test('Markdown emphasis preserves punctuation, adjacent focus matches and title whitespace', () => {
