@@ -147,6 +147,10 @@ only an explicit user-requested manual comment can override that.
 
 The adapter rechecks freshness and durably records dispatch, comment ID/URL and
 mention readback. On uncertainty run `requirements reconcile`; never retry blindly.
+Do not bypass an unresolved attempt with a direct API post. A result with
+`reconciled: true` recovers the earlier comment; it does not post a different current
+draft. For another comment, refresh changed sources, preview and obtain approval
+for its exact current payload before posting.
 An identical new comment is only a candidate. Ask the owner to identify its exact ID
 before `reconcile --comment-id <id>` when no durable acknowledgement identifies it.
 Mismatched mention readback remains unresolved. Missing access/destination, declined

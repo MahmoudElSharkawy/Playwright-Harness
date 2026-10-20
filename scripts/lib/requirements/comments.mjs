@@ -9,6 +9,41 @@ import {renderChatTable, renderComment, renderReviewSummary} from './review.mjs'
 import {projectMentionCandidates, resolveTeamMentions, verifyCommentMentions} from './mentions.mjs';
 
 const pendingPath = (roots, id) => consumerPath(roots, `.harness/state/requirements/${id}/comment-attempt.json`);
+function attributeQuoteKey(html) {
+  const tag = /<(\/?)([a-z][a-z0-9-]*)/iy;
+  const attribute = /[ \t\r\n\f]+[a-z_:][a-z0-9_.:-]*(?:[ \t\r\n\f]*=[ \t\r\n\f]*("[^"]*"|'[^']*'|[^ \t\r\n\f"'`=<>]+))?/iy;
+  const startEnd = /[ \t\r\n\f]*\/?>/y, endEnd = /[ \t\r\n\f]*>/y;
+  let key = '', at = 0;
+  while (at < html.length) {
+    const open = html.indexOf('<', at);
+    if (open < 0) return key + html.slice(at);
+    key += html.slice(at, open); tag.lastIndex = open;
+    const head = tag.exec(html);
+    // Raw text, foreign content, comments and malformed markup retain exact comparison.
+    if (!head || /^(script|style|title|textarea|xmp|iframe|noembed|noframes|noscript|plaintext|svg|math)$/i.test(head[2])) return null;
+    key += head[0]; at = tag.lastIndex;
+    if (!head[1]) for (;;) {
+      attribute.lastIndex = at; const part = attribute.exec(html);
+      if (!part) break;
+      let token = part[0];
+      if (part[1]) {
+        const value = /^["']/.test(part[1]) ? part[1].slice(1, -1) : part[1];
+        if (/^[^\x00-\x20\x7f"'`=<>]+$/.test(value)) token = token.slice(0, -part[1].length) + '"' + value + '"';
+      }
+      key += token; at = attribute.lastIndex;
+    }
+    const end = head[1] ? endEnd : startEnd; end.lastIndex = at;
+    const close = end.exec(html); if (!close) return null;
+    key += close[0]; at = end.lastIndex;
+  }
+  return key;
+}
+function sameCommentHtml(expected, actual) {
+  if (typeof expected !== 'string' || typeof actual !== 'string') return false;
+  if (expected === actual) return true;
+  const key = attributeQuoteKey(expected);
+  return key !== null && key === attributeQuoteKey(actual);
+}
 async function planFor(roots, id, options) {
   const state = readRequirements(roots, id); requireThat(state?.review?.snapshot === state.snapshot, 'Review/source binding is incomplete.');
   const source = readRequirementsSource(roots, state), draft = readChatReview(roots, state);
@@ -49,12 +84,12 @@ async function reconcile(roots, id, client, attempt, selectedCommentId) {
     acknowledged = events.find(event => event.event === 'acknowledged' && event.operation === 'create-comment')?.identity?.commentId;
   }
   const comments = await readStoryComments(client, attempt.plan.destination.storyId);
-  const candidates = comments.filter(comment => !comment.deleted && !attempt.beforeIds.includes(comment.id) && comment.text === attempt.plan.writes[0].body.text);
+  const candidates = comments.filter(comment => !comment.deleted && !attempt.beforeIds.includes(comment.id) && sameCommentHtml(attempt.plan.writes[0].body.text, comment.text));
   const identity = acknowledged ?? selectedCommentId;
   if (identity !== undefined) {
     const commentId = adoId(identity); requireThat(candidates.some(comment => comment.id === commentId), 'Selected or acknowledged comment does not match the exact attempted payload and destination.');
     const after = await client.read(`wit/workitems/${attempt.plan.destination.storyId}/comments/${commentId}?api-version=7.1-preview.4`);
-    requireThat(adoId(after.id ?? after.commentId) === commentId && after.workItemId === attempt.plan.destination.storyId && after.text === attempt.plan.writes[0].body.text && !after.isDeleted, 'Comment reconciliation readback mismatch.');
+    requireThat(adoId(after.id ?? after.commentId) === commentId && after.workItemId === attempt.plan.destination.storyId && sameCommentHtml(attempt.plan.writes[0].body.text, after.text) && !after.isDeleted, 'Comment reconciliation readback mismatch.');
     verifyCommentMentions(after, attempt.plan.mentions ?? []);
     const result = {mode: 'completed', fingerprint: attempt.plan.fingerprint, commentId, url: attempt.plan.url + '?discussionId=' + commentId, receipt: attempt.receipt, reconciled: true};
     writeJson(pendingPath(roots, id), {...attempt, status: 'completed', commentId, result}); return result;
@@ -92,9 +127,9 @@ export async function publishRequirementsComment(roots, id, {approval, ...option
     try {
       const write = plan.writes[0], response = await delivery.write('create-comment', write.route, write.body, {method: 'POST', onIdentity(identity) {attempt.commentId = identity.commentId; writeJson(path, attempt);}});
       const commentId = adoId(response.id ?? response.commentId);
-      requireThat(response.workItemId === source.origin.storyId && response.text === write.body.text, 'Comment acknowledgement mismatch.');
+      requireThat(response.workItemId === source.origin.storyId && sameCommentHtml(write.body.text, response.text), 'Comment acknowledgement mismatch.');
       const after = await client.read(`wit/workitems/${source.origin.storyId}/comments/${commentId}?api-version=7.1-preview.4`);
-      requireThat(adoId(after.id ?? after.commentId) === commentId && after.workItemId === source.origin.storyId && after.text === write.body.text && !after.isDeleted, 'Comment readback mismatch.');
+      requireThat(adoId(after.id ?? after.commentId) === commentId && after.workItemId === source.origin.storyId && sameCommentHtml(write.body.text, after.text) && !after.isDeleted, 'Comment readback mismatch.');
       verifyCommentMentions(after, plan.mentions);
       delivery.verified({commentId}); const receipt = delivery.finish();
       const result = {mode: 'completed', fingerprint: plan.fingerprint, commentId, url: plan.url + '?discussionId=' + commentId, receipt: receipt.receipt};

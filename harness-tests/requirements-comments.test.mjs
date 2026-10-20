@@ -13,14 +13,14 @@ async function setup(t) {
   const fixture = await adoFixture(t), {state} = fixture;
   Object.assign(state.items.get(200).fields, {'System.WorkItemType': 'User Story', 'System.Description': '<p>Display the saved name.</p>', 'Microsoft.VSTS.Common.AcceptanceCriteria': '<p>Names allow spaces &amp; special characters.</p>'});
   const discussion = [{id: 1, workItemId: 200, version: 1, text: '<p>Which data is required before saving?</p>'}];
-  const control = {loseResponse: false, denyComments: false, page: false, beforePost: null};
+  const control = {loseResponse: false, denyComments: false, page: false, beforePost: null, transformComment: null};
   state.fault = ({path, req, res, body, send, url}) => {
     if (path === 'wit/workitems/200/comments') {
       if (control.denyComments) {send({}, 403); return true;}
       if (req.method === 'POST') {
         if (control.beforePost) control.beforePost();
         const mentions = [...body.text.matchAll(/data-vss-mention="version:2\.0,([a-f0-9-]{36})"/g)].map(match => ({artifactType: 'person', targetId: match[1]}));
-        const comment = {id: discussion.length + 1, workItemId: 200, version: 1, text: body.text, mentions}; discussion.push(comment);
+        const comment = {id: discussion.length + 1, workItemId: 200, version: 1, text: control.transformComment?.(body.text) ?? body.text, mentions}; discussion.push(comment);
         if (control.loseResponse) res.destroy(); else send(comment); return true;
       }
       if (control.page && !url.searchParams.get('continuationToken')) {const nextPage = 'next'; send({comments: discussion.slice(0, 1), totalCount: discussion.length, continuationToken: nextPage}); return true;}
@@ -305,5 +305,104 @@ test('older rated drafts with internal-looking text preview and post after norma
     const result = await publishRequirementsComment(f.roots, 'checkout', {...options, approval: preview.fingerprint});
     assert.equal(result.mode, 'completed'); assert.equal(f.posts().length, 1); assert.equal(f.posts()[0].body.text, preview.writes[0].body.text);
     assert.equal(readFileSync(join(f.roots.projectRoot, path), 'utf8'), bytes);
+  }
+});
+
+const legacyComment = '<p>Approved questions.</p><ul>' + ['password-policy', 'address-format', 'retry-limit', 'expiry-time'].map(value => `<li data-q="${value}">Clarify ${value}.</li>`).join('') + '</ul>';
+const removeDataQuotes = html => html.replace(/(data-(?:q|vss-mention))="([^"\s<>]+)"/g, '$1=$2');
+async function pendingLegacyComment(f, sent, stored, {acknowledged = true, receipt = false} = {}) {
+  const {mode, differences, fingerprint: previousFingerprint, ...payload} = await previewRequirementsComment(f.roots, 'checkout', {client: f.client});
+  payload.writes[0].body.text = sent;
+  const attempt = {version: 1, status: 'uncertain', plan: {...payload, fingerprint: fingerprint(payload)}, beforeIds: f.discussion.map(comment => comment.id)};
+  if (acknowledged && !receipt) attempt.commentId = 2;
+  if (receipt) {attempt.receipt = '.harness/state/integrations/legacy-comment.jsonl'; put(f.roots, attempt.receipt, JSON.stringify({event: 'acknowledged', operation: 'create-comment', identity: {commentId: 2}}) + '\n');}
+  put(f.roots, '.harness/state/requirements/checkout/comment-attempt.json', attempt);
+  f.discussion.push({id: 2, workItemId: 200, version: 1, text: stored, mentions: []});
+  return attempt;
+}
+
+test('optional attribute quotes in POST acknowledgements and direct readback preserve approved mentions and review data', async t => {
+  for (const stage of ['acknowledgement', 'readback']) {
+    const f = await setup(t); roster(f); edit(f, {mentions: [analystId]});
+    if (stage === 'acknowledgement') f.control.transformComment = removeDataQuotes;
+    else {
+      const original = f.state.fault;
+      f.state.fault = input => input.path === 'wit/workitems/200/comments/2' ? (input.send({...f.discussion.at(-1), text: removeDataQuotes(f.discussion.at(-1).text)}), true) : original(input);
+    }
+    const state = readRequirements(f.roots, 'checkout'), draft = readChatReview(f.roots, state), options = {client: f.client};
+    const bytes = readFileSync(join(f.roots.projectRoot, state.review.path), 'utf8'), preview = await previewRequirementsComment(f.roots, 'checkout', options);
+    const result = await publishRequirementsComment(f.roots, 'checkout', {...options, approval: preview.fingerprint});
+    assert.equal(result.mode, 'completed'); assert.equal(result.commentId, 2); assert.equal(f.posts().length, 1);
+    assert.equal(f.posts()[0].body.text, preview.writes[0].body.text);
+    assert.deepEqual(readRequirements(f.roots, 'checkout'), state); assert.deepEqual(readChatReview(f.roots, state), draft);
+    assert.equal(readFileSync(join(f.roots.projectRoot, state.review.path), 'utf8'), bytes);
+  }
+});
+
+test('optional attribute quote formatting recovers acknowledged older attempts without reposting or changing the current draft', async t => {
+  for (const receipt of [false, true]) {
+    const f = await setup(t), options = {client: f.client};
+    const attempt = await pendingLegacyComment(f, legacyComment, removeDataQuotes(legacyComment), {receipt});
+    edit(f, {comment: 'A different current draft.'});
+    const state = readRequirements(f.roots, 'checkout'), draft = readChatReview(f.roots, state), bytes = readFileSync(join(f.roots.projectRoot, state.review.path), 'utf8');
+    const result = await publishRequirementsComment(f.roots, 'checkout', {...options, approval: 'new-draft-approval'});
+    assert.equal(result.mode, 'completed'); assert.equal(result.reconciled, true); assert.equal(result.commentId, 2); assert.equal(result.fingerprint, attempt.plan.fingerprint);
+    assert.equal(f.posts().length, 0); assert.deepEqual(readRequirements(f.roots, 'checkout'), state); assert.deepEqual(readChatReview(f.roots, state), draft);
+    assert.equal(readFileSync(join(f.roots.projectRoot, state.review.path), 'utf8'), bytes);
+    const refreshed = await captureRequirements(f.roots, f.request, options); prepareRequirements(f.roots, 'checkout', refreshed); bindChatReview(f.roots);
+    const preview = await previewRequirementsComment(f.roots, 'checkout', options);
+    await assert.rejects(publishRequirementsComment(f.roots, 'checkout', {...options, approval: attempt.plan.fingerprint}), /confirmation/);
+    assert.equal((await publishRequirementsComment(f.roots, 'checkout', {...options, approval: preview.fingerprint})).commentId, 3); assert.equal(f.posts().length, 1);
+  }
+});
+
+test('optional attribute quote candidates still require acknowledged or owner-selected comment identity', async t => {
+  const f = await setup(t), options = {client: f.client};
+  await pendingLegacyComment(f, legacyComment, removeDataQuotes(legacyComment), {acknowledged: false});
+  const pending = await reconcileRequirementsComment(f.roots, 'checkout', options);
+  assert.equal(pending.mode, 'reconciliation-required'); assert.equal(pending.candidates[0].commentId, 2); assert.equal(f.posts().length, 0);
+  await assert.rejects(reconcileRequirementsComment(f.roots, 'checkout', {...options, commentId: 1}), /does not match/);
+  assert.equal((await reconcileRequirementsComment(f.roots, 'checkout', {...options, commentId: 2})).mode, 'completed'); assert.equal(f.posts().length, 0);
+});
+
+test('optional attribute quote comparison accepts safe delimiters but preserves all other characters', async t => {
+  for (const [sent, stored] of [['<p data-q="rule">Text</p>', '<p data-q=rule>Text</p>'], ['<p data-q=rule>Text</p>', '<p data-q="rule">Text</p>'], ["<p data-q='rule'>Text</p>", '<p data-q="rule">Text</p>'], ['<p title="Keep spaces" data-q="rule">Text</p>', '<p title="Keep spaces" data-q=rule>Text</p>']]) {
+    const f = await setup(t); await pendingLegacyComment(f, sent, stored);
+    assert.equal((await reconcileRequirementsComment(f.roots, 'checkout', {client: f.client})).mode, 'completed'); assert.equal(f.posts().length, 0);
+  }
+});
+
+test('quote formatting never hides changed wording, attributes, unsafe values or literal markup text', async t => {
+  const cases = [
+    [legacyComment, removeDataQuotes(legacyComment).replace('Approved questions.', 'Changed questions.')],
+    ['<a href="https://example.test/one">Text</a>', '<a href=https://example.test/two>Text</a>'],
+    ['<p class="one">Text</p>', '<p class=two>Text</p>'],
+    ['<p data-q="a b">Text</p>', '<p data-q=a b>Text</p>'],
+    ['<p data-q="a=b">Text</p>', '<p data-q=a=b>Text</p>'],
+    ['<p data-q="">Text</p>', '<p data-q=>Text</p>'],
+    ['<img src="rule"/>', '<img src=rule/>'],
+    ['<p>Literal data-q="rule"</p>', '<p>Literal data-q=rule</p>'],
+    ["<p title='Literal data-q=\"rule\"'>Text</p>", "<p title='Literal data-q=rule'>Text</p>"],
+    ['<!-- <p data-q="rule"> -->', '<!-- <p data-q=rule> -->'],
+    ['<script>const text = \'<p data-q="rule">\';</script>', '<script>const text = \'<p data-q=rule>\';</script>'],
+    ['<svg><text data-q="rule">Text</text></svg>', '<svg><text data-q=rule>Text</text></svg>'],
+    ['<p data-q="rule">Text</p>', '<p data-q=rule>Text</div>'],
+    ['<p data-q="rule">Text</p>', '<p data-q=rule title="added">Text</p>']
+  ];
+  for (const [sent, stored] of cases) {
+    const f = await setup(t); await pendingLegacyComment(f, sent, stored);
+    await assert.rejects(reconcileRequirementsComment(f.roots, 'checkout', {client: f.client}), /does not match/); assert.equal(f.posts().length, 0);
+    assert.equal(JSON.parse(readFileSync(join(f.roots.projectRoot, '.harness/state/requirements/checkout/comment-attempt.json'), 'utf8')).status, 'uncertain');
+  }
+});
+
+test('optional attribute quote recovery retains destination, comment identity and mention readback checks', async t => {
+  for (const kind of ['mentions', 'identity', 'story']) {
+    const f = await setup(t); roster(f); edit(f, {mentions: [analystId]}); f.control.transformComment = removeDataQuotes;
+    const original = f.state.fault;
+    f.state.fault = input => input.path === 'wit/workitems/200/comments/2' ? (input.send({...f.discussion.at(-1), ...(kind === 'mentions' ? {mentions: []} : kind === 'identity' ? {id: 99} : {workItemId: 999})}), true) : original(input);
+    const options = {client: f.client}, preview = await previewRequirementsComment(f.roots, 'checkout', options);
+    assert.equal((await publishRequirementsComment(f.roots, 'checkout', {...options, approval: preview.fingerprint})).mode, 'uncertain');
+    await assert.rejects(reconcileRequirementsComment(f.roots, 'checkout', options), kind === 'mentions' ? /mention readback/ : /readback mismatch/); assert.equal(f.posts().length, 1);
   }
 });
