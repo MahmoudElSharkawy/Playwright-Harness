@@ -40,7 +40,7 @@ export function validateReviewInput(raw, state, source) {
 }
 
 function requireBusinessText(draft) {
-  const internal = /\b(?:req-[a-z0-9_-]+|(?:System|Microsoft\.VSTS)\.[a-z0-9_.]+)/i;
+  const internal = /(?<![a-z0-9])(?:req-[a-z0-9](?:[a-z0-9_-]*[a-z0-9])?|(?:System|Microsoft\.VSTS)(?:\.[a-z0-9_]*[a-z0-9])+)/i;
   const message = 'Replace internal requirement IDs and ADO field paths with readable finding labels and business text before saving or posting. Saved drafts and exact source quotations remain unchanged.';
   requireThat(draft.findings.every(finding => !internal.test(finding.id)), message);
   const quotes = [...new Set(draft.findings.flatMap(finding => finding.sources.map(reference => reference.quote)))];

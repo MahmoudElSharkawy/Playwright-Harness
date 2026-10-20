@@ -71,6 +71,23 @@ test('a partial source quotation cannot exempt a longer internal identifier in m
   }
 });
 
+test('formatting underscores cannot hide internal references in new drafts or final comments', () => {
+  const f = displayFixture();
+  for (const extra of [{comment: `See _${reportedId}_.`}, {comment: 'See _System.Description_.'}, {findings: [{...f.draft.findings[0], id: '_' + reportedId}]}, {findings: [{...f.draft.findings[0], question: 'Clarify _Microsoft.VSTS.Common.AcceptanceCriteria_.'}]}]) {
+    assert.throws(() => validateReviewInput(chatInput(f.state, f.draft.findings, extra), f.state, f.source), /internal|readable/i);
+    assert.throws(() => renderComment({...f.draft, ...extra}, f.state, f.source, []), /internal|readable/i);
+  }
+});
+
+test('exact technical source terms remain valid beside ordinary punctuation and formatting', () => {
+  const f = displayFixture(), quote = 'System.Description'; f.source.parts[0].text = quote; f.state.inventory[0].end = quote.length;
+  const finding = {...f.draft.findings[0], sources: [{requirementId: f.state.inventory[0].id, quote}]};
+  for (const comment of ['Please keep System.Description.', 'Please keep _System.Description_.']) {
+    const draft = validateReviewInput(chatInput(f.state, [finding], {comment}), f.state, f.source);
+    assert(renderComment(draft, f.state, f.source, []).html.includes(comment));
+  }
+});
+
 test('rejected display edits preserve the current draft and its traceability references', async () => {
   const roots = consumerRoots(mkdtempSync(join(tmpdir(), 'pom-display-'))); put(roots, 'story.md', 'Save the address.');
   const source = await captureRequirements(roots, {version: 1, project: 'shop', application: 'addresses', sources: [{id: 'notes', path: 'story.md', kind: 'file'}]});
