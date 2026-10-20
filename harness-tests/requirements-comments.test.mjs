@@ -313,9 +313,9 @@ const removeDataQuotes = html => html.replace(/(data-(?:q|vss-mention))="([^"\s<
 async function pendingLegacyComment(f, sent, stored, {acknowledged = true, receipt = false} = {}) {
   const {mode, differences, fingerprint: previousFingerprint, ...payload} = await previewRequirementsComment(f.roots, 'checkout', {client: f.client});
   payload.writes[0].body.text = sent;
-  const attempt = {version: 1, status: 'uncertain', plan: {...payload, fingerprint: fingerprint(payload)}, beforeIds: f.discussion.map(comment => comment.id)};
+  const attempt = {version: 1, status: 'uncertain', plan: {...payload, fingerprint: fingerprint(payload)}, beforeIds: f.discussion.map(comment => comment.id), receipt: '.harness/state/integrations/legacy-comment.jsonl'};
   if (acknowledged && !receipt) attempt.commentId = 2;
-  if (receipt) {attempt.receipt = '.harness/state/integrations/legacy-comment.jsonl'; put(f.roots, attempt.receipt, JSON.stringify({event: 'acknowledged', operation: 'create-comment', identity: {commentId: 2}}) + '\n');}
+  put(f.roots, attempt.receipt, JSON.stringify(receipt ? {event: 'acknowledged', operation: 'create-comment', identity: {commentId: 2}} : {event: 'authorized'}) + '\n');
   put(f.roots, '.harness/state/requirements/checkout/comment-attempt.json', attempt);
   f.discussion.push({id: 2, workItemId: 200, version: 1, text: stored, mentions: []});
   return attempt;
