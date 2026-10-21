@@ -214,3 +214,29 @@ test('explicit update is separate; subsequent Q&A identifies the new revision an
   });
   assert.deepEqual(files(roots.projectRoot), before);
 });
+
+test('lightweight identity/revision checks validate retained evidence without reopening the search index', async t => {
+  const {roots} = fixture(t); put(roots, 'login.txt', 'Login requires an employee ID.');
+  const input = request([source('login', 'login.txt')]); await updateContext(roots, input);
+  const retained = capturedOnly(roots, () => {
+    const overview = readContextOverview(roots, 'login-qa'), page = searchContext(roots, 'login-qa', {query: 'employee'});
+    for (const hit of page.results) resolveHit(roots, overview, page, hit);
+    return {overview, page};
+  }).value;
+  fs.unlinkSync(join(roots.projectRoot, 'login.txt'));
+  const before = files(roots.projectRoot);
+  const checked = capturedOnly(roots, () => readContextOverview(roots, 'login-qa'));
+  assert.equal(checked.value.contextId, retained.page.contextId);
+  assert.equal(checked.value.revision, retained.page.revision);
+  assert.deepEqual(checked.value.identity, retained.overview.identity);
+  assert.deepEqual(checked.value.scope, retained.overview.scope);
+  assert(checked.events.length > 0);
+  assert(checked.events.every(event => event.kind === 'read' && !event.file.endsWith('.sqlite')));
+  assert.equal(retained.page.results[0].excerpt, 'Login requires an employee ID.');
+  assert.deepEqual(files(roots.projectRoot), before);
+  put(roots, 'login.txt', 'Login requires an employee ID and a security key.');
+  await updateContext(roots, input);
+  const updated = capturedOnly(roots, () => readContextOverview(roots, 'login-qa')).value;
+  assert.equal(updated.contextId, retained.page.contextId);
+  assert.notEqual(updated.revision, retained.page.revision, 'A retained passage must not pass the revision check after refresh.');
+});

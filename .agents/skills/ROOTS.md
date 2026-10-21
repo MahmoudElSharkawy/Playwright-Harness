@@ -30,7 +30,9 @@ requires review and sanitization; observations do not silently update reviewed f
 Use [context-qa](context-qa/SKILL.md) only when the user explicitly invokes it for a
 snapshot-only answer. Its evidence comes only from one selected capture through
 local context read/search. This boundary ends when that request is answered;
-ordinary messages and later follow-ups use normal workflows. The source discovery
+ordinary messages and later follow-ups use normal workflows unless explicitly
+reinvoked. Explicit Q&A reinvocation continues the discussion and can reuse
+retained supporting passages after the required identity/revision check. The source discovery
 and live verification guidance below does not apply inside explicit Q&A.
 
 [project-context](project-context/SKILL.md) builds or updates business context from
