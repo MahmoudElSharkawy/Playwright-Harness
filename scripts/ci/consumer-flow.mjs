@@ -136,21 +136,24 @@ flow('C1', 'An empty folder gets the harness and the starter', () => {
   assert.equal(run([join(c1, 'node_modules/typescript/bin/tsc'), '--noEmit', '-p', 'tsconfig.json'], c1).status, 'PASS', 'The starter does not typecheck.');
   assert.equal(run([join(c1, 'node_modules/@playwright/test/cli.js'), 'test', '--list', '--pass-with-no-tests'], c1).status, 'PASS', 'The starter cannot list tests.');
   write(c1, {'.harness/sources/scenarios.json': JSON.stringify({version: 1, id: 'synthetic', title: 'Synthetic suite', scenarios: [{id: 'case-1', title: 'Synthetic observation', steps: [{action: 'Observe the fixture', expected: ['The fixture is visible']}]}]}) + '\n',
+    '.harness/sources/requirements.md': 'Customers can pay for synthetic orders by card.\n',
     '.harness/knowledge/reviewed.md': '# Reviewed synthetic knowledge\n', '.harness/integrations.json': JSON.stringify({version: 1, ado: {organizationUrl: 'https://dev.azure.com/example-org', project: 'Synthetic', credentialRef: 'SYN_ADO_PAT'}}) + '\n',
     '.harness/runs/local.json': '{}\n', '.harness/knowledge-candidates/local.md': 'Unreviewed synthetic observation\n'});
-  write(c1, {'.harness/runs/context-request.json': JSON.stringify({version: 1, contextId: 'synthetic-qa', identity: {project: 'Synthetic'}, scope: {application: 'starter', environment: 'qa'}, sources: [{id: 'knowledge', kind: 'repository', path: '.harness/knowledge/reviewed.md', authority: 'reviewed'}]})});
+  write(c1, {'.harness/runs/context-request.json': JSON.stringify({version: 1, contextId: 'synthetic-qa', identity: {project: 'Synthetic'}, scope: {application: 'starter', environment: 'qa'}, sources: [{id: 'requirements', kind: 'file', path: '.harness/sources/requirements.md'}]})});
   const retrieved = parse(harness(c1, 'context', 'retrieve', '--request', '.harness/runs/context-request.json'));
   assert.equal(retrieved.snapshot.status, 'complete'); assert(!existsSync(join(c1, '.harness/context')), 'Transient context was saved.');
   const captured = parse(harness(c1, 'context', 'update', '--request', '.harness/runs/context-request.json')); assert.equal(captured.saved, true);
   const contextPath = join(c1, '.harness/context/synthetic-qa/current.json'), contextBefore = readFileSync(contextPath, 'utf8');
   assert.equal(parse(harness(c1, 'context', 'read', '--id', 'synthetic-qa')).revision, captured.snapshot.revision); assert.equal(readFileSync(contextPath, 'utf8'), contextBefore);
   const searched = parse(harness(c1, 'context', 'search', '--id', 'synthetic-qa', '--query', 'synthetic'));
-  assert(searched.results.some(result => result.excerpt.includes('Reviewed synthetic knowledge') && result.authority === 'reviewed'));
+  assert.equal(searched.total, 1);
+  assert(searched.results.some(result => result.sourceId === 'requirements' && result.excerpt.includes('Customers can pay for synthetic orders by card.') && result.authority === 'observation'));
+  assert.equal(parse(harness(c1, 'context', 'search', '--id', 'synthetic-qa', '--query', 'Reviewed')).total, 0, 'Unselected knowledge entered business context.');
   assert.equal(parse(harness(c1, 'context', 'export', '--id', 'synthetic-qa', '--out', '.harness/runs/context-export.json')).status, 'EXPORTED');
   assert.equal(JSON.parse(readFileSync(join(c1, '.harness/runs/context-export.json'))).facts.length, 1);
   commit(c1, 'Adopt the harness');
   assert(git(c1, 'ls-files', `.harness/vendor/${name}`).trim(), 'The vendored archive is not committed.');
-  for (const file of ['project.json', 'targets.json', 'integrations.json', 'links.json', 'sources/scenarios.json', 'knowledge/reviewed.md'])
+  for (const file of ['project.json', 'targets.json', 'integrations.json', 'links.json', 'sources/scenarios.json', 'sources/requirements.md', 'knowledge/reviewed.md'])
     assert.equal(git(c1, 'ls-files', `.harness/${file}`).trim(), `.harness/${file}`, `Shared input ${file} was not committed.`);
   assert.equal(git(c1, 'ls-files', '.harness/runs', '.harness/state', '.harness/context', '.harness/knowledge-candidates', '.harness/installation.json').trim(), '', 'Local harness output was committed.');
   assert.equal(git(c1, 'ls-files', '.claude/skills', '.agents/skills').trim(), '', 'Skill links or their files were committed.');
@@ -190,7 +193,7 @@ flow('C5', 'A CRLF clone restores the links with npm ci', () => {
   assert(readFileSync(join(clone, 'package.json'), 'utf8').includes('\r\n'), 'The clone was not checked out with CRLF.');
   assert(!existsSync(join(clone, '.claude/skills/test-data')), 'A skill link was committed.');
   assert.equal(hash(readFileSync(join(clone, '.harness/vendor', name))), hash(readFileSync(join(c1, '.harness/vendor', name))), 'The archive bytes changed in the clone.');
-  for (const file of ['project.json', 'targets.json', 'integrations.json', 'links.json', 'sources/scenarios.json', 'knowledge/reviewed.md'])
+  for (const file of ['project.json', 'targets.json', 'integrations.json', 'links.json', 'sources/scenarios.json', 'sources/requirements.md', 'knowledge/reviewed.md'])
     assert.equal(readFileSync(join(clone, '.harness', file), 'utf8').replaceAll('\r\n', '\n'), readFileSync(join(c1, '.harness', file), 'utf8').replaceAll('\r\n', '\n'), `Shared input ${file} did not survive the CRLF clone.`);
   for (const file of ['runs', 'state', 'knowledge-candidates', 'installation.json']) assert(!existsSync(join(clone, '.harness', file)), `Local output ${file} leaked into the clone.`);
   assert.equal(run([npm, 'ci'], clone).status, 'PASS', 'npm ci failed in the clone.');

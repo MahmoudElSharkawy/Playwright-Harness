@@ -72,19 +72,19 @@ test('unchanged files reuse extraction; changed receipts remain hash-bound; cust
 });
 
 test('ADO refresh verifies membership/revisions and downloads only changed content, with stable project isolation', async t => {
-  const {roots} = fixture(t), f = adoFixture(), input = {...request(), ado: {sourceId: 'backlog'}};
+  const {roots} = fixture(t), f = adoFixture(), input = {...request(), ado: {sourceId: 'backlog', attachments: [{id: `backlog-attachment-1-${f.attachmentId}`, attachmentId: f.attachmentId}]}};
   await updateContext(roots, input, {client: f.client, now: '2026-10-01T00:00:00Z'}); f.calls.length = 0;
   await updateContext(roots, input, {client: f.client, now: '2026-10-02T00:00:00Z'});
   assert(f.calls.some(call => call[0] === 'classify')); assert(!f.calls.some(call => ['content', 'attachment'].includes(call[0])));
   assert.equal(readContext(roots, 'checkout').sources.find(s => s.kind === 'attachment').verifiedAt, '2026-10-01T00:00:00Z');
   f.items.get(2).rev++; f.calls.length = 0; await updateContext(roots, input, {client: f.client}); assert.deepEqual(f.calls.filter(c => c[0] === 'content').map(c => c[1]), [2]); assert(!f.calls.some(c => c[0] === 'attachment'));
-  const exact = searchContext(roots, 'checkout', {workItemId: 1}); assert.equal(exact.results[0].workItemId, 1); assert(exact.results.some(r => r.workItemId === 2 && r.match === 'relation'));
+  const exact = searchContext(roots, 'checkout', {workItemId: 1}); assert.equal(exact.results[0].workItemId, 1); assert(exact.results.every(r => r.workItemId === 1));
   f.project.id = '22222222-2222-4222-8222-222222222222'; f.calls.length = 0; const before = readFileSync(current(roots));
   await assert.rejects(updateContext(roots, input, {client: f.client}), /project.*(identity|differs|mismatch)/i); assert(!f.calls.some(c => ['metadata', 'query', 'content', 'attachment'].includes(c[0]))); assert.deepEqual(readFileSync(current(roots)), before);
 });
 
 test('ADO attachment reuse checks the current reader recipe even when the parent revision is unchanged', async t => {
-  const {roots} = fixture(t), f = adoFixture(), input = {...request(), ado: {sourceId: 'backlog'}};
+  const {roots} = fixture(t), f = adoFixture(), input = {...request(), ado: {sourceId: 'backlog', attachments: [{id: `backlog-attachment-1-${f.attachmentId}`, attachmentId: f.attachmentId}]}};
   f.items.get(1).relations.find(relation => relation.rel === 'AttachedFile').attributes.name = 'guide.docx';
   const read = version => Object.assign(async ({hash}) => ({hash, reader: version, coverage: 'complete', parts: [{location: 'section 1', text: `Attachment extraction ${version}`}]}), {recipe: version});
   await updateContext(roots, input, {client: f.client, readers: {docx: read('docx-v1')}, now: '2026-10-01T00:00:00Z'});
@@ -102,7 +102,7 @@ test('ADO attachment reuse checks the current reader recipe even when the parent
 });
 
 test('staging rechecks cached local bytes and repairs a changed staged copy without changing the saved snapshot', async t => {
-  const {roots} = fixture(t), f = adoFixture(), input = {...request(), ado: {sourceId: 'backlog'}};
+  const {roots} = fixture(t), f = adoFixture(), input = {...request(), ado: {sourceId: 'backlog', attachments: [{id: `backlog-attachment-1-${f.attachmentId}`, attachmentId: f.attachmentId}]}};
   await updateContext(roots, input, {client: f.client, stageAttachments: true});
   const before = readFileSync(current(roots)), attachment = readContext(roots, 'checkout').sources.find(item => item.kind === 'attachment');
   put(roots, attachment.localPath, 'Changed local bytes'); f.calls.length = 0;
@@ -114,7 +114,7 @@ test('staging rechecks cached local bytes and repairs a changed staged copy with
 });
 
 test('CLI staged receipts distinguish changed bytes from retained evidence and accept extraction for the new hash', async t => {
-  const {roots} = fixture(t), f = adoFixture(), input = {...request(), ado: {sourceId: 'backlog'}};
+  const {roots} = fixture(t), f = adoFixture(), input = {...request(), ado: {sourceId: 'backlog', attachments: [{id: `backlog-attachment-1-${f.attachmentId}`, attachmentId: f.attachmentId}]}};
   f.items.get(1).relations.find(relation => relation.rel === 'AttachedFile').attributes.name = 'guide.docx';
   await updateContext(roots, input, {client: f.client, readers: {docx: async ({hash}) => ({hash, reader: 'fixture', coverage: 'complete', parts: [{location: 'section 1', text: 'Old document evidence'}]})}});
   const oldHash = readContext(roots, 'checkout').sources.find(item => item.kind === 'attachment').hash;
@@ -142,6 +142,10 @@ test('CLI staged receipts distinguish changed bytes from retained evidence and a
 
 test('CLI save exposes staged attachment paths beyond the preview through every bounded catalog page', async t => {
   const {roots} = fixture(t), input = {...request(), ado: {sourceId: 'backlog'}};
+  input.ado.attachments = Array.from({length: 12}, (_, index) => {
+    const id = index + 9, attachmentId = `00000000-0000-4000-8000-${String(id).padStart(12, '0')}`;
+    return {id: `backlog-attachment-${id}-${attachmentId}`, attachmentId};
+  });
   put(roots, 'request.json', JSON.stringify(input));
   put(roots, '.harness/integrations.json', JSON.stringify({version: 1, ado: {organizationUrl: 'https://ado.example.test', project: 'demo', credentialRef: 'ADO_ACCESS', context: {sources: {backlog: {policy: {excludeTypes: [], excludeStates: []}}}}}}));
   function transport(url, options) {
@@ -202,10 +206,10 @@ test('CLI live metadata pages expose every type/state before policy selection an
 });
 
 test('incomplete membership retains stale support; foreign and excluded links are never followed', async t => {
-  const {roots} = fixture(t), f = adoFixture(), input = {...request(), ado: {sourceId: 'backlog'}};
+  const {roots} = fixture(t), f = adoFixture(), input = {...request(), ado: {sourceId: 'backlog', attachments: [{id: `backlog-attachment-1-${f.attachmentId}`, attachmentId: f.attachmentId}]}};
   f.items.get(1).relations.push({rel: 'System.LinkTypes.Related', url: 'https://other.example.test/foreign/_apis/wit/workItems/99'});
   await updateContext(roots, input, {client: f.client}); assert(!f.calls.some(c => c[1] === 99));
-  const item = readContext(roots, 'checkout').sources.find(s => s.workItemId === 1); assert(item.relationGaps.length); assert.deepEqual(item.relations.map(r => r.workItemId), [2]);
+  const item = readContext(roots, 'checkout').sources.find(s => s.workItemId === 1); assert.equal(item.relationGaps.length, 0); assert.deepEqual(item.relations.map(r => r.workItemId), [2]);
   f.client.wiql = async () => {throw new Error('Unavailable');};
   const next = await updateContext(roots, input, {client: f.client}); assert.equal(next.snapshot.status, 'partial'); assert(next.snapshot.sources.filter(s => s.kind === 'work-item').every(s => s.status === 'unverified' && s.contributions.length));
 });
@@ -226,7 +230,7 @@ test('legacy local snapshots migrate only on explicit update, preserve all evide
 });
 
 test('legacy ADO migration requires fresh project ownership and complete recapture', async t => {
-  const {roots} = fixture(t), f = adoFixture(), input = {...request(), ado: {sourceId: 'backlog'}};
+  const {roots} = fixture(t), f = adoFixture(), input = {...request(), ado: {sourceId: 'backlog', attachments: [{id: `backlog-attachment-1-${f.attachmentId}`, attachmentId: f.attachmentId}]}};
   const legacy = (await retrieveContext(roots, input, {client: f.client})).snapshot; legacy.version = 1; delete legacy.adoProject; for (const source of legacy.sources) {delete source.projectKey; delete source.recipeVersion;}
   put(roots, '.harness/context/checkout/current.json', JSON.stringify(legacy)); const before = readFileSync(current(roots)), read = f.client.read;
   f.client.read = async () => {throw new Error('Offline');}; await assert.rejects(updateContext(roots, input, {client: f.client}), /migration.*stopped/i); assert.deepEqual(readFileSync(current(roots)), before);
@@ -234,7 +238,7 @@ test('legacy ADO migration requires fresh project ownership and complete recaptu
 });
 
 test('same project GUID survives rename; another organization with the same name/GUID cannot reuse context', async t => {
-  const {roots} = fixture(t), f = adoFixture(), input = {...request(), ado: {sourceId: 'backlog'}}; await updateContext(roots, input, {client: f.client});
+  const {roots} = fixture(t), f = adoFixture(), input = {...request(), ado: {sourceId: 'backlog', attachments: [{id: `backlog-attachment-1-${f.attachmentId}`, attachmentId: f.attachmentId}]}}; await updateContext(roots, input, {client: f.client});
   f.project.name = 'renamed'; f.client.configuration.project = 'renamed'; for (const item of f.items.values()) item.fields['System.TeamProject'] = 'renamed';
   const renamed = await updateContext(roots, input, {client: f.client}); assert.equal(renamed.snapshot.adoProject.name, 'renamed'); assert.equal(renamed.snapshot.adoProject.id, f.project.id);
   f.client.configuration.organizationUrl = 'https://other.example.test'; f.calls.length = 0;

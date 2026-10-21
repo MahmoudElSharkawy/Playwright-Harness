@@ -54,13 +54,15 @@ export function createAdoContextSource(client) {
   }
   async function retrieve({policy: input, scope = {}, previousMetadata, reuse = () => false, allowPartial = false} = {}) {
     scope = validateContextScope(scope);
+    // An explicit ID list already selects the source set; no broad policy is inferred.
+    if (input === undefined && scope.workItemIds !== undefined) input = {excludeTypes: [], excludeStates: []};
     const current = await metadata(), changes = metadataChanges(previousMetadata, current);
     if (input === undefined) return {status: 'SELECTION_REQUIRED', metadata: current, metadataChanges: changes,
       choices: [{label: 'Exclude nothing', policy: {excludeTypes: [], excludeStates: []}}, ...current.types.map(type => ({label: type.name, type: type.id, states: type.states}))]};
     const {policy, repairs} = resolveContextPolicy(input, current);
     if (repairs.length) return {status: 'POLICY_REPAIR_REQUIRED', metadata: current, metadataChanges: changes, repairs, policy};
-    const ids = []; let cursor = 0;
-    for (let page = 0; ; page++) {
+    const ids = [...(scope.workItemIds ?? [])].sort((a, b) => a - b); let cursor = 0;
+    for (let page = 0; scope.workItemIds === undefined; page++) {
       requireValue(page <= 100, 'ADO context query exceeds 20000 items; narrow the scope.');
       const result = await client.wiql(`SELECT [System.Id] FROM WorkItems WHERE [System.TeamProject] = @project AND [System.Id] > ${cursor}${scope.areaPath ? ` AND [System.AreaPath] UNDER '${scope.areaPath}'` : ''} ORDER BY [System.Id]`, {top: 200});
       requireValue(Array.isArray(result.workItems) && result.workItems.length <= 200, 'ADO context query is incomplete or exceeds its page bound.');
@@ -70,10 +72,10 @@ export function createAdoContextSource(client) {
       if (pageIds.length < 200) break;
       cursor = pageIds.at(-1);
     }
-    const decisions = [];
+    const decisions = [], missing = [];
     for (let start = 0; start < ids.length; start += 200) {
       const page = ids.slice(start, start + 200), response = await client.workItems(page, classification), found = new Set();
-      requireValue(Array.isArray(response.value) && response.value.length === page.length, 'ADO context classification is incomplete.');
+      requireValue(Array.isArray(response.value) && (response.value.length === page.length || allowPartial && scope.workItemIds !== undefined && response.value.length < page.length), 'ADO context classification is incomplete.');
       for (const item of response.value) {
         const id = adoId(item.id); requireValue(page.includes(id) && !found.has(id), 'ADO context classification scope mismatch.'); found.add(id);
         await client.requireWorkItemProject(item);
@@ -84,10 +86,12 @@ export function createAdoContextSource(client) {
         requireValue(type && state, 'ADO context metadata changed during classification; retrieve again.');
         const reason = inScope(item.fields, scope) ? selected(policy, type, state) : 'outside-area-scope'; decisions.push({id, rev, type: type.id, state: state.id, included: reason === 'included', reason});
       }
+      for (const id of page) if (!found.has(id)) missing.push({id, included: true, reason: 'selected-item-unavailable'});
     }
+    decisions.push(...missing);
     decisions.sort((a, b) => a.id - b.id);
-    const items = [], reused = [], unavailable = [];
-    for (const decision of decisions.filter(item => item.included)) {
+    const items = [], reused = [], unavailable = [...missing];
+    for (const decision of decisions.filter(item => item.included && item.reason !== 'selected-item-unavailable')) {
       if (reuse(decision)) {reused.push(decision); continue;}
       try {
       const item = await client.read(`wit/workitems/${decision.id}?$expand=relations&api-version=7.1`);

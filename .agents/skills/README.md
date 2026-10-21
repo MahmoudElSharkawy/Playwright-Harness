@@ -18,9 +18,10 @@ open convention decisions remain in design-conventions.
 
 For standalone ADO manual runs use [execute-test](execute-test/SKILL.md); automation generation stays with automate-test.
 
-Use [project-context](project-context/SKILL.md) for explicit source retrieval, including
-configured ADO selection and supplied files. Use [context-update](context-update/SKILL.md)
-to save or refresh scoped context. Ordinary questions about captured context do not
+Use [project-context](project-context/SKILL.md) to build/update business context from
+selected work items and supplied documents, using exact IDs or saved criteria.
+Use [context-update](context-update/SKILL.md) to refresh that saved selection, and
+explicitly invoke [context-qa](context-qa/SKILL.md) for readable business answers. Ordinary questions about captured context do not
 fetch sources or write files. See the [context contract](../../docs/project-context.md).
 
 | # | Skill | Playbook | Use when (description) | Key checkpoints |

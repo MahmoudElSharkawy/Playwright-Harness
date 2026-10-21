@@ -31,7 +31,7 @@ Hard rules:
 ## Boundaries
 
 - Explicitly invoked snapshot-only answers → [context-qa](../context-qa/SKILL.md); ordinary questions do not activate it
-- Retrieve configured project/application context → [project-context](../project-context/SKILL.md); save or refresh it → [context-update](../context-update/SKILL.md)
+- Build/update selected business context → [project-context](../project-context/SKILL.md); refresh saved IDs/criteria/documents → [context-update](../context-update/SKILL.md)
 - Where framework code belongs, and the layer skills → [pom-architecture](../pom-architecture/SKILL.md)
 - How `src/config` consumes the configured targets → [test-data](../test-data/SKILL.md)
 - Automating story-linked cases, a suite or local scenarios once the harness is configured → [automate-test](../automate-test/SKILL.md)

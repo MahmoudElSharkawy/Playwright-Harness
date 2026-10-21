@@ -1,51 +1,44 @@
 ---
 name: context-update
-description: "Create or refresh consumer-owned project context when explicitly invoked or asked to update the project context, refresh context for an application, or save a retrieved context map. Reconcile selected repository, ADO and file sources with provenance while preserving custom content and the last valid snapshot. Ordinary context questions do not activate refresh."
+description: "Refresh saved business context using its selected documents, exact work-item IDs or saved criteria. Discover newly matching items, update changed evidence and preserve history. Ordinary questions do not trigger refresh."
 ---
 
-# Update project context
+# Refresh business context
 
-An invocation authorizes this scoped context update. Perform it; do not stop at a plan
-or ask for duplicate approval. Resolve the real skill path and consumer roots using
-[ROOTS](../ROOTS.md). Follow the same [retrieval workflow](../project-context/references/workflow.md)
-and [context contract](../../../docs/project-context.md). This skill owns refresh;
-it does not promote reviewed knowledge, change test scope or deliver to external systems.
+An invocation authorizes the scoped local update. Resolve the consumer and established
+context ID using [ROOTS](../ROOTS.md). Follow the shared
+[selection/capture workflow](../project-context/references/workflow.md).
 
-Read the compact overview first with `context read --id <id>`. Page source receipts
-with `context search --id <id> --catalog sources` when rebuilding the refresh request. Match consumer,
-application and environment identity. For missing initial context, retrieve the requested
-sources and create it. Otherwise refresh only requested sources, preserving unrelated
-sources and custom content. When no narrower scope is requested, reuse the snapshot's
-selected repository/file sources and configured ADO context sources. Rehash local
-bytes and revalidate live metadata/membership/revisions. Reuse complete unchanged
-extraction; old receipts are not proof for changed bytes. Verify the configured ADO
-organization and resolved project GUID before retrieval; never reuse another project
-under the same context ID. Owner notes live in `custom.json` and retain history.
+Use `context update --id <id>` to refresh the saved selection:
+- Exact IDs stay fixed, even when other work items are created.
+- Criteria rerun against the selected project. New matches enter context; changed
+  items update; unchanged content is reused; confirmed departures lose active support.
+- Explicitly selected documents are rehashed. Only selected ADO attachments are
+  eligible for download, including on later refreshes.
 
-Before ADO content reads, refresh metadata and validate supplied/saved filters. Reuse
-valid choices. Page all live selectors with `context metadata --request <request>`
-and its cursor before presenting an abbreviated selection. Missing policy requires live multi-select/text exclusions with **Exclude
-nothing**; unanswered prompts do not select everything. Request repair for unknown or
-removed selectors without discarding valid choices. New values follow the include/exclude
-semantics. Exclusions win, including conflicting includes; completion alone excludes nothing.
+For a user-specified narrower refresh or new criteria, use a request with those
+sources and the same context ID. [project-context](../project-context/SKILL.md)
+also supports this. Explicit request criteria replace that collection's saved
+criteria after successful capture. Config changes do not silently replace a
+context's saved selection. Omission of other selected collections/documents
+preserves them; source removal is explicit.
 
-Extract relevant supplied files and included work-item attachments through available
-readers, with hash-bound locations and coverage. Reconcile changed files, duplicate origins,
-newly excluded items and removed attachments. An independently supplied file remains
-selected even if its originating work item is excluded. Do not download excluded attachments.
+Inspect the published receipt and verify `saved`, then use `context read` and
+bounded `context search` to explain meaningful business changes. Read relevant
+acceptance criteria as well as descriptions. Reuse source titles/document names
+for citations. Report added or changed capabilities/rules and relevant open
+questions; counts may supplement the explanation. Keep storage hashes, full
+revisions, receipts and execution notes out of ordinary answers.
 
-Run `context update --request <consumer-json>` after collecting current extraction
-receipts. Verify the returned `saved`, snapshot status, changes, checked sources and
-gaps, then read the published snapshot. Report added/changed/removed facts, withdrawals
-due to exclusion or scope, verification dates and unresolved conflicts. An unchanged
-refresh must not duplicate facts or rewrite unrelated verification metadata.
+Unavailable or partial selected sources retain their last valid evidence as
+stale. Changed document bytes require current extraction. Do not resolve a
+contradiction by guessing, reinterpret an outage as deletion, or describe a
+failed save as successful. Publication and history safeguards remain in force.
 
-Inaccessible or partial sources retain last valid contributions as stale/partial;
-do not invent replacements. Remove source support only after confirmed deletion or an
-explicit source removal, or a successful ADO scope/selection reconciliation. Retain
-independent support and history. Failed publication leaves current intact; inspect
-recovery state before retrying an interrupted writer. Present partial results honestly.
+Older captures may contain repository/POM evidence. A full refresh of those
+captures requires explicit business-source selection; do not automatically
+carry technical sources forward. Existing history and owner notes are preserved.
+The [context contract](../../../docs/project-context.md) covers recovery.
 
-Snapshot-only answers require explicit [context-qa](../context-qa/SKILL.md)
-invocation, including after a refresh. Ordinary questions do not activate either
-context workflow or silently write verification dates.
+This workflow does not modify external work items. A later snapshot-only question
+uses an explicit [context-qa](../context-qa/SKILL.md) invocation.

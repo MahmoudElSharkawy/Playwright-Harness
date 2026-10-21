@@ -6,7 +6,7 @@ import {data, digest, fingerprint, requireThat} from '../execution-core/data.mjs
 import {keys} from '../project-config.mjs';
 import {credentialName, secretFindings} from '../package-validation.mjs';
 import {within} from '../skill-roots.mjs';
-import {RECIPE} from './model.mjs';
+import {RECIPE, businessSource} from './model.mjs';
 
 const sensitive = name => credentialName(name) || /^(?:authorization|cookie|set-cookie|connectionString)$/i.test(name);
 const privatePath = path => /(?:^|[\\/])(?:\.env(?:\..*)?|\.aws|\.ssh|\.auth)(?:[\\/]|$)/i.test(path) || /\.(?:key|pfx|p12|dpapi)$/i.test(path);
@@ -80,7 +80,8 @@ function nativeExtraction(bytes, extension, source) {
 export function contextReaderRecipe(source, readers = {}, previous) {
   const extension = extname(source.path ?? source.name ?? '').slice(1).toLowerCase();
   const native = textual.has(extension) || ['json', 'csv', 'tsv'].includes(extension);
-  const extractionRecipe = source.extraction ? fingerprint(source.extraction) : readers[extension] ? fingerprint(String(readers[extension].recipe ?? readers[extension])) : native ? 'native' : previous?.extractionRecipe ?? 'host-required';
+  const savedRecipe = businessSource(previous ?? {}) ? previous.extractionRecipe : undefined;
+  const extractionRecipe = source.extraction ? fingerprint(source.extraction) : readers[extension] ? fingerprint(String(readers[extension].recipe ?? readers[extension])) : savedRecipe ?? (native ? 'native' : previous?.extractionRecipe ?? 'host-required');
   const recipe = fingerprint({version: RECIPE, extension, extractionRecipe, encoding: source.encoding ?? 'utf-8', delimiter: source.delimiter ?? null, authority: source.authority ?? null});
   return {recipe, extractionRecipe};
 }
@@ -95,6 +96,9 @@ export async function extractContextBytes(source, bytes, {readers = {}, now = ne
   if (!extraction && readers[extension]) {
     try {extraction = await readers[extension]({bytes, hash, source: structuredClone(source)});} catch {return {...record, status: 'unverified', coverage: 'reader-failed', contributions: []};}
   }
+  // A saved host extraction carries business topics and locations even for text/JSON.
+  // Changed bytes need a fresh receipt; native parsing cannot replace that choice.
+  if (!extraction && businessSource(previous ?? {}) && previous.extractionRecipe && previous.extractionRecipe !== 'native') return {...record, status: 'unsupported', coverage: 'reader-required', contributions: []};
   if (!extraction && (textual.has(extension) || ['json', 'csv', 'tsv'].includes(extension))) {
     try {extraction = {hash, reader: 'native', ...nativeExtraction(bytes, extension, source)};} catch {return {...record, status: 'unverified', coverage: 'unreadable-or-ambiguous', contributions: []};}
   }

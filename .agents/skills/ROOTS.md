@@ -30,8 +30,17 @@ requires review and sanitization; observations do not silently update reviewed f
 Use [context-qa](context-qa/SKILL.md) only when the user explicitly invokes it for a
 snapshot-only answer. Its evidence comes only from one selected capture through
 local context read/search. This boundary ends when that request is answered;
-ordinary messages and later follow-ups use normal workflows. The source discovery
+ordinary messages and later follow-ups use normal workflows unless explicitly
+reinvoked. Explicit Q&A reinvocation continues the discussion and can reuse
+retained supporting passages after the required identity/revision check. The source discovery
 and live verification guidance below does not apply inside explicit Q&A.
+
+[project-context](project-context/SKILL.md) builds or updates business context from
+explicit work-item IDs, saved/user-selected criteria and supplied documents.
+[context-update](context-update/SKILL.md) refreshes that saved selection; criteria
+discover new matches, while exact IDs stay fixed. Neither collects POM/code,
+harness conventions or unrelated repository files. Do not apply the general
+repository-discovery guidance below to business-context collection.
 
 For unfamiliar code or recurring project facts, use the host's existing file search
 (for example, `rg`) within the relevant consumer source/test folders and

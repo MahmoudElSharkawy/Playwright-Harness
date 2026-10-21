@@ -56,7 +56,8 @@ function resolveHit(roots, overview, page, hit) {
   const fact = store.get(contribution.fact, 'fact'); assert.equal(fact.id, hit.factId);
   const chunk = fact.chunks.map(ref => store.get(ref, 'chunk')).find(chunk => chunk.id === hit.chunkId);
   assert.equal(chunk?.text, hit.excerpt); assert.equal(hit.revision, source.version ?? source.hash);
-  return `[${page.contextId} @ ${page.revision}; ${hit.sourceId} / ${hit.factId} / ${hit.chunkId}; ${hit.location}]`;
+  assert(hit.citation.label); assert(!hit.citation.label.includes(hit.factId));
+  return `${hit.citation.label}, ${hit.citation.location ?? hit.location}`;
 }
 
 test('captured answers, follow-ups and missing parts use only local evidence with resolvable citations', async t => {
@@ -105,13 +106,13 @@ test('captured answers, follow-ups and missing parts use only local evidence wit
 
 test('stale, conflicting and partial context retains dates, uncertainty and both captured contributions', async t => {
   const {roots} = fixture(t);
-  const located = (id, text, authority) => {
-    const path = authority === 'reviewed' ? `.harness/knowledge/${id}.txt` : `${id}.txt`;
+  const located = (id, text) => {
+    const path = `${id}.txt`;
     put(roots, path, text);
-    return {id, kind: 'repository', path, authority, extraction: {hash: digest(text), reader: 'fixture', coverage: 'complete', parts: [{topic: 'login.factor', location: 'section 1', text}]}};
+    return {id, kind: 'file', path, extraction: {hash: digest(text), reader: 'fixture', coverage: 'complete', parts: [{topic: 'login.factor', location: 'section 1', text}]}};
   };
-  const old = located('reviewed', 'Login uses a one-time code.', 'reviewed');
-  const current = located('observed', 'Login uses a security key.', 'current');
+  const old = located('earlier', 'Login uses a one-time code.');
+  const current = located('observed', 'Login uses a security key.');
   await updateContext(roots, request([old, current]), {now: '2026-10-01T00:00:00Z'});
   fs.unlinkSync(join(roots.projectRoot, 'observed.txt'));
   await updateContext(roots, request([current]), {now: '2026-10-02T00:00:00Z'});
@@ -212,4 +213,30 @@ test('explicit update is separate; subsequent Q&A identifies the new revision an
     assert.throws(() => searchContext(roots, 'login-qa', {query: 'login', limit: 1, cursor: previous.page.cursor}), /cursor/i);
   });
   assert.deepEqual(files(roots.projectRoot), before);
+});
+
+test('lightweight identity/revision checks validate retained evidence without reopening the search index', async t => {
+  const {roots} = fixture(t); put(roots, 'login.txt', 'Login requires an employee ID.');
+  const input = request([source('login', 'login.txt')]); await updateContext(roots, input);
+  const retained = capturedOnly(roots, () => {
+    const overview = readContextOverview(roots, 'login-qa'), page = searchContext(roots, 'login-qa', {query: 'employee'});
+    for (const hit of page.results) resolveHit(roots, overview, page, hit);
+    return {overview, page};
+  }).value;
+  fs.unlinkSync(join(roots.projectRoot, 'login.txt'));
+  const before = files(roots.projectRoot);
+  const checked = capturedOnly(roots, () => readContextOverview(roots, 'login-qa'));
+  assert.equal(checked.value.contextId, retained.page.contextId);
+  assert.equal(checked.value.revision, retained.page.revision);
+  assert.deepEqual(checked.value.identity, retained.overview.identity);
+  assert.deepEqual(checked.value.scope, retained.overview.scope);
+  assert(checked.events.length > 0);
+  assert(checked.events.every(event => event.kind === 'read' && !event.file.endsWith('.sqlite')));
+  assert.equal(retained.page.results[0].excerpt, 'Login requires an employee ID.');
+  assert.deepEqual(files(roots.projectRoot), before);
+  put(roots, 'login.txt', 'Login requires an employee ID and a security key.');
+  await updateContext(roots, input);
+  const updated = capturedOnly(roots, () => readContextOverview(roots, 'login-qa')).value;
+  assert.equal(updated.contextId, retained.page.contextId);
+  assert.notEqual(updated.revision, retained.page.revision, 'A retained passage must not pass the revision check after refresh.');
 });

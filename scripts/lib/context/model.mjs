@@ -1,8 +1,9 @@
 import {data, digest, fingerprint, requireThat} from '../execution-core/data.mjs';
 import {secretFindings} from '../package-validation.mjs';
 
-export const RECIPE = 'context-v2.1';
+export const RECIPE = 'context-v2.2-business';
 export const inactive = new Set(['removed', 'excluded', 'out-of-scope']);
+export const businessSource = source => source.selectedFor === 'business-context' && ['file', 'work-item', 'attachment'].includes(source.kind);
 export const HASH = /^[a-f0-9]{64}$/;
 export function contextData(value, maximum = 1024 * 1024) {
   const result = data(value, maximum, {maxNodes: 500000});

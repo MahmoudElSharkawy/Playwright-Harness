@@ -5,7 +5,7 @@ import {identifier, keys} from '../project-config.mjs';
 import {fingerprint, requireThat} from '../execution-core/data.mjs';
 import {readBounded, writeJson, publishExclusive} from '../execute/storage.mjs';
 import {within} from '../skill-roots.mjs';
-import {contextData, HASH, scopeKey, bucket, chunks, restoreText, inactive} from './model.mjs';
+import {contextData, HASH, scopeKey, bucket, chunks, restoreText, inactive, businessSource, facts} from './model.mjs';
 
 const OBJECT_LIMIT = 16 * 1024 * 1024;
 function capturedJson(path, maximum) {
@@ -118,16 +118,17 @@ export function prepareSnapshot(roots, snapshot) {
     const pages = []; for (let i = 0; i < (items?.length ?? 0); i += 512) pages.push(store.put('selection-items', items.slice(i, i + 512)));
     selections[name] = store.put('selection', {...selection, pages});
   }
-  const times = snapshot.sources.map(s => s.verifiedAt).filter(Boolean).sort();
-  const gaps = snapshot.sources.filter(s => !inactive.has(s.status) && (s.status !== 'verified' || s.relationGaps?.length)).map(s => ({sourceId: s.id, status: s.status, coverage: s.coverage, relationGaps: s.relationGaps?.length ?? 0}));
-  if (snapshot.facts.some(f => f.status === 'conflicting')) gaps.push({status: 'conflicting', coverage: 'conflicting-facts'});
-  if (!snapshot.sources.length && !Object.values(snapshot.selections).some(selection => selection.includedCount === 0)) gaps.push({status: 'unverified', coverage: 'no-selected-sources'});
+  const active = snapshot.sources.filter(s => businessSource(s) && !inactive.has(s.status)), businessFacts = facts(active);
+  const times = active.map(s => s.verifiedAt).filter(Boolean).sort();
+  const gaps = active.filter(s => s.status !== 'verified').map(s => ({sourceId: s.id, status: s.status, coverage: s.coverage}));
+  if (businessFacts.some(f => f.status === 'conflicting')) gaps.push({status: 'conflicting', coverage: 'conflicting-facts'});
+  if (!active.length && !Object.values(snapshot.selections).some(selection => selection.purpose === 'business-context' && selection.includedCount === 0)) gaps.push({status: 'unverified', coverage: 'no-selected-sources'});
   const manifest = {version: 2, contextId: snapshot.contextId, identity: snapshot.identity, scope: snapshot.scope,
     ...(snapshot.adoProject ? {adoProject: snapshot.adoProject} : {}), scopeKey: scopeKey(snapshot), capturedAt: snapshot.capturedAt, updatedAt: snapshot.updatedAt, status: snapshot.status,
     catalogs: {sources: store.catalog(sourceEntries), facts: store.catalog([...factEntries].map(([id, ref]) => ({id, ref})))}, selections,
     ...(snapshot.custom === undefined ? {} : {customRef: store.put('custom', snapshot.custom)}),
     ...(snapshot.lastCompleteRevision === undefined ? {} : {lastCompleteRevision: snapshot.lastCompleteRevision}),
-    counts: {sources: snapshot.sources.length, activeSources: snapshot.sources.filter(s => !inactive.has(s.status)).length, facts: snapshot.facts.length, conflicts: snapshot.facts.filter(f => f.status === 'conflicting').length, gaps: gaps.length},
+    counts: {sources: active.length, activeSources: active.length, facts: businessFacts.length, conflicts: businessFacts.filter(f => f.status === 'conflicting').length, gaps: gaps.length},
     freshness: {oldestVerifiedAt: times[0] ?? null, newestVerifiedAt: times.at(-1) ?? null}, gaps: gaps.slice(0, 8)};
   return {manifest, store, sourceRecords};
 }
