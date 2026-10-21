@@ -26,6 +26,7 @@
     "typecheck:examples": "node examples/node_modules/typescript/bin/tsc --project examples/tsconfig.json --noEmit",
     "test": "node --test harness-tests/*.test.mjs",
     "test:roots": "node --test harness-tests/skill-roots.test.mjs",
+    "test:requirements": "node --test harness-tests/requirements-*.test.mjs",
     "test:skill-proof": "node --test harness-tests/skill-proof-assessment.test.mjs",
     "test:adoption": "node --test harness-tests/adoption.test.mjs",
     "test:local-source": "node --test harness-tests/local-source.test.mjs",

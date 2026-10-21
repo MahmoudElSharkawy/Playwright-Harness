@@ -1,5 +1,14 @@
 # Provenance and release status
 
+Issue #62's requirements-analysis skill, chat drafts, source/acceptance inventory
+and delivery adapters are project-authored. Official Microsoft project-team,
+membership, person-mention and comment documentation informed the new request and
+markup shapes; [the workflow guide](requirements-analysis.md) links those contracts.
+No upstream implementation or analysis skill is copied, bundled or required, and no
+runtime dependency is added. The earlier external review integration was removed
+before release; existing consumer artifacts are preserved without treating their
+old approvals as authorization for the chat workflow.
+
 The project license is [MIT](../LICENSE). On 2026-09-29 the owner confirmed the
 necessary rights to release the supplied original material under MIT. This attestation
 is recorded in [the provenance inventory](../scripts/provenance.json). The supplied

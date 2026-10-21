@@ -14,18 +14,22 @@ export class AdoError extends Error {
 export function createAdoClient({configuration, roots, resolveCredential, fetchImpl = fetch}) {
   const config = validateAdoConfiguration(configuration);
   const base = `${config.organizationUrl}/${encodeURIComponent(config.project)}/_apis/`;
-  function destination(route, projectLookup = false) {
-    const scopedBase = projectLookup ? `${config.organizationUrl}/_apis/` : base;
+  function destination(route, projectLookup = false, teamLookup = false) {
+    const scopedBase = projectLookup || teamLookup ? `${config.organizationUrl}/_apis/` : base;
     if (projectLookup) requireValue(route === `projects/${encodeURIComponent(config.project)}?api-version=7.1`, 'Only the configured project identity can be resolved at collection scope.');
+    if (teamLookup) {
+      const match = /^projects\/([a-f0-9-]{36})\/teams(?:\/([a-f0-9-]{36})\/members)?\?api-version=7\.1&\$skip=\d+&\$top=100$/i.exec(route);
+      requireValue(match && identity && match[1].toLowerCase() === identity.id.toLowerCase() && (!match[2] || adoGuid(match[2])), 'Only configured-project teams and members can be read at collection scope.');
+    }
     requireValue(typeof route === 'string' && /^[A-Za-z]/.test(route) && !/[\\#\x00-\x20]/.test(route), 'Invalid ADO relative route.');
     const url = new URL(route, scopedBase), decoded = decodeURIComponent(url.pathname);
     requireValue(url.href.startsWith(scopedBase) && !decoded.includes('..') && !url.username && !url.password, 'ADO route escapes the configured project.');
     return url.href;
   }
-  async function request(route, {method = 'GET', body, patch = false, raw = false, binary = false, contentType, beforeDispatch, projectLookup = false} = {}) {
-    requireValue(!projectLookup || method === 'GET', 'Project identity lookup is read-only.');
+  async function request(route, {method = 'GET', body, patch = false, raw = false, binary = false, contentType, beforeDispatch, projectLookup = false, teamLookup = false} = {}) {
+    requireValue(!(projectLookup || teamLookup) || method === 'GET', 'Project identity and team lookup are read-only.');
     requireValue(!raw || Buffer.isBuffer(body) && contentType === 'application/octet-stream', 'Raw ADO bodies require bounded attachment bytes.');
-    const url = destination(route, projectLookup), serialized = body === undefined ? undefined : raw ? body : JSON.stringify(body);
+    const url = destination(route, projectLookup, teamLookup), serialized = body === undefined ? undefined : raw ? body : JSON.stringify(body);
     requireValue(serialized === undefined || Buffer.byteLength(serialized) <= (raw ? config.bugs?.maxAttachmentBytes ?? 2 * 1024 * 1024 : config.maxResponseBytes), 'ADO request exceeds configured bound.');
     let credential; try { credential = await resolveCredential(); } catch { throw new AdoError('credential-unresolved'); }
     requireValue(typeof credential === 'string' && credential.length > 0 && !/[\r\n]/.test(credential), 'ADO credential reference is unresolved.');
@@ -66,12 +70,13 @@ export function createAdoClient({configuration, roots, resolveCredential, fetchI
     const project = await projectIdentity(), name = item?.fields?.['System.TeamProject'];
     requireValue(typeof name === 'string' && name.toLowerCase() === project.name.toLowerCase(), 'ADO work item has missing or mismatched project ownership.');
   }
-  async function list(route, pagination = 'continuation') {
+  async function list(route, pagination = 'continuation', teamLookup = false) {
     const values = [], seen = new Set(); let continuation, skip = 0;
     for (let page = 0; page < 100; page++) {
       const extra = pagination === 'offset' ? `&$skip=${skip}&$top=100` : continuation ? `&continuationToken=${encodeURIComponent(continuation)}` : '';
-      const result = await request(`${route}${extra}`), rows = result.data.value ?? (Array.isArray(result.data) ? result.data : undefined);
+      const result = await request(`${route}${extra}`, {teamLookup}), rows = result.data.value ?? (Array.isArray(result.data) ? result.data : undefined);
       requireValue(Array.isArray(rows), 'ADO list response is incomplete.');
+      if (teamLookup) requireValue(rows.length <= 100 && (result.data.count === undefined || result.data.count === rows.length), 'ADO team page is incomplete or exceeds its bound.');
       values.push(...rows); requireValue(values.length <= 10000, 'ADO list exceeds bounded scope.');
       if (pagination === 'offset') {
         if (rows.length === 0) return values;
@@ -85,7 +90,7 @@ export function createAdoClient({configuration, roots, resolveCredential, fetchI
   }
   function delivery(kind, execute, sourceFingerprint) {
     requireValue(execute === true, 'External ADO writes require explicit execution authorization.');
-    requireValue(['outcomes', 'automation', 'tags', 'relations', 'pull-request', 'bugs', 'case-edits'].includes(kind), 'Unknown ADO delivery kind.');
+    requireValue(['outcomes', 'automation', 'tags', 'relations', 'pull-request', 'bugs', 'case-edits', 'story-comment'].includes(kind), 'Unknown ADO delivery kind.');
     const id = randomUUID(), receipt = `.harness/state/integrations/${id}.jsonl`;
     const file = consumerPath(roots, receipt); mkdirSync(dirname(file), {recursive: true});
     // Recheck after mkdir and use exclusive creation; each event is flushed before dispatch.
@@ -105,7 +110,7 @@ export function createAdoClient({configuration, roots, resolveCredential, fetchI
         record({event: 'prepared', operation, requestFingerprint}); let data, identity;
         try {
           const result = await request(route, {method, body, patch, raw, contentType, beforeDispatch() {record({event: 'dispatching', operation, requestFingerprint, effect: 'uncertain'}); dispatched = true;}});
-          const key = {'create-run': 'runId', 'create-bug': 'workItemId', 'upload-attachment': 'attachmentId', 'create-pull-request': 'pullRequestId'}[operation], value = key === 'pullRequestId' ? result.data.pullRequestId : result.data.id;
+          const key = {'create-run': 'runId', 'create-bug': 'workItemId', 'upload-attachment': 'attachmentId', 'create-pull-request': 'pullRequestId', 'create-comment': 'commentId'}[operation], value = key === 'pullRequestId' ? result.data.pullRequestId : key === 'commentId' ? result.data.id ?? result.data.commentId : result.data.id;
           identity = key && ((Number.isSafeInteger(value) && value > 0) || adoGuid(value)) ? {[key]: value} : undefined;
           record({event: 'acknowledged', operation, requestFingerprint, effect: 'confirmed', ...(identity ? {identity} : {})});
           data = result.data;
@@ -134,6 +139,8 @@ export function createAdoClient({configuration, roots, resolveCredential, fetchI
   const cache = new Map();
   const cached = (key, action) => {if (!cache.has(key)) {const pending = Promise.resolve().then(action); cache.set(key, pending); pending.catch(() => {if (cache.get(key) === pending) cache.delete(key);});} return cache.get(key);};
   return Object.freeze({configuration: config, read, list, delivery, projectIdentity, requireWorkItemProject,
+    async projectTeams() {const project = await projectIdentity(); return list(`projects/${project.id}/teams?api-version=7.1`, 'offset', true);},
+    async teamMembers(teamId) {requireValue(adoGuid(teamId), 'Invalid ADO team identity.'); const project = await projectIdentity(); return list(`projects/${project.id}/teams/${teamId}/members?api-version=7.1`, 'offset', true);},
     cachedRead: route => cached(`read:${route}`, () => read(route)),
     async wiql(query, {top} = {}) {
       // Keywords in quoted field values are data, including localized area names.

@@ -1,5 +1,11 @@
 # Third-party notices and references
 
+The requirements-analysis workflow is project-authored and has no external analysis
+integration or new npm dependency. The prerelease GapCue integration was removed
+before release; no GapCue implementation is copied or bundled. AgenTeX and SHAFT
+links in issue #62 are design references, not runtime dependencies or quality
+comparisons; no implementation is copied from them.
+
 The dependency security refresh uses Handlebars 4.7.10 (MIT) through the example's
 Allure tools and Tedious 20.3.8 (MIT) in the runtime and example graphs. Both
 distributions retain their upstream license notices. Tedious no longer depends
