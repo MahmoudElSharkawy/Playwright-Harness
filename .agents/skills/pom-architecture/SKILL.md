@@ -66,5 +66,5 @@ utils; nothing reaches upward or skips a layer (a spec never calls `page.locator
 | Technical plumbing in `utils/` (logging, attachments, connections) | [utility-classes](../utility-classes/SKILL.md) |
 | Installing, updating or configuring the harness itself — environments, targets, secrets, CI | [harness-setup](../harness-setup/SKILL.md) |
 | Explicitly invoke snapshot-only Q&A; ordinary questions do not activate it | [context-qa](../context-qa/SKILL.md) |
-| Retrieve source-backed project/application context | [project-context](../project-context/SKILL.md) |
-| Save, update or refresh project/application context | [context-update](../context-update/SKILL.md) |
+| Build or update selected business context with saved or new criteria | [project-context](../project-context/SKILL.md) |
+| Refresh saved business sources and discover new criteria matches | [context-update](../context-update/SKILL.md) |

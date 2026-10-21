@@ -4,7 +4,7 @@ import {existsSync, openSync, readSync, closeSync, copyFileSync, mkdirSync, unli
 import {dirname} from 'node:path';
 import {fingerprint, requireThat} from '../execution-core/data.mjs';
 import {contextFile, readManifest, storeFor, capturedCustom} from './storage.mjs';
-import {scopeKey, inactive, RECIPE, HASH, contextData} from './model.mjs';
+import {scopeKey, inactive, RECIPE, HASH, contextData, businessSource} from './model.mjs';
 
 const NORMALIZER = 'unicode-arabic-v1';
 export function normalize(text) {
@@ -70,7 +70,7 @@ export function buildIndex(roots, prepared, snapshot, previous) {
       if (old.get(id) === signatures.get(id)) continue;
       removeEntries.run(id); removeLinks.run(id); removeSource.run(id);
       if (!signatures.has(id)) continue;
-      insertSource.run(id, signatures.get(id)); const source = sourceRecords.get(id); if (inactive.has(source.status)) continue;
+      insertSource.run(id, signatures.get(id)); const source = sourceRecords.get(id); if (!businessSource(source) || inactive.has(source.status)) continue;
       for (const link of source.relations ?? []) insertLink.run(id, source.collection ?? '', link.workItemId);
       const workItemId = source.workItemId ?? sourceRecords.get(source.parentId)?.workItemId ?? null;
       for (const part of source.contributions) {
@@ -86,18 +86,46 @@ export function buildIndex(roots, prepared, snapshot, previous) {
     const hash = fileHash(temporary), path = `indexes/${hash}.sqlite`, target = contextFile(roots, manifest.contextId, path);
     if (existsSync(target) && fileHash(target) !== hash) renameSync(target, `${target}.corrupt-${randomUUID()}`);
     if (existsSync(target)) unlinkSync(temporary); else renameSync(temporary, target);
-    return {path, hash, contentKey};
+    return {path, hash, contentKey, recipe: RECIPE};
   } finally {db?.close(); if (existsSync(temporary)) unlinkSync(temporary);}
 }
 
+function businessCatalog(roots, manifest) {
+  const store = manifest.version === 2 ? storeFor(roots, manifest) : undefined;
+  const records = store ? [...store.entries(manifest.catalogs.sources)].map(entry => store.source(entry.ref, false)) : manifest.sources;
+  return records.filter(source => businessSource(source) && !inactive.has(source.status));
+}
+function citation(source, location, manifest) {
+  const fields = {'System.Title': 'Title', 'System.Description': 'Description', 'Microsoft.VSTS.Common.AcceptanceCriteria': 'Acceptance criteria', 'Microsoft.VSTS.TCM.Steps': 'Test steps', 'Microsoft.VSTS.TCM.ReproSteps': 'Reproduction steps'};
+  const label = source.kind === 'work-item' ? `Work item #${source.workItemId} — ${source.title || 'Untitled'}` : source.name ?? source.path?.replaceAll('\\', '/').split('/').at(-1) ?? source.id;
+  const project = manifest.adoProject;
+  return {label, ...(fields[location] ? {location: fields[location]} : {}), ...(source.kind === 'work-item' && project ? {url: `${project.organizationUrl}/${encodeURIComponent(project.name)}/_workitems/edit/${source.workItemId}`} : {})};
+}
 export function readContextOverview(roots, id) {
   const manifest = readManifest(roots, id); if (!manifest) return {status: 'ABSENT', contextId: id};
   // Validate editable owner notes without disclosing an unbounded note body.
   capturedCustom(roots, manifest);
+  // Current generations publish business-only counts. Preserve cheap overview reads
+  // without opening unrelated evidence records or consulting the live sources.
+  if (manifest.version === 2) return {status: 'CAPTURED', version: 2, contextId: id, identity: manifest.identity, scope: manifest.scope, ...(manifest.adoProject ? {adoProject: manifest.adoProject} : {}),
+    revision: manifest.revision, updatedAt: manifest.updatedAt,
+    ...(manifest.index?.recipe === RECIPE ? {coverage: manifest.status, counts: manifest.counts, freshness: manifest.freshness, gaps: manifest.gaps} : {coverage: 'unverified', counts: {sources: 0, activeSources: 0, facts: 0, conflicts: 0, gaps: 1}, gaps: [{coverage: 'business-selection-required'}], migration: 'Explicit business-source selection/update required; history is preserved.'})};
+  const sources = businessCatalog(roots, manifest), store = manifest.version === 2 ? storeFor(roots, manifest) : undefined;
+  const facts = new Set(), topics = new Map();
+  for (const source of sources) for (const part of source.contributions) {
+    const key = part.fact ?? fingerprint({topic: part.topic, text: part.text});
+    if (facts.has(key)) continue; facts.add(key);
+    const topic = store ? store.get(part.fact, 'fact').topic : part.topic; topics.set(topic, (topics.get(topic) ?? 0) + 1);
+  }
+  const conflicts = [...topics.values()].filter(count => count > 1).reduce((total, count) => total + count, 0);
+  const gaps = sources.filter(source => source.status !== 'verified').map(source => ({sourceId: source.id, label: citation(source, undefined, manifest).label, status: source.status, coverage: source.coverage}));
+  if (conflicts) gaps.push({status: 'conflicting', coverage: 'conflicting-facts'});
+  const times = sources.map(source => source.verifiedAt).filter(Boolean).sort();
   return {status: 'CAPTURED', version: manifest.version, contextId: id, identity: manifest.identity, scope: manifest.scope, ...(manifest.adoProject ? {adoProject: manifest.adoProject} : {}),
-    revision: manifest.revision, coverage: manifest.status, updatedAt: manifest.updatedAt,
-    counts: manifest.counts ?? {sources: manifest.sources.length, facts: manifest.facts.length, conflicts: manifest.facts.filter(f => f.status === 'conflicting').length, gaps: manifest.sources.filter(s => !inactive.has(s.status) && s.status !== 'verified').length},
-    ...(manifest.freshness ? {freshness: manifest.freshness} : {}), gaps: manifest.gaps ?? [], ...(manifest.version === 1 ? {migration: 'Explicit update required for indexed search.'} : {})};
+    revision: manifest.revision, coverage: gaps.length ? 'partial' : sources.length ? 'complete' : manifest.status, updatedAt: manifest.updatedAt,
+    counts: {sources: sources.length, activeSources: sources.length, facts: facts.size, conflicts, gaps: gaps.length},
+    freshness: {oldestVerifiedAt: times[0] ?? null, newestVerifiedAt: times.at(-1) ?? null}, gaps: gaps.slice(0, 8),
+    ...(sources.length ? {} : {guidance: 'No active selected business sources. Explicitly select sources with project-context if needed.'}), ...(manifest.version === 1 ? {migration: 'Explicit update required for indexed search.'} : {})};
 }
 export function searchContext(roots, id, options = {}) {
   const manifest = readManifest(roots, id); requireThat(manifest?.version === 2, 'Indexed search requires a captured v2 context; run an explicit update.');
@@ -113,27 +141,36 @@ export function searchContext(roots, id, options = {}) {
   requireThat(options.catalog === undefined || options.catalog === 'sources' && !query && !options.sourceId && !options.topic && !workItemId, 'Source catalog browsing cannot be combined with evidence filters.');
   requireThat(options.catalog || terms.length || options.sourceId || options.topic || workItemId, 'Search needs a query or an explicit source, topic or work item.');
   const binding = fingerprint({revision: manifest.revision, scopeKey: manifest.scopeKey, query, sourceId: options.sourceId ?? null, topic: options.topic ?? null, workItemId: workItemId ?? null, catalog: options.catalog ?? null, limit, maxBytes, normalizer: NORMALIZER});
-  let offset = 0;
+  let offset = 0, seen = 0;
   if (options.cursor) {
-    try {requireThat(typeof options.cursor === 'string' && options.cursor.length < 2048, 'Invalid cursor.'); const cursor = JSON.parse(Buffer.from(options.cursor, 'base64url').toString()); requireThat(cursor.binding === binding && Number.isSafeInteger(cursor.offset) && cursor.offset >= 0, 'Cursor does not match revision, scope, query or filters.'); offset = cursor.offset;}
+    try {requireThat(typeof options.cursor === 'string' && options.cursor.length < 2048, 'Invalid cursor.'); const cursor = JSON.parse(Buffer.from(options.cursor, 'base64url').toString()); requireThat(cursor.binding === binding && Number.isSafeInteger(cursor.offset) && cursor.offset >= 0, 'Cursor does not match revision, scope, query or filters.'); offset = cursor.offset;
+      if (options.catalog) {requireThat(Number.isSafeInteger(cursor.seen) && cursor.seen >= 0 && cursor.seen <= offset, 'Invalid catalog cursor.'); seen = cursor.seen;}}
     catch {throw new Error('Cursor does not match revision, scope, query or filters.');}
   }
   if (options.catalog) {
-    const store = storeFor(roots, manifest), results = [], total = manifest.counts.sources;
-    const response = {status: 'SOURCES', contextId: id, revision: manifest.revision, results, total, omitted: Math.max(0, total - offset), cursor: null};
-    const finish = () => {response.omitted = Math.max(0, total - offset - results.length); response.cursor = response.omitted ? Buffer.from(JSON.stringify({binding, offset: offset + results.length})).toString('base64url') : null;};
+    requireThat(manifest.index?.recipe === RECIPE, 'Business source catalog requires explicit selection/update of this older context.');
+    const store = storeFor(roots, manifest), results = [], total = manifest.counts.activeSources;
+    const response = {status: 'SOURCES', contextId: id, revision: manifest.revision, results, total, omitted: Math.max(0, total - seen), cursor: null};
     let position = 0;
+    const finish = () => {response.omitted = Math.max(0, total - seen - results.length); response.cursor = response.omitted ? Buffer.from(JSON.stringify({binding, offset: position, seen: seen + results.length})).toString('base64url') : null;};
     for (const entry of store.entries(manifest.catalogs.sources)) {
-      if (position++ < offset) continue; if (results.length === limit) break;
-      const source = store.source(entry.ref, false), {contributions, relations, relationGaps, ...metadata} = source;
-      results.push({...metadata, facts: contributions.length, relations: relations?.length ?? 0, relationGaps: relationGaps?.length ?? 0}); finish();
-      if (Buffer.byteLength(JSON.stringify(response)) + 1 > maxBytes) {results.pop(); finish(); break;}
+      if (position < offset) {position++; continue;}
+      if (results.length === limit || seen + results.length === total) break;
+      const source = store.source(entry.ref, false); position++;
+      if (!businessSource(source) || inactive.has(source.status)) continue;
+      const {contributions, relations, relationGaps, ...metadata} = source;
+      results.push({...metadata, citation: citation(source, undefined, manifest), facts: contributions.length, sections: [...new Set(contributions.map(part => part.location))].slice(0, 20), relations: relations?.length ?? 0}); finish();
+      if (Buffer.byteLength(JSON.stringify(response)) + 1 > maxBytes) {results.pop(); position--; finish(); break;}
     }
+    finish();
     requireThat(!response.omitted || results.length > 0, 'Search output budget is too small for one source record.'); return contextData(response, maxBytes);
   }
+  // This recipe indexes only selected business sources. Older generations fail
+  // openIndex's recipe check; queries need not read unrelated source objects.
   const filters = [], args = {};
   if (options.sourceId) {filters.push('e.sourceId=$source'); args.$source = options.sourceId;}
   if (options.topic) {filters.push('e.topic=$topic'); args.$topic = options.topic;}
+  if (workItemId !== undefined) {filters.push('e.workItemId=$item');}
   const filter = filters.length ? ` AND ${filters.join(' AND ')}` : '';
   args.$exact = options.sourceId ?? query.trim(); args.$item = workItemId ?? -1;
   args.$fts = terms.map(term => `"${term.replaceAll('"', '""')}"`).join(' OR ') || '""';
@@ -153,9 +190,9 @@ export function searchContext(roots, id, options = {}) {
     for (const row of rows) {
       const sourceRef = store.lookup(manifest.catalogs.sources, row.sourceId); requireThat(sourceRef, 'Search index references an uncaptured source.');
       const source = store.source(sourceRef, false), fact = store.get(row.factRef, 'fact'), chunk = store.get(row.chunkRef, 'chunk');
-      requireThat(!inactive.has(source.status) && source.contributions.some(part => part.fact === row.factRef && part.location === row.location && part.authority === row.authority) && fact.id === row.factId && fact.chunks.includes(row.chunkRef) && chunk.id === row.chunkId && chunk.factId === fact.id && normalize(chunk.text) === row.text, 'Search index and captured evidence differ; run an explicit update.');
+      requireThat(businessSource(source) && !inactive.has(source.status) && source.contributions.some(part => part.fact === row.factRef && part.location === row.location && part.authority === row.authority) && fact.id === row.factId && fact.chunks.includes(row.chunkRef) && chunk.id === row.chunkId && chunk.factId === fact.id && normalize(chunk.text) === row.text, 'Search index and captured evidence differ; run an explicit update.');
       const hit = {sourceId: source.id, factId: fact.id, chunkId: chunk.id, excerpt: chunk.text, location: row.location, offsets: {start: chunk.start, end: chunk.end, byteStart: chunk.byteStart, byteEnd: chunk.byteEnd}, revision: source.version ?? source.hash,
-        authority: row.authority, status: row.status, freshness: {status: source.status, verifiedAt: source.verifiedAt ?? null, revisionVerifiedAt: source.revisionVerifiedAt ?? null}, match: ['exact', 'relation', 'text'][row.priority], ...(row.workItemId ? {workItemId: row.workItemId} : {})};
+        citation: citation(source, row.location, manifest), authority: row.authority, status: row.status, freshness: {status: source.status, verifiedAt: source.verifiedAt ?? null, ...(source.revisionVerifiedAt ? {revisionVerifiedAt: source.revisionVerifiedAt} : {})}, match: ['exact', 'relation', 'text'][row.priority], ...(row.workItemId ? {workItemId: row.workItemId} : {})};
       results.push(hit); finish();
       if (Buffer.byteLength(JSON.stringify(response)) + 1 > maxBytes) {results.pop(); finish(); break;}
     }

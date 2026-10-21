@@ -17,8 +17,9 @@ export function validateContextPolicy(policy) {
   return structuredClone(policy);
 }
 export function validateContextScope(scope = {}) {
-  keys(scope, ['areaPath'], 'ADO context scope');
+  keys(scope, ['areaPath', 'workItemIds'], 'ADO context scope');
   if (scope.areaPath !== undefined) requireValue(selector(scope.areaPath) && !/['\[\];]/.test(scope.areaPath), 'Invalid ADO context area path.');
+  if (scope.workItemIds !== undefined) requireValue(Array.isArray(scope.workItemIds) && scope.workItemIds.length <= 20000 && scope.workItemIds.every(id => Number.isSafeInteger(id) && id > 0) && new Set(scope.workItemIds).size === scope.workItemIds.length, 'Context work-item IDs must be distinct positive integers.');
   return structuredClone(scope);
 }
 /** Shape only; live metadata validation belongs to each retrieval, never setup. */

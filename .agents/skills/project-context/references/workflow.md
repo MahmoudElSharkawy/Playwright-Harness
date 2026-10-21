@@ -1,207 +1,171 @@
-# Shared project-context workflow
+# Business-source selection and capture
 
-Run installed commands from the consumer: `npx --no pom-harness context ...`.
-For package development use `node <package>/scripts/project-context.mjs ... --project-root <consumer>`.
-The CLI validates consumer/package separation. Saved context uses a local SQLite FTS5
-index built only during explicit update; no server or background ingestion is needed.
+Use the installed runtime from the selected consumer. Examples use
+`npx --no pom-harness context ...`; direct package execution is
+`node "<package-root>/scripts/project-context.mjs" ... --project-root "<consumer>"`.
+Q&A always uses the direct runner and only read/search.
 
-## Discover and prepare
+## Select the sources
 
-1. Resolve the active consumer from the user's workspace, not the linked skill directory.
-   Read custom AGENTS/CLAUDE instructions and relevant existing root/config files directly.
-   Missing adoption or optional layers are visible gaps, not reasons to invent defaults.
-2. Inspect selected `.harness/project.json` environments and referenced targets without
-   resolving credentials. Respect existing source/test roots and multiple applications.
-   Search relevant code with `rg -n` for the business operation/class, then its callers
-   before proposing changes. Cover page/service ownership, paired test-data paths and
-   intent/ownership-based cleanup. Reuse the owning convention skill when needed.
-3. Load only relevant reviewed `.harness/knowledge/` facts and compare them with current
-   source. Keep `.harness/knowledge-candidates/` separate. Team queries/collections are
-   derive-only; existing scenarios and available adapters are sources, not new authorities.
-4. Prepare a request under ignored `.harness/runs/`. It lists **selected** sources and
-   scope. Each stable source ID identifies an origin across refreshes. Do not change an
-   ID when the same file changes, or reuse it for a different origin. A `repository`
-   path stays inside consumer storage; a `file` path can be an explicitly supplied
-   accessible absolute path. Do not enumerate unrelated files or credential stores.
+A context is a saved business-source collection, not a repository inventory.
+Resolve the consumer and project/application/environment identity from the request
+or established scope. Read connection configuration only as necessary for the
+selected ADO destination. Do not scan POM/code, harness skills, root configuration,
+reviewed automation knowledge or unrelated files for business evidence.
 
+Create a request under ignored `.harness/runs/`:
 ```json
 {
   "version": 1,
   "contextId": "checkout-qa",
-  "identity": {"project": "consumer-example"},
+  "identity": {"project": "shop"},
   "scope": {"application": "checkout", "environment": "qa"},
   "sources": [
-    {"id": "project-config", "kind": "repository", "path": ".harness/project.json", "origin": "consumer"},
-    {"id": "guide", "kind": "file", "path": "requirements.docx", "origin": "user-supplied"}
-  ]
-}
-```
-
-Use transient `context retrieve --request .harness/runs/context-request.json` to obtain
-byte hashes and native JSON/CSV/text extraction. Text receipts cite lines, JSON paths
-or CSV row/column. For CSV specify `encoding`/`delimiter` when the source requires it;
-ambiguous, inconsistent or malformed input is unverified. Native reads are bounded to
-8 MiB and 20,000 parts; use a scoped host reader for larger readable inputs and report gaps.
-
-## Format readers and located facts
-
-Read Word with the available document reader, Excel with the spreadsheet reader, PDF
-with its text/page reader, and images through image understanding/OCR. Other formats
-are eligible only when an available reader can actually read them. Never execute
-embedded content. If the host lacks a reader, retain the source as unsupported; do
-not claim success or manufacture a converted file. Password protection, corrupt files,
-unread sheets/pages, low confidence or truncation require partial/uncertain coverage.
-
-For current bytes use the source receipt's `attemptedHash` when present, otherwise
-`hash`. When extraction is incomplete after bytes change, `hash` still identifies
-retained stale evidence; `attemptedHash` identifies the new file or staged bytes.
-After successful extraction, the new evidence replaces the old hash and the
-attempted hash is cleared.
-
-After reading, add an `extraction` receipt to that source in the request:
-
-```json
-{
-  "hash": "<SHA-256 returned for the current bytes>",
-  "reader": "available-reader-name",
-  "coverage": "complete",
-  "parts": [
-    {"location": "section Checkout, table 1 row 2", "topic": "orders.retention", "text": "Submitted orders remain available."}
-  ]
-}
-```
-
-Use actual page/section/table coordinates for Word/PDF, sheet/cell/range for Excel,
-and image region for image facts. Retain every independently supplied origin even
-when bytes/content duplicate another source. `topic` identifies the same factual
-question across sources; different statements under one topic are visible conflicts.
-Omitting it deduplicates identical content. Choose relevant bounded excerpts; do not
-dump whole documents/code into context. Sanitization is required before submitting
-receipts; the existing credential-like-literal guard is a final conservative check.
-
-`coverage` is `complete`, `partial` or `uncertain` for the selected extraction scope.
-Do not label an incomplete document complete. The receipt must match current bytes;
-changed hashes require re-reading. The runtime accepts a host extraction as evidence,
-not as proof of review or permission to execute its content. Set `authority: "reviewed"`
-only for repository sources under already-reviewed `.harness/knowledge/`; all supplied
-files and work items remain observations. Use `current` for verified source code.
-
-## ADO metadata and policy
-
-Use `context metadata --request <request>` to discover every live type/state in
-bounded pages. Each state record names its type ID. Follow every returned cursor
-before presenting grouped multi-select/text choices; an omitted value is not an
-exclusion. This command reads no work-item content and saves no context or policy.
-Changed project metadata invalidates its cursor; restart discovery in that case.
-
-Add `"ado": {"sourceId": "backlog"}` to select the configured ADO context source.
-Keep the token in ignored `.env`; select organization and project in the existing
-`.harness/integrations.json`, which remains authoritative. The resolved organization
-and project GUID bind the capture before content reads. A different project needs a
-different context ID. Legacy environment settings apply only without modern config:
-
-```json
-{
-  "version": 1,
+    {"id": "checkout-guide", "kind": "file", "path": "requirements/checkout.docx"}
+  ],
   "ado": {
-    "organizationUrl": "https://dev.azure.com/example-org",
-    "project": "consumer-example",
-    "credentialRef": "AZURE_PAT",
-    "context": {
-      "sources": {
-        "backlog": {
-          "scope": {"areaPath": "consumer-example\\Checkout"},
-          "policy": {"excludeTypes": [], "excludeStates": []}
-        }
-      }
-    }
+    "sourceId": "backlog",
+    "scope": {"workItemIds": [83, 90, 91]}
   }
 }
 ```
 
-`context retrieve` discovers current types and each type's states every time. If no
-policy exists, `SELECTION_REQUIRED` returns live grouped choices without fetching item
-content. Present multi-select exclusions, including **Exclude nothing**, or numbered
-choices such as `T1`, `T2`, `T1.S1`, `T1.S2`, and `0: Exclude nothing`. Wait for the
-explicit response. Distinguish `0`/empty explicit exclusion lists from no answer.
-Preserve valid choices when requesting repairs. Do not use standard type/state names
-as defaults. Display names can be localized; prefer returned stable IDs/reference names.
+Files may be explicitly supplied absolute paths or consumer-relative paths.
+Stable source IDs identify origins across refreshes; do not reassign them.
+Repository/POM/code/configuration sources are rejected. File and attachment
+observations cannot promote themselves to reviewed knowledge.
 
-Write the chosen policy JSON and persist it with:
+Choose either exact work-item IDs or criteria:
+- `ado.scope.workItemIds` fixes membership and bypasses project-wide WIQL.
+  An empty list deliberately selects none. Optional area/type/state restrictions
+  can further narrow that list.
+- For criteria, omit `workItemIds`, optionally supply `scope.areaPath`, and
+  select live types/states with `ado.policy`. The same criteria run again on
+  refresh, admitting new matches.
 
-```sh
-npx --no pom-harness context policy --source backlog --policy .harness/runs/context-policy.json
+An explicit request's scope/policy overrides the saved context selection;
+otherwise the saved selection wins. Existing integration configuration initializes
+a new collection. Supplying a new exact-ID list without a policy means those IDs,
+without inheriting old type/state exclusions. To switch back to criteria, supply
+the new scope (for example `{"areaPath":"shop\\Checkout"}`) and desired policy.
+Other independently selected documents/collections remain until explicitly removed.
+
+## Live ADO criteria
+
+Keep organization/project and credential references in the existing
+`.harness/integrations.json`; never put secrets in requests.
+The resolved organization and project GUID must match the context. Another
+project requires a different context ID.
+
+When criteria are not supplied/saved, run `context metadata --request <request>`
+and page every cursor before presenting the relevant live type/state choices.
+Reuse valid user choices. Ask only for missing criteria or unknown/removed
+selectors; unanswered prompts never mean "all items." Exact IDs already establish
+selection and do not require a type/state exclusion interview.
+
+A criteria policy looks like:
+```json
+{
+  "includeTypes": ["<live type referenceName>"],
+  "excludeTypes": [],
+  "excludeStates": [{"type":"<live type referenceName>","states":["<live state ID>"]}]
+}
 ```
+Exclusions win. Absent includes impose no restriction; empty includes select none.
+State rules may explicitly use `"type":"*"`. Do not assume standard/localized
+names or exclude completed work automatically. An explicit all-items choice uses
+empty exclusion arrays. The runtime revalidates metadata on every refresh.
 
-This revalidates live metadata and edits only `ado.context.sources.backlog.policy`.
-Saved policies are reused; an explicit request's `ado.policy` overrides the saved
-policy for that invocation. Optional `includeTypes`/`includeStates` restrict selection;
-required `excludeTypes`/`excludeStates` always win. State rules look like
-`{"type":"<type referenceName>","states":["<state ID or exact name>"]}`;
-`"type":"*"` explicitly applies across types. Missing includes mean unrestricted;
-empty includes select nothing. No completed-state assumption is made.
+The effective scope/policy is saved with each captured collection. Optional
+`context policy --source <name> --policy <json>` sets integration defaults for
+new selections; it does not silently overwrite a context's saved criteria.
 
-`POLICY_REPAIR_REQUIRED` reports unknown/renamed/removed selectors before querying
-affected content. Repair with the user; do not silently drop a filter or remap a name.
-New values are reported and remain eligible under exclusion-only policies, while
-include restrictions admit matching values only. The snapshot records effective policy,
-metadata verification date, included/excluded counts and individual reasons.
+## Documents and explicit attachments
 
-## Included ADO attachments
+Read actual business content, including acceptance criteria, conditions, exceptions
+and domain terms. Native readers support text, JSON and CSV/TSV. For Word, Excel,
+PDF and images use the available host reader and precise section/page/sheet/cell
+or image-region locations. Unsupported, password-protected, partial or uncertain
+sources remain visible gaps. Never execute embedded content.
 
-Selection runs before full item/attachment reads. Included items' textual business
-fields contribute located observations. To read their binary attachments with host
-tools, run `context stage --request <request>`. Only attachments of included items
-are fetched, from verified configured-collection attachment endpoints, into ignored
-`.harness/runs/context/<context-id>/`. The compact `sources.sample` receipts return `localPath`, `attachmentId`, source
-`id`, `hash` and optional `attemptedHash`. Use `attemptedHash ?? hash` for exact bytes. Omitted sources require a narrower request, or an
-explicitly saved context followed by `context search --id <id> --catalog sources`
-and its revision-bound cursor. CLI `update` also stages included attachment bytes,
-so every saved receipt exposes the verified `localPath`. Staging alone writes
-evidence files without saving context. Existing staged copies are hash-checked;
-an altered copy is preserved and fresh bytes are staged at a new path.
+`context retrieve --request <request>` previews evidence and byte hashes without
+saving. For format-reader extraction, supply:
+```json
+{
+  "hash": "<hash of current bytes>",
+  "reader": "<actual reader>",
+  "coverage": "complete",
+  "parts": [
+    {"location":"section Checkout, table 1 row 2","topic":"orders.retention","text":"Submitted orders remain available."}
+  ]
+}
+```
+Add this as the selected file's `extraction`. Use complete/partial/uncertain
+honestly. Preserve source meaning; never invent rules. Use a shared `topic`
+only for the same business question across sources, so disagreements stay visible.
+Receipts are hash-bound. When bytes change, use `attemptedHash ?? hash` and
+read the new bytes; an old receipt cannot certify new content. For CSV, specify
+`encoding` or `delimiter` when needed; these choices persist for refresh.
 
-Read each staged file with its available format reader. Supply receipts in request
-`ado.attachments`: `[{"id":"<returned source ID>","attachmentId":"<GUID>","extraction":{...}}]`.
-The next retrieval rechecks the live selection and bytes/hash before accepting them.
-Unsupported/unavailable attachments remain explicit gaps. Excluded items' attachments
-are never automatically read. An explicitly supplied file uses a separate `sources`
-entry and remains independent of the parent's current selection.
+Selected work items expose `availableAttachments` metadata without downloading
+the files. Only explicitly chosen attachment IDs enter `ado.attachments`:
+```json
+{
+  "id": "backlog-attachment-83-aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  "attachmentId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+}
+```
+Use the returned identity; do not invent one or select all links automatically.
+`context stage --request <request>` downloads only those chosen attachments into
+ignored `.harness/runs/context/<id>/`. Saved-source catalog pages expose staged
+`localPath` and hashes when the compact preview omits them. Read through the host
+format reader and add `extraction` to the selected attachment entry.
+The full attachment list replaces that collection's prior attachment selection;
+omitting it reuses the saved list. An explicit empty list withdraws all attachment
+support. Removed links withdraw old support after successful reconciliation.
+An independently supplied file remains independent of its originating work item.
 
-## Publish or refresh
+## Build and refresh
 
-For requested persistence run `context update --request <request>`. For a full refresh,
-reuse existing selected sources (including confirmed removals), fresh extraction
-receipts, and each configured/snapshotted ADO source in turn. Requests refresh one
-ADO source at a time; unrelated sources and custom content survive each operation.
-For a narrower refresh include only the requested source IDs. Do not reuse a stale
-receipt for a changed file. Confirmed source removal is `{"id":"guide","status":"removed"}`;
-a merely inaccessible file stays selected and stale.
+`project-context` builds/updates a saved collection by default.
+`context-update` refreshes it. Both use the same reconciliation:
+```sh
+npx --no pom-harness context update --request .harness/runs/context-request.json
+npx --no pom-harness context update --id checkout-qa
+```
+The second form reuses all saved documents and ADO collections. `retrieve` and
+`stage` also accept `--id`. Supplying `sources: []` alongside an ADO request
+refreshes only that collection. A request containing only version/contextId is
+equivalent to `--id`. Explicit removal is `{"id":"checkout-guide","status":"removed"}`.
+A missing document alone is not confirmed deletion.
 
-Report `changes`, `checked`, `gaps`, saved path/revision and snapshot status. Exit code
-2 means selection/repair is needed or the result is partial; never describe it as
-complete. History preserves superseded support, including exclusions (which are not
-deletions). A partial refresh points to the last complete revision. Atomic publication
-protects current on failure; an orphan history record is harmless. Investigate an
-interrupted `writer.lock` before retrying; do not delete an active writer's lock.
+New matches are added, changed evidence replaced and unchanged evidence reused.
+Unavailable selected sources retain last valid contributions as stale. Confirmed
+exclusions/departures withdraw support without erasing history or independent
+origins. Failed selection changes preserve the previous context instead of
+publishing evidence under unverified new criteria.
 
-Start captured reading with `context read --id <id>`: identity, revision, counts,
-freshness, conflicts and gaps only. Use `context search --id <id> --query <text>`,
-`--work-item <id>`, `--source <source-id>` or `--topic <topic>` for evidence.
-Use `--catalog sources` to page source receipts when preparing a refresh. Defaults
-are 8 results / 16 KiB total output; explicit maxima are 25 / 64 KiB. Repeat the same
-arguments plus `--cursor <returned-cursor>` for more. Stop on no evidence; do not
-load unrelated material. Search neither fetches originals nor changes verification.
+Inspect `saved`, changes and gaps internally. Exit code 2 means selection/repair
+is required or the capture is partial. Verify the published overview and retrieve
+the passages needed for a readable business explanation. Do not present CLI JSON
+as the answer. A transient preview is bounded; save or narrow the request to read
+beyond it, according to the user's save preference.
 
-Use `context export --id <id> --out <new-consumer-file>` only when a full logical
-snapshot is explicitly needed. Stream/process that file locally; do not inject the
-whole corpus into the conversation. Evidence citations include snapshot revision,
-source/fact/chunk IDs, original location and offsets, authority and freshness.
+## Saved evidence and recovery
 
-Version 2 uses a bounded manifest, immutable JSON objects and a rebuildable SQLite
-index. Edit owner notes in `custom.json`; updates retain sanitized note history.
-Missing/corrupt indexes require explicit update, never a silent search repair. The
-first update of v1 backs up original current/history and stages v2; legacy ADO sources
-require complete fresh ownership verification/recapture. Failure leaves v1 current
-intact. Unchanged items use membership/revision checks; unchanged files still rehash
-their bytes. Revision checks never pretend attachment bytes were downloaded again.
+Start with `context read --id <id>`; use `search --query`, `--work-item`,
+`--source`, `--topic`, or `--catalog sources` for bounded evidence.
+Item/source/topic filters are strict. Defaults are 8 results / 16 KiB; maxima
+are 25 / 64 KiB. Continue with the same arguments and returned cursor.
+No search reads original sources, changes dates or repairs storage.
+
+The SQLite FTS5 tables and immutable JSON layout stay the same. Source/selection
+metadata records the business boundary. Older mixed captures require an explicit
+business-source request; old repository evidence is excluded and history remains.
+Old index recipes require an explicit update. Owner notes in `custom.json` are
+preserved, not automatically treated as business evidence.
+
+Atomic publication preserves current on failure. Inspect an interrupted writer
+lock before retrying; never remove an active lock. Use `context export --out`
+only when a complete logical snapshot is explicitly requested, never for Q&A.
+See the [storage contract](../../../../docs/project-context.md).

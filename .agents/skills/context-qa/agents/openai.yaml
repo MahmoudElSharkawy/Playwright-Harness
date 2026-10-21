@@ -1,5 +1,5 @@
 interface:
-  display_name: "Captured Context Q&A"
-  short_description: "Answer only from a saved project snapshot"
+  display_name: "Business Context Q&A"
+  short_description: "Explain selected business sources with readable citations"
 policy:
   allow_implicit_invocation: false

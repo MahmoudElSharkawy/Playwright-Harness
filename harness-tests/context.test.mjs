@@ -89,12 +89,12 @@ function adoClient() {
 }
 test('saved selection is reused; excluded items withdraw only their support and never fetch linked attachments', async t => {
   const {roots} = fixture(t), f = adoClient(); put(roots, 'independent.txt', 'Shared fact');
-  const input = {...request([source('independent', 'independent.txt')]), ado: {sourceId: 'backlog'}};
+  const input = {...request([source('independent', 'independent.txt')]), ado: {sourceId: 'backlog', attachments: [{id: `backlog-attachment-1-${f.attachmentId}`, attachmentId: f.attachmentId}]}};
   const first = await updateContext(roots, input, {client: f.client});
   assert.equal(first.snapshot.selections.backlog.includedCount, 1); assert.equal(first.snapshot.facts.find(fact => fact.text === 'Shared fact').references.length, 2);
   assert(f.calls.some(call => call[0] === 'attachment')); f.items.get(1).fields['System.State'] = 'Abandonné';
   f.client.configuration.context.sources.backlog.policy.excludeStates = [{type: 'Custom.Request', states: ['drop']}]; f.calls.length = 0;
-  const next = await updateContext(roots, {...request([]), ado: {sourceId: 'backlog'}}, {client: f.client});
+  const next = await updateContext(roots, {...request([]), ado: {sourceId: 'backlog', policy: f.client.configuration.context.sources.backlog.policy}}, {client: f.client});
   assert.equal(next.snapshot.selections.backlog.includedCount, 0); assert.equal(next.snapshot.selections.backlog.excludedCount, 1);
   assert.equal(next.snapshot.sources.find(s => s.workItemId === 1).status, 'excluded');
   assert.equal(next.snapshot.sources.find(s => s.kind === 'attachment').status, 'excluded');
@@ -126,14 +126,14 @@ test('policy persistence validates live metadata and preserves other configured 
   const before = readFileSync(join(roots.projectRoot, '.harness/integrations.json'), 'utf8');
   assert.equal((await saveContextPolicy(roots, 'backlog', {excludeTypes: ['Removed'], excludeStates: []}, {client: f.client})).status, 'POLICY_REPAIR_REQUIRED'); assert.equal(readFileSync(join(roots.projectRoot, '.harness/integrations.json'), 'utf8'), before);
 });
-test('reviewed facts conflict visibly with current source; observations cannot promote themselves', async t => {
+test('business documents preserve conflicts; shared readers prevent observation promotion', async t => {
   const {roots} = fixture(t); put(roots, '.harness/knowledge/url.txt', 'Old destination'); put(roots, 'app.txt', 'Current destination');
   const located = (id, path, text, authority, kind = 'repository') => ({id, path, kind, authority, extraction: {hash: digest(text), reader: 'targeted-source', coverage: 'complete', parts: [{topic: 'app.destination', location: 'lines 1-1', text}]}});
-  const result = await updateContext(roots, request([located('reviewed', '.harness/knowledge/url.txt', 'Old destination', 'reviewed'), located('current', 'app.txt', 'Current destination', 'current')]));
+  const result = await updateContext(roots, request([located('old', '.harness/knowledge/url.txt', 'Old destination', 'observation', 'file'), located('current', 'app.txt', 'Current destination', 'observation', 'file')]));
   assert(result.snapshot.facts.every(fact => fact.status === 'conflicting')); assert.equal(result.snapshot.status, 'partial');
   await assert.rejects(retrieveContext(roots, request([located('untrusted', 'app.txt', 'Current destination', 'reviewed', 'file')])), /reviewed/);
   put(roots, '.harness/knowledge-candidates/observation.txt', 'Unreviewed fact');
-  await assert.rejects(retrieveContext(roots, request([located('alias', '.harness/knowledge/../knowledge-candidates/observation.txt', 'Unreviewed fact', 'reviewed')])), /reviewed/);
+  await assert.rejects(readFileContext(roots, located('alias', '.harness/knowledge/../knowledge-candidates/observation.txt', 'Unreviewed fact', 'reviewed')), /reviewed/);
 });
 test('captured read ignores malformed integration config and performs no file or verification writes', async t => {
   const {roots} = fixture(t); put(roots, 'one.txt', 'Captured only'); await updateContext(roots, request([source('one', 'one.txt')]));

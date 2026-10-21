@@ -10,7 +10,7 @@ import {createAdoContextSource, validateContextPolicy, validateContextScope, res
 import {htmlToText} from '../integrations/ado-steps.mjs';
 import {readFileContext, extractContextBytes, contextParts, contextReaderRecipe} from './files.mjs';
 import {randomUUID} from 'node:crypto';
-import {contextData, facts, inactive, RECIPE, restoreText} from './model.mjs';
+import {contextData, facts, inactive, RECIPE, restoreText, businessSource} from './model.mjs';
 import {contextFile, readManifest, loadSnapshot, baseline, prepareSnapshot, backupLegacy, storeFor, capturedCustom} from './storage.mjs';
 import {buildIndex} from './search.mjs';
 export {readContextOverview, searchContext} from './search.mjs';
@@ -20,7 +20,15 @@ const sourceId = value => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.
 const stamp = value => {requireThat(typeof value === 'string' && Number.isFinite(Date.parse(value)), 'Invalid context verification date.'); return value;};
 export function readContext(roots, contextId) {
   const snapshot = loadSnapshot(roots, readManifest(roots, contextId));
-  if (snapshot && !snapshot.facts) snapshot.facts = facts(snapshot.sources); return snapshot;
+  if (snapshot) {snapshot.sources = snapshot.sources.filter(businessSource); snapshot.facts = facts(snapshot.sources);} return snapshot;
+}
+const fileSelection = source => Object.fromEntries(['id', 'kind', 'path', 'origin', 'authority', 'encoding', 'delimiter'].filter(key => source[key] !== undefined).map(key => [key, source[key]]));
+function savedSources(roots, manifest) {
+  if (!manifest) return [];
+  const store = manifest.version === 2 ? storeFor(roots, manifest) : undefined;
+  const sources = store ? [...store.entries(manifest.catalogs.sources)].map(entry => store.source(entry.ref, false)) : manifest.sources;
+  requireThat(!sources.some(source => !inactive.has(source.status) && !businessSource(source)), 'This older context needs explicit business-source selection before a full refresh. History is preserved.');
+  return sources.filter(source => businessSource(source) && source.kind === 'file' && !inactive.has(source.status)).map(fileSelection);
 }
 function validateRequest(input) {
   keys(input, ['version', 'contextId', 'identity', 'scope', 'sources', 'ado'], 'context request');
@@ -33,6 +41,8 @@ function validateRequest(input) {
   for (const source of input.sources) {
     keys(source, ['id', 'kind', 'path', 'origin', 'authority', 'encoding', 'delimiter', 'extraction', 'status'], 'context source'); requireThat(sourceId(source.id), 'Invalid context source identity.');
     requireThat(source.status === undefined || source.status === 'removed', 'Only explicit removal is accepted as a source status.');
+    requireThat(source.status === 'removed' || source.kind === 'file', 'Select business documents as file sources; repository/POM sources are not business context.');
+    if (source.status !== 'removed' && typeof source.path === 'string') requireThat(!/(?:^|[\\/])(?:\.git|\.agents|\.claude|\.github|node_modules)(?:[\\/]|$)|(?:^|[\\/])(?:AGENTS\.md|CLAUDE\.md|package(?:-lock)?\.json|npm-shrinkwrap\.json|tsconfig[^\\/]*\.json|playwright\.config\.[^\\/]+)$|\.harness[\\/](?:project|targets|integrations)\.json$|\.(?:[cm]?[jt]sx?|sql|log)$/i.test(source.path), 'Framework code and configuration cannot be business context sources.');
     requireThat(source.origin === undefined || typeof source.origin === 'string' && source.origin.trim() && source.origin.length <= 1000, 'Invalid context source origin.');
   }
   if (input.ado !== undefined) {
@@ -40,7 +50,14 @@ function validateRequest(input) {
     requireThat(identifier(input.ado.sourceId), 'Invalid configured ADO context source.');
     if (input.ado.policy !== undefined) validateContextPolicy(input.ado.policy);
     if (input.ado.scope !== undefined) validateContextScope(input.ado.scope);
-    if (input.ado.attachments !== undefined) requireThat(Array.isArray(input.ado.attachments) && input.ado.attachments.every(entry => sourceId(entry.id) && adoGuid(entry.attachmentId)), 'Invalid attachment reader receipts.');
+    if (input.ado.attachments !== undefined) {
+      requireThat(Array.isArray(input.ado.attachments) && input.ado.attachments.length <= 500 && new Set(input.ado.attachments.map(entry => entry.id)).size === input.ado.attachments.length, 'Invalid selected attachments.');
+      for (const entry of input.ado.attachments) {
+        keys(entry, ['id', 'attachmentId', 'extraction'], 'selected attachment');
+        const prefix = input.ado.sourceId + '-attachment-', suffix = '-' + String(entry.attachmentId).toLowerCase();
+        requireThat(sourceId(entry.id) && adoGuid(entry.attachmentId) && entry.id.startsWith(prefix) && entry.id.endsWith(suffix) && /^[1-9][0-9]*$/.test(entry.id.slice(prefix.length, -suffix.length)), 'Invalid selected attachment identity.');
+      }
+    }
   }
 }
 function reconcile(previous, next) {
@@ -80,28 +97,34 @@ async function bindProject(roots, input, manifest, options) {
   return {client, project};
 }
 function capturedRelations(candidates, available) {
-  const relations = [], relationGaps = [];
+  const relations = [];
   for (const candidate of candidates) {
     if (candidate.targetId && candidate.reason !== 'unverified-destination' && available.has(candidate.targetId)) relations.push({relation: candidate.relation, workItemId: candidate.targetId});
-    else relationGaps.push({...candidate, reason: candidate.reason === 'unverified-destination' ? candidate.reason : 'outside-selected-or-available-items'});
   }
-  return {relations: [...new Map(relations.map(link => [fingerprint(link), link])).values()], relationGaps};
+  // Unselected relationships do not expand the source set or make it incomplete.
+  return {relations: [...new Map(relations.map(link => [fingerprint(link), link])).values()], relationGaps: []};
 }
 async function adoRecords(roots, input, previous, options, now) {
   const {client, project} = options, collection = input.sourceId, configuration = client.configuration.context?.sources?.[collection] ?? {};
   const prior = previous?.selections?.[collection], old = new Map((previous?.sources ?? []).filter(source => source.collection === collection).map(source => [source.id, source]));
+  const attachments = input.attachments ?? (prior?.purpose === 'business-context' ? prior.attachments : undefined) ?? [];
+  const attachmentIds = new Set(attachments.map(entry => entry.id));
+  const scope = input.scope ?? prior?.scope ?? configuration.scope ?? {};
+  const policy = input.policy ?? (input.scope?.workItemIds !== undefined ? {excludeTypes: [], excludeStates: []} : prior?.effectivePolicy ?? configuration.policy);
   const children = new Map(); for (const source of old.values()) if (source.parentId && !inactive.has(source.status)) {const list = children.get(source.parentId) ?? []; list.push(source); children.set(source.parentId, list);}
   const reuse = decision => {
     const source = old.get(collection + '-item-' + decision.id);
-    return previous?.version === 2 && source?.status === 'verified' && source.coverage === 'complete' && source.recipeVersion === RECIPE && source.version === String(decision.rev)
-      && source.projectKey === projectKey(project) && (children.get(source.id) ?? []).every(child => {
-        const receipt = input.attachments?.find(entry => entry.id === child.id && entry.attachmentId.toLowerCase() === child.attachmentId);
+    const selectedChildren = (children.get(source?.id) ?? []).filter(child => attachmentIds.has(child.id));
+    const requestedChildren = attachments.filter(entry => entry.id.startsWith(collection + '-attachment-' + decision.id + '-'));
+    return previous?.version === 2 && source?.status === 'verified' && businessSource(source) && source.coverage === 'complete' && source.recipeVersion === RECIPE && source.version === String(decision.rev)
+      && source.projectKey === projectKey(project) && requestedChildren.every(entry => selectedChildren.some(child => child.id === entry.id)) && selectedChildren.every(child => {
+        const receipt = attachments.find(entry => entry.id === child.id && entry.attachmentId.toLowerCase() === child.attachmentId);
         return child.status === 'verified' && child.coverage === 'complete' && child.recipeVersion === RECIPE && child.parentRevision === source.version && child.relationBinding
           && child.recipe === contextReaderRecipe({...child, extraction: receipt?.extraction}, options.readers, child).recipe
           && (!options.stageAttachments || stagedBytesMatch(roots, child, options.contextId));
       });
   };
-  const result = await createAdoContextSource(client).retrieve({policy: input.policy ?? configuration.policy, scope: input.scope ?? configuration.scope ?? {}, previousMetadata: prior?.metadata, reuse, allowPartial: true});
+  const result = await createAdoContextSource(client).retrieve({policy, scope, previousMetadata: prior?.metadata, reuse, allowPartial: true});
   if (result.status !== 'READY') return {selectionRequired: {...result, sourceId: collection}};
   const records = [], selected = new Set(), available = new Set([...result.items.map(item => item.id), ...result.reused.map(item => item.id)]);
   const origin = project.organizationUrl + '/' + encodeURIComponent(project.name);
@@ -109,12 +132,12 @@ async function adoRecords(roots, input, previous, options, now) {
     const id = collection + '-item-' + decision.id, cached = old.get(id); selected.add(id);
     const candidates = [...(cached.relations ?? []).map(link => ({relation: link.relation, targetId: link.workItemId})), ...(cached.relationGaps ?? [])];
     records.push({...cached, origin, retrievedAt: now, revisionVerifiedAt: now, membershipVerifiedAt: now, ...capturedRelations(candidates, available)});
-    for (const child of children.get(id) ?? []) {selected.add(child.id); records.push({...child, origin: origin + '/_workitems/edit/' + decision.id, retrievedAt: now, revisionVerifiedAt: now});}
+    for (const child of children.get(id) ?? []) if (attachmentIds.has(child.id)) {selected.add(child.id); records.push({...child, origin: origin + '/_workitems/edit/' + decision.id, retrievedAt: now, revisionVerifiedAt: now});}
   }
   for (const decision of result.unavailable) {
     const id = collection + '-item-' + decision.id; selected.add(id);
-    records.push({...old.get(id), id, kind: 'work-item', collection, workItemId: decision.id, origin, projectKey: projectKey(project), status: 'unverified', coverage: 'item-unavailable-or-changed', retrievedAt: now, contributions: old.get(id)?.contributions ?? []});
-    for (const child of children.get(id) ?? []) {selected.add(child.id); records.push({...child, status: 'unverified', coverage: 'parent-unavailable', retrievedAt: now});}
+    records.push({...old.get(id), id, kind: 'work-item', selectedFor: 'business-context', collection, workItemId: decision.id, origin, projectKey: projectKey(project), status: 'unverified', coverage: 'item-unavailable-or-changed', retrievedAt: now, contributions: businessSource(old.get(id) ?? {}) ? old.get(id).contributions : []});
+    for (const child of children.get(id) ?? []) if (attachmentIds.has(child.id) && businessSource(child)) {selected.add(child.id); records.push({...child, status: 'unverified', coverage: 'parent-unavailable', retrievedAt: now});}
   }
   for (const item of result.items) {
     const id = collection + '-item-' + item.id; selected.add(id);
@@ -125,13 +148,17 @@ async function adoRecords(roots, input, previous, options, now) {
       const raw = destination(link.url, client, project, 'workItems'), targetId = /^[1-9][0-9]*$/.test(raw ?? '') ? Number(raw) : undefined;
       return {relation: typeof link.rel === 'string' ? link.rel.slice(0, 200) : 'unknown', ...(Number.isSafeInteger(targetId) ? {targetId} : {reason: 'unverified-destination'})};
     });
-    records.push({id, kind: 'work-item', collection, workItemId: item.id, origin, projectKey: projectKey(project), version: String(item.rev), hash: fingerprint({rev: item.rev, parts}), recipeVersion: RECIPE,
+    const availableAttachments = [];
+    records.push({id, kind: 'work-item', selectedFor: 'business-context', title: htmlToText(item.fields['System.Title'] ?? '').slice(0, 300), availableAttachments, collection, workItemId: item.id, origin, projectKey: projectKey(project), version: String(item.rev), hash: fingerprint({rev: item.rev, parts}), recipeVersion: RECIPE,
       retrievedAt: now, revisionVerifiedAt: now, membershipVerifiedAt: now, verifiedAt: now, status: 'verified', coverage: 'complete', ...extracted, ...capturedRelations(candidates, available)});
     for (const [number, relation] of (item.relations ?? []).entries()) if (relation.rel === 'AttachedFile') {
       const raw = destination(relation.url, client, project, 'attachments'), attachmentId = adoGuid(raw) ? raw.toLowerCase() : undefined;
-      const attachmentSourceId = attachmentId ? collection + '-attachment-' + item.id + '-' + attachmentId : collection + '-attachment-' + item.id + '-unavailable-' + number; selected.add(attachmentSourceId);
-      const name = relation.attributes?.name ?? 'attachment', receipt = input.attachments?.find(entry => entry.attachmentId.toLowerCase() === attachmentId && entry.id === attachmentSourceId);
-      const source = {id: attachmentSourceId, kind: 'attachment', origin: origin + '/_workitems/edit/' + item.id, name, parentId: id, collection, ...(receipt?.extraction ? {extraction: receipt.extraction} : {})};
+      const attachmentSourceId = attachmentId ? collection + '-attachment-' + item.id + '-' + attachmentId : collection + '-attachment-' + item.id + '-unavailable-' + number;
+      const name = String(relation.attributes?.name ?? 'attachment').slice(0, 300), receipt = attachments.find(entry => entry.attachmentId.toLowerCase() === attachmentId && entry.id === attachmentSourceId);
+      if (attachmentId) availableAttachments.push({id: attachmentSourceId, attachmentId, name});
+      if (!receipt) continue;
+      selected.add(attachmentSourceId);
+      const source = {id: attachmentSourceId, kind: 'attachment', origin: origin + '/_workitems/edit/' + item.id, name, parentId: id, collection, ...(receipt.extraction ? {extraction: receipt.extraction} : {})};
       const binding = {projectKey: projectKey(project), parentRevision: String(item.rev), relationBinding: fingerprint({id, attachmentId: attachmentId ?? null, name})};
       if (!attachmentId) {records.push({...source, ...binding, status: 'unverified', coverage: 'attachment-destination-unverified', retrievedAt: now, contributions: []}); continue;}
       let bytes;
@@ -144,15 +171,18 @@ async function adoRecords(roots, input, previous, options, now) {
         if (existsSync(consumerPath(roots, localPath)) && !stagedBytesMatch(roots, {localPath, hash}, options.contextId)) localPath = base + '-' + randomUUID() + suffix;
         const path = consumerPath(roots, localPath); if (!existsSync(path)) publishExclusive(path, bytes);
       }
-      records.push({...await extractContextBytes(source, bytes, {...options, now, previous: old.get(attachmentSourceId)}), ...binding, attachmentId, ...(localPath ? {localPath} : {})});
+      records.push({...await extractContextBytes(source, bytes, {...options, now, previous: old.get(attachmentSourceId)}), selectedFor: 'business-context', ...binding, attachmentId, ...(localPath ? {localPath} : {})});
     }
   }
+  const previouslySelected = new Set(prior?.purpose === 'business-context' ? (prior.attachments ?? []).map(entry => entry.id) : []);
+  requireThat(attachments.every(entry => selected.has(entry.id) || previouslySelected.has(entry.id)), 'Cannot verify the attachment selection within the selected work items.');
   const decisions = new Map(result.selection.items.map(item => [item.id, item]));
   for (const source of old.values()) if (!selected.has(source.id)) {
     const parentItemId = source.workItemId ?? old.get(source.parentId)?.workItemId, decision = decisions.get(parentItemId), status = decision && !decision.included && decision.reason !== 'outside-area-scope' ? 'excluded' : 'out-of-scope';
     records.push({...source, projectKey: projectKey(project), status, reason: decision?.reason ?? 'outside-current-source-scope', retrievedAt: now, contributions: []});
   }
-  return {records, selection: {sourceId: collection, origin, project, scope: result.scope, effectivePolicy: result.policy, metadata: result.metadata, metadataVerifiedAt: now, metadataChanges: result.metadataChanges, ...result.selection}};
+  for (const record of records) if (selected.has(record.id)) record.selectedFor = 'business-context';
+  return {records, selection: {sourceId: collection, purpose: 'business-context', origin, project, scope: result.scope, attachments: attachments.map(({id, attachmentId}) => ({id, attachmentId: attachmentId.toLowerCase()})), effectivePolicy: result.policy, metadata: result.metadata, metadataVerifiedAt: now, metadataChanges: result.metadataChanges, ...result.selection}};
 }
 const withoutVerification = source => Object.fromEntries(Object.entries(source).filter(([key]) => !['retrievedAt', 'verifiedAt', 'revisionVerifiedAt', 'membershipVerifiedAt'].includes(key)));
 
@@ -167,30 +197,34 @@ export async function readContextMetadata(roots, input, options = {}) {
 
 /** Live reads are explicit. Captured search/read never call this composition. */
 export async function retrieveContext(roots, input, options = {}) {
-  validateRequest(input); const now = stamp(options.now ?? new Date().toISOString()), manifest = readManifest(roots, input.contextId);
+  requireThat(input?.version === 1 && identifier(input.contextId), 'Invalid context request version/identifier.');
+  const now = stamp(options.now ?? new Date().toISOString()), manifest = readManifest(roots, input.contextId), refreshAll = input.sources === undefined && input.ado === undefined;
+  input = {...input, identity: input.identity ?? manifest?.identity, scope: input.scope ?? manifest?.scope, sources: input.sources ?? (refreshAll ? savedSources(roots, manifest) : [])};
+  validateRequest(input);
   if (manifest) requireThat(fingerprint(manifest.identity) === fingerprint(input.identity) && fingerprint(manifest.scope) === fingerprint(input.scope), 'Captured context identity/scope differs; choose the matching context identifier.');
   // Bind the configured project before loading evidence or querying metadata/content.
   const bound = await bindProject(roots, input, manifest, options), previous = loadSnapshot(roots, manifest); if (previous && !previous.facts) previous.facts = facts(previous.sources);
   if (options.persist && manifest?.version === 1) requireThat(fingerprint(facts(previous.sources)) === fingerprint(previous.facts), 'Legacy facts differ from their source evidence; preserve and repair the original snapshot before migration.');
-  const originalBaseline = baseline(roots, manifest), existing = new Map((previous?.sources ?? []).map(source => [source.id, source])), original = new Map(existing), checked = [], selections = structuredClone(previous?.selections ?? {});
+  const originalBaseline = baseline(roots, manifest), original = new Map((previous?.sources ?? []).map(source => [source.id, source]));
+  const existing = new Map([...original].map(([id, source]) => [id, businessSource(source) ? source : {...source, status: 'out-of-scope', reason: 'business-selection-required', contributions: []}])), checked = [], selections = structuredClone(previous?.selections ?? {});
   for (const source of input.sources) {
     const prior = existing.get(source.id); requireThat(!prior?.collection, 'A file source cannot replace a selected ADO source.');
     requireThat(source.status !== 'removed' || prior, 'Only a previously captured source can be explicitly removed.');
     requireThat(!prior || source.status === 'removed' || prior.kind === source.kind && prior.path === source.path && (!source.origin || prior.origin === source.origin), 'A source identifier cannot be reassigned to another origin.');
     const next = source.status === 'removed' ? {...prior, status: 'removed', reason: 'explicit-removal', retrievedAt: now, contributions: []} : await readFileContext(roots, source, {...options, now, previous: prior});
-    existing.set(source.id, reconcile(prior, next)); checked.push(source.id);
+    existing.set(source.id, {...reconcile(prior, next), ...(source.status === 'removed' ? {} : {selectedFor: 'business-context', ...Object.fromEntries(['authority', 'encoding', 'delimiter'].filter(key => source[key] !== undefined).map(key => [key, source[key]]))})}); checked.push(source.id);
   }
-  const adoInputs = input.ado ? [input.ado] : [];
-  if (options.persist && manifest?.version === 1) for (const collection of new Set(previous.sources.map(source => source.collection).filter(Boolean))) {
-    if (!adoInputs.some(item => item.sourceId === collection)) adoInputs.push({sourceId: collection});
-  }
+  const adoInputs = input.ado ? [input.ado] : refreshAll ? Object.entries(selections).filter(([, selection]) => selection.purpose === 'business-context').map(([sourceId]) => ({sourceId})) : [];
   for (const adoInput of adoInputs) {
     requireThat(!input.sources.some(source => source.id.startsWith(adoInput.sourceId + '-')), 'File and ADO context identities overlap.');
     let result;
     try {result = await adoRecords(roots, adoInput, previous, {...options, ...bound, contextId: input.contextId}, now);} catch {
       requireThat(!options.persist || manifest?.version !== 1, 'Legacy ADO recapture failed; migration stopped without changing the snapshot.');
-      const old = [...existing.values()].filter(source => source.collection === adoInput.sourceId && !inactive.has(source.status));
-      result = {records: old.length ? old.map(source => ({...source, status: 'unverified', coverage: 'ado-unavailable', retrievedAt: now})) : [{id: adoInput.sourceId + '-unavailable', collection: adoInput.sourceId, kind: 'work-item', origin: 'configured-ado', projectKey: projectKey(bound.project), status: 'unverified', coverage: 'ado-unavailable', retrievedAt: now, contributions: []}]};
+      const prior = previous?.selections?.[adoInput.sourceId];
+      requireThat(prior?.purpose === 'business-context', 'Cannot verify the initial business selection; no context was saved. Retry the explicit selection.');
+      requireThat(!prior || (adoInput.scope === undefined || fingerprint(adoInput.scope) === fingerprint(prior.scope)) && (adoInput.policy === undefined || fingerprint(adoInput.policy) === fingerprint(prior.effectivePolicy)) && (adoInput.attachments === undefined || fingerprint(adoInput.attachments) === fingerprint(prior.attachments ?? [])), 'Cannot verify the changed selection; previous context is preserved. Retry the explicit selection.');
+      const old = [...existing.values()].filter(source => source.collection === adoInput.sourceId && businessSource(source) && !inactive.has(source.status));
+      result = {records: old.length ? old.map(source => ({...source, status: 'unverified', coverage: 'ado-unavailable', retrievedAt: now})) : [{id: adoInput.sourceId + '-unavailable', selectedFor: 'business-context', collection: adoInput.sourceId, kind: 'work-item', origin: 'configured-ado', projectKey: projectKey(bound.project), status: 'unverified', coverage: 'ado-unavailable', retrievedAt: now, contributions: []}]};
     }
     if (result.selectionRequired) return {...result.selectionRequired, saved: false};
     if (result.selection) selections[adoInput.sourceId] = result.selection;
@@ -198,7 +232,7 @@ export async function retrieveContext(roots, input, options = {}) {
       requireThat(!existing.has(next.id) || existing.get(next.id).collection === adoInput.sourceId, 'ADO context identity overlaps an unrelated file source.'); existing.set(next.id, reconcile(existing.get(next.id), next)); checked.push(next.id);
     }
   }
-  const sources = [...existing.values()].sort((a, b) => a.id.localeCompare(b.id)), content = facts(sources);
+  const sources = [...existing.values()].filter(businessSource).sort((a, b) => a.id.localeCompare(b.id)), content = facts(sources);
   if (options.persist && manifest?.version === 1 && bound.project) requireThat(sources.filter(source => source.collection).every(source => source.projectKey === projectKey(bound.project) && (inactive.has(source.status) || source.status === 'verified' && source.recipeVersion === RECIPE)), 'Legacy ADO recapture is incomplete; migration stopped without changing the snapshot.');
   const gaps = sources.filter(source => !inactive.has(source.status) && (source.status !== 'verified' || source.relationGaps?.length)).map(source => ({sourceId: source.id, status: source.status, coverage: source.coverage, relationGaps: source.relationGaps?.length ?? 0}));
   if (!sources.length && !Object.values(selections).some(selection => selection.includedCount === 0)) gaps.push({status: 'unverified', coverage: 'no-selected-sources'});

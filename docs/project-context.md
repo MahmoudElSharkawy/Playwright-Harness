@@ -1,215 +1,131 @@
-# Project context retrieval and refresh
+# Business context
 
-Project context captures a scoped, traceable view of a consumer project. Use
-`project-context` to retrieve it and `context-update` to create or refresh a saved
-snapshot. Explicit [context-only Q&A](context-qa.md) invocation uses the
-`context-qa` skill and existing local read/search commands, including when an
-answer is missing. Ordinary messages do not activate Q&A or silently refresh
-saved context.
+Use `project-context` to build or refresh business understanding from selected
+work items and supplied documents. Use `context-update` to refresh the saved
+selection, and explicitly invoke `context-qa` to answer from its saved evidence.
 
-Ask **"Retrieve the project context for checkout on qa"**, then **"Save this context"**
-or **"Refresh the context for checkout"** when needed. The skills execute the shared
-[retrieval/update workflow](../.agents/skills/project-context/references/workflow.md),
-including live selection questions and host file readers. Deterministic commands use
-a selected-source request in the consumer's ignored `.harness/runs/`:
+For example: "Build checkout context from stories 83, 90 and 91 plus this document,"
+or "Build context from all User Stories in the Checkout area." Later:
+"Refresh checkout context." The first selection stays fixed; the second discovers
+new matching stories whenever it is refreshed.
+
+## Skill behavior
+
+| Skill | Behavior |
+|---|---|
+| project-context | Build/update with saved or new selection; save locally unless only a preview is requested. |
+| context-update | Refresh the saved documents and exact IDs or criteria; accept an explicit narrower/new selection too. |
+| context-qa | Answer a business question using only selected saved evidence, with readable citations. |
+
+A new selection for an existing ADO collection replaces that collection's criteria
+and reconciles its membership. Independently selected files/collections remain.
+Neither skill creates duplicate facts on repeated refresh. Ordinary questions do
+not silently retrieve, refresh or activate snapshot-only Q&A.
+
+Context excludes repository/POM structure, code, configuration and harness
+conventions. It does not automatically traverse linked work items or download
+attachments. A business document must be explicitly supplied/selected; an ADO
+attachment must be explicitly selected from the returned attachment metadata.
+Read [the workflow](../.agents/skills/project-context/references/workflow.md) for
+request examples, criteria, format readers and extraction receipts.
+
+## Commands and saved selection
 
 ```sh
-npx --no pom-harness context retrieve --request .harness/runs/context-request.json
-npx --no pom-harness context metadata --request .harness/runs/context-request.json
 npx --no pom-harness context update --request .harness/runs/context-request.json
+npx --no pom-harness context update --id checkout-qa
+npx --no pom-harness context retrieve --id checkout-qa
 npx --no pom-harness context read --id checkout-qa
-npx --no pom-harness context search --id checkout-qa --query "payment validation"
-npx --no pom-harness context search --id checkout-qa --work-item 123
+npx --no pom-harness context search --id checkout-qa --work-item 83
 npx --no pom-harness context search --id checkout-qa --catalog sources
-npx --no pom-harness context export --id checkout-qa --out .harness/runs/context-export.json
 ```
 
-`retrieve` never saves a snapshot. `update` publishes one within the requested scope.
-`read` returns a compact captured overview. `search` returns captured evidence excerpts.
-`export` streams the complete logical snapshot into an explicitly selected new file. Exit code 2 identifies partial results or a
-required selection/repair; review the returned gaps before relying on those facts.
+`retrieve` is an unsaved preview; `update` publishes a recoverable snapshot.
+`stage` stages only selected attachment bytes for host readers.
+Use exactly one of `--request` or `--id` for these operations. Source browsing
+and search are bounded, cursor-paged and read-only. Work-item/source/topic filters
+restrict evidence. An ID query does not include neighboring or related items.
 
-## Contract and ownership
+Exact selection uses `ado.scope.workItemIds` (distinct positive numeric IDs).
+It skips project-wide enumeration and checks only those items. Missing selected
+items remain unavailable/stale, rather than silently becoming a different selection.
+Criteria use optional `scope.areaPath` plus the existing type/state policy.
+They rerun on refresh, so new matches enter and confirmed departures leave.
+Current metadata validates selectors; unknown names/IDs require repair.
 
-The consumer owns `.harness/context/<context-id>/`. Version 2 uses:
+Selection precedence is explicit request, saved context, then integration defaults
+for a new collection. Saved scope/policy persists across sessions and configuration
+drift. A supplied scope replaces the entire scope, so replacing an ID list with
+criteria requires a scope without `workItemIds`. Supplying exact IDs without a
+policy selects those IDs without inherited type/state restrictions.
 
-- `current.json`: a manifest bounded to 64 KiB, with identity, scope, counts, freshness,
-  gaps and references to the current evidence and search generation.
-- `objects/<prefix>/<sha256>.json`: immutable, scoped source records, facts, chunks,
-  paged catalogs and selection receipts. Source contributions reference shared facts;
-  only chunk objects hold original evidence text. Unchanged history shares objects.
-- `indexes/<sha256>.sqlite`: a derived Node 24 built-in SQLite FTS5 index. It requires
-  no added package, server, model download or external database.
-- `custom.json`: separately editable owner notes, sanitized before use. Each published
-  revision also retains its immutable copy, so later edits do not alter history.
-- `history/<revision>.json`: immutable manifests retaining every reachable revision.
+Policies retain `includeTypes`, `excludeTypes`, `includeStates` and
+`excludeStates`; exclusions win. Explicit empty includes mean none; absent
+includes mean unrestricted. A missing policy is not an all-items choice. Query
+criteria require explicit selection, while exact IDs already establish it.
+Metadata discovery uses `context metadata --request <request>` and its cursors.
+`context policy` saves defaults for new selections. No completion state is
+automatically excluded. Membership remains bounded to 20,000 items.
 
-JSON remains authoritative. The index is disposable and only an explicit update may
-rebuild it. Package files and reviewed knowledge are never modified. This storage
-is a derived view, not a second configuration authority. Never copy object/catalog
-references across contexts; paths, object hashes and scope bindings are verified.
+Only full content of included work items is read. Revision checks reuse complete
+unchanged content. Saved attachment selection is independent of parent revision:
+adding an attachment requires its first read even when the parent is unchanged.
+Omitted attachment selection reuses the saved list; an empty list clears it.
+Unselected relationships are not missing business requirements or coverage gaps.
 
-Each source records an explicit identity and origin, path or work-item identity,
-content hash/version, retrieval/verification dates, extraction locations, coverage,
-status and attributable contributions. Facts retain every supporting origin.
-Reviewed knowledge, current source and unreviewed observations remain distinct.
-Conflicting contributions stay visible; no source silently wins by recency.
+## Business knowledge and answers
 
-A refresh touches only selected sources in the same project/application/environment
-scope. Successfully read sources replace their previous contributions. Explicit
-removals, exclusions and departures from ADO scope withdraw that source's support;
-history remains available and independently supported facts survive. A missing file
-alone is not proof of deletion. Inaccessible, unsupported, uncertain or partially
-read sources retain their last valid contributions with a stale/partial marker.
-Only sources actually checked receive new verification metadata. Repeated unchanged
-refreshes change verification metadata only, without duplicating facts.
+The skills read descriptions, acceptance criteria and actual document content,
+then explain business areas, actors, journeys, rules, terminology and dependencies
+when supported. Original located passages remain authoritative. A summary may
+connect supported facts but cannot invent missing rules or become an independent
+source of evidence.
 
-Updates finish and validate a separate index generation, then publish an immutable
-history manifest before atomically replacing `current`. Metadata-only refreshes reuse
-the index; changed content updates only affected index rows.
-Failed writes leave the previous current snapshot usable. Partial snapshots identify
-the last complete revision and coverage gaps. An interrupted commit may leave an
-unused history record; it is safe to inspect and retry. A concurrent or interrupted
-writer lock must be investigated before removing it; never discard an active writer.
+Search returns a human-readable `citation` alongside internal evidence IDs.
+Answers use work-item titles/IDs and document names/locations, with relevant
+uncertainty. They do not expose hashes, receipt dumps or irrelevant technical
+gaps. See [Q&A examples and boundaries](context-qa.md).
 
-## ADO selection
+## Storage, provenance and recovery
 
-Keep the PAT in the consumer's ignored `.env`. The authoritative destination is
-`.harness/integrations.json`: `ado.organizationUrl`, `ado.project` (name or GUID),
-and `ado.credentialRef` (for example `AZURE_PAT`). With modern configuration, legacy
-environment destinations do not override it. Without it, existing `AZURE_ORG`/
-`AZURE_URL`, `AZURE_PROJECT` and PAT environment settings remain supported.
+The consumer owns `.harness/context/<context-id>/`. The existing version-2
+storage layout and SQLite FTS5 schema are retained:
+- `current.json`: bounded 64 KiB manifest, identity/scope and catalog/index references.
+- `objects/<prefix>/<sha256>.json`: immutable sources, facts, chunks, catalogs and selections.
+- `indexes/<sha256>.sqlite`: rebuildable local Node 24 SQLite FTS5 index.
+- `custom.json`: editable owner notes, preserved with sanitized revision history.
+- `history/<revision>.json`: immutable recoverable manifests.
 
-One PAT can access many projects; each context binds to exactly one organization and
-resolved project GUID, plus the consumer/application/environment identity. The project
-is resolved before metadata/content reads. A different configured project requires a
-different context ID. Display-name changes do not change GUID identity; configure a
-GUID if the project is frequently renamed. Local-only contexts need no ADO setup.
-Captured read/search/export use no credentials or live configuration.
+JSON remains authoritative. No server, vector store or model download is required.
+Only an explicit update can rebuild an absent/corrupt/old-recipe index. Source
+records identify selected business evidence; selection records retain exact IDs
+or criteria and explicit attachment selection. Existing unrelated evidence cannot
+enter business searches or source catalogs. Older mixed captures require explicit
+business-source selection before a full refresh; superseded history stays intact.
+The v1 migration path backs up original current/history before publishing v2.
 
-Queries are project-scoped; returned ownership is checked again. Only direct relations
-between included, available items are captured. Foreign, excluded and unavailable
-targets become gaps; their URLs never trigger another retrieval.
-`ado.context.sources` stores each context source's scope and selection policy.
-Metadata discovery reads the selected project's current types and each type's states
-on every retrieval/update. Stable reference names/IDs are preferred; display names
-are exact fallbacks. No type, state or completion category is assumed irrelevant.
-Use `context metadata --request <request>` to page every type/state before selecting
-a policy. It returns up to eight flat type/state records within 16 KiB, with type
-IDs on state records and a continuation cursor. Repeat with `--cursor` until absent;
-changed metadata or project identity invalidates the cursor. Discovery reads no
-work-item content and saves neither context nor policy. Selection/repair previews
-point to this command when their metadata is abbreviated.
+The selected organization and resolved project GUID bind ADO context before
+content reads. Credentials remain in existing ignored configuration/environment
+mechanisms. A different project requires a different context ID. Captured
+read/search/export use no credentials or live source configuration.
 
-A policy has required `excludeTypes` and `excludeStates` arrays, and optional
-`includeTypes` and `includeStates` restrictions. State rules name a type or explicitly
-use `"*"` for all types. Exclusions win; absent includes impose no restriction;
-an explicitly empty include list selects nothing. A missing policy differs from an
-explicit policy with empty exclusions. Without a supplied or saved policy, present
-live types and states grouped by type as multi-select exclusions, including an
-explicit **Exclude nothing** choice. A numbered/text reply is equivalent. No answer
-means no selection, not permission to retrieve everything. Persist that choice and
-reuse it; invocation overrides take precedence.
+Successful reads replace prior contributions. Confirmed exclusions/removals
+withdraw support; independent supporting sources survive. Inaccessible, uncertain
+or partial sources retain last valid evidence as stale. Extraction receipts bind
+to current bytes and precise locations. Local documents are rehashed; unchanged
+bytes/reader recipes reuse extraction. Owner notes are not automatically Q&A evidence.
 
-Revalidate filters against live metadata before querying content. New metadata is
-reported and follows the include/exclude semantics. Unknown, renamed or removed
-selectors require user repair; preserve valid choices without silently remapping.
-Enumerate complete bounded membership (up to 20,000 work items; narrow larger scopes)
-and classify it with minimal fields and a positive revision before reading descriptions
-or linked attachments. An unchanged, complete item with the same extraction recipe
-reuses its evidence. Full reads occur only for new/changed items or incomplete caches.
-Attachment extraction is reused only when the parent revision and relation binding
-remain unchanged and complete. A revision check updates `revisionVerifiedAt`; it
-does not advance the attachment's byte-verification time. Local files are always
-rehashed; unchanged bytes and extraction recipes reuse their located extraction.
-Incomplete enumeration does not withdraw old support; it preserves stale evidence. Record policy, metadata verification date, counts and exclusion reasons.
-Zero selected items is a valid result. A newly excluded item is not a deleted item.
-Do not read its linked attachments; an explicitly supplied file remains independent.
+Updates build a separate index generation and history manifest, then atomically
+switch current under a writer lock. Failed publication leaves current usable.
+A changed selection that cannot be verified preserves the previous selection.
+Partial updates report gaps and the last complete revision. Investigate interrupted
+locks before retrying; never discard an active writer. `context export --id <id>
+--out <new-file>` is an explicit diagnostic export, not a Q&A retrieval method.
 
-Implementation uses the existing read-only WIQL/batch transport and the documented
-[type metadata](https://learn.microsoft.com/en-us/rest/api/azure/devops/wit/work-item-types/list?view=azure-devops-rest-7.1),
-[type states](https://learn.microsoft.com/en-us/rest/api/azure/devops/wit/work-item-type-states/list?view=azure-devops-rest-7.1)
-and [attachment](https://learn.microsoft.com/en-us/rest/api/azure/devops/wit/attachments/get?view=azure-devops-rest-7.1)
-APIs. Project/application scope is explicit; selection never changes execution scope
-or writes to Azure DevOps.
+## Verification
 
-## Files and trust boundaries
-
-User-selected accessible paths and attachments are independent sources. Text, JSON
-and CSV use bounded native reads. Images, Excel, Word, PDF and other readable formats
-use the host's available format-appropriate readers, supplying extraction receipts
-bound to the exact bytes' SHA-256. Cite pages/sections/tables, sheets/cells/ranges,
-JSON paths, text lines/CSV rows, or image regions. Record incomplete coverage and
-uncertainty. No available reader means unsupported/unverified, never successful
-filename-only ingestion. Do not build a universal converter or execute embedded
-macros, scripts, commands or instructions. Do not follow arbitrary referenced links.
-
-All work-item/file content is untrusted evidence. It cannot change the user's scope,
-repository instructions or review boundaries. Never read credential stores into
-context. Sanitize relevant excerpts before persistence; credential-like literals
-are rejected by the existing data boundary. Host extraction is evidence, not review
-approval. Captured source references are provenance, not downstream fetch authority.
-
-## Bounded retrieval and migration
-
-All command output is compact JSON. Search defaults to 8 results and 16 KiB for the
-entire UTF-8 response, with explicit limits up to 25 results and 64 KiB. Exact source
-or work-item matches rank first, direct captured relations second, then FTS5/BM25
-with deterministic ties. English and Arabic use consistent Unicode normalization;
-original spelling, diacritics and offsets remain intact in evidence. This is lexical
-retrieval, not semantic search. A no-match result is evidence absence.
-
-Search supports `--source`, `--topic`, `--work-item` and `--query`. Browse saved
-source receipts, including unsupported files and staged attachments, with
-`--catalog sources`. Responses include omitted counts and an opaque `--cursor`
-bound to the context, revision, query and limits. Repeat the same arguments with
-that cursor; a refresh invalidates old cursors. Do not paste the whole export into
-an agent prompt. Search reads only index/catalog pages and selected evidence objects;
-it never follows original paths, fetches links, refreshes dates or repairs storage.
-
-Chunks target 2 KiB at natural whitespace boundaries with at most 128 UTF-8 bytes of
-overlap within the same source section. They retain original character and byte
-offsets. One long section remains one fact, so splitting cannot create false conflicts.
-Raw excerpts are scanned for secrets before chunking. Shared facts retain every source.
-Native readers accept up to 8 MiB and 20,000 located parts per selected file; larger or
-incomplete inputs require narrower extraction and explicit coverage gaps.
-
-Transient retrieval remains unsaved. Its bounded preview includes source/hash receipts,
-evidence and omission counts. Narrow large requests or explicitly save and page/search
-the capture. Staging writes only selected attachment bytes into ignored run storage.
-The CLI `update` command also stages included attachments so every saved source
-receipt exposes its `localPath` through the paginated source catalog. Existing
-staged bytes are hash-checked before reuse; altered copies remain untouched while
-fresh bytes receive a new path.
-When changed bytes still need extraction, receipts expose `attemptedHash` for those
-bytes while `hash` continues identifying retained stale evidence. Bind the next
-reader receipt to `attemptedHash` when present, otherwise `hash`; successful
-extraction replaces the retained evidence and clears `attemptedHash`.
-
-Version 1 reads remain nonmutating. The first explicit update backs up the original
-current/history files under `legacy/<original-fingerprint>/`, validates the source/fact
-mapping, then stages version 2. Legacy ADO evidence must be freshly project-verified
-and completely recaptured; ambiguous ownership or incomplete recapture stops migration
-and leaves the old current file intact. No history is automatically deleted.
-
-This release changes the CLI contract: `read` is an overview and other commands return
-summaries, not complete snapshots. Consumers needing full JSON must use explicit
-`export --out`. Existing save/refresh skills remain the entry points for updates;
-Explicitly invoked `context-qa` answers from one selected capture without following
-sources. Its evidence boundary lasts only for that request and its clarifications.
-
-## Validation scope
-
-Regression fixtures cover distinct/custom process schemas, global/per-type filters,
-missing/empty/saved policies, metadata changes, all-excluded results and classification
-before content. Consumer fixtures cover scoped/idempotent reconciliation, independent
-support, stale/partial/removal/exclusion handling, custom content, atomic recovery and
-secret exclusion. File fixtures cover structured extraction locations, content hashes,
-duplicates, changed/inaccessible/unsupported inputs and untrusted embedded content.
-Host reader limitations and live-system checks are reported separately.
-
-Run `node scripts/probes/context.mjs <new-external-consumer-directory>` for offline
-1,000/10,000-work-item and document fixtures. It records ingestion/refresh latency,
-fresh-process query latency/memory, disk size, manifest/output bounds, relevance and
-zero unchanged full-item reads in `scale-results.json`. Results are measurements of
-that machine and fixture, not universal latency guarantees.
+Offline acceptance tests cover exact-ID scope, saved criteria/new matches,
+revision reuse, explicit attachment selection, strict filters, old mixed captures,
+stale/conflicting evidence, source/project isolation, bounded pagination and
+read-only Q&A. Host-answer review separately checks readability; unit tests alone
+do not establish model behavior or live ADO access.

@@ -6,6 +6,7 @@ import {chunks} from './lib/context/model.mjs';
 import {fingerprint} from './lib/execution-core/data.mjs';
 
 const usage = `pom-harness context <retrieve|update|stage> --request <consumer-json> [--project-root <consumer>]
+pom-harness context <retrieve|update|stage> --id <context-id> [--project-root <consumer>]
 pom-harness context metadata --request <consumer-json> [--cursor <cursor>] [--project-root <consumer>]
 pom-harness context read --id <context-id> [--project-root <consumer>]
 pom-harness context search --id <context-id> [--query <text>] [--source <source-id>] [--topic <topic>] [--work-item <id>] [--limit <1-25>] [--max-bytes <4096-65536>] [--cursor <cursor>] [--project-root <consumer>]
@@ -13,8 +14,9 @@ pom-harness context search --id <context-id> --catalog sources [--cursor <cursor
 pom-harness context export --id <context-id> --out <new-consumer-file> [--project-root <consumer>]
 pom-harness context policy --source <source-id> --policy <consumer-json> [--project-root <consumer>]
 
-retrieve reads selected sources without saving; update publishes a recoverable snapshot.
-stage and update save included ADO attachment bytes under ignored .harness/runs/context/ for host readers.
+retrieve previews selected business sources; update saves or refreshes a recoverable snapshot.
+--id reuses saved documents and work-item IDs/criteria; matching new items are discovered on refresh.
+stage and update save only explicitly selected ADO attachments under ignored .harness/runs/context/.
 read returns a compact captured overview. search returns bounded captured evidence only.
 metadata pages every live ADO type/state without reading work items or saving context.
 export streams the complete logical snapshot to a new file. policy saves an explicit selection.`;
@@ -42,7 +44,7 @@ function compact(result) {
   const output = {...rest, snapshot: {contextId: snapshot.contextId, identity: snapshot.identity, scope: snapshot.scope, ...(snapshot.adoProject ? {adoProject: snapshot.adoProject} : {}), revision: snapshot.revision, status: snapshot.status, updatedAt: snapshot.updatedAt,
     counts: {sources: snapshot.sources.length, facts: snapshot.facts.length, conflicts: snapshot.facts.filter(f => f.status === 'conflicting').length, gaps: gaps.length}},
     changes: Object.fromEntries(Object.entries(changes).map(([name, values]) => [name, {count: values.length, sample: values.slice(0, 8)}])), checked: {count: checked.length, sample: checked.slice(0, 8)}, gaps: {count: gaps.length, sample: gaps.slice(0, 8)},
-    sources: {count: snapshot.sources.length, sample: receipts.slice(0, 8).map(source => Object.fromEntries(['id', 'kind', 'path', 'localPath', 'hash', 'attemptedHash', 'version', 'attachmentId', 'status', 'coverage', 'verifiedAt'].filter(key => source[key] !== undefined).map(key => [key, source[key]])))}};
+    sources: {count: snapshot.sources.length, sample: receipts.slice(0, 8).map(source => Object.fromEntries(['id', 'kind', 'title', 'name', 'path', 'availableAttachments', 'localPath', 'hash', 'attemptedHash', 'version', 'attachmentId', 'status', 'coverage', 'verifiedAt'].filter(key => source[key] !== undefined).map(key => [key, source[key]])))}};
   if (!result.saved) {
     const preview = checked.length ? snapshot.facts.filter(fact => fact.references.some(reference => selected.has(reference.sourceId))) : snapshot.facts;
     output.evidence = preview.slice(0, 8).map(fact => {const chunk = chunks(fact.text, fact.id)[0]; return {factId: fact.id, chunkId: chunk.id, excerpt: chunk.text, offsets: {start: chunk.start, end: chunk.end}, status: fact.status, references: fact.references.slice(0, 4), omittedReferences: Math.max(0, fact.references.length - 4), omittedBytes: Buffer.byteLength(fact.text) - Buffer.byteLength(chunk.text)};});
@@ -71,13 +73,14 @@ try {
   if (process.argv.slice(2).some(value => ['help', '--help', '-h'].includes(value))) {console.log(usage);}
   else {
     const {roots, args} = projectArgument(), [command, ...rest] = args, options = {};
-    const fields = command === 'search' ? ['id', 'query', 'source', 'topic', 'work-item', 'limit', 'max-bytes', 'cursor', 'catalog'] : command === 'metadata' ? ['request', 'cursor'] : command === 'export' ? ['id', 'out'] : command === 'read' ? ['id'] : command === 'policy' ? ['source', 'policy'] : ['request'];
+    const fields = command === 'search' ? ['id', 'query', 'source', 'topic', 'work-item', 'limit', 'max-bytes', 'cursor', 'catalog'] : command === 'metadata' ? ['request', 'cursor'] : command === 'export' ? ['id', 'out'] : command === 'read' ? ['id'] : command === 'policy' ? ['source', 'policy'] : ['request', 'id'];
     for (let index = 0; index < rest.length; index += 2) {
       const name = rest[index].replace(/^--/, '');
       if (!rest[index].startsWith('--') || !fields.includes(name) || options[name] !== undefined || !rest[index + 1] || rest[index + 1].startsWith('--')) throw new Error(usage);
       options[name] = rest[index + 1];
     }
-    if ((command === 'search' ? ['id'] : command === 'metadata' ? ['request'] : fields).some(name => options[name] === undefined)) throw new Error(usage);
+    const refresh = ['retrieve', 'update', 'stage'].includes(command);
+    if (refresh ? Boolean(options.request) === Boolean(options.id) : (command === 'search' ? ['id'] : command === 'metadata' ? ['request'] : fields).some(name => options[name] === undefined)) throw new Error(usage);
     let result;
     if (command === 'read') result = readContextOverview(roots, options.id);
     else if (command === 'metadata') result = metadataPage(await readContextMetadata(roots, inputJson(roots, options.request)), options.cursor);
@@ -85,7 +88,7 @@ try {
     else if (command === 'export') result = exportContext(roots, options.id, options.out);
     else if (command === 'policy') result = await saveContextPolicy(roots, options.source, inputJson(roots, options.policy));
     else if (['retrieve', 'update', 'stage'].includes(command)) {
-      const request = inputJson(roots, options.request);
+      const request = options.request ? inputJson(roots, options.request) : {version: 1, contextId: options.id};
       result = command === 'update' ? await updateContext(roots, request, {stageAttachments: true}) : await retrieveContext(roots, request, {stageAttachments: command === 'stage'});
     } else throw new Error(usage);
     if (result.metadata) result.metadataContinuation = 'Use context metadata --request <context-request> [--cursor <cursor>] for every live type/state.';
