@@ -1,5 +1,50 @@
 # Changelog
 
+## 4.0.2 — Readable business context and requirements review
+
+### Upgrade actions
+
+- Update to the 4.0.2 archive and re-run setup in each consumer project. Review
+  customized managed instructions through the existing merge process, then reload
+  skills or restart the host to discover the updated skills.
+- For captures from earlier versions, explicitly reselect the business work
+  items, documents and attachments with `project-context` and refresh before Q&A,
+  even when the old capture contains only business content. Exact work-item IDs
+  remain fixed; saved criteria discover newly matching items through
+  `context-update`. SQLite storage and retained history remain in place.
+- Existing requirements drafts remain readable. Assign explicit severity to
+  unrated older drafts before previewing or posting, and refresh affected source
+  captures before preparing a new comment. Review and approve the exact new
+  preview; older approvals and attempted deliveries are not rewritten.
+
+### Changes
+
+- Limit context capture and Q&A to explicitly selected business work items,
+  documents and attachments. Save area/type/state criteria for later refresh,
+  discover new matches and update changed evidence without adding unrelated POM,
+  harness or consumer repository content. Preserve SQLite FTS5, immutable storage,
+  independent sources, provenance and history. (#109, #110)
+- Explain application capabilities, business flows, rules and uncertainties with
+  readable source labels and citations. Keep internal storage identifiers in
+  diagnostics rather than ordinary business answers. (#109, #110)
+- Preserve conversation references across explicit `context-qa` invocations.
+  Reformat supported prior answers without a new lookup; reuse retained evidence
+  after checking the context and revision, and retrieve missing or changed support
+  narrowly. User assertions do not become source evidence. Explicit-only invocation
+  and read-only snapshot answers remain in place. (#110)
+- Review requirements in chat with editable findings, a concise summary,
+  severity-ranked rows, exact source quotations and readable labels. Support
+  requested team-member mentions and approve the exact story comment before
+  delivery. Preserve literal wording in Markdown previews and ADO comments,
+  including URLs, emphasis markers, line breaks and setext underline text.
+  Verify saved approval plans during recovery without duplicate posting.
+  (#62, #106, #107)
+- Edit existing ADO test-case titles and ordinary steps through guarded
+  `edit-cases` previews and fingerprint-bound approval. Preserve untouched XML,
+  stable IDs and execution history; validate revisions and retain per-case
+  outcomes for partial or uncertain deliveries without automatic replay.
+  (#96, #105)
+
 ## 4.0.1 — Explicit-only captured-context Q&A
 
 ### Upgrade actions
