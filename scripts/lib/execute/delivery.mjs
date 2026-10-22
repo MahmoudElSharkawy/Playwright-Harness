@@ -143,23 +143,28 @@ async function fileBugs(client, roots, executionId, view, revisions, options) {
   }
   const attachments = view.reportAttachments ?? [];
   for (const record of attachments) {consumerPath(roots, record.path); const bytes = readVerifiedEvidence({runRoot: roots.projectRoot}, record); requireThat(bytes.length <= (client.configuration.bugs?.maxAttachmentBytes ?? 2 * 1024 * 1024), 'Bug evidence exceeds the destination attachment bound.');}
-  const preview = {mode: 'dry-run', executionId, revisions, skipped, bugs: prepared.map(item => ({fingerprint: item.defect.fingerprint, type: item.type, fields: item.fields, review: item.review, schemaFingerprint: item.schemaFingerprint, duplicates: item.duplicates, revision: item.revisions, attachments}))};
-  preview.planHash = fingerprint({executionId, revisions, skipped, bugs: preview.bugs, destination: {organizationUrl: client.configuration.organizationUrl, project: client.configuration.project}});
+  const bugPreview = item => ({fingerprint: item.defect.fingerprint, type: item.type, fields: item.fields, review: item.review, schemaFingerprint: item.schemaFingerprint, duplicates: item.duplicates, revision: item.revisions, attachments});
+  const preview = {mode: 'dry-run', executionId, revisions, skipped, bugs: prepared.map(bugPreview)};
+  const planHash = () => fingerprint({executionId, revisions, skipped, bugs: preview.bugs, destination: {organizationUrl: client.configuration.organizationUrl, project: client.configuration.project}});
+  preview.planHash = planHash();
   if (!options.execute) return preview;
   if (options.approvedPlan) requireThat(options.approvedPlan === preview.planHash, 'Approved bug preview changed; review and approve the updated plan.');
   const filed = [];
   for (const item of prepared) {
     let row = item.row;
-    const itemPlanHash = fingerprint(preview.bugs.find(bug => bug.fingerprint === item.defect.fingerprint));
+    let itemPlanHash = fingerprint(preview.bugs.find(bug => bug.fingerprint === item.defect.fingerprint));
     requireThat(!row?.bodyFingerprint || row.bodyFingerprint === fingerprint(item.body), 'Previously dispatched bug content changed; reconcile its original plan before a new report.');
     requireThat(!row?.planHash || row.planHash === itemPlanHash, 'Previously dispatched bug plan changed; reconcile the original report before another delivery.');
     if (row?.state === 'COMPLETED' || row?.state === 'DUPLICATE') {filed.push({fingerprint: row.fingerprint, state: row.state, id: row.workItemId ?? null}); continue;}
     if (row && !['INTENT', 'IDENTIFIED'].includes(row.state)) {await reconcileBug(client, roots, row); save();}
     if (row?.state === 'UNCERTAIN') {
       requireThat(options.recreate === row.fingerprint, `UNCERTAIN: ${row.fingerprint}; reconcile its filing tag or use --recreate ${row.fingerprint}.`);
+      requireThat(!options.approvedPlan, 'Recreation changes the filing identity; prepare and approve a new preview before dispatch.');
       const history = [...(row.history ?? []), {...row, history: []}]; row = {fingerprint: row.fingerprint, filingId: randomUUID(), state: 'INTENT', history};
       journal.value.entries = journal.value.entries.filter(entry => entry.fingerprint !== row.fingerprint); journal.value.entries.push(row); save();
       Object.assign(item, await prepareBug(client, view, item.defect, revisions, metadata, drafts, row));
+      const index = preview.bugs.findIndex(bug => bug.fingerprint === item.defect.fingerprint);
+      preview.bugs[index] = bugPreview(item); itemPlanHash = fingerprint(preview.bugs[index]); preview.planHash = planHash();
     }
     if (!row) {row = item.intent; journal.value.entries.push(row);}
     row.planHash ??= itemPlanHash; save();
