@@ -2,6 +2,8 @@
 
 To remove an optional configured field default, edit `draft.omitFields` with its stable field reference. Required fields still fail validation when absent; narrative and durable identity fields cannot be omitted. `draft.fields` supplies explicit project-specific values and overrides ordinary configured defaults.
 
+The [recorded synthetic model exercise](../harness-tests/fixtures/bug-report-model-outputs.json) retains five exact prompts, selected sources and actual generated answers. A separate reviewer [graded all five answers](../harness-tests/fixtures/bug-report-model-grading.json) against their evidence and the skill: five passed, with one nonblocking redundant clarification. This is bounded model-output evidence, not native-host discovery, live ADO acceptance or a statistical effectiveness claim. Exact model/client build and token/cost measurements were unavailable.
+
 Use [bug-report](../.agents/skills/bug-report/SKILL.md) to turn a selected story and
 an issue described in your own words into an editable bug draft, or to review a
 defect found during manual execution. A prior harness run is not required. The

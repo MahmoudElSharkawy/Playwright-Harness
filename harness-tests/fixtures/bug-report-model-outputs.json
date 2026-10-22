@@ -1,0 +1,192 @@
+{
+  "version": 1,
+  "recordedAt": "2026-10-22T14:50:40.645Z",
+  "exercise": "Synthetic bug-report model output exercise for independent grading",
+  "producer": {
+    "agent": "/root/bug_skill",
+    "model": "Exact runtime model identifier unavailable to the delegate",
+    "client": "Codex desktop delegated agent"
+  },
+  "skill": ".agents/skills/bug-report/SKILL.md",
+  "scope": {
+    "liveExecution": false,
+    "liveAdo": false,
+    "publication": false,
+    "productionEdits": false,
+    "notes": "Answers below are actual skill-guided generated responses to the embedded synthetic prompts. Fixture-supplied context/schema/evidence is not claimed as a fresh runtime or server validation. Independent reviewer must grade outputs against sources; no self-review score supplied."
+  },
+  "scenarios": [
+    {
+      "id": "informal-story-intake",
+      "source": {
+        "story": {
+          "id": "S1",
+          "revision": 3,
+          "acceptance": "When a pending order is cancelled, its paid invoice must remain listed on the order details and reserved stock must be released."
+        },
+        "userAccount": "I opened a pending order with a paid invoice, clicked Cancel, and then the paid invoice link was gone from the order details. I did not check whether the invoice record was deleted or whether stock was released.",
+        "environment": null,
+        "priorHarnessRun": null,
+        "attachments": []
+      },
+      "prompt": "Use the bug-report skill. Story S1 revision 3 and my description are supplied above. Please turn this into a clear bug draft I can edit. I have no prior harness run.",
+      "answer": "Draft for review; the observation is user-reported.\n\n| Field | Proposed value |\n|---|---|\n| Title | Paid invoice link disappears from order details after cancelling a pending order |\n| Description | Cancelling a pending order reportedly removes its paid invoice link from the order details. S1 requires the paid invoice to remain listed. Whether the invoice record itself was deleted has not been established. |\n| Source | S1, revision 3, supplied acceptance criterion. |\n| Prerequisites | A pending order with a paid invoice listed on its details. |\n| Steps to reproduce | 1. Open that pending order's details.<br>2. Click Cancel.<br>3. Inspect the paid invoice link on the order details. |\n| Expected result | The paid invoice remains listed after cancellation, as required by S1 revision 3. |\n| Actual result | The user reports that the paid invoice link disappears. Invoice-record deletion and stock release were not checked. |\n| Environment/build | Not supplied. |\n| Confirmation | User-reported; agent not run. Reproduction frequency unknown. |\n| Attachments | None supplied. |\n| Destination fields | Project/type metadata has not been supplied or validated. Required/custom fields remain unresolved. |\n\nPlease supply the affected environment/build and confirm whether these are the exact steps you used. You can edit any draft detail. If existing evidence is available, we can reuse it; otherwise guided reproduction can confirm the display issue and collect evidence before final review. No execution, server validation or filing has occurred."
+    },
+    {
+      "id": "missing-current-source-conflicting-expectation",
+      "source": {
+        "availableExcerpt": {
+          "storyId": "S22",
+          "revision": 7,
+          "text": "Paid invoices must be retained and remain visible after order cancellation."
+        },
+        "currentStory": {
+          "availability": "unavailable",
+          "revision": null
+        },
+        "userAccount": "I cancel a pending order and its paid invoice stays visible. I think cancelling should delete the paid invoice.",
+        "priorHarnessRun": null,
+        "attachments": []
+      },
+      "prompt": "Draft a bug against S22 saying cancellation should delete the paid invoice. The latest story cannot be opened; only the supplied revision-7 excerpt is available. I opened a pending order, clicked Cancel, and the invoice stayed visible.",
+      "answer": "The expected result is unresolved: your proposed deletion behavior conflicts with the supplied S22 revision-7 excerpt. The current story is unavailable, so this is a provisional report, not an established defect.\n\n| Field | Working draft |\n|---|---|\n| Title | Paid invoice remains visible after order cancellation — expected behavior needs confirmation |\n| Description | The user expects cancellation to delete the paid invoice, but the available revision-7 excerpt requires it to remain visible. Current requirement authority has not been confirmed. |\n| Source | Supplied S22 revision 7 excerpt; latest revision unavailable. |\n| Prerequisites | A pending order with a visible paid invoice, as described by the user. |\n| Steps to reproduce | 1. Open the pending order.<br>2. Click Cancel.<br>3. Check whether the paid invoice remains visible. |\n| Expected result | Unresolved. Revision 7 says retain the visible invoice; the user proposes deleting it. The proposed change has not been accepted as a requirement. |\n| Actual result | The user reports that the paid invoice remains visible. This agrees with the supplied revision-7 excerpt. |\n| Environment/build | Unknown. |\n| Confirmation | User-reported; agent not run. Product-defect classification unresolved. |\n| Attachments | None supplied. |\n| Destination fields | Not discovered or validated. |\n\nWhich current accepted requirement or authorized decision requires paid invoices to be deleted? Until that is resolved, keep this draft provisional. Editing or approving the wording cannot change the recorded requirement. No execution, source refresh, server validation or filing has occurred."
+    },
+    {
+      "id": "edited-draft-custom-schema",
+      "source": {
+        "story": {
+          "id": "S1",
+          "revision": 3,
+          "acceptance": "When a pending order is cancelled, its paid invoice must remain listed on the order details."
+        },
+        "previousDraft": {
+          "title": "Cancelling an order deletes its invoice",
+          "actual": "Invoice deleted after cancellation.",
+          "confirmation": {
+            "user": "reported",
+            "agent": "not-run"
+          }
+        },
+        "correction": "The invoice still exists; its link disappears until page reload. Change the title and actual result accordingly. Priority should be Planned. Leave Component blank until I confirm it.",
+        "schemaFixture": {
+          "project": "BillingLab",
+          "workItemType": "Problem",
+          "fields": [
+            {
+              "referenceName": "System.Title",
+              "name": "Title",
+              "required": true,
+              "type": "string"
+            },
+            {
+              "referenceName": "Custom.Component",
+              "name": "Component",
+              "required": true,
+              "type": "string",
+              "allowedValues": [
+                "Billing",
+                "Orders"
+              ]
+            },
+            {
+              "referenceName": "Custom.Priority",
+              "name": "Priority",
+              "required": true,
+              "type": "string",
+              "allowedValues": [
+                "Immediate",
+                "Planned",
+                "Backlog"
+              ]
+            }
+          ],
+          "severityField": false,
+          "liveValidated": false
+        },
+        "attachments": []
+      },
+      "prompt": "Apply my correction to the prior draft and show the complete revised bug table. Use the supplied BillingLab Problem field fixture; it has no Severity field and Priority choices are Immediate, Planned and Backlog. Do not file yet.",
+      "answer": "Revised draft: the reported failure is a temporarily missing invoice link, not established invoice deletion. The original account remains in history.\n\n| Field | Revised value |\n|---|---|\n| Title | Paid invoice link disappears until reload after order cancellation |\n| Description | After cancellation, the paid invoice still exists but its link reportedly disappears from the order details until the page is reloaded. S1 requires the paid invoice to remain listed. |\n| Source | S1, revision 3, supplied acceptance criterion. |\n| Prerequisites | A pending order with a paid invoice visible on its details. |\n| Steps to reproduce | 1. Open the pending order's details.<br>2. Cancel the order.<br>3. Inspect its paid invoice link.<br>4. Reload the page and inspect the link again. |\n| Expected result | The paid invoice remains listed after cancellation. |\n| Actual result | The user reports that the invoice link disappears after cancellation and reappears after page reload; the invoice itself still exists. |\n| Environment/build | Unknown. |\n| Confirmation | User-reported; agent not run. |\n| Attachments | None supplied. |\n| Destination/type | BillingLab / Problem, from the supplied metadata fixture. |\n| Component — required | Missing. Available fixture choices: Billing or Orders. |\n| Priority — required | Planned, matching the user's correction and the fixture's allowed values. |\n\nComponent remains unresolved, so this draft is not ready to file. Which Component applies? No Severity field is added because the supplied fixture has none. Actual destination metadata, conditional rules and server validation have not been checked; the fixture is not proof of live validation. No execution or filing has occurred."
+    },
+    {
+      "id": "existing-api-db-evidence-no-rerun",
+      "source": {
+        "story": {
+          "id": "API8",
+          "revision": 2,
+          "acceptance": "Replaying a transfer request with the same idempotency key and payload must return the original transfer and must not create another transfer."
+        },
+        "userAccount": "I confirmed a replay creates a second transfer.",
+        "existingEvidenceFixture": {
+          "build": "api-b42",
+          "environment": "staging",
+          "capturedAt": "2026-10-22T10:00:00Z",
+          "origin": "user",
+          "context": "One initial request followed by one controlled replay with identical payload and idempotency key fixture-key-42.",
+          "records": [
+            {
+              "reference": "request-response.json",
+              "kind": "api",
+              "content": "Initial response: transfer T100. Replay response: a new transfer T101, with the same supplied idempotency key and payload.",
+              "priorReview": "Fixture declares relevance/privacy reviewed; original bytes and hashes are not provided to this model exercise."
+            },
+            {
+              "reference": "transfer-query.txt",
+              "kind": "database",
+              "content": "Read-only query in the same controlled reproduction returns T100 and T101 for fixture-key-42.",
+              "priorReview": "Fixture declares relevance/privacy reviewed; original bytes and hashes are not provided to this model exercise."
+            }
+          ]
+        },
+        "confirmation": {
+          "user": "confirmed",
+          "agent": "not-run"
+        },
+        "schemaFixture": null
+      },
+      "prompt": "Use API8 revision 2 and the existing API/DB evidence supplied above to draft the bug. I already confirmed this in staging on api-b42. Please don't run it again just to obtain a screenshot.",
+      "answer": "The supplied API/DB evidence is sufficient to draft this report; another run or a screenshot is unnecessary. Existing artifact bytes/hashes still need the normal eligibility checks before final delivery.\n\n| Field | Proposed value |\n|---|---|\n| Title | Replaying a transfer request with the same idempotency key creates a second transfer |\n| Description | In the supplied controlled reproduction, a replay with the original payload and idempotency key returned T101 instead of the original T100. The corresponding query reports both transfers for that key. |\n| Source | API8, revision 2, supplied acceptance criterion. |\n| Prerequisites | The staging API on build api-b42; the same transfer payload and fixture-key-42 reused for the replay. |\n| Steps to reproduce | 1. Submit the initial transfer request.<br>2. Retain its payload, idempotency key and returned transfer T100.<br>3. Replay the request with the identical payload and key.<br>4. Compare the response with T100 and inspect the supplied read-only query result for that key. |\n| Expected result | The replay returns T100 and creates no additional transfer, as required by API8 revision 2. |\n| Actual result | The supplied user evidence reports a new transfer T101 and two matching query rows, T100 and T101. |\n| Environment/build | Staging / api-b42; supplied capture time 2026-10-22 10:00 UTC. |\n| Confirmation | User-confirmed; agent not run. One supplied controlled replay, not an unbiased historical failure rate. |\n| Attachment candidates | Reuse request-response.json and transfer-query.txt. No screenshot required. This exercise has not opened their bytes or verified their hashes. |\n| Destination fields | Actual project/type schema and required/custom values remain unvalidated. |\n\nKeep the evidence's user origin and supplied capture context. Reuse the existing artifacts through normal privacy, relevance, hash and destination checks before the final approval preview. No new execution, live schema validation or filing has occurred."
+    },
+    {
+      "id": "inconclusive-reproduction-primary-versus-cleanup",
+      "source": {
+        "story": {
+          "id": "PAY9",
+          "revision": 4,
+          "acceptance": "A payment request with amount 0 must be rejected with HTTP 400 and must not create a payment."
+        },
+        "userAccount": "Sometimes zero-value payment requests return a server error.",
+        "diagnosticFixture": {
+          "environment": "qa",
+          "build": "payments-b17",
+          "sameRequestAndConfiguration": true,
+          "selection": "Two bounded diagnostic attempts, not ordinary historical sampling.",
+          "attempts": [
+            {
+              "identity": "diag-1",
+              "sequence": "first attempt",
+              "responseStatus": 500,
+              "paymentCreationChecked": false
+            },
+            {
+              "identity": "diag-2",
+              "sequence": "retry",
+              "responseStatus": 400,
+              "paymentCreationChecked": false
+            }
+          ],
+          "cleanup": {
+            "afterAttempt": "diag-2",
+            "failure": "Cleanup database connection timed out.",
+            "productCauseEstablished": false
+          },
+          "origin": "supplied agent execution history; no execution performed in this model exercise"
+        },
+        "attachments": [],
+        "schemaFixture": null
+      },
+      "prompt": "Refine a bug draft using PAY9 revision 4 and these supplied diagnostic results: first request got 500, retry got 400, then database cleanup timed out. Can we call it a stable reproduction or use the cleanup timeout as the bug's actual result?",
+      "answer": "Neither conclusion is supported. The supplied primary discrepancy is HTTP 500 for a request that should return 400. The retry returned 400; the cleanup timeout is a separate secondary failure. Stable reproduction and root cause remain unproven.\n\n| Field | Provisional draft |\n|---|---|\n| Title | Zero-value payment request returned HTTP 500 instead of HTTP 400 in a diagnostic attempt |\n| Description | Supplied diagnostic history records HTTP 500 on the first zero-value request and HTTP 400 on the retry, using the same stated build/configuration. A later cleanup database timeout does not establish the cause of the initial API response. |\n| Source | PAY9, revision 4, supplied acceptance criterion. |\n| Prerequisites | QA / payments-b17 and the diagnostic request with amount 0. Other fixture details remain unknown. |\n| Steps to reproduce | 1. Submit the payment request with amount 0.<br>2. Record the response status.<br>3. Verify separately whether a payment was created; this check is missing from the supplied results. |\n| Expected result | HTTP 400 and no created payment, as required by PAY9 revision 4. |\n| Actual result | diag-1 returned HTTP 500; diag-2 returned HTTP 400. Payment creation was not checked. |\n| Environment/build | QA / payments-b17, from supplied diagnostic records. |\n| Confirmation | User reports intermittent behavior. Supplied reproduction is inconclusive/mixed; this model performed no execution. |\n| Frequency | One HTTP-status failure in two supplied diagnostic attempts, distinguishing first attempt from retry. This selected diagnostic sample is not a general failure rate. |\n| Separate cleanup issue | Database cleanup connection timeout after diag-2; ownership/effects require reconciliation before further attempts. |\n| Attachments | No artifact bytes supplied; evidence eligibility has not been checked. |\n| Destination fields | Required/custom fields and server rules remain unvalidated. |\n\nRetain both attempts and the cleanup error. Route uncertain attribution and cleanup reconciliation to maintain-test within the existing investigation/repair budget; do not rerun automatically or count the retry as automation acceptance. Keep the report provisional until missing evidence and classification are resolved. No new execution, schema validation or filing has occurred."
+    }
+  ]
+}
