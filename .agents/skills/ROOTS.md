@@ -20,6 +20,7 @@ and mutable state. Never derive consumer paths from a skill's installation direc
 | `.harness/knowledge/ui/` | Reviewed UI facts |
 | `.harness/knowledge-candidates/` | Unreviewed observations, separate from reviewed knowledge |
 | `.harness/runs/` | Consumer run outputs and evidence |
+| `.harness/runs/<report>/bug-report/` | Editable bug state, immutable revisions/previews and approved delivery bindings |
 
 Install, update and configure the harness with the [harness-setup](harness-setup/SKILL.md)
 skill (`npx --no pom-harness setup` in the consumer). Existing consumer instructions,

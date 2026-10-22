@@ -46,12 +46,17 @@ export function validateAdoConfiguration(input) {
   if (input.automationField !== undefined) requireValue(/^Custom\.[A-Za-z][A-Za-z0-9_]*$/.test(input.automationField), 'Optional automation field must be a Custom field reference.');
   if (input.planId !== undefined) adoId(input.planId);
   if (input.bugs !== undefined) {
-    keys(input.bugs, ['areaPath', 'iterationPath', 'pathsFrom', 'assignedTo', 'tags', 'storyLink', 'fields', 'maxAttachmentBytes'], 'ADO bug configuration');
+    keys(input.bugs, ['areaPath', 'iterationPath', 'pathsFrom', 'assignedTo', 'tags', 'storyLink', 'fields', 'maxAttachmentBytes', 'workItemType', 'fieldMap'], 'ADO bug configuration');
+    if (input.bugs.workItemType !== undefined) requireValue(typeof input.bugs.workItemType === 'string' && input.bugs.workItemType.trim() && input.bugs.workItemType.length <= 150 && !/[\/\\?#\r\n\0]/.test(input.bugs.workItemType), 'Invalid defect work-item type.');
+    if (input.bugs.fieldMap !== undefined) {
+      keys(input.bugs.fieldMap, ['title', 'description', 'reproSteps', 'expected', 'actual'], 'ADO bug field mapping');
+      requireValue(Object.values(input.bugs.fieldMap).every(value => typeof value === 'string' && /^[A-Za-z][A-Za-z0-9_.]{0,199}$/.test(value)), 'Bug field mappings require stable field references.');
+    }
     for (const name of ['areaPath', 'iterationPath', 'assignedTo']) if (input.bugs[name] !== undefined) requireValue(typeof input.bugs[name] === 'string' && input.bugs[name].trim() && input.bugs[name].length <= 512 && !/[\r\n\0]/.test(input.bugs[name]), 'Invalid bug field default.');
     if (input.bugs.pathsFrom !== undefined) requireValue(['case', 'story'].includes(input.bugs.pathsFrom), 'Bug pathsFrom must be case or story.');
     if (input.bugs.storyLink !== undefined) requireValue(typeof input.bugs.storyLink === 'boolean', 'Bug storyLink must be boolean.');
     if (input.bugs.tags !== undefined) requireValue(Array.isArray(input.bugs.tags) && input.bugs.tags.length <= 30 && input.bugs.tags.every(tag => typeof tag === 'string' && tag.trim() && tag.length <= 100 && !/[;\r\n]/.test(tag)), 'Invalid bug tags.');
-    if (input.bugs.fields !== undefined) requireValue(input.bugs.fields && !Array.isArray(input.bugs.fields) && Object.entries(input.bugs.fields).every(([name, value]) => /^[A-Za-z][A-Za-z0-9_.]+$/.test(name) && (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean')), 'Bug fields must be scalar field defaults.');
+    if (input.bugs.fields !== undefined) requireValue(input.bugs.fields && !Array.isArray(input.bugs.fields) && Object.keys(input.bugs.fields).length <= 200 && Object.entries(input.bugs.fields).every(([name, value]) => /^[A-Za-z][A-Za-z0-9_.]{0,199}$/.test(name) && (typeof value === 'string' && value.length <= 32768 && !value.includes('\0') || typeof value === 'number' && Number.isFinite(value) || typeof value === 'boolean')), 'Bug fields must be bounded scalar field defaults.');
     if (input.bugs.maxAttachmentBytes !== undefined) requireValue(Number.isSafeInteger(input.bugs.maxAttachmentBytes) && input.bugs.maxAttachmentBytes > 0 && input.bugs.maxAttachmentBytes <= 8 * 1024 * 1024, 'Bug attachments must be bounded to 8 MiB.');
   }
   const timeoutMs = input.timeoutMs ?? 30000, maxResponseBytes = input.maxResponseBytes ?? 2 * 1024 * 1024;

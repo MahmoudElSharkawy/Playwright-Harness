@@ -11,6 +11,9 @@ import {collectExecution, executionDefects, deliverableDefects, readVerifiedEvid
 import {checkSourceRevisions} from './source.mjs';
 import {readBounded, writeJson, ownedFile} from './storage.mjs';
 import {withTransition} from './lock.mjs';
+import {consumerPath} from '../consumer-paths.mjs';
+import {digest} from '../execution-core/data.mjs';
+import {loadBugSchema, inspectBugFields, allowedFieldValue} from '../integrations/bug-fields.mjs';
 
 const quote = value => `'${String(value).replaceAll("'", "''")}'`;
 const wiqlTag = tag => `SELECT [System.Id] FROM WorkItems WHERE [System.TeamProject] = @project AND [System.Tags] CONTAINS ${quote(tag)}`;
@@ -32,12 +35,7 @@ async function taggedItems(client, tag) {
   const items = []; for (const item of result.workItems) {const found = await workItem(client, item.id); if (tagsOf(found).includes(tag)) items.push(found);} return items;
 }
 async function bugMetadata(client) {
-  const category = await client.cachedRead('wit/workitemtypecategories/Microsoft.BugCategory?api-version=7.1');
-  requireThat(String(category.referenceName).toLowerCase() === 'microsoft.bugcategory' && Array.isArray(category.workItemTypes) && category.workItemTypes.length, 'ADO Bug category is unavailable.');
-  const type = category.defaultWorkItemType?.name ?? category.workItemTypes[0].name;
-  requireThat(typeof type === 'string' && type.trim(), 'ADO Bug category has no work-item type.');
-  const fields = await client.cachedRead(`wit/workitemtypes/${encodeURIComponent(type)}/fields?$expand=All&api-version=7.1`), states = await client.cachedRead(`wit/workitemtypes/${encodeURIComponent(type)}/states?api-version=7.1`);
-  requireThat(Array.isArray(fields.value) && Array.isArray(states.value), 'ADO Bug metadata is incomplete.'); return {type, fields: fields.value, states: states.value};
+  return loadBugSchema(client, {refresh: true});
 }
 async function validatePath(client, group, path) {
   if (!path) return;
@@ -48,57 +46,49 @@ async function validatePath(client, group, path) {
   requireThat(nodeParts[1]?.toLowerCase() === structure && [nodeParts[0], ...nodeParts.slice(2)].join('\\').toLowerCase() === path.toLowerCase(), 'ADO area/iteration path did not match.');
 }
 export function draftMetadata(drafts, fp, defaults, title) {
-  const input = drafts?.[fp] ?? {}; requireThat(input && typeof input === 'object' && !Array.isArray(input) && Object.keys(input).every(key => ['file', 'title', 'severity', 'priority', 'notes'].includes(key)) && (input.file === undefined || typeof input.file === 'boolean'), `Invalid bug draft: ${fp}.`);
+  const input = drafts?.[fp] ?? {}; requireThat(input && typeof input === 'object' && !Array.isArray(input) && Object.keys(input).every(key => ['file', 'title', 'severity', 'priority', 'notes', 'description', 'prerequisites', 'steps', 'expected', 'actual', 'fields', 'omitFields'].includes(key)) && (input.file === undefined || typeof input.file === 'boolean'), `Invalid bug draft: ${fp}.`);
   const generated = title.length <= 255 ? title : `${title.slice(0, 252).replace(/[\uD800-\uDBFF]$/, '')}...`;
   const output = {title: input.title ?? generated, ...(input.severity === undefined ? {} : {severity: input.severity}), ...(input.priority === undefined ? {} : {priority: input.priority}), notes: input.notes ?? ''};
-  requireThat(typeof output.title === 'string' && output.title.trim() && output.title.length <= 255 && typeof output.notes === 'string' && output.notes.length <= 4000, `Invalid bug title or notes: ${fp}.`); return output;
+  requireThat(typeof output.title === 'string' && output.title.trim() && output.title.length <= 255 && typeof output.notes === 'string' && output.notes.length <= 4000, `Invalid bug title or notes: ${fp}.`);
+  for (const name of ['description', 'expected', 'actual']) if (input[name] !== undefined) {requireThat(typeof input[name] === 'string' && input[name].length <= 16000, `Invalid bug draft ${name}.`); output[name] = input[name];}
+  for (const name of ['prerequisites', 'steps']) if (input[name] !== undefined) {requireThat(Array.isArray(input[name]) && input[name].length <= 100 && input[name].every(value => typeof value === 'string' && value.length <= 4000), `Invalid bug draft ${name}.`); output[name] = input[name];}
+  if (input.fields !== undefined) {requireThat(input.fields && !Array.isArray(input.fields) && Object.entries(input.fields).length <= 100 && Object.entries(input.fields).every(([name, value]) => /^[A-Za-z][A-Za-z0-9_.]{0,149}$/.test(name) && ['string', 'number', 'boolean'].includes(typeof value) && String(value).length <= 16000), 'Invalid bug draft fields.'); output.fields = input.fields;}
+  if (input.omitFields !== undefined) {requireThat(Array.isArray(input.omitFields) && input.omitFields.length <= 100 && input.omitFields.every(name => typeof name === 'string' && /^[A-Za-z][A-Za-z0-9_.]{0,149}$/.test(name)), 'Invalid omitted bug fields.'); output.omitFields = input.omitFields;}
+  return output;
 }
-export function allowedFieldValue(spec, value) {
-  if (/^identity$/i.test(spec.type ?? '') || spec.isIdentity) {
-    const identities = input => (typeof input === 'string' ? [input] : input && typeof input === 'object' ? [input.id, input.uniqueName, input.descriptor, input.displayName].filter(item => typeof item === 'string') : []).map(item => item.toLowerCase());
-    const supplied = new Set(identities(value)); return spec.allowedValues.filter(item => identities(item).some(identity => supplied.has(identity))).length === 1;
-  }
-  const normalize = input => {
-    if (/^(?:picklist)?(?:integer|double)$/i.test(spec.type ?? '')) {if (typeof input !== 'number' && typeof input !== 'string' || String(input).trim() === '') return null; const number = Number(input); return Number.isFinite(number) && (!/integer$/i.test(spec.type) || Number.isInteger(number)) ? number : null;}
-    if (/^boolean$/i.test(spec.type ?? '')) return input === true || input === 'true' ? true : input === false || input === 'false' ? false : null;
-    if (/^identity$/i.test(spec.type ?? '') || spec.isIdentity) return typeof input === 'object' && input ? input.id ?? input.uniqueName ?? input.descriptor ?? input.displayName : input;
-    return input;
-  };
-  const normalized = normalize(value); return normalized !== null && spec.allowedValues.some(item => normalize(item) === normalized);
-}
+export {allowedFieldValue} from '../integrations/bug-fields.mjs';
 async function prepareBug(client, view, defect, revisions, metadata, drafts, intent) {
   const defaults = client.configuration.bugs ?? {}, edited = draftMetadata(drafts, defect.fingerprint, defaults, defect.title), sourceCase = view.source.cases.find(item => item.id === defect.caseId), changed = revisions.find(item => item.caseId === defect.caseId);
-  const fields = {...defaults.fields, 'System.Title': edited.title, 'System.Tags': [...(defaults.tags ?? []), defect.fingerprint, `harness-filing-${intent.filingId.slice(0, 8)}`].join('; ')};
+  const fields = {...defaults.fields, ...edited.fields, [metadata.mappings.title]: edited.title, 'System.Tags': [...(defaults.tags ?? []), defect.fingerprint, `harness-filing-${intent.filingId.slice(0, 8)}`].join('; ')};
   let paths = {};
   if (defaults.pathsFrom) {
     requireThat(defaults.pathsFrom !== 'story' || view.source.scope.kind === 'story', 'pathsFrom:story requires story scope.');
     const parent = await workItem(client, defaults.pathsFrom === 'story' ? view.source.scope.storyId : defect.caseId); paths = parent.fields;
   }
-  fields['System.AreaPath'] = defaults.areaPath ?? paths['System.AreaPath'] ?? (await client.projectIdentity()).name;
-  fields['System.IterationPath'] = defaults.iterationPath ?? paths['System.IterationPath'] ?? (await client.projectIdentity()).name;
-  if (defaults.assignedTo) fields['System.AssignedTo'] = defaults.assignedTo;
+  for (const [name, configured] of [['System.AreaPath', defaults.areaPath], ['System.IterationPath', defaults.iterationPath]]) if (metadata.fields.some(field => field.referenceName === name)) fields[name] ??= configured ?? paths[name] ?? (await client.projectIdentity()).name;
+  if (defaults.assignedTo) fields['System.AssignedTo'] ??= defaults.assignedTo;
   if (edited.priority !== undefined) fields['Microsoft.VSTS.Common.Priority'] = edited.priority;
   if (edited.severity !== undefined) fields['Microsoft.VSTS.Common.Severity'] = edited.severity;
   const h = escapeHtml, sourceScenario = view.source.scenarios.find(item => item.id === defect.scenarioId);
-  fields['Microsoft.VSTS.TCM.ReproSteps'] = `<p>Harness manual execution ${h(view.execution.id)}; case ${defect.caseId}; executed revision ${sourceCase.rev}; current revision ${changed?.current ?? sourceCase.rev}${changed ? '; SOURCE CHANGED' : ''}.</p><p>${h(defect.status)} (${h(defect.method)})</p><pre>${h(sourceScenario.steps.map(step => `${step.position}. ${step.action}\nExpected: ${step.expected.join('; ')}`).join('\n'))}</pre><p>${h(edited.notes)}</p><pre>${h(JSON.stringify(defect.occurrences))}</pre>${changed ? `<pre>${h(JSON.stringify(changed))}</pre>` : ''}`;
-  for (const [name, value] of Object.entries(fields)) {
-    const spec = metadata.fields.find(field => field.referenceName === name); requireThat(spec && spec.readOnly !== true, `Bug field ${name} is unavailable or read-only.`);
-    if (spec.allowedValues?.length) {
-      if (!spec.type) {const field = await client.cachedRead(`wit/fields/${encodeURIComponent(name)}?api-version=7.1`); requireThat(field.referenceName === name && typeof field.type === 'string', `Bug field ${name} lacks type metadata.`); spec.type = field.type; spec.isIdentity = field.isIdentity === true;}
-      requireThat(allowedFieldValue(spec, value), `Bug field ${name} is outside its allowed values.`);
-    }
-  }
-  for (const spec of metadata.fields.filter(field => field.alwaysRequired && field.referenceName.startsWith('Custom.') && specMissing(field, fields))) throw new Error(`Required bug field ${spec.referenceName} needs a configured default.`);
+  const originalSteps = sourceScenario?.steps.map(step => `${step.position}. ${step.action}\nExpected: ${step.expected.join('; ')}`).join('\n') ?? '';
+  const narrative = view.reportContext ? `<pre>${h(JSON.stringify(view.reportContext))}</pre>` : `<p>Harness manual execution ${h(view.execution.id)}; case ${defect.caseId}; executed revision ${sourceCase.rev}; current revision ${changed?.current ?? sourceCase.rev}${changed ? '; SOURCE CHANGED' : ''}.</p><p>${h(defect.status)} (${h(defect.method)})</p>`;
+  const content = `${narrative}<p>${h(edited.description ?? '')}</p><h3>Prerequisites</h3><pre>${h((edited.prerequisites ?? []).join('\n'))}</pre><h3>Steps to reproduce</h3><pre>${h(edited.steps?.map((step, index) => `${index + 1}. ${step}`).join('\n') ?? originalSteps)}</pre><h3>Expected</h3><pre>${h(edited.expected ?? originalSteps)}</pre><h3>Actual</h3><pre>${h(edited.actual ?? JSON.stringify(defect.occurrences))}</pre><p>${h(edited.notes)}</p>${changed ? `<pre>${h(JSON.stringify(changed))}</pre>` : ''}`;
+  requireThat(metadata.mappings.reproSteps || metadata.mappings.description, 'Configure an available bug narrative field mapping.');
+  fields[metadata.mappings.reproSteps ?? metadata.mappings.description] = content;
+  if (metadata.mappings.description && metadata.mappings.description !== metadata.mappings.reproSteps) fields[metadata.mappings.description] = content;
+  for (const name of ['expected', 'actual']) if (metadata.mappings[name] && edited[name] !== undefined) {const spec = metadata.fields.find(field => field.referenceName === metadata.mappings[name]); fields[metadata.mappings[name]] = /^html$/i.test(spec?.type ?? '') ? `<pre>${h(edited[name])}</pre>` : edited[name];}
+  for (const name of edited.omitFields ?? []) {requireThat(!['System.Tags', ...Object.values(metadata.mappings)].includes(name), 'Cannot omit bug narrative or durable identity fields.'); delete fields[name];}
+  const inspection = inspectBugFields(metadata, fields);
+  if (!inspection.ready) {const details = inspection.problems.map(problem => problem.code === 'allowed-value' ? `Bug field ${problem.field} is outside its allowed values.` : ['unavailable', 'read-only'].includes(problem.code) ? `Bug field ${problem.field} is unavailable or read-only.` : problem.code === 'required' ? `Required bug field ${problem.field} needs a supplied value or configured default.` : `${problem.field}:${problem.code}`); const error = new Error(`Bug fields need review: ${details.join(' ')}`); error.fieldProblems = inspection.problems; error.fieldReview = inspection.review; throw error;}
   await validatePath(client, 'areas', fields['System.AreaPath']); await validatePath(client, 'iterations', fields['System.IterationPath']);
-  const duplicates = await taggedItems(client, defect.fingerprint), completedStates = new Set(metadata.states.filter(state => state.category === 'Completed' || state.category === 'Removed').map(state => state.name));
+  const duplicates = (await taggedItems(client, defect.fingerprint)).filter(item => !tagsOf(item).includes(`harness-filing-${intent.filingId.slice(0, 8)}`)), completedStates = new Set(metadata.states.filter(state => state.category === 'Completed' || state.category === 'Removed').map(state => state.name));
   const open = duplicates.filter(item => !completedStates.has(item.fields['System.State'])), closed = duplicates.filter(item => completedStates.has(item.fields['System.State']));
   const body = Object.entries(fields).map(([name, value]) => ({op: 'add', path: `/fields/${name}`, value}));
   for (const item of closed) body.push({op: 'add', path: '/relations/-', value: {rel: 'System.LinkTypes.Related', url: `${client.configuration.organizationUrl}/_apis/wit/workitems/${item.id}`}});
   if (defaults.storyLink && view.source.scope.kind === 'story') {await workItem(client, view.source.scope.storyId); body.push({op: 'add', path: '/relations/-', value: {rel: 'System.LinkTypes.Related', url: `${client.configuration.organizationUrl}/_apis/wit/workitems/${view.source.scope.storyId}`}});}
-  await client.validateWorkItem(metadata.type, body);
-  return {defect, type: metadata.type, body, fields, duplicates: {open: open.map(item => item.id), closed: closed.map(item => item.id)}, revisions: changed ?? null};
+  await client.validateWorkItem(metadata.type, body, {fresh: true});
+  return {defect, type: metadata.type, body, fields, fieldSpecifications: metadata.fields, schemaFingerprint: metadata.fingerprint, review: inspection.review, duplicates: {open: open.map(item => item.id), closed: closed.map(item => item.id)}, revisions: changed ?? null};
 }
-const specMissing = (field, fields) => !Object.hasOwn(fields, field.referenceName) && field.defaultValue === undefined;
 async function reconcileBug(client, roots, row) {
   if (!row.workItemId) {const acknowledged = acknowledgedId(roots, row.receipt, 'create-bug', 'workItemId', row.requestFingerprint); if (acknowledged) row.workItemId = acknowledged;}
   if (row.workItemId) {const item = await workItem(client, row.workItemId); requireThat(tagsOf(item).includes(`harness-filing-${row.filingId.slice(0, 8)}`), 'Acknowledged bug has different filing identity.'); row.state = 'IDENTIFIED'; return;}
@@ -108,10 +98,11 @@ async function reconcileBug(client, roots, row) {
 async function attachEvidence(client, roots, delivery, row, prepared, view, save, options) {
   row.attachments ??= [];
   const used = new Set(); let complete = true;
-  for (const occurrence of prepared.defect.occurrences) {
+  const selected = view.reportAttachments ? view.reportAttachments.map(record => ({record, evidenceRoots: {runRoot: roots.projectRoot}})) : prepared.defect.occurrences.flatMap(occurrence => {
     const run = view.runs.find(item => item.runId === occurrence.runId && item.state === 'ASSESSED');
-    const candidates = run.result.evidence.filter(record => record.kind === 'screenshot' && (record.identity.invocationId === prepared.defect.stepId || occurrence.evidenceIds.includes(record.id)));
-    for (const record of candidates.slice(0, 3)) {
+    return run.result.evidence.filter(record => record.kind === 'screenshot' && (record.identity.invocationId === prepared.defect.stepId || occurrence.evidenceIds.includes(record.id))).slice(0, 3).map(record => ({record, evidenceRoots: run.roots}));
+  });
+    for (const {record, evidenceRoots} of selected) {
       if (used.has(record.sha256) || record.bytes > (client.configuration.bugs?.maxAttachmentBytes ?? 2 * 1024 * 1024)) continue; used.add(record.sha256);
       let attachment = row.attachments.find(item => item.sha256 === record.sha256);
       if (!attachment) {
@@ -125,7 +116,8 @@ async function attachEvidence(client, roots, delivery, row, prepared, view, save
         save();
       }
       if (!attachment.id) {
-        const bytes = readVerifiedEvidence(run.roots, record), name = `${record.id}.png`;
+        if (view.reportAttachments) consumerPath(roots, record.path);
+        const bytes = readVerifiedEvidence(evidenceRoots, record), name = record.name ?? `${record.id}.png`;
         attachment.receipt = delivery.receipt; attachment.state = 'DISPATCHING'; attachment.requestFingerprint = adoRequestFingerprint(`wit/attachments?fileName=${encodeURIComponent(name)}&api-version=7.1`, 'POST', bytes, true); save();
         let result;
         try {result = await client.upload(delivery, bytes, name, {onIdentity(identity) {attachment.id = identity.attachmentId; attachment.state = 'UPLOADED'; save();}});}
@@ -137,24 +129,30 @@ async function attachEvidence(client, roots, delivery, row, prepared, view, save
       if (!(item.relations ?? []).some(relation => relation.rel === 'AttachedFile' && relation.url === attachment.url)) await delivery.write('attach-evidence', `wit/workitems/${row.workItemId}?api-version=7.1`, [{op: 'test', path: '/rev', value: item.rev}, {op: 'add', path: '/relations/-', value: {rel: 'AttachedFile', url: attachment.url, attributes: {comment: 'Verified harness execution context'}}}], {patch: true});
       const after = await workItem(client, row.workItemId); requireThat((after.relations ?? []).some(relation => relation.rel === 'AttachedFile' && relation.url === attachment.url), 'Bug attachment did not verify.'); attachment.state = 'ATTACHED'; save();
     }
-  }
   return complete;
 }
 
 async function fileBugs(client, roots, executionId, view, revisions, options) {
-  const journal = ledger(roots, executionId, 'bugs'), save = () => journal.save(journal.value), metadata = await bugMetadata(client), drafts = options.drafts ? readBounded(options.drafts) : {}, {defects, skipped} = deliverableDefects(view, options.include), prepared = [];
+  const journal = ledger(roots, executionId, 'bugs'), save = () => journal.save(journal.value), metadata = await bugMetadata(client), drafts = options.draftValues ?? (options.drafts ? readBounded(options.drafts) : {}), {defects, skipped} = view.reportDefects ? {defects: view.reportDefects, skipped: []} : deliverableDefects(view, options.include), prepared = [];
   // Draft IDs are stable within this invocation; preview never persists delivery intent.
   for (const defect of defects) {
     if (drafts[defect.fingerprint]?.file === false) {skipped.push({fingerprint: defect.fingerprint, reason: 'draft-excluded'}); continue;}
     let row = journal.value.entries.find(item => item.fingerprint === defect.fingerprint);
-    const intent = row ?? {fingerprint: defect.fingerprint, filingId: randomUUID(), state: 'INTENT'};
+    const intent = row ?? {fingerprint: defect.fingerprint, filingId: options.filingIds?.[defect.fingerprint] ?? randomUUID(), state: 'INTENT'};
     prepared.push({row, intent, ...await prepareBug(client, view, defect, revisions, metadata, drafts, intent)});
   }
-  const preview = {mode: 'dry-run', executionId, revisions, skipped, bugs: prepared.map(item => ({fingerprint: item.defect.fingerprint, fields: item.fields, duplicates: item.duplicates, revision: item.revisions}))};
+  const attachments = view.reportAttachments ?? [];
+  for (const record of attachments) {consumerPath(roots, record.path); const bytes = readVerifiedEvidence({runRoot: roots.projectRoot}, record); requireThat(bytes.length <= (client.configuration.bugs?.maxAttachmentBytes ?? 2 * 1024 * 1024), 'Bug evidence exceeds the destination attachment bound.');}
+  const preview = {mode: 'dry-run', executionId, revisions, skipped, bugs: prepared.map(item => ({fingerprint: item.defect.fingerprint, type: item.type, fields: item.fields, review: item.review, schemaFingerprint: item.schemaFingerprint, duplicates: item.duplicates, revision: item.revisions, attachments}))};
+  preview.planHash = fingerprint({executionId, revisions, skipped, bugs: preview.bugs, destination: {organizationUrl: client.configuration.organizationUrl, project: client.configuration.project}});
   if (!options.execute) return preview;
+  if (options.approvedPlan) requireThat(options.approvedPlan === preview.planHash, 'Approved bug preview changed; review and approve the updated plan.');
   const filed = [];
   for (const item of prepared) {
     let row = item.row;
+    const itemPlanHash = fingerprint(preview.bugs.find(bug => bug.fingerprint === item.defect.fingerprint));
+    requireThat(!row?.bodyFingerprint || row.bodyFingerprint === fingerprint(item.body), 'Previously dispatched bug content changed; reconcile its original plan before a new report.');
+    requireThat(!row?.planHash || row.planHash === itemPlanHash, 'Previously dispatched bug plan changed; reconcile the original report before another delivery.');
     if (row?.state === 'COMPLETED' || row?.state === 'DUPLICATE') {filed.push({fingerprint: row.fingerprint, state: row.state, id: row.workItemId ?? null}); continue;}
     if (row && !['INTENT', 'IDENTIFIED'].includes(row.state)) {await reconcileBug(client, roots, row); save();}
     if (row?.state === 'UNCERTAIN') {
@@ -163,7 +161,8 @@ async function fileBugs(client, roots, executionId, view, revisions, options) {
       journal.value.entries = journal.value.entries.filter(entry => entry.fingerprint !== row.fingerprint); journal.value.entries.push(row); save();
       Object.assign(item, await prepareBug(client, view, item.defect, revisions, metadata, drafts, row));
     }
-    if (!row) {row = item.intent; journal.value.entries.push(row); save();}
+    if (!row) {row = item.intent; journal.value.entries.push(row);}
+    row.planHash ??= itemPlanHash; save();
     if (!row.workItemId && item.duplicates.open.length) {row.state = 'DUPLICATE'; row.workItemId = item.duplicates.open[0]; save(); filed.push({fingerprint: row.fingerprint, state: row.state, id: row.workItemId}); continue;}
     const delivery = client.delivery('bugs', true, view.execution.freezeFingerprint); row.receipt = delivery.receipt; save();
     try {
@@ -173,12 +172,22 @@ async function fileBugs(client, roots, executionId, view, revisions, options) {
         row.workItemId = adoId(created.id); row.state = 'IDENTIFIED'; save();
       }
       const after = await workItem(client, row.workItemId); requireThat(tagsOf(after).includes(row.fingerprint) && tagsOf(after).includes(`harness-filing-${row.filingId.slice(0, 8)}`), 'Bug creation did not verify its fingerprint and filing identity.');
+      for (const [name, value] of Object.entries(item.fields)) {
+        const actual = after.fields[name], spec = item.fieldSpecifications.find(field => field.referenceName === name);
+        const matches = name === 'System.Tags' ? String(value).split(';').map(tag => tag.trim()).filter(Boolean).every(tag => tagsOf(after).includes(tag)) : /Path$/.test(name) ? typeof actual === 'string' && actual.toLowerCase() === String(value).toLowerCase() : allowedFieldValue({...spec, allowedValues: [actual]}, value);
+        requireThat(matches, `Bug field ${name} did not match its approved value at readback.`);
+      }
       const attached = await attachEvidence(client, roots, delivery, row, item, view, save, options);
       if (attached) {delivery.verified({workItemId: row.workItemId}); delivery.finish();}
       row.state = attached ? 'COMPLETED' : 'ATTACHMENTS_PENDING'; save(); filed.push({fingerprint: row.fingerprint, state: row.state, id: row.workItemId, ...(attached ? {} : {uncertainAttachments: row.attachments.filter(item => item.state === 'UNCERTAIN').map(item => `${row.fingerprint}:${item.sha256}`)})});
     } catch (error) {save(); throw error;}
   }
   return {...preview, mode: 'execute', bugs: filed};
+}
+/** Shared filing/attachment journal; reported drafts carry no fabricated execution verdicts. */
+export async function deliverBugReports(client, roots, reportId, view, options = {}) {
+  requireThat(Array.isArray(view.reportDefects) && view.reportDefects.length === 1 && Array.isArray(view.reportAttachments), 'Invalid reported bug projection.');
+  return fileBugs(client, roots, reportId, view, [], options);
 }
 async function reconcilePublication(client, roots, row, planId) {
   if (!row.runId) {const acknowledged = acknowledgedId(roots, row.receipt, 'create-run', 'runId', row.requestFingerprint); if (acknowledged) row.runId = acknowledged;} if (row.runId) {row.state = 'IDENTIFIED'; return;}
