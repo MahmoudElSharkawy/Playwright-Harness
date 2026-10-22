@@ -121,6 +121,106 @@ npx --no pom-harness bug-report approve <report> --preview <fingerprint>
 npx --no pom-harness bug-report file <report> --approved <fingerprint> --execute
 ```
 
+## Post-run review
+
+Both execute-test and automate-test prepare bug drafts as part of completing a
+failed, blocked or partial run. The agent classifies the findings; the runtime
+reassesses saved records, binds that classification to the run and persists the
+editable drafts. No additional bug-report invocation from the user is needed.
+Generating an HTML report alone does not perform this conversational review.
+
+1. Read the final run report and inspect its selected source, actual observations,
+   failed checks and available evidence. Do not infer a product defect from a red
+   assertion alone. Use maintain-test for uncertain attribution within the existing
+   investigation and repair budget; retain the original failure and later attempts.
+2. Run `bug-report failures <review> --input <run.json>`. The input is
+   `{"workflow":"execute-test","executionId":"<exec>"}` or
+   `{"workflow":"automate-test","sourceId":"<source-id>"}`. Before generation
+   starts, use `source` with the consumer-relative source JSON path and optional
+   `notes` with the same source-bound blocker notes used for reporting. Findings
+   include supported failures and unresolved/blocked items; the returned `hash`
+   binds the current source and observations.
+   For exploration before a generation handoff exists, also pass `observed` with
+   the existing reporting-observation JSON path (`source`, `executions`, `bindings`).
+   The shared loader reassesses those native snapshots and evidence; imported
+   summary verdicts cannot establish a failure.
+3. Classify every finding exactly once as `application`, `test`, `environment` or
+   `unknown`, with a grounded reason and next action. Prepare a complete refined
+   draft for each supported application issue. Keep test/environment causes in
+   the attention list. An unknown cause may have a provisional draft; it cannot
+   be filed as a confirmed application defect.
+4. Group only when the recorded evidence supports the same observable defect and
+   compatible expected behavior, environment/build and circumstances. Record why
+   the cases belong together; the same error text or an assumed shared root cause
+   is insufficient. Keep distinct symptoms separate. Preserve every member and
+   occurrence, including differing attempts. Explain grouping in chat and split
+   or regroup with a new review identity if the user corrects it.
+   One case may reveal distinct defects. Give each such group a unique `key` and
+   its own symptom/evidence rationale; these groups may share the same finding
+   while retaining separate drafts and approvals. Never invent distinct defects
+   from a native assertion count alone.
+5. Save the classification input below and run
+   `bug-report from-run <review> --input <classified.json>`. Reuse the same review
+   identity/input when resuming; existing draft edits and approvals are retained.
+   New observations or classifications require a new reviewed snapshot. Empty
+   findings produce no drafts and no ADO calls.
+
+```json
+{
+  "version": 1,
+  "run": {"workflow": "execute-test", "executionId": "<exec>"},
+  "hash": "<hash from failures>",
+  "classifications": [
+    {"finding": "<finding-id>", "classification": "application",
+     "reason": "Explain the source/evidence comparison establishing the defect.",
+     "nextAction": "Review the bug draft."}
+  ],
+  "groups": [
+    {"members": ["<finding-id>"], "reason": "Explain why these occurrences belong together.",
+     "draft": {"title": "Refined symptom", "description": "Supported circumstances and impact",
+       "prerequisites": [], "steps": ["Observed action"], "expected": "Accepted behavior",
+       "actual": "Recorded discrepancy", "fields": {}}, "evidence": []}
+  ]
+}
+```
+
+For ADO-backed automation, include `adoSnapshot` in `run`, pointing to the original
+`execution-tests/ado-story-<id>/_suite.json` or `execution-tests/ado-suite-<id>/_suite.json`
+captured with `fetch-story|fetch-suite --revisions`. The snapshot must match the
+executed neutral source and retain the case, shared-step and story revisions.
+Review and filing check all selected bindings against the destination. Missing
+original revisions leave an editable draft with a visible source gap; a new fetch
+does not retroactively supply the executed revision. Explicitly refined sources
+whose actions/expectations no longer match that snapshot need provenance resolution
+before filing. Local sources need no ADO snapshot or credentials to draft.
+
+Use the existing evidence input contract for each group's reviewed screenshots,
+API/DB observations or logs. The inventory lists execution evidence candidates;
+verify relevance/privacy before selecting them. Automation receipts establish what
+the generated tests did, not an independent manual reproduction. Add precise
+observations from the native results or maintenance assessment; do not substitute
+raw assertion counts for the user's readable actual result. Preserve uncertain
+or mixed reproduction outcomes in the draft's confirmation details.
+
+Present the complete editable field/value table for **each** returned draft, its
+affected cases, grouping reason, confirmation limits, attachments and unresolved
+project fields. Include attention items and their next actions alongside drafts.
+Users may edit individual drafts, choose a subset, or defer all filing. For example,
+three cases showing the same supported invoice defect plus a locator fault and an
+unavailable environment produce one grouped draft and two attention items.
+
+Each selected draft then uses the existing `edit`, `preview`, `approve` and `file`
+commands. Validate the destination's actual fields and evidence and obtain explicit
+approval for that exact preview before `file --execute`. Selecting a draft or
+approving its wording alone is not approval to file. Changed sources, group
+membership, content or attachments require an updated preview and approval.
+Grouped drafts recheck every captured member's case/source revision. Configured
+case-derived paths use the first member (sorted by finding identity); expose those
+paths in review or set explicit project fields when they are unsuitable. Drafting
+never changes test verdicts, assertions, generation repair counts or green runs.
+
+### Single execution defect
+
 For an existing execution defect, retain its native identity and evidence:
 
 ```text

@@ -355,7 +355,7 @@ For each failure, classify before touching anything:
 |---|---|---|
 | Script defect | wrong/brittle locator, timing, wrong test data, strict-mode violation | Fix via the matching skill (element-locators for locators, etc.), re-run |
 | Data reusability (script-defect family) | passed an earlier run, now fails with already-exists / duplicate / unique-constraint / leftover-record symptoms — typically on the confirmation run | Fix via the test-data reusability ladder (practice 8): per-case + per-run unique data → API/DB seed-and-cleanup (consult `resources/apisCollections/` / `resources/Queries/`) → GUI cleanup in teardown under design-conventions §4a ONLY when no lower-layer path exists (flag it in the PR). Record as `script-defect` with note `data-reusability: …` |
-| App defect | EXPLORE phase saw the same failure on the manual path | Keep the assertion; `test.fixme` + `allure.issue`; offer `/bug-report-azure` |
+| App defect | EXPLORE phase saw the same failure on the manual path | Keep the assertion and failure; prepare an editable draft through [bug-report](../../bug-report/SKILL.md); link a verified existing/filed issue only |
 | Environment | connectivity, credentials, seed API down | Report BLOCKED to the user; do not "fix" the test around it |
 | Unclassifiable | EXPLORE was skipped, no manual-path data | After the final round, reproduce the failing step once manually in a scratch playwright-cli session: reproduces → app defect; doesn't → report UNCLASSIFIED with both hypotheses |
 
@@ -499,8 +499,9 @@ silently skipped:
 - Matrix: TC id → title → EXPLORE verdict → generated test title → VERIFY status → note.
 - Artifacts: `execution-tests/ado-suite-<suiteId>/`, `executions/execu_<ts>/report.md`, the
   generated spec + data files, PR link, Allure TMS links (wired via `allure.tms`).
-- Defects: list app defects with evidence paths; offer `/bug-report-azure` (requires
-  az CLI) or manual filing with the prepared defect blocks.
+- Defects: perform the [post-run review](../../../../docs/bug-reporting.md#post-run-review),
+  present editable application-bug drafts and evidence, and retain unresolved causes
+  as attention items. Filing requires approval of the selected exact previews.
 - What was NOT automated and why (blocked cases, missing backends, NEEDS-DATA), the
   methods newly created per case, and any GUI-cleanup last-resorts awaiting a
   backend path.

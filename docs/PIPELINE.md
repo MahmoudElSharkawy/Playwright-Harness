@@ -328,6 +328,13 @@ new automation does not use it. See [reporting](reporting.md) for link templates
 
 ## 7. REVIEW
 
+When exploration or verification ends with failures, blockers or partial work,
+complete the [post-run bug review](bug-reporting.md#post-run-review) before the
+final handoff. Classify the recorded failures, prepare editable application-bug
+drafts, group only evidence-supported related defects, and show unresolved causes
+as attention items. Filing selected drafts requires their exact preview approval.
+This review preserves generation verdicts and the existing review/green gates.
+
 A fresh, independent reviewer tries to refute the candidate. The author cannot review
 their own work, and a self-review cannot release verification.
 

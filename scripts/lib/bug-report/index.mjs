@@ -12,6 +12,7 @@ import {checkSourceRevisions} from '../execute/source.mjs';
 import {deliverBugReports} from '../execute/delivery.mjs';
 import {collectExecution, deliverableDefects, readVerifiedEvidence} from '../execute/report.mjs';
 import {prepareAnnotation, bindAnnotationReview, verifyAnnotation, inspectScreenshot} from './annotations.mjs';
+import {reviewRunFailures} from './failures.mjs';
 
 const path = (roots, reportId, name) => {id(reportId); return consumerPath(roots, `.harness/runs/${reportId}/bug-report/${name}`);};
 const current = (roots, reportId) => path(roots, reportId, 'current.json');
@@ -109,6 +110,23 @@ function verifiedAttachments(roots, state) {
 }
 async function sourceFresh(client, state) {
   const source = state.intake.source;
+  if (source?.postRun) {
+    const review = await reviewRunFailures(state.roots, source.postRun.run);
+    requireThat(review.hash === source.postRun.hash, 'Post-run source or observations changed; classify the current failures and review new drafts.');
+    for (const reference of source.postRun.references) await sourceFresh(client, {...state, intake: {source: reference}});
+    return;
+  }
+  if (source?.ado) {
+    const captured = source.ado;
+    requireThat(captured.organizationUrl === client.configuration.organizationUrl && captured.project.toLowerCase() === client.configuration.project.toLowerCase(), 'Bug destination differs from the captured automation source.');
+    const changes = await checkSourceRevisions(captured, createAdoTestSource(client));
+    requireThat(changes.length === 0, 'Automated case or shared-step source revision changed; review current source before filing.');
+    if (captured.storyId) {
+      const story = await client.read(`wit/workitems/${captured.storyId}?api-version=7.1`); await client.requireWorkItemProject(story);
+      requireThat(story.id === captured.storyId && story.rev === captured.storyRev, 'Automated story revision changed; review current source before filing.');
+    }
+    return;
+  }
   if (source?.executionId) {
     const view = collectExecution(state.roots, source.executionId);
     requireThat(!view.integrityFailures.length && view.execution.sourceFingerprint === source.sourceFingerprint, 'Original execution source or evidence changed.');
@@ -140,6 +158,8 @@ async function preparePreview(roots, reportId, dependencies) {
   for (const name of ['title', 'description', 'expected', 'actual']) if (!hasText(state.draft[name])) problems.push({field: name, code: 'missing'});
   if (!state.draft.steps.length) problems.push({field: 'steps', code: 'missing'});
   if (!hasText(state.intake.source?.content ?? '')) problems.push({field: 'source', code: 'missing-accepted-context'});
+  if (state.intake.source?.postRun?.classification === 'unknown') problems.push({field: 'classification', code: 'provisional-classification'});
+  for (const message of state.intake.source?.postRun?.sourceGaps ?? []) problems.push({field: 'source', code: 'missing-original-revisions', message});
   const base = {version: 1, head: state.head, draft: state.draft, confirmation: state.confirmation, rejectedEvidence: state.evidence.filter(item => !item.eligible), annotations: state.annotations, problems, destination: null, ready: false, bugs: []};
   if (problems.length) return base;
   const client = clientFor(roots, dependencies.client); await sourceFresh(client, {...state, roots});
@@ -200,4 +220,57 @@ export function bugReportFromExecution(roots, reportId, executionId, selected) {
   }
   return prepareBugReport(roots, reportId, {version: 1, description: defect.title, source: {executionId, caseId: defect.caseId, ...(view.source.scope.kind === 'story' ? {storyId: view.source.scope.storyId} : {}), sourceFingerprint: view.execution.sourceFingerprint, defectFingerprint: selected, observationsFingerprint: fingerprint(defect.occurrences), content: JSON.stringify({executionId, sourceFingerprint: view.execution.sourceFingerprint, caseId: defect.caseId, revision: tc.rev, occurrences: defect.occurrences}), expected: scenario.steps.flatMap(item => item.expected).join('; ')},
     draft: {title: defect.title, description: defect.title, prerequisites: [], steps: scenario.steps.map(item => item.action), expected: scenario.steps.flatMap(item => item.expected).join('; '), actual: JSON.stringify(defect.occurrences), fields: {}}, confirmation: {user: 'reported', agent: 'reproduced', notes: `Verified execution ${executionId}; ${defect.fingerprint}`}, evidence: evidence.slice(0, 20)});
+}
+
+/** Persist agent classifications and evidence-backed grouping, then reuse ordinary editable drafts. */
+export async function prepareRunBugReports(roots, batchId, raw, dependencies = {}) {
+  id(batchId);
+  const input = data(raw), review = await reviewRunFailures(roots, input.run);
+  requireThat(input.version === 1 && Object.keys(input).every(key => ['version', 'run', 'hash', 'classifications', 'groups'].includes(key)), 'Invalid post-run review input.');
+  requireThat(input.hash === review.hash, 'Run source or observations changed; review the current failures.');
+  requireThat(Array.isArray(input.classifications) && input.classifications.length === review.findings.length && Array.isArray(input.groups), 'Classify every run finding exactly once.');
+  const classifications = new Map(), grouped = new Set();
+  for (const row of input.classifications) {
+    requireThat(row && Object.keys(row).every(key => ['finding', 'classification', 'reason', 'nextAction'].includes(key)) && review.findings.some(finding => finding.id === row.finding) && !classifications.has(row.finding), 'Invalid or duplicate failure classification.');
+    requireThat(['application', 'test', 'environment', 'unknown'].includes(row.classification) && hasText(row.reason) && hasText(row.nextAction), 'Classifications need a supported category, reason and next action.');
+    classifications.set(row.finding, row);
+  }
+  const groupKeys = new Set();
+  const plans = input.groups.map(group => {
+    requireThat(group && Object.keys(group).every(key => ['key', 'members', 'reason', 'draft', 'evidence'].includes(key)) && Array.isArray(group.members) && group.members.length > 0 && new Set(group.members).size === group.members.length && hasText(group.reason), 'A defect group needs unique members and an evidence-backed grouping reason.');
+    if (group.key !== undefined) {id(group.key); requireThat(!groupKeys.has(group.key), 'Use distinct keys for distinct defect groups.'); groupKeys.add(group.key);}
+    const members = [...group.members].sort(), rows = members.map(member => {
+      requireThat(classifications.has(member) && (!grouped.has(member) || group.key && input.groups.filter(item => item.members.includes(member)).every(item => item.key)), 'Overlapping findings need distinct explicit group keys and a separate symptom rationale.'); grouped.add(member);
+      return review.findings.find(row => row.id === member);
+    });
+    const classification = classifications.get(members[0]).classification;
+    requireThat(['application', 'unknown'].includes(classification) && members.every(member => classifications.get(member).classification === classification), 'Only uniformly classified application or provisional unknown findings form bug drafts.');
+    requireThat(classification !== 'application' || rows.every(row => row.eligible), 'An application bug needs supported failure evidence; keep unresolved findings provisional.');
+    const identity = {members, ...(group.key ? {key: group.key} : {})};
+    const fp = members.length === 1 && input.run.workflow === 'execute-test' && !group.key ? members[0] : `harness-defect-${fingerprint({workflow: input.run.workflow, ...identity}).slice(0, 12)}`;
+    const reportId = `bug-${fingerprint({batchId, ...identity}).slice(0, 24)}`;
+    const confirmation = {user: 'reported', agent: classification === 'unknown' ? 'inconclusive' : input.run.workflow === 'execute-test' ? 'reproduced' : 'not-run', notes: 'Classification uses the recorded run; no additional reproduction was performed.'};
+    const draft = {prerequisites: [], fields: {}, ...group.draft}; validateDraft(draft, confirmation);
+    const references = rows.flatMap(row => row.references), first = references[0];
+    const scenarioIds = new Set(rows.flatMap(row => [row.scenarioId, ...(row.occurrences ?? []).map(occurrence => occurrence.scenarioId)]));
+    const scenarios = review.source.scenarios.filter(scenario => scenarioIds.has(scenario.id));
+    const source = {content: JSON.stringify({title: review.source.title, scenarios}), expected: draft.expected, defectFingerprint: fp,
+      ...(first ? {caseId: first.caseId} : {}), ...(review.source.scope?.kind === 'story' ? {storyId: review.source.scope.storyId} : first?.ado?.storyId ? {storyId: first.ado.storyId} : {}),
+      postRun: {run: input.run, hash: review.hash, ...identity, classification, groupingReason: group.reason, classifications: members.map(member => classifications.get(member)), references, sourceGaps: rows.flatMap(row => row.sourceGaps ?? [])}};
+    const intake = {version: 1, description: draft.description, source, draft, confirmation, evidence: group.evidence ?? []};
+    return {reportId, members, classification, intake};
+  });
+  requireThat(input.classifications.every(row => row.classification !== 'application' || grouped.has(row.finding)), 'Every supported application defect needs a draft group.');
+  return withTransition(roots, () => {
+    const file = consumerPath(roots, `.harness/runs/${batchId}/bug-review.json`), hash = fingerprint(input);
+    if (existsSync(file)) requireThat(readBounded(file).hash === hash, 'This run review already exists; resume its input or use a new review identity for reclassification.');
+    else writeJson(file, {version: 1, hash, input}, {exclusive: true});
+    const drafts = plans.map(({intake, ...plan}) => {
+      if (existsSync(current(roots, plan.reportId))) requireThat(readBugReport(roots, plan.reportId).intakeFingerprint === fingerprint(intake), 'Existing draft has different source bindings.');
+      else prepareBugReport(roots, plan.reportId, intake);
+      const state = readBugReport(roots, plan.reportId);
+      return {...plan, head: state.head, draft: state.draft};
+    });
+    return {batchId, hash, drafts, attention: input.classifications.filter(row => row.classification !== 'application')};
+  }, {key: `bug-review-${batchId}`, ...(dependencies.inventory ? {inventory: dependencies.inventory} : {})});
 }

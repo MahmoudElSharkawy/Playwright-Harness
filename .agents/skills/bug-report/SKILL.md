@@ -18,6 +18,13 @@ required to begin a draft. Test execution belongs to
 belong to [maintain-test](../maintain-test/SKILL.md). Drafting authorizes no
 execution, requirement change or external filing.
 
+After execute-test or automate-test finds failures, use the
+[post-run review](../../../docs/bug-reporting.md#post-run-review) as part of that
+skill's completion. Classify before drafting, preserve each affected case and
+occurrence, and group only supported instances of the same observable issue.
+Show every draft in the editable table and let the user select, edit or defer it.
+Test/environment faults stay repair items; unknown causes stay provisional.
+
 ## Understand and draft
 
 Resolve available story references/content, acceptance criteria, the user's own

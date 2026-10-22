@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 import {projectArgument, consumerPath} from './lib/consumer-paths.mjs';
 import {readBounded} from './lib/execute/storage.mjs';
-import {prepareBugReport, readBugReport, editBugReport, previewBugReport, approveBugReport, fileBugReport, annotateBugReport, reviewBugAnnotation, bugReportFromExecution} from './lib/bug-report/index.mjs';
+import {prepareBugReport, readBugReport, editBugReport, previewBugReport, approveBugReport, fileBugReport, annotateBugReport, reviewBugAnnotation, bugReportFromExecution, prepareRunBugReports} from './lib/bug-report/index.mjs';
+import {reviewRunFailures} from './lib/bug-report/failures.mjs';
 
 try {
   const {roots, args} = projectArgument(), [command, reportId, ...rest] = args, options = {};
@@ -14,6 +15,8 @@ try {
   const input = () => {if (!options.input) throw new Error('--input needs a selected JSON file.'); return readBounded(consumerPath(roots, options.input));};
   let result;
   if (command === 'prepare') result = prepareBugReport(roots, reportId, input());
+  else if (command === 'failures') result = await reviewRunFailures(roots, input());
+  else if (command === 'from-run') result = await prepareRunBugReports(roots, reportId, input());
   else if (command === 'show') result = readBugReport(roots, reportId);
   else if (command === 'edit') result = editBugReport(roots, reportId, input());
   else if (command === 'preview') result = await previewBugReport(roots, reportId);
@@ -22,7 +25,7 @@ try {
   else if (command === 'annotate') result = await annotateBugReport(roots, reportId, input());
   else if (command === 'review-annotation') result = reviewBugAnnotation(roots, reportId, input());
   else if (command === 'from-execution') result = bugReportFromExecution(roots, reportId, options.execution, options.fingerprint);
-  else throw new Error('Use bug-report prepare|show|edit|from-execution|annotate|review-annotation|preview|approve|file <report> [options].');
+  else throw new Error('Use bug-report failures|from-run|prepare|show|edit|from-execution|annotate|review-annotation|preview|approve|file <report> [options].');
   console.log(JSON.stringify(result, null, 2));
   if (command === 'preview' && result.ready === false) process.exitCode = 1;
 } catch (error) {console.error(error.message); process.exitCode = 1;}

@@ -89,6 +89,16 @@ test('retrieval follows continuation, batches reads and preserves nested shared 
   const suite = await createAdoTestSource(f.client).fetchSuite(1, 2), neutral = adoSuiteToSource(suite);
   assert.equal(suite.cases.length, 2); assert.equal(neutral.scenarios[0].steps[0].expected[0], 'Shared expected'); assert.equal(writes(f).length, 0); assert.equal(f.receipts().length, 0);
 });
+test('revision-bearing fetch retains original story, case and nested shared-step versions for later bug review', async t => {
+  const f = await storyFixture(t); f.state.items.get(400).rev = 7;
+  f.state.items.set(300, {id: 300, rev: 3, fields: {'System.TeamProject': 'demo', 'Microsoft.VSTS.TCM.Steps': '<steps><compref ref="301"/></steps>'}});
+  f.state.items.set(301, {id: 301, rev: 4, fields: {'System.TeamProject': 'demo', 'Microsoft.VSTS.TCM.Steps': xml('Shared action', 'Shared expected')}});
+  f.state.items.get(101).fields['Microsoft.VSTS.TCM.Steps'] = '<steps><compref ref="300"/></steps>';
+  const adapter = createAdoTestSource(f.client), story = await adapter.fetchStory(400, undefined, {includeRevisions: true}), suite = await adapter.fetchSuite(1, 2, {includeRevisions: true});
+  assert.equal(story.storyRev, 7);
+  for (const captured of [story, suite]) {assert.equal(captured.cases[0].rev, 1); assert.deepEqual(captured.cases[0].sharedRevisions, {'300': 3, '301': 4});}
+  assert.equal(writes(f).length, 0);
+});
 for (const mode of ['missing-item', 'missing-shared', 'cycle', 'malformed', 'pagination-loop']) {
   test(`retrieval refuses incomplete ${mode} source`, async t => {
     const f = await adoFixture(t);

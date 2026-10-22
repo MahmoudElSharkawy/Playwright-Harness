@@ -46,10 +46,12 @@ export function createAdoTestSource(client) {
           requireValue(!trail.includes(node.ref), 'ADO shared steps contain a cycle.');
           if (!shared.has(node.ref)) shared.set(node.ref, (await batch([node.ref])).get(node.ref));
           const item = shared.get(node.ref);
-          if (!tolerant) requireValue(emptyAdoMetadata(item.fields['Microsoft.VSTS.TCM.Parameters'], 'parameters') && emptyAdoMetadata(item.fields['Microsoft.VSTS.TCM.LocalDataSource'], 'NewDataSet'), 'Parameterized shared steps require explicit refinement.');
-          else {
+          if (tolerant || includeRevisions) {
             dependencies[node.ref] = item.rev;
             requireValue(Number.isInteger(item.rev) && item.rev > 0, 'ADO shared-step revision is incomplete.');
+          }
+          if (!tolerant) requireValue(emptyAdoMetadata(item.fields['Microsoft.VSTS.TCM.Parameters'], 'parameters') && emptyAdoMetadata(item.fields['Microsoft.VSTS.TCM.LocalDataSource'], 'NewDataSet'), 'Parameterized shared steps require explicit refinement.');
+          else {
             requireValue(emptyAdoMetadata(item.fields['Microsoft.VSTS.TCM.LocalDataSource'], 'NewDataSet'), 'Shared parameter sets are unsupported.');
             for (const name of parameterNames(item.fields['Microsoft.VSTS.TCM.Parameters'])) sharedParameters.add(name);
           }
@@ -71,7 +73,7 @@ export function createAdoTestSource(client) {
       cases.push({id, title: f['System.Title'], state: f['System.State'] ?? '', priority: f['Microsoft.VSTS.Common.Priority'] ?? null,
         tags: String(f['System.Tags'] ?? '').split(';').map(tag => tag.trim()).filter(Boolean), steps: await expand(f['Microsoft.VSTS.TCM.Steps']),
         parameters: f['Microsoft.VSTS.TCM.Parameters'] ?? null, dataTable, ...(dataTableXml === null ? {} : {dataTableXml}),
-        ...(tolerant || includeRevisions ? {rev: items.get(id).rev} : {}),
+        ...(tolerant || includeRevisions ? {rev: items.get(id).rev, sharedRevisions: dependencies} : {}),
         ...(tolerant ? {contentSha256: fingerprint({title: f['System.Title'], steps: f['Microsoft.VSTS.TCM.Steps'], parameters: f['Microsoft.VSTS.TCM.Parameters'] ?? null, dataTable: dataTableXml}), sharedRevisions: dependencies, sharedParameters: [...sharedParameters]} : {})});
       if (tolerant || includeRevisions) requireValue(Number.isInteger(items.get(id).rev) && items.get(id).rev > 0, 'ADO case revision is incomplete.');
       } catch (error) {
@@ -131,7 +133,8 @@ export function createAdoTestSource(client) {
       requireValue(ids.length <= 500, 'ADO story needs 1–500 linked test cases.');
       const loaded = await readCases(ids, options);
       return {storyId, storyTitle: item.fields['System.Title'], links: selected, organizationUrl: client.configuration.organizationUrl, project: client.configuration.project,
-        ...(options.tolerant ? {cases: loaded.cases, excluded: [...excluded, ...loaded.excluded], storyRev: item.rev} : {cases: loaded, excluded})};
+        ...(options.tolerant ? {cases: loaded.cases, excluded: [...excluded, ...loaded.excluded]} : {cases: loaded, excluded}),
+        ...(options.tolerant || options.includeRevisions ? {storyRev: item.rev} : {})};
     }
   });
 }

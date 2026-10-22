@@ -1,11 +1,10 @@
 #!/usr/bin/env node
 // Local generation gates. Source code is authored/reused through the canonical POM skills.
-import {join} from 'node:path';
 import {projectArgument} from './lib/consumer-paths.mjs';
 import {readJson} from './lib/project-config.mjs';
-import {createRun} from './lib/execution-core/index.mjs';
 import {requireThat, keys} from './lib/execution-core/data.mjs';
-import {createGenerationHandoff, createReportingAssessment, beginGeneration, registerCandidate, reviseGeneration, recordGenerationReview, generationStatus, recordGenerationReporting} from './lib/generation/index.mjs';
+import {createGenerationHandoff, beginGeneration, registerCandidate, reviseGeneration, recordGenerationReview, generationStatus, recordGenerationReporting} from './lib/generation/index.mjs';
+import {readObservedExecutions, readReportingObservations} from './lib/generation/reporting-context.mjs';
 import {verifyGeneration} from './lib/generation/verify.mjs';
 import {relativeFile} from './lib/generation/storage.mjs';
 import {writeAutomationReport} from './lib/generation/report.mjs';
@@ -13,22 +12,8 @@ import {generationBlocker} from './lib/generation/reasons.mjs';
 
 let roots, source, sourceId, command, reportContext;
 
-function reconstructExecutions(executions) {
-  requireThat(Array.isArray(executions), 'Generation needs observed executions.');
-  return executions.map(item => {
-    keys(item, ['snapshot', 'runRoot'], 'observed execution');
-    const saved = readJson(relativeFile(roots, item.snapshot));
-    const run = createRun({...saved.inputs, id: saved.id, startedAt: saved.startedAt});
-    requireThat(run.inputFingerprint === saved.inputFingerprint, 'Run snapshot differs from assessed inputs.');
-    const runRoot = relativeFile(roots, item.runRoot);
-    return {run, roots: {...roots, runRoot}, observations: readJson(join(runRoot, 'observations.json'))};
-  });
-}
-
 function reportingObserved(path) {
-  const input = readJson(relativeFile(roots, path));
-  keys(input, ['source', 'executions', 'bindings'], 'reporting observation paths');
-  return createReportingAssessment(readJson(relativeFile(roots, input.source)), reconstructExecutions(input.executions), input.bindings);
+  return readReportingObservations(roots, path).assessment;
 }
 
 try {
@@ -64,7 +49,7 @@ try {
       if (input.reporting.notes !== undefined) reportContext.notes = readJson(relativeFile(roots, input.reporting.notes));
       if (input.reporting.observed !== undefined) reportContext.observed = reportingObserved(input.reporting.observed);
     }
-    const handoff = createGenerationHandoff(source, reconstructExecutions(input.executions), input.bindings);
+    const handoff = createGenerationHandoff(source, readObservedExecutions(roots, input.executions), input.bindings);
     if (command === 'prepare') {
       await beginGeneration(roots, handoff, input.author, reportContext); result = {status: 'PREPARED', sourceId: source.id, expectations: handoff.expectations.length};
     } else {
