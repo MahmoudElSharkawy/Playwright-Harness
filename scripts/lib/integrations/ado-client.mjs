@@ -90,7 +90,7 @@ export function createAdoClient({configuration, roots, resolveCredential, fetchI
   }
   function delivery(kind, execute, sourceFingerprint) {
     requireValue(execute === true, 'External ADO writes require explicit execution authorization.');
-    requireValue(['outcomes', 'automation', 'tags', 'relations', 'pull-request', 'bugs', 'case-edits', 'story-comment'].includes(kind), 'Unknown ADO delivery kind.');
+    requireValue(['outcomes', 'automation', 'tags', 'relations', 'pull-request', 'bugs', 'case-edits', 'case-design', 'story-comment'].includes(kind), 'Unknown ADO delivery kind.');
     const id = randomUUID(), receipt = `.harness/state/integrations/${id}.jsonl`;
     const file = consumerPath(roots, receipt); mkdirSync(dirname(file), {recursive: true});
     // Recheck after mkdir and use exclusive creation; each event is flushed before dispatch.
@@ -110,7 +110,7 @@ export function createAdoClient({configuration, roots, resolveCredential, fetchI
         record({event: 'prepared', operation, requestFingerprint}); let data, identity;
         try {
           const result = await request(route, {method, body, patch, raw, contentType, beforeDispatch() {record({event: 'dispatching', operation, requestFingerprint, effect: 'uncertain'}); dispatched = true;}});
-          const key = {'create-run': 'runId', 'create-bug': 'workItemId', 'upload-attachment': 'attachmentId', 'create-pull-request': 'pullRequestId', 'create-comment': 'commentId'}[operation], value = key === 'pullRequestId' ? result.data.pullRequestId : key === 'commentId' ? result.data.id ?? result.data.commentId : result.data.id;
+          const key = {'create-run': 'runId', 'create-bug': 'workItemId', 'create-case': 'workItemId', 'upload-attachment': 'attachmentId', 'create-pull-request': 'pullRequestId', 'create-comment': 'commentId'}[operation], value = key === 'pullRequestId' ? result.data.pullRequestId : key === 'commentId' ? result.data.id ?? result.data.commentId : result.data.id;
           identity = key && ((Number.isSafeInteger(value) && value > 0) || adoGuid(value)) ? {[key]: value} : undefined;
           record({event: 'acknowledged', operation, requestFingerprint, effect: 'confirmed', ...(identity ? {identity} : {})});
           data = result.data;
@@ -150,7 +150,8 @@ export function createAdoClient({configuration, roots, resolveCredential, fetchI
       return (await request(`wit/wiql?api-version=7.1${top === undefined ? '' : `&$top=${top}`}`, {method: 'POST', body: {query}})).data;
     },
     async attachment(id) {requireValue(adoGuid(id), 'Invalid ADO attachment identity.'); return (await request(`wit/attachments/${encodeURIComponent(id)}?api-version=7.1`, {binary: true})).data;},
-    validateWorkItem(type, body) {requireValue(typeof type === 'string' && type.trim() && type.length <= 150 && !/[\/\\?#\r\n]/.test(type), 'Invalid bug work-item type.'); return cached(`validate:${type}:${digest(JSON.stringify(body))}`, async () => (await request(`wit/workitems/$${encodeURIComponent(type)}?validateOnly=true&api-version=7.1`, {method: 'POST', body, patch: true})).data);},
+    validateWorkItem(type, body, {fresh = false} = {}) {requireValue(typeof type === 'string' && type.trim() && type.length <= 150 && !/[\/\\?#\r\n]/.test(type), 'Invalid work-item type.'); const validate = async () => (await request(`wit/workitems/$${encodeURIComponent(type)}?validateOnly=true&api-version=7.1`, {method: 'POST', body, patch: true})).data; return fresh ? validate() : cached(`validate:${type}:${digest(JSON.stringify(body))}`, validate);},
+    validateWorkItemUpdate(id, body) {requireValue(Number.isSafeInteger(id) && id > 0 && id <= 2147483647, 'Invalid work-item identity.'); return request(`wit/workitems/${id}?validateOnly=true&api-version=7.1`, {method: 'PATCH', body, patch: true}).then(result => result.data);},
     upload(delivery, bytes, name, options = {}) {requireValue(typeof name === 'string' && /^[A-Za-z0-9_.-]{1,100}$/.test(name), 'Invalid attachment name.'); return delivery.write('upload-attachment', `wit/attachments?fileName=${encodeURIComponent(name)}&api-version=7.1`, bytes, {method: 'POST', raw: true, contentType: 'application/octet-stream', ...options});},
     // This POST has a documented read-only contract; callers cannot select a mutation route.
     async workItems(ids, fields) {requireValue(Array.isArray(ids) && ids.length > 0 && ids.length <= 200, 'ADO work-item batches require 1–200 IDs.'); return (await request('wit/workitemsbatch?api-version=7.1', {method: 'POST', body: {ids, fields, errorPolicy: 'fail'}})).data;}

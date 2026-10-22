@@ -49,10 +49,29 @@ export function prepareRequirements(roots, analysisId, raw) {
     const previous = readRequirements(roots, analysisId);
     requireThat(!previous || previous.consumer === source.consumer, 'Analysis ID belongs to another project/application.');
     if (previous?.snapshot === hash) return previous;
+    const oldSource = previous && readRequirementsSource(roots, previous), oldText = new Map(), moved = new Map();
+    const textKey = (part, text) => fingerprint({sourceId: part.sourceId, kind: part.kind, text});
+    for (const part of oldSource?.parts ?? []) {
+      const entries = previous.inventory.filter(entry => entry.partId === part.id), key = textKey(part, part.text);
+      if (entries.length) oldText.set(key, oldText.has(key) ? null : entries);
+    }
+    for (const part of source.parts) {
+      const key = textKey(part, part.text), same = source.parts.filter(value => textKey(value, value.text) === key);
+      if (oldText.get(key) && same.length === 1) moved.set(part.id, oldText.get(key));
+    }
+    const reserved = new Set([...moved.values()].flatMap(entries => entries.map(entry => entry.id)));
     const inventory = source.parts.flatMap(part => {
       const before = (previous?.inventory ?? []).filter(item => item.partId === part.id), unchanged = before.length && before.every(item => item.partContent === fingerprint(part));
       if (unchanged) return before.map(item => ({...item, disposition: item.disposition === 'accepted' ? part.kind === 'discussion' ? 'needs-decision' : 'unknown' : item.disposition, evidence: []}));
-      return [inventoryEntry(part, before[0]?.id ?? 'req-' + part.id.slice(0, 24))];
+      if (moved.has(part.id)) return moved.get(part.id).map(entry => inventoryEntry(part, entry.id, entry.start, entry.end));
+      // Preserve partition identities when exact statements move inside one criterion.
+      const oldPart = oldSource?.parts.find(value => value.id === part.id), slices = before.flatMap(entry => {
+        const text = oldPart?.text.slice(entry.start, entry.end), start = text ? part.text.indexOf(text) : -1;
+        return text && start >= 0 && part.text.indexOf(text, start + 1) < 0 && !reserved.has(entry.id) ? [{entry, start, end: start + text.length}] : [];
+      }).sort((a, b) => a.start - b.start);
+      if (slices.length === before.length && slices.length > 1 && slices.every((slice, index) => !part.text.slice(index ? slices[index - 1].end : 0, slice.start).trim()) && !part.text.slice(slices.at(-1).end).trim()) return slices.map(({entry, start, end}) => inventoryEntry(part, entry.id, start, end));
+      const prior = before[0]?.id, fallback = 'req-' + part.id.slice(0, 24);
+      return [inventoryEntry(part, prior && !reserved.has(prior) ? prior : !reserved.has(fallback) ? fallback : 'req-' + textKey(part, part.text).slice(0, 24))];
     });
     const sourcePath = file(roots, analysisId, `sources/${hash}.json`); if (!existsSync(sourcePath)) writeJson(sourcePath, source, {exclusive: true});
     const staleRequirementIds = (previous?.inventory ?? []).filter(item => item.disposition === 'accepted' || item.evidence.length > 0 || !inventory.some(next => item.id === next.id && item.content === next.content)).map(item => item.id);

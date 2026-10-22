@@ -1,5 +1,33 @@
 # Changelog
 
+## 4.1.0 — Source-grounded test case design
+
+### Upgrade actions
+
+- Update to the 4.1.0 archive and re-run setup in each consumer project. Review
+  customized managed instructions through the existing merge process, then reload
+  skills or restart the host to discover `test-case-design` in Claude Code and Codex.
+- Existing requirements inventories remain usable. Select current sources and
+  acceptance evidence before designing cases; after changing inventory decisions,
+  prepare the design again before review. Design state stays in the consumer.
+
+### Changes
+
+- Add `test-case-design` for local requirements and selected ADO stories, including
+  current cases, explicitly selected attachments and narrow saved business context.
+  Preserve requirement identities and distinguish accepted rules from unresolved
+  decisions. (#63)
+- Review create, update and reuse proposals with complete case tables, reconciled
+  classification counts and independent checks of actual verifying steps and data.
+  Selected-case approval retains omitted cases and exposes remaining coverage gaps.
+- Publish approved cases through native ADO fields, classification tags, coverage
+  references and preparation steps while preserving unrelated content. Bind approval
+  to source revisions and exact payloads; retain durable per-case operations and
+  reconcile uncertain writes without blind replay or duplicate creation.
+- Hand approved designs to existing execution and automation intake with correct
+  step references and truthful not-run/not-generated status. Add synthetic source,
+  rendering, publication, recovery and installed-discovery regression coverage.
+
 ## 4.0.2 — Readable business context and requirements review
 
 ### Upgrade actions

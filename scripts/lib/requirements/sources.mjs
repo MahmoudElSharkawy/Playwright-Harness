@@ -44,10 +44,12 @@ export async function readStoryComments(client, storyId) {
 
 export async function captureRequirements(roots, raw, options = {}) {
   const request = contextData(raw);
-  keys(request, ['version', 'project', 'application', 'storyId', 'sources', 'attachments'], 'requirements request');
+  keys(request, ['version', 'project', 'application', 'storyId', 'sources', 'attachments', 'attachmentIds', 'includeHistory'], 'requirements request');
   requireThat(request.version === 1 && ['project', 'application'].every(key => typeof request[key] === 'string' && request[key].trim() && request[key].length <= 200), 'Requirements need project and application identity.');
   requireThat(Array.isArray(request.sources) && request.sources.length <= 100 && new Set(request.sources.map(source => source.id)).size === request.sources.length, 'Select distinct supplied sources.');
   if (request.attachments !== undefined) requireThat(request.storyId !== undefined && Array.isArray(request.attachments) && request.attachments.length <= 100 && new Set(request.attachments.map(item => item.attachmentId?.toLowerCase())).size === request.attachments.length && request.attachments.every(item => adoGuid(item.attachmentId) && item.extraction && typeof item.extraction === 'object'), 'Attachment reader receipts need distinct ADO attachment identities.');
+  if (request.attachmentIds !== undefined) requireThat(request.storyId !== undefined && Array.isArray(request.attachmentIds) && request.attachmentIds.length <= 100 && request.attachmentIds.every(adoGuid) && new Set(request.attachmentIds.map(value => value.toLowerCase())).size === request.attachmentIds.length, 'Select distinct attachment IDs explicitly for one story.');
+  requireThat(request.includeHistory === undefined || typeof request.includeHistory === 'boolean', 'History selection must be boolean.');
   const parts = [], omissions = [], revisions = [], sourceKeys = new Set();
   function add(sourceId, revision, values, kind = 'requirement') {
     const safe = contextParts(values);
@@ -76,7 +78,24 @@ export async function captureRequirements(roots, raw, options = {}) {
       revisions.push({id: 'discussion', revision: fingerprint(comments)});
       for (const comment of comments) if (!comment.deleted) add('discussion', String(comment.version), [{location: `comment:${comment.id}`, text: ordinaryHtmlText(comment.text)}], 'discussion');
     } catch {omissions.push({sourceId: 'discussion', reason: 'inaccessible-or-incomplete'});}
+    if (request.includeHistory) {
+      try {
+        const history = [];
+        for (let skip = 0; ; skip += 100) {
+          const response = await client.read(`wit/workitems/${storyId}/revisions?$top=100&$skip=${skip}&api-version=7.1`);
+          requireThat(Array.isArray(response.value) && response.value.length <= 100 && history.length + response.value.length <= 1000, 'Story history is incomplete or exceeds 1000 revisions.');
+          for (const revision of response.value) {
+            requireThat(adoId(revision.id) === storyId && Number.isInteger(revision.rev) && revision.rev > 0 && revision.fields && !history.some(row => row.rev === revision.rev), 'Story history identity is incomplete.');
+            history.push({rev: revision.rev, fields: Object.fromEntries(['System.Description', 'Microsoft.VSTS.Common.AcceptanceCriteria', 'System.History'].filter(field => typeof revision.fields[field] === 'string').map(field => [field, ordinaryHtmlText(revision.fields[field])]))});
+          }
+          if (response.value.length < 100) break;
+        }
+        revisions.push({id: 'history', revision: fingerprint(history)});
+        for (const revision of history) for (const [field, value] of Object.entries(revision.fields)) if (value.trim()) add('history', String(revision.rev), [{location: `revision:${revision.rev}:${field}`, text: value}], 'discussion');
+      } catch {omissions.push({sourceId: 'history', reason: 'inaccessible-or-incomplete'});}
+    }
     requireThat(item.relations === undefined || Array.isArray(item.relations), 'Story attachments are incomplete.');
+    const missingAttachments = new Set(request.attachmentIds?.map(value => value.toLowerCase()) ?? []);
     for (const [index, relation] of (item.relations ?? []).entries()) if (relation.rel === 'AttachedFile') {
       let sourceId = 'attachment-' + index; const name = relation.attributes?.name ?? 'attachment';
       let url; try {url = new URL(relation.url);} catch {}
@@ -85,6 +104,8 @@ export async function captureRequirements(roots, raw, options = {}) {
       const attachmentId = prefix && url.pathname.slice(new URL(prefix).pathname.length);
       if (!prefix || !adoGuid(attachmentId) || url.username || url.password) {omissions.push({sourceId, reason: 'unverified-attachment-destination'}); continue;}
       sourceId = 'ado-attachment-' + attachmentId.toLowerCase();
+      if (request.attachmentIds !== undefined && !request.attachmentIds.some(value => value.toLowerCase() === attachmentId.toLowerCase())) {omissions.push({sourceId, reason: 'not-selected'}); continue;}
+      missingAttachments.delete(attachmentId.toLowerCase());
       try {
         const bytes = await client.attachment(attachmentId);
         revisions.push({id: sourceId, revision: digest(bytes), name});
@@ -94,6 +115,7 @@ export async function captureRequirements(roots, raw, options = {}) {
         if (extracted.coverage !== 'complete' || extracted.redacted) omissions.push({sourceId, reason: extracted.coverage, redacted: extracted.redacted ?? 0});
       } catch {omissions.push({sourceId, reason: 'inaccessible-attachment'});}
     }
+    for (const attachmentId of missingAttachments) omissions.push({sourceId: 'ado-attachment-' + attachmentId, reason: 'unverified-selected-attachment'});
   }
   for (const source of request.sources) {
     keys(source, ['id', 'kind', 'path', 'encoding', 'delimiter', 'extraction'], 'requirements source');
