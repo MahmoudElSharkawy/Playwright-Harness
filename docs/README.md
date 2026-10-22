@@ -16,6 +16,7 @@ explains how the harness and the automation it helps you author fit together.
 | Configure environments, targets, secrets and project knowledge | [Configuration](configuration.md) |
 | Retrieve or refresh project/application context with traceable sources | [Project context](project-context.md) |
 | Review requirements in chat, preserve accepted/unresolved rules and approve story comments with requested team mentions | [Requirements analysis](requirements-analysis.md) |
+| Design/revise cases from selected requirements, review complete coverage and publish approved ADO operations | [Test case design](test-case-design.md) |
 | Turn local scenarios or ADO cases into reviewed automation | [Automation workflow](PIPELINE.md) |
 | Run ADO manual cases without generating code | [Manual execution](manual-execution.md) |
 | Connect Azure DevOps and deliver results or code | [Azure DevOps integration](azure-devops.md) |

@@ -1,0 +1,146 @@
+---
+name: test-case-design
+description: Design, review, create or revise source-grounded test cases for a selected story or supplied requirements, reuse suitable existing cases, and optionally publish an approved proposal to Azure DevOps. Use for test-case design, not test execution, automation generation or direct edits to already selected case text.
+---
+
+# Test case design
+
+Resolve this linked skill to its real package path. Read [ROOTS.md](../ROOTS.md)
+and the [workflow, formats and example](../../../docs/test-case-design.md).
+The host designs and independently reviews; deterministic commands validate,
+render, persist and deliver. Consumer state belongs under
+`.harness/state/test-case-design/`. The canonical skill name is `test-case-design`.
+
+## Establish accepted scope
+
+Resolve the selected story/local requirements, project/application, relevant saved
+context and prior design/requirements IDs from available conversation and project
+information. Bundle only essential missing choices. Use an existing #62 requirements
+inventory where available; otherwise capture the accepted sources through
+`test-case-design prepare`. Local design never needs ADO access. Use `requirements
+inventory` to partition compound source statements, preserving IDs across reordering,
+and record actual acceptance evidence. Never invent an owner decision merely to
+make publication possible. Captured headings and setup introductions can remain
+unknown structural context; distinguish them from unresolved business decisions in
+assessment reasons instead of inventing an owner ruling.
+After inventory acceptance or partition edits, run design `prepare` again with the
+same analysis ID and selected context/case scope to bind the current acceptance head,
+then save the proposal using the newly returned source fingerprint.
+
+Read current description, acceptance criteria, relevant discussion/history and
+linked cases. New stories may have no linked cases. Captured history identifies
+superseded statements; it does not revive them. Retrieve related business evidence
+narrowly within authorized scope, using direct links as leads. Consider applicable
+rules, terminology, realistic setup/data and reusable cases from the selected
+captured project context. Missing/stale context permits useful supported design;
+disclose the gap. Do not invoke context-qa, refresh/build context, download unselected
+attachments or expand neighboring regression scope. Captures with older broad
+attachment ingestion need explicit reselection.
+
+Only accepted selected-story description/criteria authorize expected outcomes.
+Comments, conventions and neighboring stories can clarify or expose gaps; they do
+not automatically accept rules. Resolve contradictions, missing decisions and
+unaccepted assumptions before delivering affected cases. Empty values, spaces and
+special characters do not automatically imply rejection.
+
+## Design and independently evaluate
+
+Choose Create, Update, Reuse unchanged or no-change from actual differences and
+coverage. Preserve real ADO IDs; new cases retain stable `NEW-...` IDs until the
+server assigns one. Reuse suitable cases without copies or cosmetic rewrites.
+Keep one coherent objective and executable path per case. Use meaningful partitions,
+boundaries, decisions and state transitions where accepted behavior needs them.
+Consolidate overlap while retaining meaningful role/input/state/integration/outcome
+differences. No category or count quotas. Use consumer setup/data conventions and
+per-case/per-run ownership; include necessary cleanup in the actual ordered steps.
+
+Case content is exactly ID, title, prerequisites, test data, coverage references,
+test type, scenario type and ordered action/observable-expectation pairs. Proposed
+action is a review control. Choose one test type: Functional, Accessibility,
+Compatibility, UIUX, Security, Performance, Responsiveness or Localization; choose
+Positive or Negative. Nonfunctional cases require accepted conditions, environments
+and measurable targets in these ordinary fields. Missing workloads, thresholds or
+compliance decisions remain gaps; classification authorizes no execution.
+
+Map every accepted in-scope criterion and testable description requirement to actual
+verifying steps, exact expectations and test data. One criterion may need several
+cases; one case may verify related criteria. Partition multi-part criteria before
+claiming completeness. Missing branches and unresolved decisions remain explicit.
+Expected results distinguish wrong-user/wrong-record/no-op outcomes. Cleanup is
+not the final business outcome. The overview derives its final result from the last
+mapped verification, so map business verification rather than cleanup as coverage.
+
+After saving the complete proposal, dispatch a fresh independent reviewer with the
+raw selected sources, inventory, context, existing cases and proposal. Ask it to
+refute source grounding, every rule/condition/branch/outcome, independence, meaningful
+expectations and completeness. Save its actual per-case and per-requirement evidence
+with `assess`; an author-filled reviewer name, schema pass or matching reference is
+not evidence of independent review. Fix findings and revalidate edited content.
+Record residual gaps after edits, selection and delivery. Never equate publication,
+approval or valid unchanged cases with passing execution.
+
+## Show the agreed chat review
+
+Display the renderer's summary first: distinct-case total, all eight test-type
+counts including zeros, and both scenario counts. Then the overview containing
+every case with exactly ID, Proposed action, Title, Prerequisites, Final expected
+results, Coverage reference, Test type and Scenario type.
+
+Display every case completely in one table with three bold section dividers:
+case details (ID, Title, Coverage reference, Test type, Scenario type); setup
+(Prerequisites and Test data); complete numbered steps (action and expected result).
+Continue long tables. Never replace steps with summaries, split a case into adjacent
+tables, nest tables or add a separate final-result row. Do not add Priority, Review
+status, Execution layer, risk-rationale, Technique, Basis, Counterexample or other
+case-data fields. Internal mappings are not a mandatory chat coverage matrix.
+
+Support approve all, selected IDs, reject and revise. Explain material update diffs,
+shared-case impacts, unresolved gaps and publication choices briefly outside tables.
+Use `reject` to invalidate an unattempted preview; retain its draft/history. Save edits
+against the current head and repeat affected review. Partial approval preserves the
+unapproved cases and gaps.
+
+## Optional ADO publication
+
+When requested, generate `preview` for selected IDs. Show the complete proposal and
+exact native changes, destination and shared-case effects. Outside the case tables,
+show each combined Preparation action and its observable readiness expectation;
+these are part of approval, never hidden implementation metadata. Usually one step
+combines the reviewed Prerequisites and Test data. If distinct setup actions each
+need independent verification, resolve their ordering/readiness explicitly before
+delivery rather than inventing a readiness result. Missing setup/data remains a
+decision. Keep secret references; never publish actual external credentials.
+
+Obtain one consolidated approval for this complete unchanged preview. Reuse already
+given authorization when it covers exactly this content, selection, operations and
+destination. Changed content, relevant source/case revisions, destination or missing
+acceptance requires affected revalidation and renewed approval. Use only `publish`
+with its exact fingerprint; do not bypass it with direct ADO writes.
+
+Native Title receives the title. Description receives the selected-story coverage
+block while retaining unrelated content. Two separate tags use the exact test/scenario
+values, preserving unrelated tags. Native steps begin with combined Preparation and
+its readiness check, followed by all reviewed business steps; update reconciles
+existing preparation and preserves stable step IDs. Sequence position is consecutive.
+No duplicate setup in Description or chat steps, separate final result or chat-only
+columns. Required unavailable/read-only fields, tag permissions or custom process
+requirements are explicit publication gaps; never drop fields or create custom ones.
+New cases link to the approved story atomically. Native History carries the previewed
+operation marker needed for unambiguous recovery.
+
+On partial/interrupted delivery, `reconcile` reads exact native history, fields and
+story links against durable request fingerprints. Never identify by title, blindly
+retry, recreate uncertain cases or repeat confirmed writes. Resume only remaining
+authorized work using the same approval. Retain returned IDs/URLs, failed/pending/
+uncertain outcomes and immutable receipts. Use real ADO IDs in subsequent proposals.
+
+## Handoff
+
+Use `handoff` to write validated local scenarios and adjacent source/impact mappings
+for [execute-test](../execute-test/SKILL.md) or
+[automate-test](../automate-test/SKILL.md). Accepted revisions affecting existing
+automation go to [maintain-test](../maintain-test/SKILL.md). Preserve failure history,
+cumulative repair budgets, independent review and two fresh scoped green runs.
+Handoff/publication does not set tracker completion or claim repaired automation.
+Wider source impacts belong to the change-impact workflow when available; report
+them without adding neighboring tests to this design.

@@ -188,6 +188,7 @@ reports for cases that stop before execution or generated tests exist.
 | Configure environments, targets, secrets and knowledge | [Configuration](docs/configuration.md) |
 | Build or refresh business context from selected items, saved criteria and documents | [Project context](docs/project-context.md) |
 | Review requirements in chat and approve a story comment with requested team mentions | [Requirements analysis](docs/requirements-analysis.md) |
+| Design/revise test cases, review source coverage and publish an approved ADO selection | [Test case design](docs/test-case-design.md) |
 | Explicitly ask business questions with readable citations from saved evidence | [Business context questions](docs/context-qa.md) |
 | Generate automation or execute manual cases | [Automation workflow](docs/PIPELINE.md) · [Manual execution](docs/manual-execution.md) |
 | Connect ADO, retrieve cases or deliver results | [Azure DevOps](docs/azure-devops.md) |

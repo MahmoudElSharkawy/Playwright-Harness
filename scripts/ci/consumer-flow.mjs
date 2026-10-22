@@ -127,7 +127,8 @@ flow('C1', 'An empty folder gets the harness and the starter', () => {
   assert(!existsSync(join(c1, name)), 'The downloaded archive stayed in the project folder.');
   const report = check(c1); assert.equal(report.exit, 0, report.errors.join(' ')); noDrift(report);
   for (const prefix of ['skills', 'generation verification']) assert.equal(feature(report, prefix), 'ready', `${prefix} is not ready.`);
-  for (const rel of ['.claude/skills/test-data', '.agents/skills/harness-setup', '.claude/skills/project-context', '.agents/skills/context-update', '.claude/skills/context-qa', '.agents/skills/context-qa']) assert.equal(linked(c1, rel), installedSkill(c1, rel.split('/').pop()));
+  for (const rel of ['.claude/skills/test-data', '.agents/skills/harness-setup', '.claude/skills/project-context', '.agents/skills/context-update', '.claude/skills/context-qa', '.agents/skills/context-qa', '.claude/skills/test-case-design', '.agents/skills/test-case-design']) assert.equal(linked(c1, rel), installedSkill(c1, rel.split('/').pop()));
+  assert.match(harness(c1, 'test-case-design', '--help').stdout, /preview\|publish\|reconcile\|handoff/);
   for (const host of ['.agents', '.claude']) {
     const skill = join(c1, host, 'skills/context-qa');
     assert.match(readFileSync(join(skill, 'SKILL.md'), 'utf8'), /^disable-model-invocation: true\r?$/m);
