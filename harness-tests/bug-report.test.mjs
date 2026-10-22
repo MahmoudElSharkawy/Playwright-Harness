@@ -5,8 +5,10 @@ import {join} from 'node:path';
 import {deflateSync} from 'node:zlib';
 import {fixture} from './fixtures/execution-core.mjs';
 import {adoFixture} from './fixtures/ado.mjs';
+import {executionFixture, executeApi} from './fixtures/execute.mjs';
 import {createAdoClient} from '../scripts/lib/integrations/ado-client.mjs';
-import {prepareBugReport, readBugReport, editBugReport, previewBugReport, approveBugReport, fileBugReport, annotateBugReport, reviewBugAnnotation} from '../scripts/lib/bug-report/index.mjs';
+import {prepareBugReport, readBugReport, editBugReport, previewBugReport, approveBugReport, fileBugReport, annotateBugReport, reviewBugAnnotation, bugReportFromExecution} from '../scripts/lib/bug-report/index.mjs';
+import {collectExecution, deliverableDefects} from '../scripts/lib/execute/report.mjs';
 
 const input = () => ({version: 1, description: 'The status API returned 500 for an existing record.', source: {content: 'Existing records must return status 200.', expected: 'Status 200'},
   draft: {title: 'Existing record status request returns 500', description: 'The reported request fails.', prerequisites: ['An existing record'], steps: ['Request the record status'], expected: 'Status 200', actual: 'Status 500', fields: {}},
@@ -131,4 +133,19 @@ test('reviewed raw and annotated pair uses one bug and recovers a lost second at
   await assert.rejects(fileBugReport(roots, 'bug-pair', preview.hash, dependencies)); ado.state.fault = null;
   const done = await fileBugReport(roots, 'bug-pair', preview.hash, dependencies); assert.equal(done.bugs[0].state, 'COMPLETED'); assert.equal(ado.state.attachments.size, 2); assert.equal(ado.state.items.get(800).relations.filter(item => item.rel === 'AttachedFile').length, 2);
   assert.equal(writes(ado).filter(item => item.path === 'wit/workitems/$bug').length, 1);
+});
+test('an eligible screenshot needs an annotation attempt; an explicit eligible raw-only fallback can be delivered', async t => {
+  const ado = await adoFixture(t), {roots} = fixture(t), dependencies = deps(ado, roots), raw = input(); writeFileSync(join(roots.projectRoot, 'fallback.png'), image(120, 80));
+  raw.evidence = [{path: 'fallback.png', kind: 'screenshot', origin: 'user', sanitized: true, verification: {privacy: true, relevance: true}, context: 'Synthetic image reviewed against this report'}]; const state = prepareBugReport(roots, 'bug-fallback', raw);
+  assert.equal((await previewBugReport(roots, 'bug-fallback', dependencies)).ready, false);
+  const fallback = await annotateBugReport(roots, 'bug-fallback', {source: state.evidence[0].path, output: '.harness/runs/bug-fallback/annotated.png', summary: 'Status error', expected: raw.draft.expected, actual: raw.draft.actual, boxes: [{kind: 'defect', x: 0.1, y: 0.1, width: 0.5, height: 0.5}], verification: {privacy: true, relevance: true}}, {inventory: dependencies.inventory, render: async () => {throw Object.assign(new Error('Unavailable'), {code: 'RENDERER_UNAVAILABLE'});}});
+  assert.equal(fallback.annotations[0].record.state, 'RAW_ONLY'); assert.equal(fallback.annotations[0].record.reason, 'renderer-unavailable');
+  const preview = await previewBugReport(roots, 'bug-fallback', dependencies); assert(preview.ready); assert.equal(preview.bugs[0].attachments.length, 1); approveBugReport(roots, 'bug-fallback', preview.hash); await fileBugReport(roots, 'bug-fallback', preview.hash, dependencies); assert.equal(ado.state.attachments.size, 1);
+});
+test('execution handoff retains the defect identity, verified observations and case-path configuration', async t => {
+  const ado = await adoFixture(t), execution = await executionFixture(t, {organizationUrl: ado.config.organizationUrl, handler: (req, res) => {res.writeHead(500); res.end('{}');}}); execution.apiStep(); execution.freeze(); await executeApi(execution);
+  const defect = deliverableDefects(collectExecution(execution.roots, execution.executionId)).defects[0]; ado.config.bugs = {pathsFrom: 'case'};
+  const state = bugReportFromExecution(execution.roots, 'bug-execution', execution.executionId, defect.fingerprint), dependencies = deps(ado, execution.roots); assert.equal(state.intake.source.caseId, 101); assert.equal(state.confirmation.agent, 'reproduced');
+  const preview = await previewBugReport(execution.roots, 'bug-execution', dependencies); assert.equal(preview.ready, true); assert.equal(preview.bugs[0].fingerprint, defect.fingerprint);
+  ado.state.items.get(101).rev = 2; const stale = await previewBugReport(execution.roots, 'bug-execution', dependencies); assert.equal(stale.ready, false); assert.match(stale.problems[0].message, /case revision changed/i); assert.equal(writes(ado).length, 0);
 });

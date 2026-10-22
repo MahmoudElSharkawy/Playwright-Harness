@@ -7,6 +7,8 @@ import {readBounded, writeJson} from '../execute/storage.mjs';
 import {withTransition} from '../execute/lock.mjs';
 import {createAdoClient} from '../integrations/ado-client.mjs';
 import {loadAdoConfiguration} from '../integrations/config.mjs';
+import {createAdoTestSource} from '../integrations/ado-source.mjs';
+import {checkSourceRevisions} from '../execute/source.mjs';
 import {deliverBugReports} from '../execute/delivery.mjs';
 import {collectExecution, deliverableDefects, readVerifiedEvidence} from '../execute/report.mjs';
 import {prepareAnnotation, bindAnnotationReview, verifyAnnotation, inspectScreenshot} from './annotations.mjs';
@@ -116,6 +118,8 @@ async function sourceFresh(client, state) {
       requireThat(view.source.organizationUrl === client.configuration.organizationUrl && view.source.project.toLowerCase() === client.configuration.project.toLowerCase(), 'Bug destination differs from the captured execution source.');
       const original = view.source.cases.find(item => item.id === defect.caseId), latest = await client.read(`wit/workitems/${defect.caseId}?api-version=7.1`); await client.requireWorkItemProject(latest);
       requireThat(latest.id === original.id && latest.rev === original.rev, 'Executed case revision changed; review current source before filing.');
+      const changes = await checkSourceRevisions({...view.source, cases: [original]}, createAdoTestSource(client));
+      requireThat(changes.length === 0, 'Executed case or shared-step source changed; review current source before filing.');
     }
     if (view.source.scope.kind === 'story') {const story = await client.read(`wit/workitems/${view.source.scope.storyId}?api-version=7.1`); await client.requireWorkItemProject(story); requireThat(story.id === view.source.scope.storyId && story.rev === view.source.scopeRev, 'Executed story revision changed; review current source before filing.');}
     return;
