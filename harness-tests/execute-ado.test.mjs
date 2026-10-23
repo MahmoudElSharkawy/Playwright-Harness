@@ -25,6 +25,15 @@ test('lost bug create response adopts its filing tag without creating twice', as
   const f = await fixture(t, {fail: true}); f.ado.state.afterBugCreate = ({res}) => res.destroy(); await assert.rejects(f.deliver('file-bugs', {execute: true}), /incomplete/); f.ado.state.afterBugCreate = null;
   const resumed = await f.deliver('file-bugs', {execute: true}); assert.equal(resumed.bugs[0].state, 'COMPLETED'); assert.equal(writes(f.ado).filter(request => request.path === 'wit/workitems/$bug').length, 1);
 });
+test('explicit recreation after an unacknowledged non-create binds its new plan and resumes unchanged', async t => {
+  const f = await fixture(t, {fail: true}), initial = await f.deliver('file-bugs');
+  f.ado.state.fault = ({req, res, path, url}) => {if (req.method === 'POST' && path === 'wit/workitems/$bug' && url.searchParams.get('validateOnly') !== 'true') {res.destroy(); return true;}};
+  await assert.rejects(f.deliver('file-bugs', {execute: true}), /incomplete/); f.ado.state.fault = null;
+  await assert.rejects(f.deliver('file-bugs', {execute: true, recreate: initial.bugs[0].fingerprint, approvedPlan: (await f.deliver('file-bugs')).planHash}), /new preview/i);
+  const recreated = await f.deliver('file-bugs', {execute: true, recreate: initial.bugs[0].fingerprint}); assert.equal(recreated.bugs[0].state, 'COMPLETED');
+  const resumed = await f.deliver('file-bugs', {execute: true}); assert.equal(resumed.bugs[0].id, recreated.bugs[0].id); assert.equal(resumed.bugs[0].state, 'COMPLETED');
+  assert.equal([...f.ado.state.items.values()].filter(item => item.fields['System.WorkItemType'] === 'Bug').length, 1);
+});
 test('publication preview is read-only, lost create reconciles using paged client-side names, and new-run is unique', async t => {
   const f = await fixture(t); const preview = await f.deliver('publish-results'); assert.equal(preview.cases[0].outcome, 'Passed'); assert.equal(writes(f.ado).length, 0);
   f.ado.state.afterRunCreate = ({res}) => res.destroy(); await assert.rejects(f.deliver('publish-results', {execute: true}), /incomplete/); f.ado.state.afterRunCreate = null;

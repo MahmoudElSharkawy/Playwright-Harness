@@ -112,5 +112,12 @@ does not use the legacy `_verify-state.json` sync: record a history event from i
 verified status. Preserve non-automatable rulings. Local cases without a plan keep
 their assessment and generation history without inventing an ADO plan.
 
+For a supported application-defect diagnosis or a user-described issue, use
+[bug-report](../bug-report/SKILL.md) for the editable source-grounded draft,
+project-specific fields and evidence review. Preserve this assessment, attempt
+provenance and uncertainty. A suspected test/environment fault must not become a
+confirmed product defect; any further reproduction stays within existing authority
+and cumulative budgets.
+
 Report unresolved items candidly. External bug filing/result publication still
 requires its own authorization. Do not introduce quarantine or scheduled monitoring.

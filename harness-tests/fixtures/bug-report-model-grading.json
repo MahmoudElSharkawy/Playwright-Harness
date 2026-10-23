@@ -1,0 +1,56 @@
+{
+  "version": 1,
+  "reviewer": "/root/bug_review",
+  "producer": "/root/bug_skill",
+  "inputArtifact": "harness-tests/fixtures/bug-report-model-outputs.json",
+  "method": "Independent read of all five exact generated answers against their embedded source, user correction, schema and evidence fixtures, plus the canonical bug-report skill/playbook. The reviewer did not generate those answers.",
+  "limitations": [
+    "Synthetic five-scenario model exercise, not live application or Azure DevOps validation.",
+    "No native-host skill-discovery, forced compaction or live attachment upload was exercised.",
+    "Exact producer model identifier and client build were unavailable; no claim about all models/hosts or statistical effectiveness is made.",
+    "No model-token, cost or time-saving measurement was available."
+  ],
+  "rubric": [
+    "source grounding",
+    "reported-versus-verified distinction",
+    "visible missing/conflicting evidence",
+    "faithful user edits",
+    "project-specific fields",
+    "evidence provenance and execution/filing boundaries"
+  ],
+  "scenarios": [
+    {
+      "id": "informal-story-intake",
+      "verdict": "PASS",
+      "evidence": "The title and actual result name the disappearing link, not invoice deletion. Expected invoice preservation traces to S1 revision 3; stock release, environment, frequency and agent reproduction remain unverified. The full editable table includes required bug fields and destination gaps.",
+      "note": "The request to confirm exact steps is mildly redundant because the supplied account already states the actions; this does not change the draft's facts or create an execution/filing approval."
+    },
+    {
+      "id": "missing-current-source-conflicting-expectation",
+      "verdict": "PASS",
+      "evidence": "The answer identifies the conflict between requested deletion and revision-7 retention, records unavailable current source and labels defect classification provisional. It does not turn wording approval into a changed business requirement."
+    },
+    {
+      "id": "edited-draft-custom-schema",
+      "verdict": "PASS",
+      "evidence": "The revision corrects deletion to a link disappearing until reload, keeps user origin and agent not-run status, uses Problem/Planned from the fixture, retains required Component as missing and omits the unavailable Severity field. It explicitly disclaims live metadata/server validation."
+    },
+    {
+      "id": "existing-api-db-evidence-no-rerun",
+      "verdict": "PASS",
+      "evidence": "The draft derives duplicate-transfer behavior from supplied T100/T101 evidence, preserves the original expected idempotent result, user confirmation, build/environment and controlled replay context. It reuses API/DB candidates without requiring a screenshot or another run and states that bytes/hashes remain unverified."
+    },
+    {
+      "id": "inconclusive-reproduction-primary-versus-cleanup",
+      "verdict": "PASS",
+      "evidence": "The answer distinguishes primary HTTP 500 from the retry's HTTP 400 and the later cleanup timeout, preserves the unverified no-payment criterion and reports 1/2 selected diagnostic attempts without claiming a historical failure rate or stable reproduction. Further diagnosis returns to maintenance under existing budgets."
+    }
+  ],
+  "summary": {
+    "evaluated": 5,
+    "passed": 5,
+    "failed": 0,
+    "minorObservations": 1
+  },
+  "verdict": "PASS within the stated synthetic evaluation scope"
+}

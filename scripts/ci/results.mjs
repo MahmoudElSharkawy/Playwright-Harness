@@ -59,6 +59,10 @@ export function testFailureDiagnostics(output, files) {
     const stack = block.match(/^\s+stack: \|[^\r\n]*\r?\n([\s\S]*)/m)?.[1] ?? '';
     const stackLocation = stack.split(/\r?\n/).map(line => coordinate(line.trim())).find(Boolean);
     if (stackLocation) failure.stackLocation = stackLocation;
+    const native = block.match(/^\s+Owned process inspection failed: (TIMEOUT|SPAWN_FAILURE|OUTPUT_LIMIT|CANCELLED|EXIT_FAILURE)\.\s*$/m)?.[1];
+    if (native) failure.nativeDiagnostic = `process-inspection-${native.toLowerCase().replaceAll('_', '-')}`;
+    else if (/^\s+spawnSync whoami ETIMEDOUT\s*$/m.test(block)) failure.nativeDiagnostic = 'acl-owner-timeout';
+    else if (/^\s+spawnSync icacls ETIMEDOUT\s*$/m.test(block)) failure.nativeDiagnostic = 'acl-grant-timeout';
     failures.push(failure); if (failures.length === 100) break;
   }
   return failures;

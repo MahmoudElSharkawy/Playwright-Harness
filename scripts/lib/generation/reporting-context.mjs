@@ -1,7 +1,30 @@
 import {data, fingerprint, frozen, id, keys, requireThat, unique} from '../execution-core/data.mjs';
-import {assessRun} from '../execution-core/index.mjs';
+import {assessRun, createRun} from '../execution-core/index.mjs';
+import {join} from 'node:path';
+import {readJson} from '../project-config.mjs';
+import {relativeFile} from './storage.mjs';
 import {caseNotes} from '../reporting/case-notes.mjs';
 const ASSESSMENTS = new WeakSet();
+
+/** Reconstruct the same saved observation paths for generation and post-run bug review. */
+export function readObservedExecutions(roots, executions) {
+  requireThat(Array.isArray(executions), 'Generation needs observed executions.');
+  return executions.map(item => {
+    keys(item, ['snapshot', 'runRoot'], 'observed execution');
+    const saved = readJson(relativeFile(roots, item.snapshot));
+    const run = createRun({...saved.inputs, id: saved.id, startedAt: saved.startedAt});
+    requireThat(run.inputFingerprint === saved.inputFingerprint, 'Run snapshot differs from assessed inputs.');
+    const runRoot = relativeFile(roots, item.runRoot);
+    return {run, roots: {...roots, runRoot}, observations: readJson(join(runRoot, 'observations.json'))};
+  });
+}
+export function readReportingObservations(roots, path) {
+  const input = readJson(relativeFile(roots, path));
+  keys(input, ['source', 'executions', 'bindings'], 'reporting observation paths');
+  const source = readJson(relativeFile(roots, input.source)), executions = readObservedExecutions(roots, input.executions);
+  return {assessment: createReportingAssessment(source, executions, input.bindings),
+    fingerprint: fingerprint({input, source, executions: executions.map(({run, observations}) => ({run, observations}))})};
+}
 
 /** Reporting may inventory an incomplete draft; generation still requires validateLocalSource. */
 export function reportSource(input) {

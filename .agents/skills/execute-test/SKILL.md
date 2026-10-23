@@ -42,6 +42,14 @@ given by the user remains in force for ordinary permitted application operations
    raw records, internal IDs, hashes and debugging metadata stay in execution storage.
    If report delivery fails, state that separately from case outcomes. Report output is ignored consumer storage; never generate
    framework, tracker or legacy verification files on this route.
-5. Read [delivery](references/delivery.md) only when ADO delivery is requested.
+5. Before finishing failed, blocked or partial execution, perform the
+   [post-run bug review](../../../docs/bug-reporting.md#post-run-review) through
+   [bug-report](../bug-report/SKILL.md), without waiting for another invocation.
+   Classify every finding, prepare editable drafts for supported application
+   defects, and group related occurrences only with an evidence-backed reason.
+   Present complete drafts and remaining investigation/repair items for edits,
+   selection or deferral. Reuse verified run evidence. Drafting does not
+   authorize filing or additional reproduction.
+   Read [delivery](references/delivery.md) only when ADO delivery is requested.
    Preview first. External writes require `--execute`; the request must authorize
    the concrete delivery. Story scope supports bugs only.

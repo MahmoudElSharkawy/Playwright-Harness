@@ -204,6 +204,23 @@ test('failed TAP diagnostics identify the actual assertion in real Node test out
   assert.equal(failure.location.line, 3); assert.equal(failure.stackLocation.line, 4);
   assert(!JSON.stringify(failure).includes('private'));
 });
+
+test('failed CLI assertions retain only allow-listed native command categories from real TAP', t => {
+  const root = temporary(t), file = join(root, 'synthetic.test.mjs');
+  for (const [message, diagnostic] of [
+    ['Owned process inspection failed: TIMEOUT.', 'process-inspection-timeout'],
+    ['Owned process inspection failed: EXIT_FAILURE.', 'process-inspection-exit-failure'],
+    ['spawnSync whoami ETIMEDOUT', 'acl-owner-timeout'],
+    ['spawnSync icacls ETIMEDOUT', 'acl-grant-timeout'],
+    ['private-error', undefined]
+  ]) {
+    writeFileSync(file, `import test from 'node:test';\nimport assert from 'node:assert/strict';\ntest('private-test-name', () => assert.equal(1, 0, ${JSON.stringify(message + '\nprivate-output')}));\n`);
+    const result = command(['--test', '--test-reporter=tap', file], {cwd: root, env: {NODE_TEST_CONTEXT: undefined}});
+    assert.equal(result.status, 'FAIL');
+    const [failure] = testFailureDiagnostics(result.output, ['synthetic.test.mjs']);
+    assert.equal(failure.nativeDiagnostic, diagnostic); assert(!JSON.stringify(failure).includes('private'));
+  }
+});
 test('native parallel proof still requires both substantive scopes and complete cleanup', () => {
   const assessment = {status: 'PASS', comparison: {status: 'PASS'}, counts: [{scenarios: 13, assertions: 35, evidence: 166}, {scenarios: 13, assertions: 35, evidence: 166}]};
   const cleanup = {ownedDatabasesRemoved: true, fixtureServersClosed: true};

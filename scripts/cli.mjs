@@ -14,7 +14,7 @@ const SCRIPTS = {
   'tag-workitem': 'tag-ado-workitem.mjs', 'relink-story': 'relink-ado-story.mjs', pr: 'ado-pr.mjs', 'load-source': 'load-local-source.mjs',
   'edit-cases': 'edit-ado-cases.mjs',
   generate: 'generate-tests.mjs', 'render-results': 'render-results.mjs', 'generate-allure': 'generate-allure.mjs',
-  execute: 'execute-test.mjs', context: 'project-context.mjs', requirements: 'requirements-analysis.mjs', 'test-case-design': 'test-case-design.mjs',
+  execute: 'execute-test.mjs', context: 'project-context.mjs', requirements: 'requirements-analysis.mjs', 'test-case-design': 'test-case-design.mjs', 'bug-report': 'bug-report.mjs',
 };
 const USAGE = `pom-harness ${VERSION}
 

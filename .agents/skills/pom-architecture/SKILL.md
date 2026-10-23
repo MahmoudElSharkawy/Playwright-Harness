@@ -52,6 +52,7 @@ utils; nothing reaches upward or skips a layer (a spec never calls `page.locator
 |---|---|
 | Requirements/story analysis, editable chat review and confirmed story comments with requested team mentions | [requirements-analysis](../requirements-analysis/SKILL.md) |
 | Design or revise source-grounded test cases, review complete coverage in chat and optionally publish approved create/update/reuse proposals | [test-case-design](../test-case-design/SKILL.md) |
+| Draft/review a bug from selected story context, a user description or verified execution evidence, including project-specific fields and approved attachments | [bug-report](../bug-report/SKILL.md) |
 | Automating story-linked cases, an ADO suite or local scenarios into durable POM code | [automate-test](../automate-test/SKILL.md) |
 | Executing ADO manual cases interactively, with reports and optional bug/result delivery | [execute-test](../execute-test/SKILL.md) |
 | Updating existing ADO case titles, actions, expected results or ordinary-step ordering | [Case editing](../../../docs/ado-case-editing.md) |

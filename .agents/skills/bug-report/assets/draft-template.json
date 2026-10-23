@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "source": {
+    "content": "",
+    "expected": ""
+  },
+  "description": "",
+  "draft": {
+    "title": "",
+    "description": "",
+    "prerequisites": [],
+    "steps": [],
+    "expected": "",
+    "actual": "",
+    "fields": {}
+  },
+  "confirmation": {
+    "user": "reported",
+    "agent": "not-run"
+  },
+  "evidence": []
+}

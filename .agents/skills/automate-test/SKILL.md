@@ -21,14 +21,16 @@ Choose the source explicitly:
 ```
 
 ADO is optional and must be explicitly configured. For a story, use the existing
-`npx --no pom-harness fetch-story --story <id> --source-out <consumer-path.json>`
+`npx --no pom-harness fetch-story --story <id> --revisions --source-out <consumer-path.json>`
 route; no suite or plan is required. Follow Tested By links by default; select other
-link types only when requested. For a suite, use `fetch-suite --suite <id>
+link types only when requested. For a suite, use `fetch-suite --suite <id> --revisions
 --plan <id> --source-out <consumer-path.json>`, resolving the plan from the request
 or the configured ADO default. If neither supplies it, ask for the plan ID.
 Preserve fetch/refinement behavior for parameterized or incomplete cases: explicitly
 refine them into neutral input before generation. Pass the neutral source through
 the same workflow below. Local input requires no ADO configuration.
+Preserve the original revision-bearing `_suite.json` snapshot for post-run bug
+review. A later fetch cannot establish which source revision the run exercised.
 
 Read the
 [generation procedure](../../../docs/PIPELINE.md) for the executable handoff,
@@ -91,6 +93,17 @@ HTML focused on case outcomes, expectations, reasons and next actions; internal 
 hashes, raw records and verification-gate metadata stay in execution storage.
 Generation commands also return a separate `reporting` delivery result. Report failure
 must remain visible without changing the workflow verdict, repair count or greens.
+
+Before finishing failed, blocked or partial exploration or verification, perform the
+[post-run bug review](../../../docs/bug-reporting.md#post-run-review) through
+[bug-report](../bug-report/SKILL.md), without waiting for another invocation.
+Classify application, test, environment and unknown causes using the recorded source
+and evidence; use maintain-test for unresolved diagnosis within existing budgets.
+Prepare editable drafts for supported application defects, grouping related failures
+only with an evidence-backed reason. Present complete drafts and remaining attention
+items for edits, selection or deferral. Keep assertions, verdicts and repair/green
+counts intact. A failed automated assertion alone does not prove an application bug
+or an independent reproduction. Only explicitly approved previews may be filed in ADO.
 
 Use [Azure DevOps](../../../docs/azure-devops.md) for explicitly authorized external delivery.
 Local sources support the complete generation/review/verification path without ADO.

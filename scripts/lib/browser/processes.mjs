@@ -19,14 +19,14 @@ export async function processCall(executable, args, {cwd, env, timeoutMs = 30000
   });
 }
 
-export async function processInventory(deadlineAt = Infinity) {
+export async function processInventory(deadlineAt = Infinity, {platform = process.platform, call = processCall} = {}) {
   if (Date.now() >= deadlineAt) throw new Error('Owned process inspection deadline exceeded.');
-  if (process.platform === 'win32') {
-    const reply = await processCall('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', 'Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId,@{Name="Identity";Expression={$_.CreationDate.ToFileTimeUtc().ToString()}} | ConvertTo-Json -Compress'], {timeoutMs: Math.min(10000, deadlineAt - Date.now())});
-    if (reply.exitCode !== 0) throw new Error('Owned process inspection failed.');
+  if (platform === 'win32') {
+    const reply = await call('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', 'Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId,@{Name="Identity";Expression={$_.CreationDate.ToFileTimeUtc().ToString()}} | ConvertTo-Json -Compress'], {timeoutMs: Math.min(10000, deadlineAt - Date.now())});
+    if (reply.kind || reply.exitCode !== 0) throw new Error(`Owned process inspection failed: ${['TIMEOUT', 'SPAWN_FAILURE', 'OUTPUT_LIMIT', 'CANCELLED'].includes(reply.kind) ? reply.kind : 'EXIT_FAILURE'}.`);
     return JSON.parse(reply.stdout).map(item => ({pid: item.ProcessId, parent: item.ParentProcessId, identity: item.Identity}));
   }
-  if (process.platform !== 'linux') throw new Error('Browser ownership is supported on Windows and Linux only.');
+  if (platform !== 'linux') throw new Error('Browser ownership is supported on Windows and Linux only.');
   const result = [];
   for (const name of await readdir('/proc')) if (/^\d+$/.test(name)) {
     try {

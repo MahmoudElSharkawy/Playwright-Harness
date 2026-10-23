@@ -7,7 +7,7 @@ import {syncBuiltinESMExports} from 'node:module';
 import {createRun, defineOperation, authorizeOperation} from '../scripts/lib/execution-core/index.mjs';
 import {browserLifecycleOperations, browserCapabilities} from '../scripts/lib/browser/index.mjs';
 import {validateNativeArguments, classifyNative, prepareNativeSession, nativeCliInstallation} from '../scripts/lib/browser/native-cli.mjs';
-import {processCall, expandTree} from '../scripts/lib/browser/processes.mjs';
+import {processCall, processInventory, expandTree} from '../scripts/lib/browser/processes.mjs';
 import {within} from '../scripts/lib/skill-roots.mjs';
 import {runInput, environment} from './fixtures/execution-core.mjs';
 import {requiredBrowserChecks, completeBrowserChecks} from '../scripts/probes/browser-checks.mjs';
@@ -68,6 +68,16 @@ test('native child execution bounds output and supports cancellation without inv
   const limited = await processCall(process.execPath, ['-e', 'process.stdout.write("x".repeat(10000))'], {timeoutMs: 5000, maxBytes: 100}); assert.equal(limited.kind, 'OUTPUT_LIMIT');
   const controller = new AbortController(); controller.abort();
   const cancelled = await processCall(process.execPath, ['-e', 'process.exit(9)'], {signal: controller.signal}); assert.equal(cancelled.kind, 'CANCELLED'); assert.equal(cancelled.dispatched, false);
+});
+
+test('Windows process inspection preserves fixed failure categories without exposing command output', async () => {
+  for (const kind of ['TIMEOUT', 'SPAWN_FAILURE', 'OUTPUT_LIMIT', 'CANCELLED', 'private-kind', undefined]) for (const exitCode of kind ? [null, 0] : [1]) {
+    const call = async () => ({kind, exitCode, stdout: 'private-output', stderr: 'private-error'});
+    await assert.rejects(processInventory(Infinity, {platform: 'win32', call}), error => {
+      assert.equal(error.message, `Owned process inspection failed: ${!kind || kind === 'private-kind' ? 'EXIT_FAILURE' : kind}.`);
+      assert(!error.message.includes('private')); return true;
+    });
+  }
 });
 test('owned process trees never adopt an older process through a reused parent PID', () => {
   // Windows keeps a dead parent's PID on its children; the daemon later reused PID 40.
