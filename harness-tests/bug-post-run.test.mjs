@@ -47,9 +47,15 @@ for (const workflow of ['execute-test', 'automate-test']) test(`${workflow}: cla
   assert.equal((await prepareRunBugReports(f.roots, 'post-run', input)).drafts[0].reportId, id);
   assert.equal(readBugReport(f.roots, id).draft.title, 'Corrected observation failure');
   const preview = await previewBugReport(f.roots, id, dependencies); assert(preview.ready, JSON.stringify(preview.problems));
+  const html = preview.bugs[0].fields['Microsoft.VSTS.TCM.ReproSteps'];
+  assert(html.includes(`Source: ${workflow === 'execute-test' ? 'Test execution' : 'Automated tests'}`));
+  assert(!html.includes('sourceFingerprint')); assert(!html.includes('observationsFingerprint')); assert(!html.includes('"postRun"')); assert(!html.includes(initial.intake.source.defectFingerprint));
+  assert.equal(html.includes('Agent reproduction: Reproduced'), workflow === 'execute-test');
+  assert(html.includes(workflow === 'execute-test' ? 'Test case #101' : 'case1')); assert(html.includes(workflow === 'execute-test' ? 'Test case #102' : 'case2'));
   await assert.rejects(fileBugReport(f.roots, id, preview.hash, dependencies)); assert.equal(writes(ado).length, 0);
   approveBugReport(f.roots, id, preview.hash); await fileBugReport(f.roots, id, preview.hash, dependencies);
   assert.equal(writes(ado).filter(row => row.path === 'wit/workitems/$bug').length, 1);
+  assert.equal(ado.state.items.get(800).fields['Microsoft.VSTS.TCM.ReproSteps'], html);
   const after = workflow === 'automate-test' ? await generationStatus(f.roots, f.source.id) : readFileSync(join(f.projectRoot, `.harness/runs/${f.executionId}/execution.json`));
   assert.deepEqual(after, before);
 });

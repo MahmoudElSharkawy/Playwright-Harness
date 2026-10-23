@@ -7,6 +7,7 @@ import {createAdoTestManagement, prepareExecutionPublication} from '../integrati
 import {loadAdoConfiguration, adoId, adoGuid} from '../integrations/config.mjs';
 import {fingerprint, requireThat} from '../execution-core/data.mjs';
 import {escapeHtml} from '../reporting/render.mjs';
+import {renderBugNarrative} from './bug-narrative.mjs';
 import {collectExecution, executionDefects, deliverableDefects, readVerifiedEvidence} from './report.mjs';
 import {checkSourceRevisions} from './source.mjs';
 import {readBounded, writeJson, ownedFile} from './storage.mjs';
@@ -58,7 +59,7 @@ export function draftMetadata(drafts, fp, defaults, title) {
 }
 export {allowedFieldValue} from '../integrations/bug-fields.mjs';
 async function prepareBug(client, view, defect, revisions, metadata, drafts, intent) {
-  const defaults = client.configuration.bugs ?? {}, edited = draftMetadata(drafts, defect.fingerprint, defaults, defect.title), sourceCase = view.source.cases.find(item => item.id === defect.caseId), changed = revisions.find(item => item.caseId === defect.caseId);
+  const defaults = client.configuration.bugs ?? {}, edited = draftMetadata(drafts, defect.fingerprint, defaults, defect.title), changed = revisions.find(item => item.caseId === defect.caseId);
   const fields = {...defaults.fields, ...edited.fields, [metadata.mappings.title]: edited.title, 'System.Tags': [...(defaults.tags ?? []), defect.fingerprint, `harness-filing-${intent.filingId.slice(0, 8)}`].join('; ')};
   let paths = {};
   if (defaults.pathsFrom) {
@@ -69,14 +70,11 @@ async function prepareBug(client, view, defect, revisions, metadata, drafts, int
   if (defaults.assignedTo) fields['System.AssignedTo'] ??= defaults.assignedTo;
   if (edited.priority !== undefined) fields['Microsoft.VSTS.Common.Priority'] = edited.priority;
   if (edited.severity !== undefined) fields['Microsoft.VSTS.Common.Severity'] = edited.severity;
-  const h = escapeHtml, sourceScenario = view.source.scenarios.find(item => item.id === defect.scenarioId);
-  const originalSteps = sourceScenario?.steps.map(step => `${step.position}. ${step.action}\nExpected: ${step.expected.join('; ')}`).join('\n') ?? '';
-  const narrative = view.reportContext ? `<pre>${h(JSON.stringify(view.reportContext))}</pre>` : `<p>Harness manual execution ${h(view.execution.id)}; case ${defect.caseId}; executed revision ${sourceCase.rev}; current revision ${changed?.current ?? sourceCase.rev}${changed ? '; SOURCE CHANGED' : ''}.</p><p>${h(defect.status)} (${h(defect.method)})</p>`;
-  const content = `${narrative}<p>${h(edited.description ?? '')}</p><h3>Prerequisites</h3><pre>${h((edited.prerequisites ?? []).join('\n'))}</pre><h3>Steps to reproduce</h3><pre>${h(edited.steps?.map((step, index) => `${index + 1}. ${step}`).join('\n') ?? originalSteps)}</pre><h3>Expected</h3><pre>${h(edited.expected ?? originalSteps)}</pre><h3>Actual</h3><pre>${h(edited.actual ?? JSON.stringify(defect.occurrences))}</pre><p>${h(edited.notes)}</p>${changed ? `<pre>${h(JSON.stringify(changed))}</pre>` : ''}`;
+  const {html: content, actual} = renderBugNarrative(view, defect, edited, changed);
   requireThat(metadata.mappings.reproSteps || metadata.mappings.description, 'Configure an available bug narrative field mapping.');
   fields[metadata.mappings.reproSteps ?? metadata.mappings.description] = content;
   if (metadata.mappings.description && metadata.mappings.description !== metadata.mappings.reproSteps) fields[metadata.mappings.description] = content;
-  for (const name of ['expected', 'actual']) if (metadata.mappings[name] && edited[name] !== undefined) {const spec = metadata.fields.find(field => field.referenceName === metadata.mappings[name]); fields[metadata.mappings[name]] = /^html$/i.test(spec?.type ?? '') ? `<pre>${h(edited[name])}</pre>` : edited[name];}
+  for (const name of ['expected', 'actual']) if (metadata.mappings[name] && edited[name] !== undefined) {const spec = metadata.fields.find(field => field.referenceName === metadata.mappings[name]), value = name === 'actual' ? actual : edited[name]; fields[metadata.mappings[name]] = /^html$/i.test(spec?.type ?? '') ? `<pre>${escapeHtml(value)}</pre>` : value;}
   for (const name of edited.omitFields ?? []) {requireThat(!['System.Tags', ...Object.values(metadata.mappings)].includes(name), 'Cannot omit bug narrative or durable identity fields.'); delete fields[name];}
   const inspection = inspectBugFields(metadata, fields);
   if (!inspection.ready) {const details = inspection.problems.map(problem => problem.code === 'allowed-value' ? `Bug field ${problem.field} is outside its allowed values.` : ['unavailable', 'read-only'].includes(problem.code) ? `Bug field ${problem.field} is unavailable or read-only.` : problem.code === 'required' ? `Required bug field ${problem.field} needs a supplied value or configured default.` : `${problem.field}:${problem.code}`); const error = new Error(`Bug fields need review: ${details.join(' ')}`); error.fieldProblems = inspection.problems; error.fieldReview = inspection.review; throw error;}

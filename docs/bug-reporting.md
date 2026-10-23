@@ -36,6 +36,17 @@ valid; system-managed fields are read-only. A changed expected result that confl
 with the story needs a requirement decision. Draft edits never rewrite original
 requirements, execution results, assertions or raw evidence.
 
+ADO bug narratives show readable source references and separate user-confirmation
+and agent-reproduction details. Internal source snapshots, run/evidence identities,
+fingerprints and raw observation structures stay in consumer records rather than
+being serialized into the Description or Repro Steps fields. Generated execution
+defaults summarize recorded failure/inconclusive/diagnostic occurrences without
+claiming a reproduction rate. This also applies to recognized older generated
+defaults; saved intake and draft history remain unchanged. Deliberately reviewed
+API JSON in a user's actual result remains part of that approved report. Existing
+ADO correlation tags still support duplicate detection and delivery recovery.
+Changed rendered content requires a current preview and approval before filing.
+
 ## Confirm only what needs confirmation
 
 Existing adequate, current evidence avoids an unnecessary rerun. If confirmation

@@ -10,6 +10,7 @@ import {loadAdoConfiguration} from '../integrations/config.mjs';
 import {createAdoTestSource} from '../integrations/ado-source.mjs';
 import {checkSourceRevisions} from '../execute/source.mjs';
 import {deliverBugReports} from '../execute/delivery.mjs';
+import {executionBugActual} from '../execute/bug-narrative.mjs';
 import {collectExecution, deliverableDefects, readVerifiedEvidence} from '../execute/report.mjs';
 import {prepareAnnotation, bindAnnotationReview, verifyAnnotation, inspectScreenshot} from './annotations.mjs';
 import {reviewRunFailures} from './failures.mjs';
@@ -219,7 +220,7 @@ export function bugReportFromExecution(roots, reportId, executionId, selected) {
     }
   }
   return prepareBugReport(roots, reportId, {version: 1, description: defect.title, source: {executionId, caseId: defect.caseId, ...(view.source.scope.kind === 'story' ? {storyId: view.source.scope.storyId} : {}), sourceFingerprint: view.execution.sourceFingerprint, defectFingerprint: selected, observationsFingerprint: fingerprint(defect.occurrences), content: JSON.stringify({executionId, sourceFingerprint: view.execution.sourceFingerprint, caseId: defect.caseId, revision: tc.rev, occurrences: defect.occurrences}), expected: scenario.steps.flatMap(item => item.expected).join('; ')},
-    draft: {title: defect.title, description: defect.title, prerequisites: [], steps: scenario.steps.map(item => item.action), expected: scenario.steps.flatMap(item => item.expected).join('; '), actual: JSON.stringify(defect.occurrences), fields: {}}, confirmation: {user: 'reported', agent: 'reproduced', notes: `Verified execution ${executionId}; ${defect.fingerprint}`}, evidence: evidence.slice(0, 20)});
+    draft: {title: defect.title, description: defect.title, prerequisites: [], steps: scenario.steps.map(item => item.action), expected: scenario.steps.flatMap(item => item.expected).join('; '), actual: executionBugActual(defect), fields: {}}, confirmation: {user: 'reported', agent: 'reproduced', notes: 'The failure was verified in the recorded execution; no additional reproduction was performed.'}, evidence: evidence.slice(0, 20)});
 }
 
 /** Persist agent classifications and evidence-backed grouping, then reuse ordinary editable drafts. */
