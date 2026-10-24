@@ -1,5 +1,29 @@
 # Changelog
 
+## 4.1.1 — Reviewed bug reporting and paired screenshot evidence
+
+### Upgrade actions
+
+- Update to the 4.1.1 archive and re-run setup in each consumer project. Review
+  customized managed instructions through the existing merge process, then reload
+  skills or restart the host to discover `bug-report` in Claude Code and Codex.
+- Existing execution and automation histories remain usable. Prepare bug drafts
+  from selected current sources and verified evidence; review the exact fields,
+  destination and attachments before authorizing publication. No automatic bug
+  filing or migration is required.
+
+### Changes
+
+- Add editable, source-grounded bug drafts with project-specific required/custom
+  fields, readable story references, confirmation details and independently
+  reviewed examples. (#64)
+- Prepare reviewed bug drafts for verified failures after execution and automation,
+  retaining existing source-selection, evidence and publication boundaries. (#64)
+- Attach eligible raw screenshots alongside their annotated copies, with raw-only
+  fallback when annotation is unavailable and resumable per-image delivery. (#13)
+- Preserve stable delivery plans across recovery and retain privacy-safe native
+  command failure diagnostics without exposing private payloads or raw stacks.
+
 ## 4.1.0 — Source-grounded test case design
 
 ### Upgrade actions
