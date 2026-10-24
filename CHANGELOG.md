@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Extend `maintain-test` with bounded controlled experiments, CI evidence
+  forensics and hypothesis/outcome records in the existing assessment/history.
+  Reuse comparable-attempt accounting and preserve diagnostic/repair limits,
+  failure history, independent review and verification gates. (#103)
+
 - Add read-only change impact analysis for selected stories, bugs and technical
   changes, with evidence-linked affected areas and regression recommendations.
   Share source/caller comparison with maintenance while preserving its sole

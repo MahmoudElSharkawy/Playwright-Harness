@@ -1,6 +1,6 @@
 ---
 name: maintain-test
-description: Diagnose and maintain failed, flaky, changed or blocked tests using existing execution, generation and tracker workflows. Reassess blockers, preserve failure history and repair budgets, and verify repairs against accepted requirements.
+description: Diagnose and maintain failed, flaky, changed or blocked tests, including bounded controlled experiments, using existing execution, generation and tracker workflows. Preserve failure history and budgets, reassess blockers and verify repairs against accepted requirements.
 ---
 
 # Maintain tests
@@ -24,6 +24,8 @@ For impact-only requests to identify affected areas and recommend regression sco
 use [impact-analysis](../impact-analysis/SKILL.md). Route by requested outcome, not
 by story/bug ID or the presence of failure evidence. Combined analysis-and-repair
 requests stay here, with one maintenance assessment/history and the existing gates.
+For routing-only questions, return owners and next actions without creating an
+assessment or investigating co-located cases/history.
 
 For direct requests to update original ADO case titles, actions, expected results
 or step order, follow [case editing](../../../docs/ado-case-editing.md) first. That
@@ -52,6 +54,10 @@ automation or resets repair budgets.
    diagnostic attempt. Diagnostics never count as generation greens and cannot
    bypass the failed-candidate rerun gate. Define a bounded investigation and stop
    when evidence or repair budget is exhausted.
+   For intermittent failures or CI investigations, use the maintenance-owned
+   [controlled-experiment guidance](references/controlled-experiments.md). Reuse
+   sufficient evidence; record hypotheses, controls, attempts and outcomes in this
+   assessment/history, not a separate flaky-test workflow.
 4. Classify with linked evidence: application defect, test/framework defect,
    intermittent behavior, environment/dependency problem, accepted requirement
    change, or unknown/needs-investigation. Record mixed causes separately.
