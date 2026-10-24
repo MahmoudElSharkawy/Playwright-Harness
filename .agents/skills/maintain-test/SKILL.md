@@ -20,6 +20,11 @@ Resolve requested cases from existing sources and history first. Confirm only mi
 scope/environment information that cannot be inferred. A blocked case may have no
 generated test. Investigate selected cases and resume their owning workflow.
 
+For impact-only requests to identify affected areas and recommend regression scope,
+use [impact-analysis](../impact-analysis/SKILL.md). Route by requested outcome, not
+by story/bug ID or the presence of failure evidence. Combined analysis-and-repair
+requests stay here, with one maintenance assessment/history and the existing gates.
+
 For direct requests to update original ADO case titles, actions, expected results
 or step order, follow [case editing](../../../docs/ado-case-editing.md) first. That
 workflow edits only selected source cases. Refetch with `--revisions` into a fresh
@@ -35,11 +40,12 @@ automation or resets repair budgets.
    generation status/history and manual reports as applicable. Record missing or
    stale evidence explicitly. Create a fresh consumer-owned assessment following
    the [report contract](../../../docs/maintenance.md#assessment-record).
-2. Compare the executed source with the current source and accepted requirements.
-   Keep the old snapshot; fetching a new ADO revision or observing changed behavior
-   does not accept a new expectation. Map each affected step/expectation to its
-   spec, page/service methods, locators and data, then search their callers. Record
-   affected cases and verification scope before changing shared behavior.
+2. Apply the [shared source/caller comparison](../../../docs/impact-analysis.md#source-and-caller-comparison)
+   to the executed/current source and accepted requirements. Keep the old snapshot;
+   record affected steps/expectations, dependencies, callers and verification scope
+   in this assessment before changing shared behavior. Reuse current impact findings
+   and reassess stale evidence; no standalone impact run or second assessment is
+   required. A new revision or observed behavior does not accept an expectation.
 3. Inspect traces, assertions, runtime failures, data ownership and cleanup. Where
    needed, reproduce through configured browser/API/DB runtimes or scoped existing
    tests, within their replay and effect-reconciliation rules. Preserve every

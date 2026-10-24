@@ -41,6 +41,7 @@ fetch sources or write files. See the [context contract](../../docs/project-cont
 
 | Skill | Use when |
 |---|---|
+| [impact-analysis](impact-analysis/SKILL.md) | Identifying affected areas and recommending regression scope for selected changes; diagnosis/repair remains with maintain-test |
 | [bug-report](bug-report/SKILL.md) | Story-guided editable bug drafts, project-specific fields, evidence review and approved recoverable filing |
 | [requirements-analysis](requirements-analysis/SKILL.md) | Requirement/story analysis, editable chat tables, acceptance inventory and confirmed story comments with requested team mentions |
 | [test-case-design](test-case-design/SKILL.md) | Source-grounded case design, complete chat review, independent coverage assessment and approved ADO create/update/reuse delivery |

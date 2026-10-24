@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Add read-only change impact analysis for selected stories, bugs and technical
+  changes, with evidence-linked affected areas and regression recommendations.
+  Share source/caller comparison with maintenance while preserving its sole
+  ownership of diagnosis, repair, recovery, history and verification. (#66)
+
 ## 4.1.1 — Reviewed bug reporting and paired screenshot evidence
 
 ### Upgrade actions

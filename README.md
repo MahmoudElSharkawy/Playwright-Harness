@@ -148,6 +148,11 @@ prepare, refine, freeze, execute and report flow without generating POM code.
 
 ## Choose your first workflow
 
+Ask **"What does this story or bug fix affect, and which existing cases should we
+retest?"** or use `/impact-analysis local <selected-change.md>`. The
+[change impact analysis](docs/impact-analysis.md) workflow identifies affected areas
+and recommends regression scope without running tests or repairing automation.
+
 Maintain existing failed, flaky, changed or blocked cases with
 `/maintain-test cases <ids> from <run-or-report> on qa`, or select a local source,
 suite or story. The [maintenance workflow](docs/maintenance.md) diagnoses causes,
