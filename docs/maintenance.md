@@ -6,6 +6,13 @@ suites/stories, or case IDs with run evidence. Configure the relevant environmen
 as for [automation](PIPELINE.md) or [manual execution](manual-execution.md).
 The skill uses their commands and evidence; there is no separate maintenance engine.
 
+For identifying affected areas and recommending regression scope only, use
+[change impact analysis](impact-analysis.md). A selected story/bug or failure report
+does not itself request diagnosis. Combined analysis-and-repair stays in maintenance,
+which uses the [shared source/caller comparison](impact-analysis.md#source-and-caller-comparison)
+inside its existing assessment/history. Reuse current findings and reassess stale
+evidence; no compulsory standalone impact run or second assessment is required.
+
 ```text
 /maintain-test local .harness/sources/orders.json on qa
 /maintain-test suite 4521 plan 4500 on qa

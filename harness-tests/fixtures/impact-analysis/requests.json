@@ -1,0 +1,42 @@
+[
+  {
+    "id": "story-accepted",
+    "request": "Analyze Cedar STORY-123 revision 7 against revision 6. Use the supplied D6/D7 sources, registration/current cases and PLAN-7. Identify affected areas and recommend existing regression cases; save the impact report."
+  },
+  {
+    "id": "story-proposed",
+    "request": "Use impact-analysis on Cedar STORY-123 proposed revision 8 against current revision 7. Include the supplied registration/current cases. What would this proposal affect, and what should we verify? Save the report."
+  },
+  {
+    "id": "design-flags",
+    "request": "Assess the supplied F1-F4 test-design flags for STORY-123 revision 7 using the selected registration, reset, profile and flag sources/current cases. What impacts are supported and what regression/design scope do you recommend? Save the report."
+  },
+  {
+    "id": "exact-id",
+    "request": "Analyze https://dev.azure.com/example-org/Cedar/_workitems/edit/456 from its supplied read-only capture and proposed F456 diff/current cart callers. Recommend regression scope and save the report."
+  },
+  {
+    "id": "bug-no-fix",
+    "request": "Analyze Cedar Bug 789 from the supplied selected symptom-only source and its supporting cart evidence. What could be affected and what should we retest? Save the report."
+  },
+  {
+    "id": "shared-contract",
+    "request": "Analyze the separate C3 contract/service proposal against accepted C2, using current cart callers/cases. Identify affected areas and recommend regression scope. Save the report."
+  },
+  {
+    "id": "cohort-stale-handoff",
+    "request": "Analyze Cedar Bug 456 revision 5/F456 using current cart sources, M-CART-A3 and samples X1/X2. Identify changed comparison inputs, affected areas and recommended regression/reassessment scope. Save the report."
+  },
+  {
+    "id": "ambiguous-id",
+    "request": "Analyze bug 456. I have supplied two project captures and have not selected a project. Save what can be supported and identify what you need."
+  },
+  {
+    "id": "inaccessible",
+    "request": "Analyze the exact selected Cedar Bug 777 using the supplied read response. Save what can be supported and identify what you need."
+  },
+  {
+    "id": "routes",
+    "request": "For each incoming request below, select its owning workflow and state the next action without executing the request. The same selected item is Cedar Bug 456. Requests: (a) What could F456 affect? (b) Diagnose why CASE-21 failed. (c) Repair CASE-21 for the accepted change. (d) Recover this blocked test. (e) Run the recommended regression. (f) Design cases for a confirmed accepted coverage gap. (g) Draft a bug report. (h) Analyze the impact and repair the affected automation. Include whether a separate impact run/assessment is required and whether existing budgets/history change."
+  }
+]

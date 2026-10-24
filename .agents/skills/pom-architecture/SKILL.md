@@ -53,10 +53,11 @@ utils; nothing reaches upward or skips a layer (a spec never calls `page.locator
 | Requirements/story analysis, editable chat review and confirmed story comments with requested team mentions | [requirements-analysis](../requirements-analysis/SKILL.md) |
 | Design or revise source-grounded test cases, review complete coverage in chat and optionally publish approved create/update/reuse proposals | [test-case-design](../test-case-design/SKILL.md) |
 | Draft/review a bug from selected story context, a user description or verified execution evidence, including project-specific fields and approved attachments | [bug-report](../bug-report/SKILL.md) |
+| Identify affected areas and recommend regression scope for a selected story, bug fix or requirement/application/framework change | [impact-analysis](../impact-analysis/SKILL.md) |
 | Automating story-linked cases, an ADO suite or local scenarios into durable POM code | [automate-test](../automate-test/SKILL.md) |
 | Executing ADO manual cases interactively, with reports and optional bug/result delivery | [execute-test](../execute-test/SKILL.md) |
 | Updating existing ADO case titles, actions, expected results or ordinary-step ordering | [Case editing](../../../docs/ado-case-editing.md) |
-| Diagnosing failed/flaky tests, accepted source changes, or resuming blocked cases | [maintain-test](../maintain-test/SKILL.md) |
+| Diagnosing failed/flaky tests, repairing automation for accepted source changes, or resuming blocked cases, including combined analysis-and-repair requests | [maintain-test](../maintain-test/SKILL.md) |
 | A page class (new page, header/footer/skeleton area, refactor) | [page-classes](../page-classes/SKILL.md) |
 | Finding, naming, or repairing an element locator | [element-locators](../element-locators/SKILL.md) |
 | A spec file's skeleton — describe block, hooks, wiring | [test-classes](../test-classes/SKILL.md) |
@@ -70,3 +71,8 @@ utils; nothing reaches upward or skips a layer (a spec never calls `page.locator
 | Explicitly invoke snapshot-only Q&A; ordinary questions do not activate it | [context-qa](../context-qa/SKILL.md) |
 | Build or update selected business context with saved or new criteria | [project-context](../project-context/SKILL.md) |
 | Refresh saved business sources and discover new criteria matches | [context-update](../context-update/SKILL.md) |
+
+Select the workflow by the requested outcome. A story/bug ID or failure report alone
+does not select maintenance. Impact-only requests produce recommendations without
+diagnosis, test execution or repairs; maintenance reuses the shared impact procedure
+inside its existing assessment/history.
