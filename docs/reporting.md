@@ -50,6 +50,7 @@ Supporting artifacts are retained separately from the report inventory:
 | Preserved Allure run evidence | `.harness/runs/allure/<timestamp>[-NNN]/` | Immutable native HTML, `run.json`, `allure-results/`, `capture.json`, optional `verification.json`, and `generation.json`; not a CI upload |
 | Native Playwright evidence | `test-results/`, according to configuration | Traces, screenshots and videos |
 | Generation verification receipts | `.harness/state/generation/<source-id>/<verification-id>/` | Collection/execution receipts, selected scope and native verification evidence |
+| Optional testing plan | `.harness/runs/test-planning/<plan-id>/<version>.md` | Intended scope, risks, criteria and decision baseline; not an execution result or tracker event |
 
 Harness QA reports remain separate from native Allure. They include blocked,
 ungenerated and partial cases outside the native invocation; Allure cannot replace

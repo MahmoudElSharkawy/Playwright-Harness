@@ -29,6 +29,12 @@ output folder and preserve the executed source/history. Revised expectations sti
 need accepted requirement evidence and the existing maintenance/revision gates;
 editing the source does not make automation READY.
 
+An optional accepted [testing plan](test-planning.md#baseline-and-criteria-contract)
+can supply selected scope, risk/criterion links and source/baseline versions. It
+does not replace accepted scenario expectations, authorize execution or become a
+required phase. Its plan identity is distinct from an ADO test-plan ID; generation
+readiness, independent review, verification and repair limits remain unchanged.
+
 ```text
 SOURCE → REFINE → EXPLORE → PREPARE → AUTHOR → CANDIDATE → REVIEW → VERIFY ×2 → READY → DELIVER
                                         ▲                    │        │                 (optional)

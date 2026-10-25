@@ -16,6 +16,7 @@ explains how the harness and the automation it helps you author fit together.
 | Configure environments, targets, secrets and project knowledge | [Configuration](configuration.md) |
 | Retrieve or refresh project/application context with traceable sources | [Project context](project-context.md) |
 | Review requirements in chat, preserve accepted/unresolved rules and approve story comments with requested team mentions | [Requirements analysis](requirements-analysis.md) |
+| Plan cycle objectives, risk-based scope, strategy, feasibility and measurable criteria | [Test planning](test-planning.md) |
 | Design/revise cases from selected requirements, review complete coverage and publish approved ADO operations | [Test case design](test-case-design.md) |
 | Draft/review a bug from story context or execution evidence, adapt project fields and deliver approved attachments | [Bug reporting](bug-reporting.md) |
 | Identify affected areas and recommend regression scope for a story, bug fix or technical change | [Change impact analysis](impact-analysis.md) |

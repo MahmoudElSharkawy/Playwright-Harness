@@ -148,6 +148,11 @@ prepare, refine, freeze, execute and report flow without generating POM code.
 
 ## Choose your first workflow
 
+Ask **"Plan a two-day testing cycle from these requirements, risks and capacity."**
+The [test-planning skill](docs/test-planning.md) produces a versioned scope, strategy,
+feasibility and criteria plan. Planning is optional and performs no execution or
+progress updates; individual design/execution requests keep their existing routes.
+
 Ask **"What does this story or bug fix affect, and which existing cases should we
 retest?"** or use `/impact-analysis local <selected-change.md>`. The
 [change impact analysis](docs/impact-analysis.md) workflow identifies affected areas

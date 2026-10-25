@@ -1,0 +1,25 @@
+# Reorder cycle / v1
+
+Plan ID reorder; version v1; status draft. No plan approval was supplied.
+Selected source ORD-R1 contains accepted requirements ORD-1 (save preserves the
+selected record) and ORD-2 (cross-user updates are denied without modification).
+Required cohorts are Chrome and Firefox on qa-r1/build b1; no runtime results.
+Two elapsed days are proposed; capacity and historical effort basis are unknown.
+
+| Risk | Parents | Meaning and basis |
+| --- | --- | --- |
+| RISK-02 | ORD-2 | Wrong-user data modification; high impact, unknown likelihood |
+| RISK-01 | ORD-1 | Lost persisted change; material impact, unknown likelihood |
+
+| Criterion | Type / parents | Condition / population / window / evidence / owner |
+| --- | --- | --- |
+| C-ENTRY-01 | entry / ORD-1, ORD-2 | Case-scoped b1/qa-r1 fixture/access readiness before execution; evidence from the existing readiness receipt; Env-Owner |
+| C-EXIT-01 | exit / ORD-1, ORD-2 | Every selected rule/browser point has compatible outcomes during this cycle; native results and mapped assertions; QA-Lead |
+| C-SUSPEND-01 | suspension / RISK-02 | Affected mutation work stops if fixture ownership is uncertain; current lifecycle evidence; Env-Owner |
+| C-RESUME-01 | resumption / RISK-02 | Reconciliation and fresh selected-case readiness before affected work resumes; readiness/ownership receipts; Env-Owner |
+
+Existing CASE-301 maps ORD-1 in Chrome only. ORD-2 has no selected mapping. Strategy:
+prioritize wrong-user and persistence coverage, reuse mapped design, request missing
+design within separately selected scope. No executed coverage is established.
+All criterion choices are draft planning proposals. Actual resources/effort remain
+unresolved, and no execution, case creation or tracker update was authorized.
