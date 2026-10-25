@@ -1,8 +1,8 @@
 # Maintain failed, changed and blocked tests
 
-Use [maintain-test](../.agents/skills/maintain-test/SKILL.md) to diagnose existing
-cases, repair automation and resume blocked work. It accepts local sources, ADO
-suites/stories, or case IDs with run evidence. Configure the relevant environment
+Use [maintain-test](../.agents/skills/maintain-test/SKILL.md) to **diagnose only** or
+**diagnose and fix** existing failed, flaky, changed or blocked cases. It accepts
+local sources, ADO suites/stories, or case IDs with run evidence. Configure the relevant environment
 as for [automation](PIPELINE.md) or [manual execution](manual-execution.md).
 The skill uses their commands and evidence; there is no separate maintenance engine.
 
@@ -18,6 +18,46 @@ evidence; no compulsory standalone impact run or second assessment is required.
 /maintain-test suite 4521 plan 4500 on qa
 /maintain-test cases 701,702 from <run-or-report> on qa
 ```
+
+## Choose the requested outcome
+
+State the outcome in ordinary language when requesting maintenance. Both outcomes
+use this skill and the same consumer-owned assessment/history; they are not separate
+commands, flags or persistence formats. The agent uses the request and authorized
+context to determine where to stop.
+
+| Outcome | Result |
+| --- | --- |
+| **Diagnose only** | An assessment of supported causes/hypotheses, evidence, uncertainty and recommended next checks/actions. Stop before repairs, candidate registration, blocked-work resumption, repair verification, tracker transitions or downstream handoffs. |
+| **Diagnose and fix** | The same diagnosis followed by supported automation repair or workflow resumption, independent review and the existing verification gates. An application/environment cause may require its responsible owner rather than a test-code change. |
+
+For diagnosis without repairs:
+
+```text
+Use maintain-test to diagnose only CASE-701 from <run-or-report> on qa.
+Return supported causes, evidence, uncertainty and next actions. Do not apply repairs.
+```
+
+Diagnosis only can include authorized bounded diagnostic checks. To restrict it to
+existing artifacts, add:
+
+```text
+Review existing evidence only; do not run tests or experiments.
+```
+
+For diagnosis followed by a supported fix:
+
+```text
+Use maintain-test to diagnose and fix CASE-701 from <run-or-report> on qa.
+Diagnose first, apply a supported automation repair and complete normal review and verification.
+```
+
+Record the requested outcome and execution restrictions in the same assessment.
+An evidence-only request still permits that assessment record; it does not authorize
+runtime execution. When a check cannot be run, label it proposed/unperformed.
+Diagnosis does not mark automation repaired, verified or done. Diagnostic passes
+award no verification greens; repairs still require fresh independent review and
+two fresh scoped green processes after the final repair, within the same limits.
 
 ## Assessment record
 

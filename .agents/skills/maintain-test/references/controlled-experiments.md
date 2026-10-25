@@ -7,6 +7,10 @@ commands, diagnosis store or repair gates. Reuse adequate current evidence befor
 running another diagnostic. A deterministic or unsupported failure need not be
 called flaky because the request uses that word.
 
+Honor the [requested outcome](../SKILL.md#choose-the-requested-outcome) and any
+evidence-only execution restriction. A diagnostic experiment does not authorize a
+repair; diagnose only stops with the assessment and recommendations.
+
 ## Bind evidence and limits
 
 Resolve the selected case/source and revision, parameter set, project/browser,

@@ -4,6 +4,8 @@
 
 - Extend `maintain-test` with bounded controlled experiments, CI evidence
   forensics and hypothesis/outcome records in the existing assessment/history.
+  Make diagnose only versus diagnose and fix explicit in discovery and usage,
+  including evidence-only requests and the assessment-only stopping point.
   Reuse comparable-attempt accounting and preserve diagnostic/repair limits,
   failure history, independent review and verification gates. (#103)
 

@@ -19,7 +19,7 @@ explains how the harness and the automation it helps you author fit together.
 | Design/revise cases from selected requirements, review complete coverage and publish approved ADO operations | [Test case design](test-case-design.md) |
 | Draft/review a bug from story context or execution evidence, adapt project fields and deliver approved attachments | [Bug reporting](bug-reporting.md) |
 | Identify affected areas and recommend regression scope for a story, bug fix or technical change | [Change impact analysis](impact-analysis.md) |
-| Diagnose failures, repair automation or resume blocked tests | [Maintenance](maintenance.md) |
+| Diagnose only, or diagnose and fix failed/flaky/changed/blocked tests | [Maintenance](maintenance.md#choose-the-requested-outcome) |
 | Turn local scenarios or ADO cases into reviewed automation | [Automation workflow](PIPELINE.md) |
 | Run ADO manual cases without generating code | [Manual execution](manual-execution.md) |
 | Connect Azure DevOps and deliver results or code | [Azure DevOps integration](azure-devops.md) |

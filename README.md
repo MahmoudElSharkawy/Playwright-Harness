@@ -155,8 +155,10 @@ and recommends regression scope without running tests or repairing automation.
 
 Maintain existing failed, flaky, changed or blocked cases with
 `/maintain-test cases <ids> from <run-or-report> on qa`, or select a local source,
-suite or story. The [maintenance workflow](docs/maintenance.md) diagnoses causes,
-reassesses blockers and resumes existing execution/automation with preserved history.
+suite or story. Choose **diagnose only** for findings and next actions, or **diagnose
+and fix** to continue with supported repairs, review and verification. The
+[maintenance workflow](docs/maintenance.md#choose-the-requested-outcome) preserves
+the same evidence, history and budgets for both outcomes.
 
 Generate durable automation from local scenarios or configured ADO cases:
 
