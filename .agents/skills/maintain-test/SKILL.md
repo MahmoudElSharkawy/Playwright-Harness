@@ -1,6 +1,6 @@
 ---
 name: maintain-test
-description: Diagnose and maintain failed, flaky, changed or blocked tests using existing execution, generation and tracker workflows. Reassess blockers, preserve failure history and repair budgets, and verify repairs against accepted requirements.
+description: Diagnose failed, flaky, changed or blocked tests. Support diagnose only (findings and next actions) and diagnose and fix (supported automation repair, review and verification), with bounded experiments, existing workflows and preserved history and budgets.
 ---
 
 # Maintain tests
@@ -18,12 +18,30 @@ source files, run IDs or failure reports, for example:
 
 Resolve requested cases from existing sources and history first. Confirm only missing
 scope/environment information that cannot be inferred. A blocked case may have no
-generated test. Investigate selected cases and resume their owning workflow.
+generated test. Investigate selected cases; resume their owning workflow when
+repair or resumption is requested.
+
+## Choose the requested outcome
+
+Use the request and existing authorized context to choose the stopping point; these
+phrases are ordinary request wording, not new commands or flags.
+
+| Requested outcome | Work and stopping point |
+| --- | --- |
+| **Diagnose only** | Assess evidence, supported causes/hypotheses, uncertainty and next checks/actions in the existing assessment. Stop there; do not apply repairs, register candidates, resume blocked work or change tracker status. Recommendations do not start another workflow. |
+| **Diagnose and fix** | Diagnose first, then repair supported automation defects or resume work through the existing owning workflow. Preserve accepted expectations, cumulative history/budgets, independent review and verification gates. |
+
+Diagnosis only may include permitted bounded diagnostic checks. Honor narrower
+requests such as **"Review existing evidence only; do not run tests or experiments."**
+When execution is excluded or unavailable, propose the next check as unperformed.
+See [usage examples](../../../docs/maintenance.md#choose-the-requested-outcome).
 
 For impact-only requests to identify affected areas and recommend regression scope,
 use [impact-analysis](../impact-analysis/SKILL.md). Route by requested outcome, not
 by story/bug ID or the presence of failure evidence. Combined analysis-and-repair
 requests stay here, with one maintenance assessment/history and the existing gates.
+For routing-only questions, return owners and next actions without creating an
+assessment or investigating co-located cases/history.
 
 For direct requests to update original ADO case titles, actions, expected results
 or step order, follow [case editing](../../../docs/ado-case-editing.md) first. That
@@ -52,6 +70,10 @@ automation or resets repair budgets.
    diagnostic attempt. Diagnostics never count as generation greens and cannot
    bypass the failed-candidate rerun gate. Define a bounded investigation and stop
    when evidence or repair budget is exhausted.
+   For intermittent failures or CI investigations, use the maintenance-owned
+   [controlled-experiment guidance](references/controlled-experiments.md). Reuse
+   sufficient evidence; record hypotheses, controls, attempts and outcomes in this
+   assessment/history, not a separate flaky-test workflow.
 4. Classify with linked evidence: application defect, test/framework defect,
    intermittent behavior, environment/dependency problem, accepted requirement
    change, or unknown/needs-investigation. Record mixed causes separately.
@@ -109,6 +131,10 @@ Use the [existing command routes](../../../docs/maintenance.md#resume-and-verify
 Record classification, source/caller impact, attempts, remaining blockers,
 resolution and validation receipts. Retain earlier assessments; create a new file
 when evidence changes, especially after an artifact has been bound to a candidate.
+
+For diagnose only, save and return the assessment and recommendations here. Do not
+perform the tracker transitions or downstream handoffs below; diagnosis does not
+mark automation repaired, verified or done.
 
 For cases in an existing plan registry, follow [plan-tracker](../plan-tracker/SKILL.md)
 to append evidence-backed transitions and regenerate the report. Unresolved blockers

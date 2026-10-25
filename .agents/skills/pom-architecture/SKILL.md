@@ -57,7 +57,7 @@ utils; nothing reaches upward or skips a layer (a spec never calls `page.locator
 | Automating story-linked cases, an ADO suite or local scenarios into durable POM code | [automate-test](../automate-test/SKILL.md) |
 | Executing ADO manual cases interactively, with reports and optional bug/result delivery | [execute-test](../execute-test/SKILL.md) |
 | Updating existing ADO case titles, actions, expected results or ordinary-step ordering | [Case editing](../../../docs/ado-case-editing.md) |
-| Diagnosing failed/flaky tests, repairing automation for accepted source changes, or resuming blocked cases, including combined analysis-and-repair requests | [maintain-test](../maintain-test/SKILL.md) |
+| Diagnose only or diagnose and fix failed/flaky/changed/blocked tests, including combined analysis-and-repair requests and requested workflow resumption | [maintain-test](../maintain-test/SKILL.md) |
 | A page class (new page, header/footer/skeleton area, refactor) | [page-classes](../page-classes/SKILL.md) |
 | Finding, naming, or repairing an element locator | [element-locators](../element-locators/SKILL.md) |
 | A spec file's skeleton — describe block, hooks, wiring | [test-classes](../test-classes/SKILL.md) |

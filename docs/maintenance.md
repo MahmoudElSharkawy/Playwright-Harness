@@ -1,8 +1,8 @@
 # Maintain failed, changed and blocked tests
 
-Use [maintain-test](../.agents/skills/maintain-test/SKILL.md) to diagnose existing
-cases, repair automation and resume blocked work. It accepts local sources, ADO
-suites/stories, or case IDs with run evidence. Configure the relevant environment
+Use [maintain-test](../.agents/skills/maintain-test/SKILL.md) to **diagnose only** or
+**diagnose and fix** existing failed, flaky, changed or blocked cases. It accepts
+local sources, ADO suites/stories, or case IDs with run evidence. Configure the relevant environment
 as for [automation](PIPELINE.md) or [manual execution](manual-execution.md).
 The skill uses their commands and evidence; there is no separate maintenance engine.
 
@@ -19,6 +19,46 @@ evidence; no compulsory standalone impact run or second assessment is required.
 /maintain-test cases 701,702 from <run-or-report> on qa
 ```
 
+## Choose the requested outcome
+
+State the outcome in ordinary language when requesting maintenance. Both outcomes
+use this skill and the same consumer-owned assessment/history; they are not separate
+commands, flags or persistence formats. The agent uses the request and authorized
+context to determine where to stop.
+
+| Outcome | Result |
+| --- | --- |
+| **Diagnose only** | An assessment of supported causes/hypotheses, evidence, uncertainty and recommended next checks/actions. Stop before repairs, candidate registration, blocked-work resumption, repair verification, tracker transitions or downstream handoffs. |
+| **Diagnose and fix** | The same diagnosis followed by supported automation repair or workflow resumption, independent review and the existing verification gates. An application/environment cause may require its responsible owner rather than a test-code change. |
+
+For diagnosis without repairs:
+
+```text
+Use maintain-test to diagnose only CASE-701 from <run-or-report> on qa.
+Return supported causes, evidence, uncertainty and next actions. Do not apply repairs.
+```
+
+Diagnosis only can include authorized bounded diagnostic checks. To restrict it to
+existing artifacts, add:
+
+```text
+Review existing evidence only; do not run tests or experiments.
+```
+
+For diagnosis followed by a supported fix:
+
+```text
+Use maintain-test to diagnose and fix CASE-701 from <run-or-report> on qa.
+Diagnose first, apply a supported automation repair and complete normal review and verification.
+```
+
+Record the requested outcome and execution restrictions in the same assessment.
+An evidence-only request still permits that assessment record; it does not authorize
+runtime execution. When a check cannot be run, label it proposed/unperformed.
+Diagnosis does not mark automation repaired, verified or done. Diagnostic passes
+award no verification greens; repairs still require fresh independent review and
+two fresh scoped green processes after the final repair, within the same limits.
+
 ## Assessment record
 
 Create sanitized Markdown under
@@ -30,7 +70,8 @@ verifier receipt. Include these facts, with `unknown` and a next action where mi
 | --- | --- |
 | Scope | Case/scenario IDs; source file/ADO identity; executed/current revisions or fingerprints; consumer commit and relevant uncommitted changes; environment and known application build; saved stage and generated spec, if any |
 | Evidence | Run IDs, trace/report/assertion/cleanup paths; each diagnostic attempt and outcome; freshness and gaps. Link artifacts instead of copying secrets or payloads |
-| Diagnosis | Supported classification and causal evidence; mixed causes and uncertainty. Intermittency does not establish its root cause |
+| Experiments, when needed | Baseline, competing hypotheses/predictions, one controlled factor, controls, disconfirming check, existing limits/consumption, actual observations and comparison limits; follow the [controlled-experiment reference](../.agents/skills/maintain-test/references/controlled-experiments.md) |
+| Diagnosis | Supported classification and causal evidence; mixed causes, confidence, impact, residual risk and next owner/action. Intermittency does not establish its root cause |
 | Source and caller impact | Old/new action and expectation, accepted revision reference, spec, page/service method, locator/data dependency, other callers/affected cases, and scoped regression selection |
 | Blockers | One row per blocker: reason, evidence, unblock condition, current verified observation, unresolved/resolved disposition, next action and known owner |
 | Resolution | Diagnosed repair or external fix, accepted expectation, resumption stage, prior repair count, new candidate/review/verification IDs, tracker transition and remaining action |
@@ -45,6 +86,27 @@ old/new expectation and affected scope. An application-change artifact identifie
 the observed build/fix and retest evidence against unchanged expectations. Hashing
 the file establishes which artifact was reviewed; it does not prove the decision
 or classify the root cause. Independent review checks those meanings.
+
+## Intermittent failures and CI investigations
+
+Requests such as **"Why does this test sometimes fail in CI?"** continue to use
+`maintain-test`, with the same source identity, assessment files and retained history.
+Use its [controlled-experiment guidance](../.agents/skills/maintain-test/references/controlled-experiments.md)
+to select the smallest discriminating check within existing investigation limits.
+Read exact CI/native evidence before experimenting; a job label or empty report is
+not a case result. Record first attempts, retries and launch transitions separately,
+applying the existing [comparable-evidence rules](../.agents/skills/bug-report/references/playbook.md#confirmation-and-evidence).
+
+For example, a pass after changing both build and fixture leaves cause unresolved;
+record those changed inputs and a single-factor next check. A primary assertion
+failure followed by a cleanup failure retains both events and their separate roles.
+Neither example erases the first failure or authorizes changing an expectation.
+
+Experiments are diagnostic attempts, not generation verification. New assessments
+inherit recorded attempt/time consumption and repair history; exhausted limits do
+not restart. At the bound, record uncertainty and a concrete next action/owner.
+Repairs retain independent review and two fresh scoped green processes after the
+final repair; those greens satisfy acceptance, not a statistical stability claim.
 
 ## Blocked-case recovery
 

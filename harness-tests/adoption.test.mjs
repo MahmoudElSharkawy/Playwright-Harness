@@ -40,6 +40,7 @@ test('adoption links every canonical skill for both hosts, initializes consumer 
  assert(shipped.includes('test-case-design'));assert(shipped.includes('impact-analysis'));
  for(const dir of ['.agents/skills','.claude/skills']) {
   for(const name of shipped)assert.equal(realpathSync(join(root,dir,name)),realpathSync(join(packageRoot,'.agents/skills',name)));
+  assert(existsSync(join(root,dir,'maintain-test/references/controlled-experiments.md')));
   assert.match(readFileSync(join(root,dir,'ROOTS.md'),'utf8'),/Read \[ROOTS\.md in the installed harness\]\(.+\.agents\/skills\/ROOTS\.md\)/);
  }
  assert.equal(JSON.parse(readFileSync(join(root,'.harness/links.json'),'utf8')).links.length,shipped.length*2);
