@@ -90,9 +90,13 @@ Apply §6, with these review procedures and additional harness checks:
   typed parameters) — from-scratch endpoint definitions the collection covers are a
   finding (class: `collection-library-bypassed`); collection sample literals
   surfacing in test data or code are a finding
-  (class: `collection-sample-literal-leaked`). Curated collection files change only
-  through the import ritual (README/index and sanitization-ledger maintenance
-  excepted). Additionally: `integration/*_db.json` connection coordinates
+  (class: `collection-sample-literal-leaked`). Supplied collections change only
+  through their import ritual. Separate observed collections require reviewed,
+  sanitized capture provenance, configured runtime verification, resolved lifecycle
+  and authentication contracts, and their incremental promotion ledger. Confirm
+  business-method/supplied-source precedence, visible conflicts and no invented
+  endpoints, oracles or captured values. Collection export is not a reuse gate.
+  Additionally: `integration/*_db.json` connection coordinates
   contradicting `src/config/databases.ts` are a finding
   (class: `db-config-forked`).
 

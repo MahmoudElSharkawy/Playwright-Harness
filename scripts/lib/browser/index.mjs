@@ -7,6 +7,7 @@ import {data, id, oneOf, typedValue} from '../execution-core/data.mjs';
 import {within} from '../skill-roots.mjs';
 import {prepareNativeSession, NativeFailure} from './native-cli.mjs';
 import {prepareSettlement, projectOutcome} from './settlement.mjs';
+import {createApiCapture} from './api-capture.mjs';
 import {createScenarioState, requireScenarioState, acceptBrowserStorage, finishScenario, inputBindings, publicValue, rememberSensitive, phaseOrder, checkWorkWindow, observationBudgetReached, requireObservationCapacity} from '../sequential/state.mjs';
 
 export const browserCapabilities = Object.freeze(['browserReads', 'browserMutations']);
@@ -68,6 +69,7 @@ export async function runBrowserScenario(run, roots, {target, storageState, secr
   roots = native.roots;
   acceptBrowserStorage(state, roots);
   const {scenario, observations, histories} = state;
+  const apiCapture = createApiCapture(run, roots, native, target);
   const activeAttempts = new Set();
   let busy = false, finished = false, cleanupStartedAt, scenarioFailure, bodyInterrupted = false;
   const indeterminate = () => {if (!scenario.issues.includes('indeterminate-outcome')) scenario.issues.push('indeterminate-outcome');};
@@ -230,7 +232,14 @@ export async function runBrowserScenario(run, roots, {target, storageState, secr
             selectOutput: value => {requireActive(); scenario.outputRefs.push(data(value));},
             identity: Object.freeze({...current.identity})
           };
-          try {await boundedWork(() => action(context), currentWindow, signal, expire);} catch (error) {failure ??= error;}
+          try {await boundedWork(async () => {
+            const capturing = await apiCapture.begin(current.identity, currentWindow);
+            try {await action(context);} finally {
+              if (capturing && !expired) await apiCapture.end(current.identity, currentWindow,
+                value => observe(current, 'observation', value, requireActive),
+                evidenceId => observations.evidence.find(item => item.id === evidenceId));
+            }
+          }, currentWindow, signal, expire);} catch (error) {failure ??= error;}
           if (closingPromise) await closingPromise;
           active = false;
           if (pending.size && !expired) {
@@ -294,6 +303,7 @@ export async function runBrowserScenario(run, roots, {target, storageState, secr
     state.cleanupStartedAt ??= Date.now(); cleanupStartedAt = state.cleanupStartedAt; state.phaseNumber = 3;
     const cleanup = record(lifecycle[1], 'browser-session-cleanup', 'CLEANUP'); cleanup.inputs = [sessionValue];
     const cleanupExpired = cleanup.startedAt >= cleanupStartedAt + run.inputs.limits.cleanupTimeoutMs;
+    try {await apiCapture.finish();} catch { /* Discovery delivery does not change the scenario verdict. */ }
     const result = await closeOwnedSession();
     cleanup.effect = {certainty: result.complete ? 'confirmed' : 'uncertain', resourceIds: [sessionResourceId]};
     if (!result.complete || Date.now() >= cleanupStartedAt + run.inputs.limits.cleanupTimeoutMs) {cleanup.outcome = 'INFRASTRUCTURE_FAILURE'; cleanup.failureClass = 'EXECUTOR';}

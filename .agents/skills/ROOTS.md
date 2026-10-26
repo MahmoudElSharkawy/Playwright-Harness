@@ -18,7 +18,9 @@ and mutable state. Never derive consumer paths from a skill's installation direc
 | `.harness/state/tracker/` | Consumer plan registries and append-only history |
 | `.harness/knowledge/prerequisites.md` | Reviewed prerequisite facts |
 | `.harness/knowledge/ui/` | Reviewed UI facts |
+| `.harness/knowledge/api/records/` | Immutable reviewed, runtime-verified API definitions and provenance |
 | `.harness/knowledge-candidates/` | Unreviewed observations, separate from reviewed knowledge |
+| `.harness/knowledge-candidates/api/records/` | Sanitized API capture candidates bound to run evidence |
 | `.harness/runs/` | Consumer run outputs and evidence |
 | `.harness/runs/test-planning/<plan-id>/<version>.md` | Optional versioned cycle plan, source/decision baseline, risks and criteria; not tracker or execution state |
 | `.harness/runs/<report>/bug-report/` | Editable bug state, immutable revisions/previews and approved delivery bindings |
@@ -29,6 +31,10 @@ framework code, settings and imported team libraries must be preserved. A custom
 skill requires a reviewed merge; do not replace it with a package link silently.
 Templates in skill assets are starting points, never live state. Knowledge promotion
 requires review and sanitization; observations do not silently update reviewed facts.
+For API discovery, follow [the API reference](../../docs/reference/api.md#observed-api-knowledge).
+Supplied collections and separate consumer-owned observed collections are derive-only
+inputs. Promote before freezing generation; retained evidence/review references remain
+subject to integrity checks and new captures never rewrite existing reviewed records.
 
 Use [context-qa](context-qa/SKILL.md) only when the user explicitly invokes it for a
 snapshot-only answer. Its evidence comes only from one selected capture through

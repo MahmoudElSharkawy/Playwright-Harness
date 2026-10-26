@@ -16,6 +16,14 @@ or `/execute-test story <id> [on <environment>]`. Execute sequentially, pausing
 on blockers. In checkpoint mode, pause after each case. Authorization already
 given by the user remains in force for ordinary permitted application operations.
 
+Browser steps passively save sanitized API candidates and `api-discovery.json`
+through the shared runtime. Follow [observed API knowledge](../../../docs/reference/api.md#observed-api-knowledge):
+reuse business methods and applicable supplied collections first, then reviewed,
+runtime-verified discoveries for missing operations. Report relevant discoveries,
+unresolved gaps and any separately promoted observed collection without changing
+case verdicts or generating POM code. Capture alone never promotes reviewed knowledge,
+invents cleanup/authentication, or makes a collection a prerequisite.
+
 1. Run `prepare suite|story <id> [--plan <id>] [--environment <name>] [--checkpoint]`.
    Read the captured source and exclusions. Edit only its draft `refinement.json`,
    following [refinement](references/refinement.md); then run `freeze <exec>`.

@@ -33,3 +33,12 @@ locale, exact), Network (endpoints the page calls — candidates for `integratio
 `Apis<Domain>`), Gotchas (iframes, timing, RTL, dialogs), Drift ledger
 (`old → new + cause + date`). Keep the `## Drift ledger` heading: `harness-metrics`
 counts locator drift from it.
+
+Network rows link to reviewed API knowledge and its capture/verification provenance;
+they do not copy captured payload values or turn responses into expected outcomes.
+The shared browser runtime saves unreviewed API candidates separately. Use
+[observed API review](../../../../docs/reference/api.md#observed-api-knowledge) before
+deriving services or prerequisite routes. Durable capture retains only fixed public
+route words and removes unknown segments. Establish opaque segments from permitted
+evidence; never guess a route template or change a retained literal. Preserve
+supplied-contract conflicts and unresolved gaps.

@@ -72,6 +72,36 @@ The supported profile is owned, isolated, headless Chromium. Global close/kill,
 session/config overrides, attaching an existing browser, borrowed-browser retention,
 Firefox/WebKit and headed desktop behavior are outside this proven profile.
 
+## Passive API discovery
+
+The shared owned-session boundary used by manual execution and automation exploration
+collects bounded fetch/XHR observations through the pinned CLI's `run-code` interface
+and Playwright context request/response events. It observes existing traffic; it adds
+no application request, proxy, replay or transport. Request-start attempt identity
+binds observations across navigation and tabs to their actual run, scenario, invocation,
+phase and attempt. Allowed browser origins remain the capture boundary; assets,
+unrelated analytics and out-of-scope origins are excluded.
+
+Raw request/response data stays within the protected session and follows its existing
+cleanup/remediation rules. Registered evidence and immutable API candidates contain
+sanitized structure, status, ordering and bounded observed relationships. All captured
+scalar values and unknown path segments are removed; only the
+[fixed public route vocabulary](api.md#observed-api-knowledge) is retained. Opaque
+segments never establish parameter names or route templates. Unknown field names are also
+removed under a conservative allowlist and reported as a gap; unknown request/query
+names block reuse, while unknown response fields cannot supply extraction definitions.
+Unknown, omitted, truncated and
+unsupported bodies remain distinct. The limit is 100 observations and 16 KiB per
+captured body/sanitized record; partial or interrupted capture does not establish full
+schema, authentication, cleanup or API coverage.
+
+The run's `api-discovery.json` reports candidates and gaps. Capture starts unreviewed
+and does not alter assertions or readiness. Follow
+[observed API knowledge](api.md#observed-api-knowledge) to establish the literal route
+from permitted evidence, validate a parameterized operation through an enabled API
+target, and optionally promote an observed collection. Discovering an origin does not
+enable a new API target or grant execution permission.
+
 ## Responses, evidence and recovery
 
 The adapter launches the installed Node entrypoint with `shell: false`, argument

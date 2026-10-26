@@ -45,6 +45,14 @@ Source → refinement → observed execution → durable POM generation
   knowledge are distinct. Never weaken assertions or silently promote runtime candidates.
 - Browser mechanics use the official Playwright CLI skill through the existing browser
   ownership/evidence boundary. API/DB operations use the shared deterministic runtimes.
+- That browser boundary also saves bounded, sanitized API candidates and an
+  `api-discovery.json` summary. Reuse business methods and applicable supplied
+  collections first; review and verify missing operations through the configured API
+  runtime before reuse. Follow [observed API knowledge](../../../docs/reference/api.md#observed-api-knowledge),
+  including authentication, extraction, effects and cleanup gaps. A collection is not
+  required; observations do not change expectations or authorize new destinations.
+  Promote reviewed knowledge/optional observed collections before CANDIDATE, and
+  summarize discovered, reused/verified and unresolved operations in the handoff.
 - For specific list records, apply [search-first targeting (§4b)](../pom-architecture/references/design-conventions.md#4b-record-targeting-on-list-pages) during exploration and generation. Observe supported keys, scope and asynchronous completion before choosing search; reuse page business methods, verify exact row identity and uniqueness, and define scoped absence/ambiguity or a documented fallback. Preserve every frozen pagination, sorting or browsing journey; never insert raw selectors, waits or lookup loops into specs.
 - Follow configured environment capabilities. Catalogs, deterministic helpers and fixed
   inline parameterized definitions are peers. Imported team libraries are derive-only.

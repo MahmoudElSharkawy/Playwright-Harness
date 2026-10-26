@@ -35,6 +35,7 @@
     "probe:cli": "node scripts/spikes/playwright-cli/probe.mjs",
     "test:browser": "node --test harness-tests/browser-policy.test.mjs",
     "probe:browser": "node scripts/probes/browser.mjs",
+    "probe:observed-api": "node scripts/probes/observed-api.mjs",
     "test:api": "node --test harness-tests/api-runtime.test.mjs",
     "test:database": "node --test harness-tests/database-runtime.test.mjs",
     "probe:database": "node scripts/probes/sqlserver.mjs",

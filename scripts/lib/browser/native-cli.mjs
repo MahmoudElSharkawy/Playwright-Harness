@@ -7,6 +7,7 @@ import {randomUUID} from 'node:crypto';
 import {createRequire} from 'node:module';
 import {resolveSkillRoots, within, realFuture} from '../skill-roots.mjs';
 import {processCall, rememberTree, refreshTree, stopTree, treeGone} from './processes.mjs';
+import {nativeCaptureCode} from './api-capture.mjs';
 
 const PIN = Object.freeze({cli: '0.1.22', playwright: '1.64.0-alpha-1790635538000'});
 export {PIN as NATIVE_CLI_PIN};
@@ -186,6 +187,13 @@ export async function prepareNativeSession(roots, {origins, storageState, secret
     return lastCleanup;
   }
   return {session, roots, workRoot, events, open, close,
+    capture: async (action, identity, options) => {
+      if (!opened || closed) throw new NativeFailure('UNAVAILABLE');
+      const reply = await invoke(['run-code', nativeCaptureCode(action, identity, origins)], options);
+      if (typeof reply.result !== 'string' || Buffer.byteLength(reply.result) > 2 * 1024 * 1024) throw new Error('Invalid bounded native capture.');
+      if (action === 'end') await writeFile(join(workRoot, `api-capture-${randomUUID()}.json`), reply.result, {flag: 'wx', mode: 0o600});
+      return JSON.parse(reply.result);
+    },
     command: async (args, options) => {
       if (!opened || closed) throw new NativeFailure('UNAVAILABLE'); validateNativeArguments(args, workRoot, origins);
       const paths = args.slice(1).flatMap((value, index) => /^--(?:filename|path)=/.test(value) ? [value.slice(value.indexOf('=') + 1)] : /^--(?:filename|path)$/.test(value) ? [args[index + 2]] : []);
