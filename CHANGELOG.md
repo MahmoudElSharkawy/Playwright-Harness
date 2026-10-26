@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+## 4.2.0 — Test planning, change impact and maintenance diagnosis
+
+### Upgrade actions
+
+- Update to the 4.2.0 archive and re-run setup in each consumer project. Review
+  customized managed instructions through the existing merge process, then reload
+  skills or restart the host to discover test-planning and impact-analysis.
+- Existing histories remain usable. Choose diagnose only or diagnose and fix when
+  invoking maintain-test; use evidence-only wording to exclude diagnostic runs.
+  Cycle planning is optional and requires no migration of existing consumer plans.
+
+### Changes
+
 - Add optional source-grounded `test-planning` with a reusable consumer plan,
   risk/coverage strategy, evidence-based effort/capacity and measurable criteria.
   Share one versioned baseline/criterion contract with future completion consumers;
