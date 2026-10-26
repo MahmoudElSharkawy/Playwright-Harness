@@ -94,6 +94,16 @@ filters. Follow cursors when needed. Additional terms must remain within the
 same selected evidence collection. A title or keyword match does not establish
 an entire business rule.
 
+When conditions, exceptions or sequence steps are missing from a hit, use bounded
+`search --around <passageId> --source <sourceId> --revision <capture-revision>`.
+Before/after default to two passages each, maximum five; results stay in source
+order with strict item/topic filters. Use the response revision. Continue inside
+that window with identical options/cursor; inspect the reported outside-window
+and filtered omissions. Expand from a returned passage only when more support is
+needed. Complete sections and retained support need no expansion. Adjacency alone
+does not connect unrelated sections, and generated explanations are synthesis,
+never new captured evidence. See [the search contract](project-context.md).
+
 For factual answers, check the current overview once before reusing retained
 passages. Match consumer/context identity and revision. If additional evidence was
 retrieved, re-read the overview before answering to catch a concurrent refresh;
@@ -120,6 +130,13 @@ blocks while preserving team text. Reload skills in the host.
 Old captures containing technical sources need an explicit business-source request;
 their history survives, and Q&A never silently migrates or repairs them.
 
+Existing native line captures remain readable with their supported index recipe.
+Only an explicit refresh upgrades native Markdown/text extraction, including
+unchanged bytes. Host-reader receipts keep their existing contracts. Regrouping
+can change evidence IDs, counts and ranking without changing business rules.
+After refresh, retain the conversational referent and retrieve new-revision
+support; never bind a previous citation to a different section by position.
+
 Deterministic tests verify citation resolution, source isolation, strict filtering,
 stale/conflicting support, cursor/revision consistency and actual read-only activity.
 A representative multi-turn model exercise checks numbered-point clarification,
@@ -128,3 +145,19 @@ context switches. Compare actual answers and audited retrieval calls, not just
 instruction wording. Keep model behavior separate from deterministic runtime
 checks; native host invocation and live integration proof must be reported only
 when actually exercised.
+
+The repeatable [model exercise driver](../scripts/probes/context-qa.mjs) prepares
+the same synthetic questions against an unmodified pre-enhancement source/package
+and the current reader, including an unchanged-byte legacy upgrade. Run `prepare
+<new-external-directory> <baseline-package>`, then use `query <directory>
+<before|after> <turn> <read|search> <context-id> [options-json]` as the audited model
+evidence transport. It records actual outputs, captured-file reads, calls, bytes
+and retrieval timings, denying original reads, network, processes and writes inside
+Q&A. The external controller explicitly refreshes before turns 8 and 9. Record each
+arm's 12 actual answers in `answers-before.json`/`answers-after.json`; `report
+<directory>` compares them and requires zero retrieval for formatting turns.
+Independently grade factual support, citations and limitations against the captured
+passages. Instrumentation writes happen outside the read-only answering boundary.
+Initial capture, unchanged refresh and native-reader upgrade timings are separate
+from answer retrieval; provider tokens/cost remain unavailable unless an actual
+runner supplies them. A synthetic model exercise is not native-host/live-ADO proof.

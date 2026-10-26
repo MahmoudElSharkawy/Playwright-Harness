@@ -18,6 +18,7 @@ as an HTML block; its words and recorded results are unchanged.
 |---|---|---|
 | `ADO-STORY-VALIDATION.md` | [Archive](validation/ADO-STORY-VALIDATION.md) | [Current guide](../azure-devops.md) |
 | `ALLURE3-VALIDATION.md` | [Archive](validation/ALLURE3-VALIDATION.md) | [Current guide](../reporting.md) |
+| Issue 112 context sections | [Implementation and proof](context-sections-112.md) | [Current guide](../context-qa.md) |
 | `HARNESS.md` | [Archive](milestones/HARNESS.md) | [Current guide](../architecture.md) |
 | `M1-VALIDATION.md` | [Archive](milestones/M1-VALIDATION.md) | [Current guide](../contributing.md) |
 | `M2-SKILL-PROOF.md` | [Archive](milestones/M2-SKILL-PROOF.md) | [Current guide](../contributing.md) |

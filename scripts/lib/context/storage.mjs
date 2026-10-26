@@ -74,7 +74,7 @@ export function storeFor(roots, manifest) {
   }
   function source(ref, hydrate = true) {
     const record = get(ref, 'source'); if (!hydrate) return record;
-    return {...record, contributions: record.contributions.map(part => {const fact = get(part.fact, 'fact'); return {topic: fact.topic, text: restoreText(fact.chunks.map(ref => get(ref, 'chunk'))), location: part.location, authority: part.authority};})};
+    return {...record, contributions: record.contributions.map(part => {const fact = get(part.fact, 'fact'); return {topic: fact.topic, text: restoreText(fact.chunks.map(ref => get(ref, 'chunk'))), location: part.location, authority: part.authority, ...(part.document ? {document: part.document} : {})};})};
   }
   return {get, put, entries, lookup, catalog, source};
 }
@@ -109,7 +109,7 @@ export function prepareSnapshot(roots, snapshot) {
     const contributions = source.contributions.map(part => {
       const id = fingerprint({topic: part.topic, text: part.text}); let ref = factEntries.get(id);
       if (!ref) {ref = store.put('fact', {id, topic: part.topic, chunks: chunks(part.text, id).map(chunk => store.put('chunk', chunk))}); factEntries.set(id, ref);}
-      return {fact: ref, location: part.location, authority: part.authority};
+      return {fact: ref, location: part.location, authority: part.authority, ...(part.document ? {document: part.document} : {})};
     });
     const record = {...source, contributions}; sourceRecords.set(source.id, record); sourceEntries.push({id: source.id, ref: store.put('source', record)});
   }

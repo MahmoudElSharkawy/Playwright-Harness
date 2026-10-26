@@ -30,18 +30,18 @@ export function adoFixture() {
 }
 
 test('v2 stores large evidence outside a bounded manifest; search and export preserve exact text and origins', async t => {
-  const {roots} = fixture(t), text = Array.from({length: 180}, (_, n) => `Section ${n} checkout payment ${'details '.repeat(950)}`).join('\n');
+  const {roots} = fixture(t), text = Array.from({length: 180}, (_, n) => `Section ${n} checkout payment ${'details '.repeat(950)}`).join('\n\n');
   put(roots, 'large.txt', text); const result = await updateContext(roots, request([source('large', 'large.txt')]));
   const manifest = JSON.parse(readFileSync(current(roots))); assert.equal(manifest.version, 2); assert(statSync(current(roots)).size < 65536); assert.equal(manifest.sources, undefined); assert.equal(manifest.facts, undefined);
   assert.equal(result.snapshot.status, 'complete');
   const page = searchContext(roots, 'checkout', {query: 'payment'}); assert(page.results.length > 0 && page.results.length <= 8); assert(Buffer.byteLength(JSON.stringify(page)) <= 16384); assert(page.omitted > 0);
   assert(page.results.every(hit => hit.sourceId === 'large' && hit.chunkId && hit.factId && hit.location && hit.revision));
   exportContext(roots, 'checkout', 'export.json'); const exported = JSON.parse(readFileSync(join(roots.projectRoot, 'export.json')));
-  assert.equal(exported.sources[0].contributions.map(part => part.text).join('\n'), text); assert.equal(exported.facts.length, 180);
+  assert.equal(exported.sources[0].contributions.map(part => part.text).join(''), text); assert.equal(exported.facts.length, 180);
 });
 
 test('search normalizes Arabic, preserves evidence, paginates deterministically and never falls back to unrelated facts', async t => {
-  const {roots} = fixture(t); put(roots, 'arabic.txt', 'إِدَارَةُ الْمَدْفُوعَاتِ\nطلب آمن'); put(roots, 'many.txt', Array.from({length: 40}, (_, n) => `Payment requirement ${n}`).join('\n'));
+  const {roots} = fixture(t); put(roots, 'arabic.txt', 'إِدَارَةُ الْمَدْفُوعَاتِ\nطلب آمن'); put(roots, 'many.txt', Array.from({length: 40}, (_, n) => `Payment requirement ${n}`).join('\n\n'));
   await updateContext(roots, request([source('arabic', 'arabic.txt'), source('many', 'many.txt')]));
   const arabic = searchContext(roots, 'checkout', {query: 'ادارة المدفوعات'}); assert(arabic.results[0].excerpt.includes('إِدَارَةُ'));
   assert.equal(searchContext(roots, 'checkout', {query: 'unrepresentedword'}).results.length, 0);
@@ -274,7 +274,13 @@ test('catalog and CLI outputs are bounded, paginated, useful for host readers, a
   const transient = cli('retrieve', '--request', 'request.json'); assert.equal(transient.status, 0, transient.stderr); assert(Buffer.byteLength(transient.stdout) <= 16384); const preview = JSON.parse(transient.stdout); assert.equal(preview.saved, false); assert.equal(preview.sources.sample[0].hash, digest('Payment ' + 'evidence '.repeat(600))); assert(!existsSync(current(roots)));
   const update = cli('update', '--request', 'request.json'); assert.equal(update.status, 0, update.stderr); assert(Buffer.byteLength(update.stdout) <= 16384); assert.equal(JSON.parse(update.stdout).snapshot.facts, undefined);
   const catalog = searchContext(roots, 'checkout', {catalog: 'sources', limit: 3}), next = searchContext(roots, 'checkout', {catalog: 'sources', limit: 3, cursor: catalog.cursor}); assert.equal(catalog.total, 35); assert.equal(next.results.length, 3); assert(next.results.every(b => !catalog.results.some(a => a.id === b.id)));
-  const searched = cli('search', '--id', 'checkout', '--query', 'payment', '--limit', '25', '--max-bytes', '65536'); assert.equal(searched.status, 0, searched.stderr); assert(Buffer.byteLength(searched.stdout) <= 65536); assert.equal(JSON.parse(searched.stdout).results.length, 25);
+  const hits = []; let cursor;
+  do {
+    const searched = cli('search', '--id', 'checkout', '--query', 'payment', '--limit', '25', '--max-bytes', '65536', ...(cursor ? ['--cursor', cursor] : []));
+    assert.equal(searched.status, 0, searched.stderr); assert(Buffer.byteLength(searched.stdout) <= 65536);
+    const page = JSON.parse(searched.stdout); assert(page.results.length > 0 && page.results.length <= 25); hits.push(...page.results); cursor = page.cursor;
+  } while (cursor);
+  assert.equal(hits.length, 35); assert.equal(new Set(hits.map(hit => hit.sourceId)).size, 35);
   const exported = cli('export', '--id', 'checkout', '--out', 'complete.json'); assert.equal(exported.status, 0, exported.stderr); assert.equal(JSON.parse(exported.stdout).status, 'EXPORTED'); assert.equal(JSON.parse(readFileSync(join(roots.projectRoot, 'complete.json'))).sources.length, 35);
 });
 

@@ -99,7 +99,49 @@ function citation(source, location, manifest) {
   const fields = {'System.Title': 'Title', 'System.Description': 'Description', 'Microsoft.VSTS.Common.AcceptanceCriteria': 'Acceptance criteria', 'Microsoft.VSTS.TCM.Steps': 'Test steps', 'Microsoft.VSTS.TCM.ReproSteps': 'Reproduction steps'};
   const label = source.kind === 'work-item' ? `Work item #${source.workItemId} — ${source.title || 'Untitled'}` : source.name ?? source.path?.replaceAll('\\', '/').split('/').at(-1) ?? source.id;
   const project = manifest.adoProject;
-  return {label, ...(fields[location] ? {location: fields[location]} : {}), ...(source.kind === 'work-item' && project ? {url: `${project.organizationUrl}/${encodeURIComponent(project.name)}/_workitems/edit/${source.workItemId}`} : {})};
+  return {label, ...(location ? {location: fields[location] ?? location} : {}), ...(source.kind === 'work-item' && project ? {url: `${project.organizationUrl}/${encodeURIComponent(project.name)}/_workitems/edit/${source.workItemId}`} : {})};
+}
+function capturedHit(store, manifest, row) {
+  const sourceRef = store.lookup(manifest.catalogs.sources, row.sourceId); requireThat(sourceRef, 'Search index references an uncaptured source.');
+  const source = store.source(sourceRef, false), fact = store.get(row.factRef, 'fact'), chunk = store.get(row.chunkRef, 'chunk');
+  const part = source.contributions.find(part => part.fact === row.factRef && part.location === row.location && part.authority === row.authority);
+  requireThat(businessSource(source) && !inactive.has(source.status) && part && fact.id === row.factId && fact.chunks.includes(row.chunkRef) && chunk.id === row.chunkId && chunk.factId === fact.id && normalize(chunk.text) === row.text
+    && row.key === fingerprint({sourceId: source.id, factId: fact.id, chunkId: chunk.id, location: part.location, authority: part.authority}), 'Search index and captured evidence differ; run an explicit update.');
+  const document = part.document;
+  return {passageId: row.key, sourceId: source.id, factId: fact.id, chunkId: chunk.id, topic: fact.topic, excerpt: chunk.text, location: row.location,
+    offsets: {start: chunk.start, end: chunk.end, byteStart: chunk.byteStart, byteEnd: chunk.byteEnd},
+    ...(document ? {documentOffsets: {start: document.start + chunk.start, end: document.start + chunk.end,
+      ...(document.byteStart === undefined ? {} : {byteStart: document.byteStart + chunk.byteStart, byteEnd: document.byteStart + chunk.byteEnd})}, headings: document.headings} : {}),
+    revision: source.version ?? source.hash, citation: citation(source, row.location, manifest), authority: row.authority, status: row.status,
+    freshness: {status: source.status, verifiedAt: source.verifiedAt ?? null, ...(source.revisionVerifiedAt ? {revisionVerifiedAt: source.revisionVerifiedAt} : {})},
+    match: row.priority === undefined ? 'surrounding' : ['exact', 'relation', 'text'][row.priority], ...(row.workItemId ? {workItemId: row.workItemId} : {})};
+}
+
+/** Row insertion follows contribution/chunk order in every supported index recipe. */
+function surroundingPage(roots, manifest, options, pagination, window) {
+  const {limit, maxBytes, binding, offset, workItemId} = pagination, {before, after} = window;
+  let db;
+  try {
+    db = openIndex(roots, manifest);
+    const anchor = db.prepare('SELECT * FROM entries WHERE key=? AND sourceId=?').get(options.around, options.sourceId);
+    const allowed = row => (!options.topic || row.topic === options.topic) && (workItemId === undefined || row.workItemId === workItemId);
+    requireThat(anchor && allowed(anchor), 'Surrounding anchor does not match the selected source or filters.');
+    const preceding = db.prepare('SELECT * FROM entries WHERE sourceId=? AND rowid<? ORDER BY rowid DESC LIMIT ?').all(anchor.sourceId, anchor.rowid, before).reverse();
+    const following = db.prepare('SELECT * FROM entries WHERE sourceId=? AND rowid>? ORDER BY rowid LIMIT ?').all(anchor.sourceId, anchor.rowid, after);
+    const neighbors = [...preceding, anchor, ...following], rows = neighbors.filter(allowed), results = [], store = storeFor(roots, manifest);
+    const counts = db.prepare('SELECT sum(rowid<?) AS preceding,sum(rowid>?) AS following FROM entries WHERE sourceId=?').get(anchor.rowid, anchor.rowid, anchor.sourceId);
+    const response = {status: 'SURROUNDING', contextId: manifest.contextId, revision: manifest.revision, scope: manifest.scope,
+      ...(manifest.adoProject ? {adoProject: manifest.adoProject} : {}), results, total: rows.length, omitted: Math.max(0, rows.length - offset), cursor: null,
+      surrounding: {anchor: options.around, before, after, omittedBefore: Math.max(0, counts.preceding - preceding.length), omittedAfter: Math.max(0, counts.following - following.length), excludedByFilters: neighbors.length - rows.length}};
+    requireThat(offset < rows.length, 'Surrounding cursor is outside its evidence window.');
+    const finish = () => {response.omitted = rows.length - offset - results.length; response.cursor = response.omitted ? Buffer.from(JSON.stringify({binding, offset: offset + results.length})).toString('base64url') : null;};
+    for (const row of rows.slice(offset, offset + limit)) {
+      results.push(capturedHit(store, manifest, row)); finish();
+      if (Buffer.byteLength(JSON.stringify(response)) + 1 > maxBytes) {results.pop(); finish(); break;}
+    }
+    requireThat(results.length, 'Search output budget is too small for one surrounding evidence result.');
+    return contextData(response, maxBytes);
+  } finally {db?.close();}
 }
 export function readContextOverview(roots, id) {
   const manifest = readManifest(roots, id); if (!manifest) return {status: 'ABSENT', contextId: id};
@@ -129,7 +171,7 @@ export function readContextOverview(roots, id) {
 }
 export function searchContext(roots, id, options = {}) {
   const manifest = readManifest(roots, id); requireThat(manifest?.version === 2, 'Indexed search requires a captured v2 context; run an explicit update.');
-  const allowed = ['query', 'sourceId', 'topic', 'workItemId', 'limit', 'maxBytes', 'cursor', 'catalog']; requireThat(Object.keys(options).every(key => allowed.includes(key)), 'Unknown context search option.');
+  const allowed = ['query', 'sourceId', 'topic', 'workItemId', 'limit', 'maxBytes', 'cursor', 'catalog', 'around', 'revision', 'before', 'after']; requireThat(Object.keys(options).every(key => allowed.includes(key)), 'Unknown context search option.');
   const limit = options.limit === undefined ? 8 : Number(options.limit), maxBytes = options.maxBytes === undefined ? 16384 : Number(options.maxBytes);
   requireThat(Number.isSafeInteger(limit) && limit >= 1 && limit <= 25 && Number.isSafeInteger(maxBytes) && maxBytes >= 4096 && maxBytes <= 65536, 'Search limits are 1–25 results and 4096–65536 output bytes.');
   const query = options.query ?? ''; requireThat(typeof query === 'string' && Buffer.byteLength(query) <= 4096, 'Search query exceeds 4096 bytes.');
@@ -138,15 +180,20 @@ export function searchContext(roots, id, options = {}) {
   const workItemId = options.workItemId === undefined ? inferredId : Number(options.workItemId);
   requireThat(workItemId === undefined || Number.isSafeInteger(workItemId) && workItemId > 0, 'Invalid work item identifier.');
   const terms = [...new Set(normalize(query).match(/[\p{L}\p{N}]+/gu) ?? [])]; requireThat(terms.length <= 32, 'Search query exceeds 32 terms.');
+  const window = {before: Number(options.before ?? 2), after: Number(options.after ?? 2)};
+  requireThat(options.around !== undefined ? HASH.test(options.around) && options.sourceId && options.revision === manifest.revision && !query && !options.catalog : ['revision', 'before', 'after'].every(key => options[key] === undefined), 'Surrounding search needs a passage anchor, source and current capture revision, without query/catalog.');
+  requireThat(Object.values(window).every(value => Number.isSafeInteger(value) && value >= 0 && value <= 5), 'Surrounding window limits are 0–5 passages before and after.');
   requireThat(options.catalog === undefined || options.catalog === 'sources' && !query && !options.sourceId && !options.topic && !workItemId, 'Source catalog browsing cannot be combined with evidence filters.');
-  requireThat(options.catalog || terms.length || options.sourceId || options.topic || workItemId, 'Search needs a query or an explicit source, topic or work item.');
-  const binding = fingerprint({revision: manifest.revision, scopeKey: manifest.scopeKey, query, sourceId: options.sourceId ?? null, topic: options.topic ?? null, workItemId: workItemId ?? null, catalog: options.catalog ?? null, limit, maxBytes, normalizer: NORMALIZER});
+  requireThat(options.around || options.catalog || terms.length || options.sourceId || options.topic || workItemId, 'Search needs a query or an explicit source, topic or work item.');
+  const binding = fingerprint({revision: manifest.revision, scopeKey: manifest.scopeKey, query, sourceId: options.sourceId ?? null, topic: options.topic ?? null, workItemId: workItemId ?? null, catalog: options.catalog ?? null, limit, maxBytes, normalizer: NORMALIZER,
+    ...(options.around ? {around: options.around, consumer: roots.projectRoot, ...window} : {})});
   let offset = 0, seen = 0;
   if (options.cursor) {
     try {requireThat(typeof options.cursor === 'string' && options.cursor.length < 2048, 'Invalid cursor.'); const cursor = JSON.parse(Buffer.from(options.cursor, 'base64url').toString()); requireThat(cursor.binding === binding && Number.isSafeInteger(cursor.offset) && cursor.offset >= 0, 'Cursor does not match revision, scope, query or filters.'); offset = cursor.offset;
       if (options.catalog) {requireThat(Number.isSafeInteger(cursor.seen) && cursor.seen >= 0 && cursor.seen <= offset, 'Invalid catalog cursor.'); seen = cursor.seen;}}
     catch {throw new Error('Cursor does not match revision, scope, query or filters.');}
   }
+  if (options.around) return surroundingPage(roots, manifest, options, {limit, maxBytes, binding, offset, workItemId}, window);
   if (options.catalog) {
     requireThat(manifest.index?.recipe === RECIPE, 'Business source catalog requires explicit selection/update of this older context.');
     const store = storeFor(roots, manifest), results = [], total = manifest.counts.activeSources;
@@ -188,12 +235,7 @@ export function searchContext(roots, id, options = {}) {
     const response = {status: total ? 'MATCHES' : 'NO_EVIDENCE', contextId: id, revision: manifest.revision, scope: manifest.scope, ...(manifest.adoProject ? {adoProject: manifest.adoProject} : {}), results, total, omitted: Math.max(0, total - offset), cursor: null};
     const finish = () => {response.omitted = Math.max(0, total - offset - results.length); response.cursor = response.omitted ? Buffer.from(JSON.stringify({binding, offset: offset + results.length})).toString('base64url') : null;};
     for (const row of rows) {
-      const sourceRef = store.lookup(manifest.catalogs.sources, row.sourceId); requireThat(sourceRef, 'Search index references an uncaptured source.');
-      const source = store.source(sourceRef, false), fact = store.get(row.factRef, 'fact'), chunk = store.get(row.chunkRef, 'chunk');
-      requireThat(businessSource(source) && !inactive.has(source.status) && source.contributions.some(part => part.fact === row.factRef && part.location === row.location && part.authority === row.authority) && fact.id === row.factId && fact.chunks.includes(row.chunkRef) && chunk.id === row.chunkId && chunk.factId === fact.id && normalize(chunk.text) === row.text, 'Search index and captured evidence differ; run an explicit update.');
-      const hit = {sourceId: source.id, factId: fact.id, chunkId: chunk.id, excerpt: chunk.text, location: row.location, offsets: {start: chunk.start, end: chunk.end, byteStart: chunk.byteStart, byteEnd: chunk.byteEnd}, revision: source.version ?? source.hash,
-        citation: citation(source, row.location, manifest), authority: row.authority, status: row.status, freshness: {status: source.status, verifiedAt: source.verifiedAt ?? null, ...(source.revisionVerifiedAt ? {revisionVerifiedAt: source.revisionVerifiedAt} : {})}, match: ['exact', 'relation', 'text'][row.priority], ...(row.workItemId ? {workItemId: row.workItemId} : {})};
-      results.push(hit); finish();
+      results.push(capturedHit(store, manifest, row)); finish();
       if (Buffer.byteLength(JSON.stringify(response)) + 1 > maxBytes) {results.pop(); finish(); break;}
     }
     requireThat(!rows.length || results.length, 'Search output budget is too small for one evidence result.');

@@ -29,6 +29,9 @@ ADO destination; it does not become business evidence.
 3. Read the selected content through the existing runtime and appropriate file
    readers. Preserve conditions, amounts, limits, exceptions and named actors.
    Keep unresolved contradictions and unreadable portions attributable to sources.
+   Native Markdown/text capture preserves sections/paragraphs, heading ancestry,
+   lists, tables and fenced content with original locations. Headings describe
+   locations, not shared business topics or proof of a contradiction.
 4. Build or refresh the saved context with `context update --request <request>`,
    or reuse its complete saved selection with `context update --id <id>`.
    An invocation to build/update context authorizes this local save. If the user

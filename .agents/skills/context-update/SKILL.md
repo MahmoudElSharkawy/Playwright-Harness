@@ -15,6 +15,10 @@ Use `context update --id <id>` to refresh the saved selection:
   items update; unchanged content is reused; confirmed departures lose active support.
 - Explicitly selected documents are rehashed. Only selected ADO attachments are
   eligible for download, including on later refreshes.
+- An explicit refresh also checks the native Markdown/text reader recipe, so
+  unchanged bytes can receive section extraction. Unaffected formats and saved
+  host receipts retain their contracts. Regrouped IDs/counts/ranking do not alone
+  indicate changed business requirements; bind citations to the new revision.
 
 For a user-specified narrower refresh or new criteria, use a request with those
 sources and the same context ID. [project-context](../project-context/SKILL.md)
