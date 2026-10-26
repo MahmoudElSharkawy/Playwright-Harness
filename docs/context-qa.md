@@ -94,13 +94,27 @@ filters. Follow cursors when needed. Additional terms must remain within the
 same selected evidence collection. A title or keyword match does not establish
 an entire business rule.
 
+Each hit's `section` describes its coverage of one captured contribution:
+`chunkIndex` (zero-based), `chunkCount`, `omittedBefore`, `omittedAfter` and
+`complete`. A search with no omitted matching results can still return only part
+of a long section. Before describing a rule as complete, inspect missing chunks
+for qualifications using targeted searches or bounded expansion. If available
+evidence or the retrieval budget cannot establish completeness, state that limit
+and answer only the supported parts.
+
+`complete: true` never establishes whole-document or business completeness.
+Legacy lines, partial host receipts and redacted fragments can each fit in one
+chunk while related conditions remain elsewhere. Combine retained chunks only
+within the same consumer/context/capture revision/source/fact/location, counting
+distinct indexes and preserving original overlapping offsets.
+
 When conditions, exceptions or sequence steps are missing from a hit, use bounded
 `search --around <passageId> --source <sourceId> --revision <capture-revision>`.
 Before/after default to two passages each, maximum five; results stay in source
 order with strict item/topic filters. Use the response revision. Continue inside
 that window with identical options/cursor; inspect the reported outside-window
 and filtered omissions. Expand from a returned passage only when more support is
-needed. Complete sections and retained support need no expansion. Adjacency alone
+needed. Sufficient retained support needs no repeated expansion. Adjacency alone
 does not connect unrelated sections, and generated explanations are synthesis,
 never new captured evidence. See [the search contract](project-context.md).
 
@@ -161,3 +175,18 @@ passages. Instrumentation writes happen outside the read-only answering boundary
 Initial capture, unchanged refresh and native-reader upgrade timings are separate
 from answer retrieval; provider tokens/cost remain unavailable unless an actual
 runner supplies them. A synthetic model exercise is not native-host/live-ADO proof.
+
+For the section-completeness comparison, use `prepare <new-external-directory>
+<unmodified-baseline-package> sections`. This eight-turn profile keeps both arms on
+the baseline capture until an explicit `control ... refresh` before turn 2 and
+changes the original gift deadline with `control ... change` before turn 8.
+It includes distant exceptions, list-contained fences, multiline headings, plain
+text separators and an intentionally incomplete checklist. Identical budgets are
+enforced: six calls per factual turn, three for turn 7, zero for formatting turn 3,
+and at most 4,096 output bytes per retrieval. Errors count; rejected attempts stay
+in the audit and invalidate a compliant report. Do not read the expected rubric
+while answering. Run two independent repetitions per arm with fresh model contexts.
+Record model/settings and usage when exposed, otherwise record them as unavailable.
+An independent reviewer distinguishes supported complete answers, honest partial
+answers and unsupported answers. Equal scores establish parity, not improvement.
+See the [follow-up evidence](archive/context-completeness-follow-up.md).

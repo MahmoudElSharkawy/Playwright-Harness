@@ -63,17 +63,32 @@ contents or restart a general project overview.
    - **Specific/new question:** search relevant terms and use `--work-item`,
      `--source` or `--topic` to obtain the needed surrounding evidence. These
      filters restrict results; follow relevant pages with the same options/cursor.
+     Check each hit's `section`: `chunkIndex` is zero-based; `chunkCount`,
+     `omittedBefore` and `omittedAfter` describe that excerpt within one captured
+     contribution. `complete` means that excerpt contains the whole contribution,
+     not the whole document or all business conditions. Legacy lines, host receipts
+     and redacted fragments can be complete contributions with support elsewhere.
+     Search-level `omitted: 0` only means no matching results remain.
+     Before presenting a rule as complete, inspect missing section chunks for
+     qualifications using targeted terms or bounded surrounding retrieval. If the
+     budget or source coverage prevents that check, answer only supported parts and
+     explicitly state the limitation; never silently treat the first chunk as the
+     complete rule. Complete contributions still need relevant adjacent conditions.
      If a hit lacks conditions, exceptions or process steps, fetch a bounded
      window with `search --around <passageId> --source <sourceId> --revision
      <capture-revision>` (use the response revision, not the hit's source revision).
      `--before`/`--after` default to 2, maximum 5 each. Fetch only the missing
-     support; a complete section or retained support needs no expansion. Windows
+     support; sufficiently complete retained support needs no repeated expansion. Windows
      keep source order and strict item/topic filters. Follow their cursor with
      identical options when needed; inspect `surrounding.omittedBefore`,
      `omittedAfter` and `excludedByFilters` before claiming completeness. A further
      window uses a returned passage as its anchor. Adjacent sections are not
      automatically related rules. A rejected old anchor requires current support,
      never an automatic refresh or source read.
+     Combine retained chunk coverage only for the same consumer, context, capture
+     revision, source, fact and location. Count distinct chunk indexes, not summed
+     omissions; overlapping excerpts retain their original offsets. A complete
+     union proves captured-contribution coverage only.
    - **Clarification/explanation:** start from the referenced part of the previous
      answer and its retained support. Search narrowly only for missing support;
      neither new invocation nor a pronoun alone requires repeating searches.

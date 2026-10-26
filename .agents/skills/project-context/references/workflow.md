@@ -177,6 +177,12 @@ selected window; `surrounding.omittedBefore`/`omittedAfter` count passages outsi
 it, and `excludedByFilters` counts filtered neighbors. A next window needs a new
 returned anchor. Adjacency does not establish a business relationship.
 
+Hits expose `section` chunk index/count, before/after omissions and `complete` for
+one captured contribution. No omitted matching results does not mean the section
+is complete. Check missing chunks before claiming an exhaustive rule, or disclose
+the limitation. Even a complete legacy line or host receipt may have conditions
+elsewhere; source coverage remains separate. See the [Q&A guidance](../../context-qa/SKILL.md).
+
 The SQLite FTS5 tables and immutable JSON layout stay the same. Source/selection
 metadata records the business boundary. Older mixed captures require an explicit
 business-source request; old repository evidence is excluded and history remains.
