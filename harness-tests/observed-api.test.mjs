@@ -14,7 +14,7 @@ function raw(baseUrl, patch = {}) {
   return {method: 'GET', url: `${baseUrl}/items?search=${privateValue}`, resourceType: 'fetch',
     requestHeaders: [{name: 'authorization', value: 'Bearer session-private-sentinel'}, {name: 'accept', value: 'application/json'}],
     responseHeaders: [{name: 'set-cookie', value: 'session=private-session-sentinel'}, {name: 'content-type', value: 'application/json'}],
-    requestBody: {state: 'omitted'}, responseBody: {state: 'known', contentType: 'application/json', text: JSON.stringify({items: [{id: privateValue, email: 'private@example.invalid', token: 'session-private-sentinel'}]})}, status: 200, ...patch};
+    requestBody: {state: 'omitted'}, responseBody: {state: 'known', contentType: 'application/json', text: JSON.stringify({items: [{id: privateValue, email: 'private@example.invalid', token: '<session-private-sentinel>'}]})}, status: 200, ...patch};
 }
 async function setup(t, {definition = operation('read-items', {request: {method: 'GET', path: '/items', query: {search: {$input: 'search'}}}}), auth = false, values = [['search', 'synthetic']]} = {}) {
   const f = await fixture(t, ({reply}) => reply(200, {items: []}), [definition], {values, auth,
