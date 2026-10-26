@@ -105,11 +105,13 @@ function capturedHit(store, manifest, row) {
   const sourceRef = store.lookup(manifest.catalogs.sources, row.sourceId); requireThat(sourceRef, 'Search index references an uncaptured source.');
   const source = store.source(sourceRef, false), fact = store.get(row.factRef, 'fact'), chunk = store.get(row.chunkRef, 'chunk');
   const part = source.contributions.find(part => part.fact === row.factRef && part.location === row.location && part.authority === row.authority);
-  requireThat(businessSource(source) && !inactive.has(source.status) && part && fact.id === row.factId && fact.chunks.includes(row.chunkRef) && chunk.id === row.chunkId && chunk.factId === fact.id && normalize(chunk.text) === row.text
+  const chunkIndex = fact.chunks.indexOf(row.chunkRef), chunkCount = fact.chunks.length;
+  requireThat(businessSource(source) && !inactive.has(source.status) && part && fact.id === row.factId && chunkIndex >= 0 && chunk.id === row.chunkId && chunk.factId === fact.id && normalize(chunk.text) === row.text
     && row.key === fingerprint({sourceId: source.id, factId: fact.id, chunkId: chunk.id, location: part.location, authority: part.authority}), 'Search index and captured evidence differ; run an explicit update.');
   const document = part.document;
   return {passageId: row.key, sourceId: source.id, factId: fact.id, chunkId: chunk.id, topic: fact.topic, excerpt: chunk.text, location: row.location,
     offsets: {start: chunk.start, end: chunk.end, byteStart: chunk.byteStart, byteEnd: chunk.byteEnd},
+    section: {chunkIndex, chunkCount, omittedBefore: chunkIndex, omittedAfter: chunkCount - chunkIndex - 1, complete: chunkCount === 1},
     ...(document ? {documentOffsets: {start: document.start + chunk.start, end: document.start + chunk.end,
       ...(document.byteStart === undefined ? {} : {byteStart: document.byteStart + chunk.byteStart, byteEnd: document.byteStart + chunk.byteEnd})}, headings: document.headings} : {}),
     revision: source.version ?? source.hash, citation: citation(source, row.location, manifest), authority: row.authority, status: row.status,

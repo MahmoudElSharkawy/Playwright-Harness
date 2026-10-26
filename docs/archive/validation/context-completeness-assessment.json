@@ -1,0 +1,1722 @@
+{
+  "version": 1,
+  "independentReviewer": "/root/review_proof",
+  "independence": {
+    "runtimeAuthor": false,
+    "answerAuthor": false,
+    "protocolPlanningContributor": true,
+    "description": "Reviewer proposed evaluation design earlier but did not author runtime changes or any trial answer. Semantic grading inspected every answer against actual returned or legitimately retained support."
+  },
+  "reviewedAt": "2026-10-26",
+  "scope": {
+    "trials": [
+      "release1",
+      "release2"
+    ],
+    "excludedPilots": [
+      "rep1",
+      "final1"
+    ],
+    "baselineCommit": "53fbd77f6ca64768f350305a24c2355f38a4ce9f",
+    "evidenceFile": "context-completeness-model.json",
+    "evidenceSha256": "8aeb732117112a90036f90353a23669ea7d556348c932f93b29f80546eff37be",
+    "rubricFile": "harness-tests/fixtures/context-qa/sections-rubric.json",
+    "rubricSha256": "444a34ff3741d0a54afd6a8e325494950692ab5b02de642504cb11cdb63100c3"
+  },
+  "method": {
+    "classification": {
+      "supported-complete": "Every requested required claim is correct and supported by actually retrieved or legitimately retained passages, with accurate citations and revision.",
+      "honest-partial": "All stated claims are supported; the answer explicitly limits its scope because required captured support was not retrieved. This is safe behavior, not complete task coverage.",
+      "unsupported-or-incorrect": "An incorrect or unsupported claim, an exhaustive claim from incomplete evidence, a materially misleading section citation, or an undisclosed missing required condition."
+    },
+    "exhaustiveRequests": "Turn 4 has every enumerated business claim but discloses unobserved section text; it remains honest-partial for the request to include every captured condition. Turn 7 exposes one numbered condition out of 24.",
+    "citationImpact": "A materially misleading source or section fails. Correct reconstruction from actual text succeeds. A truncated heading with an unambiguous filename and exact supporting lines is recorded as a non-material fidelity defect without manufacturing an answer failure.",
+    "retention": "Formatting turn 3 reuses turn 2. Both baseline turn 6 answers reuse warehouse evidence retrieved in turn 4 at the unchanged revision."
+  },
+  "integrity": {
+    "status": "pass",
+    "equalInputHashesAcrossArmsAndRepetitions": true,
+    "equalBudgetsAcrossArmsAndRepetitions": true,
+    "equalRuntimeAndInstructionHashesAcrossRepetitions": true,
+    "controllerSchedule": [
+      {
+        "operation": "refresh",
+        "afterTurn": 1
+      },
+      {
+        "operation": "change",
+        "afterTurn": 7
+      }
+    ],
+    "unchangedRefreshPreservesSourceHashes": true,
+    "changedRefreshChangesOnlyRulesHash": true,
+    "afterRefreshUsesNativeSectionsV2": true,
+    "beforeRefreshKeepsNativeSectionsV1": true,
+    "allFactualTurnsUseOpeningAndClosingOverview": true,
+    "singleCaptureRevisionPerFactualTurn": true,
+    "zeroFormattingRetrieval": true,
+    "allResponsesWithin4096Bytes": true,
+    "allReportedBytesRecomputed": true,
+    "allRecordedAuditEventsSelectedCapturedReads": true,
+    "finalTrialsHaveNoTransportErrors": true
+  },
+  "rows": [
+    {
+      "repetition": 1,
+      "arm": "before",
+      "turn": 1,
+      "classification": "supported-complete",
+      "reason": "The retrieved Gift eligibility passage states the ordinary receipt requirement, 14 days, the gift order-number substitution and the same deadline. The answer preserves all four without importing exchange rules.",
+      "evidence": {
+        "file": "context-completeness-model.json",
+        "repetition": 1,
+        "arm": "before",
+        "turn": 1,
+        "supportingTurns": [
+          1
+        ],
+        "pointer": "/comparisons/0/variants/before/turns/0"
+      },
+      "checks": {
+        "claimSupport": {
+          "status": "pass"
+        },
+        "citationFidelity": {
+          "status": "pass",
+          "note": "Source names and supplied locations identify the actual passages supporting the answer."
+        },
+        "conditionCoverage": {
+          "status": "complete",
+          "note": "Every required business condition for this turn is supported."
+        },
+        "revision": {
+          "status": "pass",
+          "captureRevision": "101f56945550a2910438f3e9d5dc1aeae88fa599915b460827402c4bb392d906",
+          "note": "Legacy capture read succeeds before the first explicit controller refresh."
+        },
+        "readOnlyBoundary": {
+          "status": "pass",
+          "scope": "Audited API activity",
+          "note": "Recorded events are selected captured-context reads only; no transport error or forbidden event appears."
+        },
+        "budget": {
+          "status": "pass",
+          "calls": 3,
+          "maxCalls": 6,
+          "outputBytes": 5387,
+          "maxBytesPerCall": 4096
+        }
+      }
+    },
+    {
+      "repetition": 1,
+      "arm": "before",
+      "turn": 2,
+      "classification": "supported-complete",
+      "reason": "After the explicit unchanged refresh, newly retrieved Gift eligibility support uses the controller revision and preserves the 14-day deadline and gift proof exception.",
+      "evidence": {
+        "file": "context-completeness-model.json",
+        "repetition": 1,
+        "arm": "before",
+        "turn": 2,
+        "supportingTurns": [
+          2
+        ],
+        "pointer": "/comparisons/0/variants/before/turns/1"
+      },
+      "checks": {
+        "claimSupport": {
+          "status": "pass"
+        },
+        "citationFidelity": {
+          "status": "pass",
+          "note": "Source names and supplied locations identify the actual passages supporting the answer."
+        },
+        "conditionCoverage": {
+          "status": "complete",
+          "note": "Every required business condition for this turn is supported."
+        },
+        "revision": {
+          "status": "pass",
+          "captureRevision": "7f7e9a129c25ab934697739524488769a3fe7575343a74a951d272ce565efea5",
+          "note": "Opening overview, retrieved evidence and closing overview match the appropriate controller-published revision."
+        },
+        "readOnlyBoundary": {
+          "status": "pass",
+          "scope": "Audited API activity",
+          "note": "Recorded events are selected captured-context reads only; no transport error or forbidden event appears."
+        },
+        "budget": {
+          "status": "pass",
+          "calls": 3,
+          "maxCalls": 6,
+          "outputBytes": 3477,
+          "maxBytesPerCall": 4096
+        }
+      }
+    },
+    {
+      "repetition": 1,
+      "arm": "before",
+      "turn": 3,
+      "classification": "supported-complete",
+      "reason": "The two-column table faithfully transforms turn 2, preserving its claims and citation with no retrieval.",
+      "evidence": {
+        "file": "context-completeness-model.json",
+        "repetition": 1,
+        "arm": "before",
+        "turn": 3,
+        "supportingTurns": [
+          2
+        ],
+        "pointer": "/comparisons/0/variants/before/turns/2"
+      },
+      "checks": {
+        "claimSupport": {
+          "status": "pass"
+        },
+        "citationFidelity": {
+          "status": "pass",
+          "note": "Citations are retained faithfully from the supported preceding answer."
+        },
+        "conditionCoverage": {
+          "status": "complete",
+          "note": "Faithful transformation; no new facts."
+        },
+        "revision": {
+          "status": "pass",
+          "captureRevision": "7f7e9a129c25ab934697739524488769a3fe7575343a74a951d272ce565efea5",
+          "note": "Zero-retrieval transformation legitimately retains turn 2 evidence."
+        },
+        "readOnlyBoundary": {
+          "status": "pass",
+          "scope": "Audited API activity",
+          "note": "Recorded events are selected captured-context reads only; no transport error or forbidden event appears."
+        },
+        "budget": {
+          "status": "pass",
+          "calls": 0,
+          "maxCalls": 0,
+          "outputBytes": 0,
+          "maxBytesPerCall": 4096
+        }
+      }
+    },
+    {
+      "repetition": 1,
+      "arm": "before",
+      "turn": 4,
+      "classification": "honest-partial",
+      "reason": "Beginning and end passages support all five required proof/deadline/condition claims, and repeated captured processing text supports the review queue. Intervening section text remains unobserved; the answer explicitly declines to guarantee every captured condition. This is honest partial coverage of the exhaustive request, not an incorrect business claim.",
+      "evidence": {
+        "file": "context-completeness-model.json",
+        "repetition": 1,
+        "arm": "before",
+        "turn": 4,
+        "supportingTurns": [
+          4
+        ],
+        "pointer": "/comparisons/0/variants/before/turns/3"
+      },
+      "checks": {
+        "claimSupport": {
+          "status": "pass"
+        },
+        "citationFidelity": {
+          "status": "pass",
+          "note": "Source names and supplied locations identify the actual passages supporting the answer."
+        },
+        "conditionCoverage": {
+          "status": "required-claims-covered-exhaustiveness-unverified",
+          "requiredClaimsSupported": 5,
+          "requiredClaimsTotal": 5,
+          "note": "All enumerated business requirements are present, but the requested exhaustive condition set is not established from the unobserved middle of the section."
+        },
+        "revision": {
+          "status": "pass",
+          "captureRevision": "7f7e9a129c25ab934697739524488769a3fe7575343a74a951d272ce565efea5",
+          "note": "Opening overview, retrieved evidence and closing overview match the appropriate controller-published revision."
+        },
+        "readOnlyBoundary": {
+          "status": "pass",
+          "scope": "Audited API activity",
+          "note": "Recorded events are selected captured-context reads only; no transport error or forbidden event appears."
+        },
+        "budget": {
+          "status": "pass",
+          "calls": 5,
+          "maxCalls": 6,
+          "outputBytes": 9879,
+          "maxBytesPerCall": 4096
+        }
+      }
+    },
+    {
+      "repetition": 1,
+      "arm": "before",
+      "turn": 5,
+      "classification": "supported-complete",
+      "reason": "Retrieved dispatch text supports supervisor approval and the service-lead exception for prepaid replacements. The answer correctly distinguishes the nonbinding demonstration and identifies Dispatch approval as the binding section.",
+      "evidence": {
+        "file": "context-completeness-model.json",
+        "repetition": 1,
+        "arm": "before",
+        "turn": 5,
+        "supportingTurns": [
+          5
+        ],
+        "pointer": "/comparisons/0/variants/before/turns/4"
+      },
+      "checks": {
+        "claimSupport": {
+          "status": "pass"
+        },
+        "citationFidelity": {
+          "status": "pass",
+          "note": "Baseline metadata incorrectly labels the combined passage Sample instruction, but the answer explicitly identifies Dispatch approval inside the retrieved text and distinguishes the demonstration. This reconstruction is a citation success, not a manufactured baseline failure."
+        },
+        "conditionCoverage": {
+          "status": "complete",
+          "note": "Every required business condition for this turn is supported."
+        },
+        "revision": {
+          "status": "pass",
+          "captureRevision": "7f7e9a129c25ab934697739524488769a3fe7575343a74a951d272ce565efea5",
+          "note": "Opening overview, retrieved evidence and closing overview match the appropriate controller-published revision."
+        },
+        "readOnlyBoundary": {
+          "status": "pass",
+          "scope": "Audited API activity",
+          "note": "Recorded events are selected captured-context reads only; no transport error or forbidden event appears."
+        },
+        "budget": {
+          "status": "pass",
+          "calls": 3,
+          "maxCalls": 6,
+          "outputBytes": 3524,
+          "maxBytesPerCall": 4096
+        }
+      }
+    },
+    {
+      "repetition": 1,
+      "arm": "before",
+      "turn": 6,
+      "classification": "supported-complete",
+      "reason": "Retrieved international evidence supports 30 days and 48-hour damage reporting; warehouse evidence supports arrival within 10 days and unopened goods. The answer preserves the source-specific distinctions.",
+      "evidence": {
+        "file": "context-completeness-model.json",
+        "repetition": 1,
+        "arm": "before",
+        "turn": 6,
+        "supportingTurns": [
+          4,
+          6
+        ],
+        "pointer": "/comparisons/0/variants/before/turns/5"
+      },
+      "checks": {
+        "claimSupport": {
+          "status": "pass"
+        },
+        "citationFidelity": {
+          "status": "pass",
+          "note": "The model reconstructs International returns from the adjacent retrieved text, reports the imperfect returned label transparently, and reuses warehouse support from turn 4 at the same revision. The source and locations are sufficient and not materially misleading."
+        },
+        "conditionCoverage": {
+          "status": "complete",
+          "note": "Every required business condition for this turn is supported."
+        },
+        "revision": {
+          "status": "pass",
+          "captureRevision": "7f7e9a129c25ab934697739524488769a3fe7575343a74a951d272ce565efea5",
+          "note": "Opening overview, retrieved evidence and closing overview match the appropriate controller-published revision."
+        },
+        "readOnlyBoundary": {
+          "status": "pass",
+          "scope": "Audited API activity",
+          "note": "Recorded events are selected captured-context reads only; no transport error or forbidden event appears."
+        },
+        "budget": {
+          "status": "pass",
+          "calls": 3,
+          "maxCalls": 6,
+          "outputBytes": 3435,
+          "maxBytesPerCall": 4096
+        }
+      }
+    },
+    {
+      "repetition": 1,
+      "arm": "before",
+      "turn": 7,
+      "classification": "honest-partial",
+      "reason": "The single checklist excerpt supports the existence of 24 mandatory conditions, condition 1 and recording the review. The answer explicitly declines to enumerate or infer conditions 2-24, whose text was not retrieved.",
+      "evidence": {
+        "file": "context-completeness-model.json",
+        "repetition": 1,
+        "arm": "before",
+        "turn": 7,
+        "supportingTurns": [
+          7
+        ],
+        "pointer": "/comparisons/0/variants/before/turns/6"
+      },
+      "checks": {
+        "claimSupport": {
+          "status": "pass"
+        },
+        "citationFidelity": {
+          "status": "pass",
+          "note": "Source names and supplied locations identify the actual passages supporting the answer."
+        },
+        "conditionCoverage": {
+          "status": "partial-explicitly-disclosed",
+          "numberedConditionsObserved": 1,
+          "numberedConditionsTotal": 24,
+          "note": "The all-24 prerequisite and record-review instruction are supported; numbered conditions 2-24 are neither supplied nor inferred."
+        },
+        "revision": {
+          "status": "pass",
+          "captureRevision": "7f7e9a129c25ab934697739524488769a3fe7575343a74a951d272ce565efea5",
+          "note": "Opening overview, retrieved evidence and closing overview match the appropriate controller-published revision."
+        },
+        "readOnlyBoundary": {
+          "status": "pass",
+          "scope": "Audited API activity",
+          "note": "Recorded events are selected captured-context reads only; no transport error or forbidden event appears."
+        },
+        "budget": {
+          "status": "pass",
+          "calls": 3,
+          "maxCalls": 3,
+          "outputBytes": 4538,
+          "maxBytesPerCall": 4096
+        }
+      }
+    },
+    {
+      "repetition": 1,
+      "arm": "before",
+      "turn": 8,
+      "classification": "supported-complete",
+      "reason": "After the change controller publishes a new revision, the retrieved Gift eligibility passage explicitly says 21 days and retains the order-number substitution. The answer updates the original refund referent without borrowing exchange or international deadlines.",
+      "evidence": {
+        "file": "context-completeness-model.json",
+        "repetition": 1,
+        "arm": "before",
+        "turn": 8,
+        "supportingTurns": [
+          8
+        ],
+        "pointer": "/comparisons/0/variants/before/turns/7"
+      },
+      "checks": {
+        "claimSupport": {
+          "status": "pass"
+        },
+        "citationFidelity": {
+          "status": "pass",
+          "note": "Source names and supplied locations identify the actual passages supporting the answer."
+        },
+        "conditionCoverage": {
+          "status": "complete",
+          "note": "Every required business condition for this turn is supported."
+        },
+        "revision": {
+          "status": "pass",
+          "captureRevision": "704986cfe6fbaff4bb390f3285624244ce9bdf4348cacf1d2c834515108364b1",
+          "note": "Opening overview, retrieved evidence and closing overview match the appropriate controller-published revision."
+        },
+        "readOnlyBoundary": {
+          "status": "pass",
+          "scope": "Audited API activity",
+          "note": "Recorded events are selected captured-context reads only; no transport error or forbidden event appears."
+        },
+        "budget": {
+          "status": "pass",
+          "calls": 3,
+          "maxCalls": 6,
+          "outputBytes": 3477,
+          "maxBytesPerCall": 4096
+        }
+      }
+    },
+    {
+      "repetition": 1,
+      "arm": "after",
+      "turn": 1,
+      "classification": "supported-complete",
+      "reason": "The retrieved Gift eligibility passage states the ordinary receipt requirement, 14 days, the gift order-number substitution and the same deadline. The answer preserves all four without importing exchange rules.",
+      "evidence": {
+        "file": "context-completeness-model.json",
+        "repetition": 1,
+        "arm": "after",
+        "turn": 1,
+        "supportingTurns": [
+          1
+        ],
+        "pointer": "/comparisons/0/variants/after/turns/0"
+      },
+      "checks": {
+        "claimSupport": {
+          "status": "pass"
+        },
+        "citationFidelity": {
+          "status": "pass",
+          "note": "Source names and supplied locations identify the actual passages supporting the answer."
+        },
+        "conditionCoverage": {
+          "status": "complete",
+          "note": "Every required business condition for this turn is supported."
+        },
+        "revision": {
+          "status": "pass",
+          "captureRevision": "2776256bb49056c3ff92d477849ab85d3b2c77133b65f8b2fb4426d7bedd7ce1",
+          "note": "Legacy capture read succeeds before the first explicit controller refresh."
+        },
+        "readOnlyBoundary": {
+          "status": "pass",
+          "scope": "Audited API activity",
+          "note": "Recorded events are selected captured-context reads only; no transport error or forbidden event appears."
+        },
+        "budget": {
+          "status": "pass",
+          "calls": 4,
+          "maxCalls": 6,
+          "outputBytes": 5913,
+          "maxBytesPerCall": 4096
+        }
+      }
+    },
+    {
+      "repetition": 1,
+      "arm": "after",
+      "turn": 2,
+      "classification": "supported-complete",
+      "reason": "After the explicit unchanged refresh, newly retrieved Gift eligibility support uses the controller revision and preserves the 14-day deadline and gift proof exception.",
+      "evidence": {
+        "file": "context-completeness-model.json",
+        "repetition": 1,
+        "arm": "after",
+        "turn": 2,
+        "supportingTurns": [
+          2
+        ],
+        "pointer": "/comparisons/0/variants/after/turns/1"
+      },
+      "checks": {
+        "claimSupport": {
+          "status": "pass"
+        },
+        "citationFidelity": {
+          "status": "pass",
+          "note": "Source names and supplied locations identify the actual passages supporting the answer."
+        },
+        "conditionCoverage": {
+          "status": "complete",
+          "note": "Every required business condition for this turn is supported."
+        },
+        "revision": {
+          "status": "pass",
+          "captureRevision": "9df97bb3daa520101e343435d0f6827cb0496a4922bb20cfd6f610de6e95b16c",
+          "note": "Opening overview, retrieved evidence and closing overview match the appropriate controller-published revision."
+        },
+        "readOnlyBoundary": {
+          "status": "pass",
+          "scope": "Audited API activity",
+          "note": "Recorded events are selected captured-context reads only; no transport error or forbidden event appears."
+        },
+        "budget": {
+          "status": "pass",
+          "calls": 3,
+          "maxCalls": 6,
+          "outputBytes": 3663,
+          "maxBytesPerCall": 4096
+        }
+      }
+    },
+    {
+      "repetition": 1,
+      "arm": "after",
+      "turn": 3,
+      "classification": "supported-complete",
+      "reason": "The two-column table faithfully transforms turn 2, preserving its claims and citation with no retrieval.",
+      "evidence": {
+        "file": "context-completeness-model.json",
+        "repetition": 1,
+        "arm": "after",
+        "turn": 3,
+        "supportingTurns": [
+          2
+        ],
+        "pointer": "/comparisons/0/variants/after/turns/2"
+      },
+      "checks": {
+        "claimSupport": {
+          "status": "pass"
+        },
+        "citationFidelity": {
+          "status": "pass",
+          "note": "Citations are retained faithfully from the supported preceding answer."
+        },
+        "conditionCoverage": {
+          "status": "complete",
+          "note": "Faithful transformation; no new facts."
+        },
+        "revision": {
+          "status": "pass",
+          "captureRevision": "9df97bb3daa520101e343435d0f6827cb0496a4922bb20cfd6f610de6e95b16c",
+          "note": "Zero-retrieval transformation legitimately retains turn 2 evidence."
+        },
+        "readOnlyBoundary": {
+          "status": "pass",
+          "scope": "Audited API activity",
+          "note": "Recorded events are selected captured-context reads only; no transport error or forbidden event appears."
+        },
+        "budget": {
+          "status": "pass",
+          "calls": 0,
+          "maxCalls": 0,
+          "outputBytes": 0,
+          "maxBytesPerCall": 4096
+        }
+      }
+    },
+    {
+      "repetition": 1,
+      "arm": "after",
+      "turn": 4,
+      "classification": "honest-partial",
+      "reason": "Beginning and end passages support all five required proof/deadline/condition claims, and repeated captured processing text supports the review queue. Intervening section text remains unobserved; the answer explicitly declines to guarantee every captured condition. This is honest partial coverage of the exhaustive request, not an incorrect business claim.",
+      "evidence": {
+        "file": "context-completeness-model.json",
+        "repetition": 1,
+        "arm": "after",
+        "turn": 4,
+        "supportingTurns": [
+          4
+        ],
+        "pointer": "/comparisons/0/variants/after/turns/3"
+      },
+      "checks": {
+        "claimSupport": {
+          "status": "pass"
+        },
+        "citationFidelity": {
+          "status": "pass",
+          "note": "Source names and supplied locations identify the actual passages supporting the answer."
+        },
+        "conditionCoverage": {
+          "status": "required-claims-covered-exhaustiveness-unverified",
+          "requiredClaimsSupported": 5,
+          "requiredClaimsTotal": 5,
+          "note": "All enumerated business requirements are present, but the requested exhaustive condition set is not established from the unobserved middle of the section."
+        },
+        "revision": {
+          "status": "pass",
+          "captureRevision": "9df97bb3daa520101e343435d0f6827cb0496a4922bb20cfd6f610de6e95b16c",
+          "note": "Opening overview, retrieved evidence and closing overview match the appropriate controller-published revision."
+        },
+        "readOnlyBoundary": {
+          "status": "pass",
+          "scope": "Audited API activity",
+          "note": "Recorded events are selected captured-context reads only; no transport error or forbidden event appears."
+        },
+        "budget": {
+          "status": "pass",
+          "calls": 6,
+          "maxCalls": 6,
+          "outputBytes": 13725,
+          "maxBytesPerCall": 4096
+        }
+      }
+    },
+    {
+      "repetition": 1,
+      "arm": "after",
+      "turn": 5,
+      "classification": "supported-complete",
+      "reason": "Retrieved dispatch text supports supervisor approval and the service-lead exception for prepaid replacements. The answer correctly distinguishes the nonbinding demonstration and identifies Dispatch approval as the binding section.",
+      "evidence": {
+        "file": "context-completeness-model.json",
+        "repetition": 1,
+        "arm": "after",
+        "turn": 5,
+        "supportingTurns": [
+          5
+        ],
+        "pointer": "/comparisons/0/variants/after/turns/4"
+      },
+      "checks": {
+        "claimSupport": {
+          "status": "pass"
+        },
+        "citationFidelity": {
+          "status": "pass",
+          "note": "Source names and supplied locations identify the actual passages supporting the answer."
+        },
+        "conditionCoverage": {
+          "status": "complete",
+          "note": "Every required business condition for this turn is supported."
+        },
+        "revision": {
+          "status": "pass",
+          "captureRevision": "9df97bb3daa520101e343435d0f6827cb0496a4922bb20cfd6f610de6e95b16c",
+          "note": "Opening overview, retrieved evidence and closing overview match the appropriate controller-published revision."
+        },
+        "readOnlyBoundary": {
+          "status": "pass",
+          "scope": "Audited API activity",
+          "note": "Recorded events are selected captured-context reads only; no transport error or forbidden event appears."
+        },
+        "budget": {
+          "status": "pass",
+          "calls": 3,
+          "maxCalls": 6,
+          "outputBytes": 3740,
+          "maxBytesPerCall": 4096
+        }
+      }
+    },
+    {
+      "repetition": 1,
+      "arm": "after",
+      "turn": 6,
+      "classification": "supported-complete",
+      "reason": "Retrieved international evidence supports 30 days and 48-hour damage reporting; warehouse evidence supports arrival within 10 days and unopened goods. The answer preserves the source-specific distinctions.",
+      "evidence": {
+        "file": "context-completeness-model.json",
+        "repetition": 1,
+        "arm": "after",
+        "turn": 6,
+        "supportingTurns": [
+          6
+        ],
+        "pointer": "/comparisons/0/variants/after/turns/5"
+      },
+      "checks": {
+        "claimSupport": {
+          "status": "pass"
+        },
+        "citationFidelity": {
+          "status": "pass",
+          "note": "International returns retains the complete multiline heading. Warehouse lines 5-7 accurately combine the two returned plain-text paragraphs without inventing heading ancestry."
+        },
+        "conditionCoverage": {
+          "status": "complete",
+          "note": "Every required business condition for this turn is supported."
+        },
+        "revision": {
+          "status": "pass",
+          "captureRevision": "9df97bb3daa520101e343435d0f6827cb0496a4922bb20cfd6f610de6e95b16c",
+          "note": "Opening overview, retrieved evidence and closing overview match the appropriate controller-published revision."
+        },
+        "readOnlyBoundary": {
+          "status": "pass",
+          "scope": "Audited API activity",
+          "note": "Recorded events are selected captured-context reads only; no transport error or forbidden event appears."
+        },
+        "budget": {
+          "status": "pass",
+          "calls": 4,
+          "maxCalls": 6,
+          "outputBytes": 7531,
+          "maxBytesPerCall": 4096
+        }
+      }
+    },
+    {
+      "repetition": 1,
+      "arm": "after",
+      "turn": 7,
+      "classification": "honest-partial",
+      "reason": "The single checklist excerpt supports the existence of 24 mandatory conditions, condition 1 and recording the review. The answer explicitly declines to enumerate or infer conditions 2-24, whose text was not retrieved.",
+      "evidence": {
+        "file": "context-completeness-model.json",
+        "repetition": 1,
+        "arm": "after",
+        "turn": 7,
+        "supportingTurns": [
+          7
+        ],
+        "pointer": "/comparisons/0/variants/after/turns/6"
+      },
+      "checks": {
+        "claimSupport": {
+          "status": "pass"
+        },
+        "citationFidelity": {
+          "status": "pass",
+          "note": "Source names and supplied locations identify the actual passages supporting the answer."
+        },
+        "conditionCoverage": {
+          "status": "partial-explicitly-disclosed",
+          "numberedConditionsObserved": 1,
+          "numberedConditionsTotal": 24,
+          "note": "The all-24 prerequisite and record-review instruction are supported; numbered conditions 2-24 are neither supplied nor inferred."
+        },
+        "revision": {
+          "status": "pass",
+          "captureRevision": "9df97bb3daa520101e343435d0f6827cb0496a4922bb20cfd6f610de6e95b16c",
+          "note": "Opening overview, retrieved evidence and closing overview match the appropriate controller-published revision."
+        },
+        "readOnlyBoundary": {
+          "status": "pass",
+          "scope": "Audited API activity",
+          "note": "Recorded events are selected captured-context reads only; no transport error or forbidden event appears."
+        },
+        "budget": {
+          "status": "pass",
+          "calls": 3,
+          "maxCalls": 3,
+          "outputBytes": 4634,
+          "maxBytesPerCall": 4096
+        }
+      }
+    },
+    {
+      "repetition": 1,
+      "arm": "after",
+      "turn": 8,
+      "classification": "supported-complete",
+      "reason": "After the change controller publishes a new revision, the retrieved Gift eligibility passage explicitly says 21 days and retains the order-number substitution. The answer updates the original refund referent without borrowing exchange or international deadlines.",
+      "evidence": {
+        "file": "context-completeness-model.json",
+        "repetition": 1,
+        "arm": "after",
+        "turn": 8,
+        "supportingTurns": [
+          8
+        ],
+        "pointer": "/comparisons/0/variants/after/turns/7"
+      },
+      "checks": {
+        "claimSupport": {
+          "status": "pass"
+        },
+        "citationFidelity": {
+          "status": "pass",
+          "note": "Source names and supplied locations identify the actual passages supporting the answer."
+        },
+        "conditionCoverage": {
+          "status": "complete",
+          "note": "Every required business condition for this turn is supported."
+        },
+        "revision": {
+          "status": "pass",
+          "captureRevision": "7f36db5b5ba7463d3ed7748121669e959b64f4b49d131053fa48888f5f28c4d4",
+          "note": "Opening overview, retrieved evidence and closing overview match the appropriate controller-published revision."
+        },
+        "readOnlyBoundary": {
+          "status": "pass",
+          "scope": "Audited API activity",
+          "note": "Recorded events are selected captured-context reads only; no transport error or forbidden event appears."
+        },
+        "budget": {
+          "status": "pass",
+          "calls": 3,
+          "maxCalls": 6,
+          "outputBytes": 3663,
+          "maxBytesPerCall": 4096
+        }
+      }
+    },
+    {
+      "repetition": 2,
+      "arm": "before",
+      "turn": 1,
+      "classification": "supported-complete",
+      "reason": "The retrieved Gift eligibility passage states the ordinary receipt requirement, 14 days, the gift order-number substitution and the same deadline. The answer preserves all four without importing exchange rules.",
+      "evidence": {
+        "file": "context-completeness-model.json",
+        "repetition": 2,
+        "arm": "before",
+        "turn": 1,
+        "supportingTurns": [
+          1
+        ],
+        "pointer": "/comparisons/1/variants/before/turns/0"
+      },
+      "checks": {
+        "claimSupport": {
+          "status": "pass"
+        },
+        "citationFidelity": {
+          "status": "pass",
+          "note": "Source names and supplied locations identify the actual passages supporting the answer."
+        },
+        "conditionCoverage": {
+          "status": "complete",
+          "note": "Every required business condition for this turn is supported."
+        },
+        "revision": {
+          "status": "pass",
+          "captureRevision": "82faec676dc7fbd56b175adae922f4340364485262d582344de86fcb115414f3",
+          "note": "Legacy capture read succeeds before the first explicit controller refresh."
+        },
+        "readOnlyBoundary": {
+          "status": "pass",
+          "scope": "Audited API activity",
+          "note": "Recorded events are selected captured-context reads only; no transport error or forbidden event appears."
+        },
+        "budget": {
+          "status": "pass",
+          "calls": 3,
+          "maxCalls": 6,
+          "outputBytes": 5387,
+          "maxBytesPerCall": 4096
+        }
+      }
+    },
+    {
+      "repetition": 2,
+      "arm": "before",
+      "turn": 2,
+      "classification": "supported-complete",
+      "reason": "After the explicit unchanged refresh, newly retrieved Gift eligibility support uses the controller revision and preserves the 14-day deadline and gift proof exception.",
+      "evidence": {
+        "file": "context-completeness-model.json",
+        "repetition": 2,
+        "arm": "before",
+        "turn": 2,
+        "supportingTurns": [
+          2
+        ],
+        "pointer": "/comparisons/1/variants/before/turns/1"
+      },
+      "checks": {
+        "claimSupport": {
+          "status": "pass"
+        },
+        "citationFidelity": {
+          "status": "pass",
+          "note": "Source names and supplied locations identify the actual passages supporting the answer."
+        },
+        "conditionCoverage": {
+          "status": "complete",
+          "note": "Every required business condition for this turn is supported."
+        },
+        "revision": {
+          "status": "pass",
+          "captureRevision": "5d9bdff22dbaae9a8eeaabd779124c59d195b3b202ca12bc3b7a808729b57723",
+          "note": "Opening overview, retrieved evidence and closing overview match the appropriate controller-published revision."
+        },
+        "readOnlyBoundary": {
+          "status": "pass",
+          "scope": "Audited API activity",
+          "note": "Recorded events are selected captured-context reads only; no transport error or forbidden event appears."
+        },
+        "budget": {
+          "status": "pass",
+          "calls": 3,
+          "maxCalls": 6,
+          "outputBytes": 3477,
+          "maxBytesPerCall": 4096
+        }
+      }
+    },
+    {
+      "repetition": 2,
+      "arm": "before",
+      "turn": 3,
+      "classification": "supported-complete",
+      "reason": "The two-column table faithfully transforms turn 2, preserving its claims and citation with no retrieval.",
+      "evidence": {
+        "file": "context-completeness-model.json",
+        "repetition": 2,
+        "arm": "before",
+        "turn": 3,
+        "supportingTurns": [
+          2
+        ],
+        "pointer": "/comparisons/1/variants/before/turns/2"
+      },
+      "checks": {
+        "claimSupport": {
+          "status": "pass"
+        },
+        "citationFidelity": {
+          "status": "pass",
+          "note": "Citations are retained faithfully from the supported preceding answer."
+        },
+        "conditionCoverage": {
+          "status": "complete",
+          "note": "Faithful transformation; no new facts."
+        },
+        "revision": {
+          "status": "pass",
+          "captureRevision": "5d9bdff22dbaae9a8eeaabd779124c59d195b3b202ca12bc3b7a808729b57723",
+          "note": "Zero-retrieval transformation legitimately retains turn 2 evidence."
+        },
+        "readOnlyBoundary": {
+          "status": "pass",
+          "scope": "Audited API activity",
+          "note": "Recorded events are selected captured-context reads only; no transport error or forbidden event appears."
+        },
+        "budget": {
+          "status": "pass",
+          "calls": 0,
+          "maxCalls": 0,
+          "outputBytes": 0,
+          "maxBytesPerCall": 4096
+        }
+      }
+    },
+    {
+      "repetition": 2,
+      "arm": "before",
+      "turn": 4,
+      "classification": "honest-partial",
+      "reason": "Beginning and end passages support all five required proof/deadline/condition claims, and repeated captured processing text supports the review queue. Intervening section text remains unobserved; the answer explicitly declines to guarantee every captured condition. This is honest partial coverage of the exhaustive request, not an incorrect business claim.",
+      "evidence": {
+        "file": "context-completeness-model.json",
+        "repetition": 2,
+        "arm": "before",
+        "turn": 4,
+        "supportingTurns": [
+          4
+        ],
+        "pointer": "/comparisons/1/variants/before/turns/3"
+      },
+      "checks": {
+        "claimSupport": {
+          "status": "pass"
+        },
+        "citationFidelity": {
+          "status": "pass",
+          "note": "Source names and supplied locations identify the actual passages supporting the answer."
+        },
+        "conditionCoverage": {
+          "status": "required-claims-covered-exhaustiveness-unverified",
+          "requiredClaimsSupported": 5,
+          "requiredClaimsTotal": 5,
+          "note": "All enumerated business requirements are present, but the requested exhaustive condition set is not established from the unobserved middle of the section."
+        },
+        "revision": {
+          "status": "pass",
+          "captureRevision": "5d9bdff22dbaae9a8eeaabd779124c59d195b3b202ca12bc3b7a808729b57723",
+          "note": "Opening overview, retrieved evidence and closing overview match the appropriate controller-published revision."
+        },
+        "readOnlyBoundary": {
+          "status": "pass",
+          "scope": "Audited API activity",
+          "note": "Recorded events are selected captured-context reads only; no transport error or forbidden event appears."
+        },
+        "budget": {
+          "status": "pass",
+          "calls": 4,
+          "maxCalls": 6,
+          "outputBytes": 8488,
+          "maxBytesPerCall": 4096
+        }
+      }
+    },
+    {
+      "repetition": 2,
+      "arm": "before",
+      "turn": 5,
+      "classification": "supported-complete",
+      "reason": "Retrieved dispatch text supports supervisor approval and the service-lead exception for prepaid replacements. The answer correctly distinguishes the nonbinding demonstration and identifies Dispatch approval as the binding section.",
+      "evidence": {
+        "file": "context-completeness-model.json",
+        "repetition": 2,
+        "arm": "before",
+        "turn": 5,
+        "supportingTurns": [
+          5
+        ],
+        "pointer": "/comparisons/1/variants/before/turns/4"
+      },
+      "checks": {
+        "claimSupport": {
+          "status": "pass"
+        },
+        "citationFidelity": {
+          "status": "pass",
+          "note": "Baseline metadata incorrectly labels the combined passage Sample instruction, but the answer explicitly identifies Dispatch approval inside the retrieved text and distinguishes the demonstration. This reconstruction is a citation success, not a manufactured baseline failure."
+        },
+        "conditionCoverage": {
+          "status": "complete",
+          "note": "Every required business condition for this turn is supported."
+        },
+        "revision": {
+          "status": "pass",
+          "captureRevision": "5d9bdff22dbaae9a8eeaabd779124c59d195b3b202ca12bc3b7a808729b57723",
+          "note": "Opening overview, retrieved evidence and closing overview match the appropriate controller-published revision."
+        },
+        "readOnlyBoundary": {
+          "status": "pass",
+          "scope": "Audited API activity",
+          "note": "Recorded events are selected captured-context reads only; no transport error or forbidden event appears."
+        },
+        "budget": {
+          "status": "pass",
+          "calls": 3,
+          "maxCalls": 6,
+          "outputBytes": 3524,
+          "maxBytesPerCall": 4096
+        }
+      }
+    },
+    {
+      "repetition": 2,
+      "arm": "before",
+      "turn": 6,
+      "classification": "supported-complete",
+      "reason": "Retrieved international evidence supports 30 days and 48-hour damage reporting; warehouse evidence supports arrival within 10 days and unopened goods. The answer preserves the source-specific distinctions.",
+      "evidence": {
+        "file": "context-completeness-model.json",
+        "repetition": 2,
+        "arm": "before",
+        "turn": 6,
+        "supportingTurns": [
+          4,
+          6
+        ],
+        "pointer": "/comparisons/1/variants/before/turns/5"
+      },
+      "checks": {
+        "claimSupport": {
+          "status": "pass"
+        },
+        "citationFidelity": {
+          "status": "non-material-location-defect",
+          "note": "The answer repeats the truncated returned heading Returns > returns instead of International returns. The international.md filename, international row label and correct lines 4-7 still identify the actual policy and support every stated condition. Record degraded heading fidelity separately; its impact does not make the answer unsupported or materially misleading."
+        },
+        "conditionCoverage": {
+          "status": "complete",
+          "note": "Every required business condition for this turn is supported."
+        },
+        "revision": {
+          "status": "pass",
+          "captureRevision": "5d9bdff22dbaae9a8eeaabd779124c59d195b3b202ca12bc3b7a808729b57723",
+          "note": "Opening overview, retrieved evidence and closing overview match the appropriate controller-published revision."
+        },
+        "readOnlyBoundary": {
+          "status": "pass",
+          "scope": "Audited API activity",
+          "note": "Recorded events are selected captured-context reads only; no transport error or forbidden event appears."
+        },
+        "budget": {
+          "status": "pass",
+          "calls": 3,
+          "maxCalls": 6,
+          "outputBytes": 3435,
+          "maxBytesPerCall": 4096
+        }
+      }
+    },
+    {
+      "repetition": 2,
+      "arm": "before",
+      "turn": 7,
+      "classification": "honest-partial",
+      "reason": "The single checklist excerpt supports the existence of 24 mandatory conditions, condition 1 and recording the review. The answer explicitly declines to enumerate or infer conditions 2-24, whose text was not retrieved.",
+      "evidence": {
+        "file": "context-completeness-model.json",
+        "repetition": 2,
+        "arm": "before",
+        "turn": 7,
+        "supportingTurns": [
+          7
+        ],
+        "pointer": "/comparisons/1/variants/before/turns/6"
+      },
+      "checks": {
+        "claimSupport": {
+          "status": "pass"
+        },
+        "citationFidelity": {
+          "status": "pass",
+          "note": "Source names and supplied locations identify the actual passages supporting the answer."
+        },
+        "conditionCoverage": {
+          "status": "partial-explicitly-disclosed",
+          "numberedConditionsObserved": 1,
+          "numberedConditionsTotal": 24,
+          "note": "The all-24 prerequisite and record-review instruction are supported; numbered conditions 2-24 are neither supplied nor inferred."
+        },
+        "revision": {
+          "status": "pass",
+          "captureRevision": "5d9bdff22dbaae9a8eeaabd779124c59d195b3b202ca12bc3b7a808729b57723",
+          "note": "Opening overview, retrieved evidence and closing overview match the appropriate controller-published revision."
+        },
+        "readOnlyBoundary": {
+          "status": "pass",
+          "scope": "Audited API activity",
+          "note": "Recorded events are selected captured-context reads only; no transport error or forbidden event appears."
+        },
+        "budget": {
+          "status": "pass",
+          "calls": 3,
+          "maxCalls": 3,
+          "outputBytes": 4538,
+          "maxBytesPerCall": 4096
+        }
+      }
+    },
+    {
+      "repetition": 2,
+      "arm": "before",
+      "turn": 8,
+      "classification": "supported-complete",
+      "reason": "After the change controller publishes a new revision, the retrieved Gift eligibility passage explicitly says 21 days and retains the order-number substitution. The answer updates the original refund referent without borrowing exchange or international deadlines.",
+      "evidence": {
+        "file": "context-completeness-model.json",
+        "repetition": 2,
+        "arm": "before",
+        "turn": 8,
+        "supportingTurns": [
+          8
+        ],
+        "pointer": "/comparisons/1/variants/before/turns/7"
+      },
+      "checks": {
+        "claimSupport": {
+          "status": "pass"
+        },
+        "citationFidelity": {
+          "status": "pass",
+          "note": "Source names and supplied locations identify the actual passages supporting the answer."
+        },
+        "conditionCoverage": {
+          "status": "complete",
+          "note": "Every required business condition for this turn is supported."
+        },
+        "revision": {
+          "status": "pass",
+          "captureRevision": "1c7936ed4300dfaadcef660d37052e8ae92c5dd89f9d2ed7811d792eaeb3fa32",
+          "note": "Opening overview, retrieved evidence and closing overview match the appropriate controller-published revision."
+        },
+        "readOnlyBoundary": {
+          "status": "pass",
+          "scope": "Audited API activity",
+          "note": "Recorded events are selected captured-context reads only; no transport error or forbidden event appears."
+        },
+        "budget": {
+          "status": "pass",
+          "calls": 3,
+          "maxCalls": 6,
+          "outputBytes": 3477,
+          "maxBytesPerCall": 4096
+        }
+      }
+    },
+    {
+      "repetition": 2,
+      "arm": "after",
+      "turn": 1,
+      "classification": "supported-complete",
+      "reason": "The retrieved Gift eligibility passage states the ordinary receipt requirement, 14 days, the gift order-number substitution and the same deadline. The answer preserves all four without importing exchange rules.",
+      "evidence": {
+        "file": "context-completeness-model.json",
+        "repetition": 2,
+        "arm": "after",
+        "turn": 1,
+        "supportingTurns": [
+          1
+        ],
+        "pointer": "/comparisons/1/variants/after/turns/0"
+      },
+      "checks": {
+        "claimSupport": {
+          "status": "pass"
+        },
+        "citationFidelity": {
+          "status": "pass",
+          "note": "Source names and supplied locations identify the actual passages supporting the answer."
+        },
+        "conditionCoverage": {
+          "status": "complete",
+          "note": "Every required business condition for this turn is supported."
+        },
+        "revision": {
+          "status": "pass",
+          "captureRevision": "546acbae7b4464b0e28f752edbf387bee77830c22d935c7ba8dc2ddade7c9904",
+          "note": "Legacy capture read succeeds before the first explicit controller refresh."
+        },
+        "readOnlyBoundary": {
+          "status": "pass",
+          "scope": "Audited API activity",
+          "note": "Recorded events are selected captured-context reads only; no transport error or forbidden event appears."
+        },
+        "budget": {
+          "status": "pass",
+          "calls": 5,
+          "maxCalls": 6,
+          "outputBytes": 8380,
+          "maxBytesPerCall": 4096
+        }
+      }
+    },
+    {
+      "repetition": 2,
+      "arm": "after",
+      "turn": 2,
+      "classification": "supported-complete",
+      "reason": "After the explicit unchanged refresh, newly retrieved Gift eligibility support uses the controller revision and preserves the 14-day deadline and gift proof exception.",
+      "evidence": {
+        "file": "context-completeness-model.json",
+        "repetition": 2,
+        "arm": "after",
+        "turn": 2,
+        "supportingTurns": [
+          2
+        ],
+        "pointer": "/comparisons/1/variants/after/turns/1"
+      },
+      "checks": {
+        "claimSupport": {
+          "status": "pass"
+        },
+        "citationFidelity": {
+          "status": "pass",
+          "note": "Source names and supplied locations identify the actual passages supporting the answer."
+        },
+        "conditionCoverage": {
+          "status": "complete",
+          "note": "Every required business condition for this turn is supported."
+        },
+        "revision": {
+          "status": "pass",
+          "captureRevision": "0cc7a9d18cf37a8341c124ae2e88575541d998ab1af52b6dfa348582a98124b8",
+          "note": "Opening overview, retrieved evidence and closing overview match the appropriate controller-published revision."
+        },
+        "readOnlyBoundary": {
+          "status": "pass",
+          "scope": "Audited API activity",
+          "note": "Recorded events are selected captured-context reads only; no transport error or forbidden event appears."
+        },
+        "budget": {
+          "status": "pass",
+          "calls": 3,
+          "maxCalls": 6,
+          "outputBytes": 3663,
+          "maxBytesPerCall": 4096
+        }
+      }
+    },
+    {
+      "repetition": 2,
+      "arm": "after",
+      "turn": 3,
+      "classification": "supported-complete",
+      "reason": "The two-column table faithfully transforms turn 2, preserving its claims and citation with no retrieval.",
+      "evidence": {
+        "file": "context-completeness-model.json",
+        "repetition": 2,
+        "arm": "after",
+        "turn": 3,
+        "supportingTurns": [
+          2
+        ],
+        "pointer": "/comparisons/1/variants/after/turns/2"
+      },
+      "checks": {
+        "claimSupport": {
+          "status": "pass"
+        },
+        "citationFidelity": {
+          "status": "pass",
+          "note": "Citations are retained faithfully from the supported preceding answer."
+        },
+        "conditionCoverage": {
+          "status": "complete",
+          "note": "Faithful transformation; no new facts."
+        },
+        "revision": {
+          "status": "pass",
+          "captureRevision": "0cc7a9d18cf37a8341c124ae2e88575541d998ab1af52b6dfa348582a98124b8",
+          "note": "Zero-retrieval transformation legitimately retains turn 2 evidence."
+        },
+        "readOnlyBoundary": {
+          "status": "pass",
+          "scope": "Audited API activity",
+          "note": "Recorded events are selected captured-context reads only; no transport error or forbidden event appears."
+        },
+        "budget": {
+          "status": "pass",
+          "calls": 0,
+          "maxCalls": 0,
+          "outputBytes": 0,
+          "maxBytesPerCall": 4096
+        }
+      }
+    },
+    {
+      "repetition": 2,
+      "arm": "after",
+      "turn": 4,
+      "classification": "honest-partial",
+      "reason": "Beginning and end passages support all five required proof/deadline/condition claims, and repeated captured processing text supports the review queue. Intervening section text remains unobserved; the answer explicitly declines to guarantee every captured condition. This is honest partial coverage of the exhaustive request, not an incorrect business claim.",
+      "evidence": {
+        "file": "context-completeness-model.json",
+        "repetition": 2,
+        "arm": "after",
+        "turn": 4,
+        "supportingTurns": [
+          4
+        ],
+        "pointer": "/comparisons/1/variants/after/turns/3"
+      },
+      "checks": {
+        "claimSupport": {
+          "status": "pass"
+        },
+        "citationFidelity": {
+          "status": "pass",
+          "note": "Source names and supplied locations identify the actual passages supporting the answer."
+        },
+        "conditionCoverage": {
+          "status": "required-claims-covered-exhaustiveness-unverified",
+          "requiredClaimsSupported": 5,
+          "requiredClaimsTotal": 5,
+          "note": "All enumerated business requirements are present, but the requested exhaustive condition set is not established from the unobserved middle of the section."
+        },
+        "revision": {
+          "status": "pass",
+          "captureRevision": "0cc7a9d18cf37a8341c124ae2e88575541d998ab1af52b6dfa348582a98124b8",
+          "note": "Opening overview, retrieved evidence and closing overview match the appropriate controller-published revision."
+        },
+        "readOnlyBoundary": {
+          "status": "pass",
+          "scope": "Audited API activity",
+          "note": "Recorded events are selected captured-context reads only; no transport error or forbidden event appears."
+        },
+        "budget": {
+          "status": "pass",
+          "calls": 5,
+          "maxCalls": 6,
+          "outputBytes": 12241,
+          "maxBytesPerCall": 4096
+        }
+      }
+    },
+    {
+      "repetition": 2,
+      "arm": "after",
+      "turn": 5,
+      "classification": "supported-complete",
+      "reason": "Retrieved dispatch text supports supervisor approval and the service-lead exception for prepaid replacements. The answer correctly distinguishes the nonbinding demonstration and identifies Dispatch approval as the binding section.",
+      "evidence": {
+        "file": "context-completeness-model.json",
+        "repetition": 2,
+        "arm": "after",
+        "turn": 5,
+        "supportingTurns": [
+          5
+        ],
+        "pointer": "/comparisons/1/variants/after/turns/4"
+      },
+      "checks": {
+        "claimSupport": {
+          "status": "pass"
+        },
+        "citationFidelity": {
+          "status": "pass",
+          "note": "Source names and supplied locations identify the actual passages supporting the answer."
+        },
+        "conditionCoverage": {
+          "status": "complete",
+          "note": "Every required business condition for this turn is supported."
+        },
+        "revision": {
+          "status": "pass",
+          "captureRevision": "0cc7a9d18cf37a8341c124ae2e88575541d998ab1af52b6dfa348582a98124b8",
+          "note": "Opening overview, retrieved evidence and closing overview match the appropriate controller-published revision."
+        },
+        "readOnlyBoundary": {
+          "status": "pass",
+          "scope": "Audited API activity",
+          "note": "Recorded events are selected captured-context reads only; no transport error or forbidden event appears."
+        },
+        "budget": {
+          "status": "pass",
+          "calls": 3,
+          "maxCalls": 6,
+          "outputBytes": 3740,
+          "maxBytesPerCall": 4096
+        }
+      }
+    },
+    {
+      "repetition": 2,
+      "arm": "after",
+      "turn": 6,
+      "classification": "supported-complete",
+      "reason": "Retrieved international evidence supports 30 days and 48-hour damage reporting; warehouse evidence supports arrival within 10 days and unopened goods. The answer preserves the source-specific distinctions.",
+      "evidence": {
+        "file": "context-completeness-model.json",
+        "repetition": 2,
+        "arm": "after",
+        "turn": 6,
+        "supportingTurns": [
+          6
+        ],
+        "pointer": "/comparisons/1/variants/after/turns/5"
+      },
+      "checks": {
+        "claimSupport": {
+          "status": "pass"
+        },
+        "citationFidelity": {
+          "status": "pass",
+          "note": "International returns retains the complete multiline heading. Warehouse lines 5-7 accurately combine the two returned plain-text paragraphs without inventing heading ancestry."
+        },
+        "conditionCoverage": {
+          "status": "complete",
+          "note": "Every required business condition for this turn is supported."
+        },
+        "revision": {
+          "status": "pass",
+          "captureRevision": "0cc7a9d18cf37a8341c124ae2e88575541d998ab1af52b6dfa348582a98124b8",
+          "note": "Opening overview, retrieved evidence and closing overview match the appropriate controller-published revision."
+        },
+        "readOnlyBoundary": {
+          "status": "pass",
+          "scope": "Audited API activity",
+          "note": "Recorded events are selected captured-context reads only; no transport error or forbidden event appears."
+        },
+        "budget": {
+          "status": "pass",
+          "calls": 4,
+          "maxCalls": 6,
+          "outputBytes": 7531,
+          "maxBytesPerCall": 4096
+        }
+      }
+    },
+    {
+      "repetition": 2,
+      "arm": "after",
+      "turn": 7,
+      "classification": "honest-partial",
+      "reason": "The single checklist excerpt supports the existence of 24 mandatory conditions, condition 1 and recording the review. The answer explicitly declines to enumerate or infer conditions 2-24, whose text was not retrieved.",
+      "evidence": {
+        "file": "context-completeness-model.json",
+        "repetition": 2,
+        "arm": "after",
+        "turn": 7,
+        "supportingTurns": [
+          7
+        ],
+        "pointer": "/comparisons/1/variants/after/turns/6"
+      },
+      "checks": {
+        "claimSupport": {
+          "status": "pass"
+        },
+        "citationFidelity": {
+          "status": "pass",
+          "note": "Source names and supplied locations identify the actual passages supporting the answer."
+        },
+        "conditionCoverage": {
+          "status": "partial-explicitly-disclosed",
+          "numberedConditionsObserved": 1,
+          "numberedConditionsTotal": 24,
+          "note": "The all-24 prerequisite and record-review instruction are supported; numbered conditions 2-24 are neither supplied nor inferred."
+        },
+        "revision": {
+          "status": "pass",
+          "captureRevision": "0cc7a9d18cf37a8341c124ae2e88575541d998ab1af52b6dfa348582a98124b8",
+          "note": "Opening overview, retrieved evidence and closing overview match the appropriate controller-published revision."
+        },
+        "readOnlyBoundary": {
+          "status": "pass",
+          "scope": "Audited API activity",
+          "note": "Recorded events are selected captured-context reads only; no transport error or forbidden event appears."
+        },
+        "budget": {
+          "status": "pass",
+          "calls": 3,
+          "maxCalls": 3,
+          "outputBytes": 4634,
+          "maxBytesPerCall": 4096
+        }
+      }
+    },
+    {
+      "repetition": 2,
+      "arm": "after",
+      "turn": 8,
+      "classification": "supported-complete",
+      "reason": "After the change controller publishes a new revision, the retrieved Gift eligibility passage explicitly says 21 days and retains the order-number substitution. The answer updates the original refund referent without borrowing exchange or international deadlines.",
+      "evidence": {
+        "file": "context-completeness-model.json",
+        "repetition": 2,
+        "arm": "after",
+        "turn": 8,
+        "supportingTurns": [
+          8
+        ],
+        "pointer": "/comparisons/1/variants/after/turns/7"
+      },
+      "checks": {
+        "claimSupport": {
+          "status": "pass"
+        },
+        "citationFidelity": {
+          "status": "pass",
+          "note": "Source names and supplied locations identify the actual passages supporting the answer."
+        },
+        "conditionCoverage": {
+          "status": "complete",
+          "note": "Every required business condition for this turn is supported."
+        },
+        "revision": {
+          "status": "pass",
+          "captureRevision": "bf2b1203425a9cc25aec8bad9ac64aaa95f0555de187f3b2fe66994eef2dba7d",
+          "note": "Opening overview, retrieved evidence and closing overview match the appropriate controller-published revision."
+        },
+        "readOnlyBoundary": {
+          "status": "pass",
+          "scope": "Audited API activity",
+          "note": "Recorded events are selected captured-context reads only; no transport error or forbidden event appears."
+        },
+        "budget": {
+          "status": "pass",
+          "calls": 3,
+          "maxCalls": 6,
+          "outputBytes": 3663,
+          "maxBytesPerCall": 4096
+        }
+      }
+    }
+  ],
+  "aggregates": [
+    {
+      "repetition": 1,
+      "arm": "before",
+      "turns": 8,
+      "classifications": {
+        "supported-complete": 6,
+        "honest-partial": 2,
+        "unsupported-or-incorrect": 0
+      },
+      "claimSupportPass": 8,
+      "citationFidelityPass": 8,
+      "nonMaterialCitationDefects": 0,
+      "materialCitationDefects": 0,
+      "revisionPass": 8,
+      "boundaryPass": 8,
+      "budgetPass": 8,
+      "retrievalCalls": 23,
+      "toolOutputBytes": 33717,
+      "retrievalMs": 443.98190000000005
+    },
+    {
+      "repetition": 1,
+      "arm": "after",
+      "turns": 8,
+      "classifications": {
+        "supported-complete": 6,
+        "honest-partial": 2,
+        "unsupported-or-incorrect": 0
+      },
+      "claimSupportPass": 8,
+      "citationFidelityPass": 8,
+      "nonMaterialCitationDefects": 0,
+      "materialCitationDefects": 0,
+      "revisionPass": 8,
+      "boundaryPass": 8,
+      "budgetPass": 8,
+      "retrievalCalls": 26,
+      "toolOutputBytes": 42869,
+      "retrievalMs": 550.2113
+    },
+    {
+      "repetition": 2,
+      "arm": "before",
+      "turns": 8,
+      "classifications": {
+        "supported-complete": 6,
+        "honest-partial": 2,
+        "unsupported-or-incorrect": 0
+      },
+      "claimSupportPass": 8,
+      "citationFidelityPass": 7,
+      "nonMaterialCitationDefects": 1,
+      "materialCitationDefects": 0,
+      "revisionPass": 8,
+      "boundaryPass": 8,
+      "budgetPass": 8,
+      "retrievalCalls": 22,
+      "toolOutputBytes": 32326,
+      "retrievalMs": 363.122
+    },
+    {
+      "repetition": 2,
+      "arm": "after",
+      "turns": 8,
+      "classifications": {
+        "supported-complete": 6,
+        "honest-partial": 2,
+        "unsupported-or-incorrect": 0
+      },
+      "claimSupportPass": 8,
+      "citationFidelityPass": 8,
+      "nonMaterialCitationDefects": 0,
+      "materialCitationDefects": 0,
+      "revisionPass": 8,
+      "boundaryPass": 8,
+      "budgetPass": 8,
+      "retrievalCalls": 26,
+      "toolOutputBytes": 43852,
+      "retrievalMs": 545.2187999999999
+    }
+  ],
+  "totals": {
+    "before": {
+      "turns": 16,
+      "supportedComplete": 12,
+      "honestPartial": 4,
+      "unsupportedOrIncorrect": 0,
+      "nonMaterialCitationDefects": 1,
+      "retrievalCalls": 45,
+      "toolOutputBytes": 66043
+    },
+    "after": {
+      "turns": 16,
+      "supportedComplete": 12,
+      "honestPartial": 4,
+      "unsupportedOrIncorrect": 0,
+      "nonMaterialCitationDefects": 0,
+      "retrievalCalls": 52,
+      "toolOutputBytes": 86721
+    }
+  },
+  "conclusions": [
+    "Answer-grade parity: each repetition and arm has six supported-complete answers, two honest-partial answers and zero unsupported-or-incorrect answers. Both arms recover the distant gift-exchange exception and preserve upgrade/deadline continuity.",
+    "Corrected dispatch and multiline heading metadata removes the need for model reconstruction. Baseline reconstruction succeeds where actually performed. One baseline answer retains a truncated but non-material international section label; candidate labels are correct in both repetitions.",
+    "Explicit section incompleteness is visible in candidate retrieval responses and safely acknowledged. Baseline answers also acknowledge incomplete long sections; these trials do not establish an answer-accuracy or safety-rate uplift.",
+    "Observed retrieval increases from 45 calls and 66043 output bytes before to 52 calls and 86721 bytes after. These trials demonstrate no retrieval-call or output-byte savings. Runtime metadata and agent choices both contribute; causal attribution is not established."
+  ],
+  "probeAccountingReview": {
+    "status": "pass",
+    "testsExecutedByReviewer": false,
+    "codeEvidence": [
+      "scripts/probes/context-qa.mjs",
+      "harness-tests/context-qa-exercise.test.mjs:61"
+    ],
+    "recordedEvidence": [
+      {
+        "file": ".validation/context-follow-up/argument-red.log",
+        "result": "One failing regression: malformed JSON escaped before a recorded attempt."
+      },
+      {
+        "file": ".validation/context-follow-up/exercise-final.log",
+        "result": "Four exercise tests pass, including malformed/double-encoded/null/array options recorded as ERROR attempts."
+      }
+    ],
+    "reason": "Current code converts invalid options to an audited error, logs it and counts it against the same budget. Budget-overrun attempts remain recorded and invalidate report compliance."
+  },
+  "limitations": [
+    "Two repetitions per arm on one synthetic corpus are limited evidence, not a statistical benchmark or proof of general answer improvement.",
+    "Concrete provider model identifier, settings and usage are unavailable. The recorded configuration is the same inherited host default with no overrides; provider details cannot be independently reconstructed.",
+    "Output bytes and calls are API transport measurements, not model tokens or monetary cost. No token or cost savings are claimed.",
+    "Read-only isolation was assessed from the supplied audited API traces. Native-host invocation, live ADO and other-platform behavior were not independently exercised by this reviewer.",
+    "Runtime and transport provenance was also verified by the parent assembler. This reviewer did not rerun model trials or package tests; recorded red/green test logs were inspected.",
+    "Published answer quality is partial for long exhaustive requests under the fixed budgets. Correctly declining to infer unseen conditions is safe behavior, not complete task coverage."
+  ]
+}

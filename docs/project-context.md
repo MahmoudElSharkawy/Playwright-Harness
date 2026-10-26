@@ -108,6 +108,15 @@ and `omittedAfter` count passages beyond it; `excludedByFilters` identifies filt
 neighbors. To extend the window, use another returned passage as the new anchor.
 An old revision, foreign source anchor or changed cursor options fails explicitly.
 
+Every evidence hit also includes `section: {chunkIndex, chunkCount, omittedBefore,
+omittedAfter, complete}`. Indexes are zero-based; counts refer to that single hit
+within its captured contribution, not missing query results or the entire source.
+This is available on existing supported captures without refresh or index repair.
+It uses immutable chunk references without hydrating the rest of a section.
+Search-level `omitted: 0` does not establish section completeness. Even a complete
+contribution may be a legacy line, partial host receipt or redacted fragment;
+relevant conditions elsewhere and source coverage still need consideration.
+
 `offsets` remain relative to the captured section in UTF-16 characters and UTF-8
 bytes. New native documents also return `documentOffsets` relative to the decoded
 original and readable section/line locations. Original byte offsets are returned
@@ -150,6 +159,11 @@ formats and saved host-reader receipts retain their recipes and reusable evidenc
 an unavailable original retains stale evidence. JSON storage, index schema and
 index recipe stay unchanged. Older unsupported/mixed indexes still require their
 existing explicit selection/update path.
+
+The corrected `native-document-sections-v2` reader preserves list-contained fenced
+examples, full multiline setext headings and literal separators in plain text.
+Explicit refresh upgrades both the original native line reader and sections-v1;
+read/search alone never reparses documents. The index recipe remains unchanged.
 
 Regrouping can change fact/chunk/passage IDs, result counts and ranking without
 changing business requirements. History remains immutable; new citations/cursors
