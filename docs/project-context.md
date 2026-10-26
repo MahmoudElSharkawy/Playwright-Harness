@@ -86,6 +86,34 @@ Answers use work-item titles/IDs and document names/locations, with relevant
 uncertainty. They do not expose hashes, receipt dumps or irrelevant technical
 gaps. See [Q&A examples and boundaries](context-qa.md).
 
+Native Markdown captures heading ancestry and sections, preserving lists, tables,
+fenced blocks and rule/exception order. Text captures paragraphs. Long sections
+retain bounded overlapping chunks. Heading ancestry is location metadata, never
+an invented topic or a reason to mark adjacent requirements as conflicting.
+Missing and duplicate headings remain distinct located passages.
+
+Search hits include `passageId` and `topic`. When additional conditions, exceptions
+or process steps are needed, retrieve a bounded surrounding window:
+
+```sh
+npx --no pom-harness context search --id checkout-qa --around <passageId> --source <sourceId> --revision <capture-revision> --before 2 --after 2
+```
+
+Use the response/overview capture revision, not a hit's source revision. Before
+and after accept 0–5 passages each. Results follow original source order and keep
+strict source/item/topic filters; they never traverse related items or another
+context. Existing result/byte limits and cursors apply. `omitted` and `cursor`
+describe remaining results inside the chosen window. `surrounding.omittedBefore`
+and `omittedAfter` count passages beyond it; `excludedByFilters` identifies filtered
+neighbors. To extend the window, use another returned passage as the new anchor.
+An old revision, foreign source anchor or changed cursor options fails explicitly.
+
+`offsets` remain relative to the captured section in UTF-16 characters and UTF-8
+bytes. New native documents also return `documentOffsets` relative to the decoded
+original and readable section/line locations. Original byte offsets are returned
+for UTF-8 inputs (including BOM/CRLF); other encodings return character offsets.
+Bounded heading labels can be shortened; original text stays in the capture.
+
 ## Storage, provenance and recovery
 
 The consumer owns `.harness/context/<context-id>/`. The existing version-2
@@ -114,6 +142,20 @@ withdraw support; independent supporting sources survive. Inaccessible, uncertai
 or partial sources retain last valid evidence as stale. Extraction receipts bind
 to current bytes and precise locations. Local documents are rehashed; unchanged
 bytes/reader recipes reuse extraction. Owner notes are not automatically Q&A evidence.
+
+Captures made before section extraction remain usable with the supported business
+index recipe; reads/searches perform no migration. Explicit refresh detects the
+new native Markdown/text recipe even when file bytes are unchanged. Unaffected
+formats and saved host-reader receipts retain their recipes and reusable evidence;
+an unavailable original retains stale evidence. JSON storage, index schema and
+index recipe stay unchanged. Older unsupported/mixed indexes still require their
+existing explicit selection/update path.
+
+Regrouping can change fact/chunk/passage IDs, result counts and ranking without
+changing business requirements. History remains immutable; new citations/cursors
+bind to the refreshed revision. Q&A discards retained old evidence bindings while
+preserving the conversational referent. Publication failure keeps the prior usable
+snapshot and source selections intact.
 
 Updates build a separate index generation and history manifest, then atomically
 switch current under a writer lock. Failed publication leaves current usable.

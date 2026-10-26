@@ -159,11 +159,37 @@ Item/source/topic filters are strict. Defaults are 8 results / 16 KiB; maxima
 are 25 / 64 KiB. Continue with the same arguments and returned cursor.
 No search reads original sources, changes dates or repairs storage.
 
+Native Markdown groups content by headings (including setext headings); text
+groups paragraphs. Conditions, exceptions, lists, tables and fenced blocks retain
+their original section and order. Long sections use the existing bounded chunks.
+Locations include heading ancestry and original line ranges; `documentOffsets`
+locates an excerpt in the decoded original, with original UTF-8 byte offsets for
+UTF-8 inputs. Other encodings expose character offsets only. Heading labels are
+bounded; full heading text remains in the captured content. Do not assign a shared
+business topic merely because different passages have the same heading.
+
+For missing conditions, exceptions or sequence steps, use
+`search --around <passageId> --source <sourceId> --revision <capture-revision>`.
+The revision is the response/overview revision, not the hit's source revision.
+`--before`/`--after` default to 2 and accept 0–5 passages each. Results stay in
+source order; existing item/topic filters stay strict. `omitted`/`cursor` page the
+selected window; `surrounding.omittedBefore`/`omittedAfter` count passages outside
+it, and `excludedByFilters` counts filtered neighbors. A next window needs a new
+returned anchor. Adjacency does not establish a business relationship.
+
 The SQLite FTS5 tables and immutable JSON layout stay the same. Source/selection
 metadata records the business boundary. Older mixed captures require an explicit
 business-source request; old repository evidence is excluded and history remains.
 Old index recipes require an explicit update. Owner notes in `custom.json` are
 preserved, not automatically treated as business evidence.
+
+Pre-section native captures using the supported business index recipe remain
+readable/searchable without migration. Only explicit refresh upgrades selected
+native Markdown/text even when bytes are unchanged. Other formats and saved host
+extraction receipts keep their contracts; unavailable sources retain stale support.
+Regrouping may change fact/chunk/passage IDs, result counts and ranking without a
+business requirement change. Keep old history and bind new citations to the new
+capture revision. No blanket index recipe bump is needed for this reader change.
 
 Atomic publication preserves current on failure. Inspect an interrupted writer
 lock before retrying; never remove an active lock. Use `context export --out`

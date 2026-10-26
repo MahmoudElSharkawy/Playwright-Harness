@@ -43,6 +43,9 @@ export async function readStoryComments(client, storyId) {
 }
 
 export async function captureRequirements(roots, raw, options = {}) {
+  // Requirement inventory IDs bind to individual located lines. Business-context
+  // section grouping must not merge those independent acceptance units.
+  const readerOptions = {...options, nativeSections: false};
   const request = contextData(raw);
   keys(request, ['version', 'project', 'application', 'storyId', 'sources', 'attachments', 'attachmentIds', 'includeHistory'], 'requirements request');
   requireThat(request.version === 1 && ['project', 'application'].every(key => typeof request[key] === 'string' && request[key].trim() && request[key].length <= 200), 'Requirements need project and application identity.');
@@ -110,7 +113,7 @@ export async function captureRequirements(roots, raw, options = {}) {
         const bytes = await client.attachment(attachmentId);
         revisions.push({id: sourceId, revision: digest(bytes), name});
         const receipt = request.attachments?.find(item => item.attachmentId.toLowerCase() === attachmentId.toLowerCase());
-        const extracted = await extractContextBytes({id: sourceId, kind: 'attachment', name, ...(receipt ? {extraction: receipt.extraction} : {})}, bytes, options);
+        const extracted = await extractContextBytes({id: sourceId, kind: 'attachment', name, ...(receipt ? {extraction: receipt.extraction} : {})}, bytes, readerOptions);
         add(sourceId, extracted.hash, extracted.contributions.map(({location, text}) => ({location, text})));
         if (extracted.coverage !== 'complete' || extracted.redacted) omissions.push({sourceId, reason: extracted.coverage, redacted: extracted.redacted ?? 0});
       } catch {omissions.push({sourceId, reason: 'inaccessible-attachment'});}
@@ -121,7 +124,7 @@ export async function captureRequirements(roots, raw, options = {}) {
     keys(source, ['id', 'kind', 'path', 'encoding', 'delimiter', 'extraction'], 'requirements source');
     requireThat(typeof source.id === 'string' && /^[A-Za-z][A-Za-z0-9_-]{0,79}$/.test(source.id) && !source.id.startsWith('ado-') && !['story', 'discussion'].includes(source.id) || source.id === 'story' && request.storyId === undefined, 'Invalid or reserved requirements source ID.');
     // Supplied paths are explicit inputs; reuse the existing bounded, sanitizing readers.
-    const record = await readFileContext(roots, source, options), revision = record.hash ?? 'unavailable';
+    const record = await readFileContext(roots, source, readerOptions), revision = record.hash ?? 'unavailable';
     revisions.push({id: source.id, revision});
     add(source.id, revision, record.contributions.map(({location, text}) => ({location, text})));
     if (record.coverage !== 'complete' || record.redacted) omissions.push({sourceId: source.id, reason: record.coverage, redacted: record.redacted ?? 0});

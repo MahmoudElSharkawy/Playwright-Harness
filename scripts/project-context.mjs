@@ -11,6 +11,7 @@ pom-harness context metadata --request <consumer-json> [--cursor <cursor>] [--pr
 pom-harness context read --id <context-id> [--project-root <consumer>]
 pom-harness context search --id <context-id> [--query <text>] [--source <source-id>] [--topic <topic>] [--work-item <id>] [--limit <1-25>] [--max-bytes <4096-65536>] [--cursor <cursor>] [--project-root <consumer>]
 pom-harness context search --id <context-id> --catalog sources [--cursor <cursor>] [--project-root <consumer>]
+pom-harness context search --id <context-id> --around <passage-id> --source <source-id> --revision <capture-revision> [--before <0-5>] [--after <0-5>] [--topic <topic>] [--work-item <id>] [--limit <1-25>] [--max-bytes <4096-65536>] [--cursor <cursor>] [--project-root <consumer>]
 pom-harness context export --id <context-id> --out <new-consumer-file> [--project-root <consumer>]
 pom-harness context policy --source <source-id> --policy <consumer-json> [--project-root <consumer>]
 
@@ -73,7 +74,7 @@ try {
   if (process.argv.slice(2).some(value => ['help', '--help', '-h'].includes(value))) {console.log(usage);}
   else {
     const {roots, args} = projectArgument(), [command, ...rest] = args, options = {};
-    const fields = command === 'search' ? ['id', 'query', 'source', 'topic', 'work-item', 'limit', 'max-bytes', 'cursor', 'catalog'] : command === 'metadata' ? ['request', 'cursor'] : command === 'export' ? ['id', 'out'] : command === 'read' ? ['id'] : command === 'policy' ? ['source', 'policy'] : ['request', 'id'];
+    const fields = command === 'search' ? ['id', 'query', 'source', 'topic', 'work-item', 'limit', 'max-bytes', 'cursor', 'catalog', 'around', 'revision', 'before', 'after'] : command === 'metadata' ? ['request', 'cursor'] : command === 'export' ? ['id', 'out'] : command === 'read' ? ['id'] : command === 'policy' ? ['source', 'policy'] : ['request', 'id'];
     for (let index = 0; index < rest.length; index += 2) {
       const name = rest[index].replace(/^--/, '');
       if (!rest[index].startsWith('--') || !fields.includes(name) || options[name] !== undefined || !rest[index + 1] || rest[index + 1].startsWith('--')) throw new Error(usage);
