@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Add optional source-grounded `test-planning` with a reusable consumer plan,
+  risk/coverage strategy, evidence-based effort/capacity and measurable criteria.
+  Share one versioned baseline/criterion contract with future completion consumers;
+  preserve existing design, execution, tracking and repair ownership/gates. (#102)
+
 - Extend `maintain-test` with bounded controlled experiments, CI evidence
   forensics and hypothesis/outcome records in the existing assessment/history.
   Make diagnose only versus diagnose and fix explicit in discovery and usage,

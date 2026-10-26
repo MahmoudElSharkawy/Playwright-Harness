@@ -75,6 +75,10 @@ event (one event, note = "imported <name>'s export of <date>").
 
 ## Boundaries
 
+- Cycle objectives, risk priorities, strategy, estimates and criteria belong to
+  [test-planning](../test-planning/SKILL.md). This tracker records actual progress;
+  accepting a plan creates no status event or automation completion.
+
 - Reassessing blocked or failed cases uses [maintain-test](../maintain-test/SKILL.md).
   Verified unblocking permits resumed work (`doing`), never `done` by itself.
   Neutral generation uses an explicit history event from current generation

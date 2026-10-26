@@ -51,6 +51,7 @@ utils; nothing reaches upward or skips a layer (a spec never calls `page.locator
 | Working on | Specialist skill |
 |---|---|
 | Requirements/story analysis, editable chat review and confirmed story comments with requested team mentions | [requirements-analysis](../requirements-analysis/SKILL.md) |
+| Plan a testing cycle's objectives, risk-based scope, strategy, feasibility and measurable criteria | [test-planning](../test-planning/SKILL.md) |
 | Design or revise source-grounded test cases, review complete coverage in chat and optionally publish approved create/update/reuse proposals | [test-case-design](../test-case-design/SKILL.md) |
 | Draft/review a bug from selected story context, a user description or verified execution evidence, including project-specific fields and approved attachments | [bug-report](../bug-report/SKILL.md) |
 | Identify affected areas and recommend regression scope for a selected story, bug fix or requirement/application/framework change | [impact-analysis](../impact-analysis/SKILL.md) |
@@ -76,3 +77,7 @@ Select the workflow by the requested outcome. A story/bug ID or failure report a
 does not select maintenance. Impact-only requests produce recommendations without
 diagnosis, test execution or repairs; maintenance reuses the shared impact procedure
 inside its existing assessment/history.
+
+Cycle planning is optional and distinct from actual progress tracking. An accepted
+plan can inform scoped design/execution; it does not create cases, accept unstated
+expectations or replace execution, review, verification or repair gates.

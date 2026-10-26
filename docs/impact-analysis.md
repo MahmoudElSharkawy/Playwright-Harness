@@ -80,7 +80,7 @@ histories or cohorts. Combined analysis-and-repair belongs to maintenance.
    accepted plan or maintenance comparison cohort, name its reference and the changed
    dimension: requirements, test/application build, fixture, environment or configuration.
    Cite old/new evidence, affected criteria/comparability and remaining uncertainty.
-   Recommend reassessment by the plan owner or maintenance, using its
+   Recommend reassessment by the [plan owner](test-planning.md) or maintenance, using its
    [controlled-experiment guidance](../.agents/skills/maintain-test/references/controlled-experiments.md).
    A changed build is not proof of flakiness, a new expected result or
    a replacement accepted baseline. Do not expand scope, erase failures or reset budgets.

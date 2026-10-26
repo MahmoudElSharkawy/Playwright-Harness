@@ -9,6 +9,12 @@ Manual execution currently accepts ADO suites/stories and runs sequentially.
 API/DB-only cases start no browser. Configure the selected
 [environment](configuration.md) and [ADO connection](azure-devops.md) first.
 
+An optional accepted [testing plan](test-planning.md#baseline-and-criteria-contract)
+can identify selected scope, risk/criterion links and its source/version baseline.
+It is not a prerequisite, a replacement for the ADO plan ID or execution authority.
+Source expectations, readiness, ownership, reporting and delivery rules remain
+authoritative; planned coverage is not an executed result.
+
 ## Start, refine and freeze
 
 Ask for `/execute-test suite <id> [plan <id>] [on qa] [checkpoint]` or

@@ -47,6 +47,8 @@ design's selected requirements or authorizing case changes.
 Record changed plan-baseline or diagnostic-cohort inputs and recommend the owning
 workflow's reassessment. Do not infer a failure cause or flakiness from changed
 builds, fixtures, requirements or mixed outcomes.
+The plan owner can use [test-planning](../test-planning/SKILL.md) to revise affected
+scope, estimates and criteria; the recommendation performs no revision or handoff.
 
 Save a compact sanitized [report](../../../docs/impact-analysis.md#report) under the
 consumer's `.harness/runs/impact-analysis/<analysis-id>.md`, preserving earlier

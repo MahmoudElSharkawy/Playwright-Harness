@@ -44,6 +44,7 @@ fetch sources or write files. See the [context contract](../../docs/project-cont
 | [impact-analysis](impact-analysis/SKILL.md) | Identifying affected areas and recommending regression scope for selected changes; diagnosis/repair remains with maintain-test |
 | [bug-report](bug-report/SKILL.md) | Story-guided editable bug drafts, project-specific fields, evidence review and approved recoverable filing |
 | [requirements-analysis](requirements-analysis/SKILL.md) | Requirement/story analysis, editable chat tables, acceptance inventory and confirmed story comments with requested team mentions |
+| [test-planning](test-planning/SKILL.md) | Cycle objectives, risk-based scope, strategy, feasibility and measurable criteria in a versioned consumer plan; no execution or progress updates |
 | [test-case-design](test-case-design/SKILL.md) | Source-grounded case design, complete chat review, independent coverage assessment and approved ADO create/update/reuse delivery |
 | [automate-test](automate-test/SKILL.md) | Turning story-linked cases, ADO suites or local scenarios into reviewed POM automation with two scoped green runs |
 | [execute-test](execute-test/SKILL.md) | Running ADO manual cases through live UI/API/DB runtimes and producing verified reports without generating POM code |

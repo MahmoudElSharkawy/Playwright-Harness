@@ -27,6 +27,11 @@ After inventory acceptance or partition edits, run design `prepare` again with t
 same analysis ID and selected context/case scope to bind the current acceptance head,
 then save the proposal using the newly returned source fingerprint.
 
+When an accepted [testing plan](../test-planning/SKILL.md) is supplied, reuse its
+compatible version, selected scope, priorities and risk/criterion links as context.
+Planning is not required and plan approval does not accept missing expectations,
+create extra cases or change the case fields and review/publication gates below.
+
 Read current description, acceptance criteria, relevant discussion/history and
 linked cases. New stories may have no linked cases. Captured history identifies
 superseded statements; it does not revive them. Retrieve related business evidence
