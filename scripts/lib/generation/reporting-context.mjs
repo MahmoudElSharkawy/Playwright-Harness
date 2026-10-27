@@ -77,7 +77,7 @@ function observationDetails(scenario) {
 export function createReportingAssessment(sourceInput, executions, bindingsInput) {
   const source = reportSource(sourceInput), bindings = data(bindingsInput);
   requireThat(Array.isArray(executions) && executions.length > 0, 'Reporting observations need assessed execution.');
-  const runs = executions.map(({run, roots, observations}) => ({run, result: assessRun(run, roots, observations)}));
+  const runs = executions.map(({run, roots, observations}) => ({run, runRoot: roots.runRoot, result: assessRun(run, roots, observations)}));
   unique(runs.map(({run}) => run.id), 'reporting observed runs');
   requireThat(Array.isArray(bindings) && bindings.length === source.scenarios.length, 'Bind every observed source case exactly once.');
   unique(bindings.map(row => row.sourceScenarioId), 'reporting source bindings');
@@ -87,7 +87,7 @@ export function createReportingAssessment(sourceInput, executions, bindingsInput
     for (const name of ['sourceScenarioId', 'runId', 'scenarioId']) id(binding[name]);
     const observed = runs.find(({run}) => run.id === binding.runId), scenario = observed?.result.scenarios.find(row => row.id === binding.scenarioId);
     requireThat(source.scenarios.some(row => row.id === binding.sourceScenarioId) && scenario, 'Reporting case binding needs a known source case and assessed execution case.');
-    return {id: binding.sourceScenarioId, runId: observed.run.id, scenarioId: scenario.id, inputFingerprint: observed.run.inputFingerprint,
+    return {id: binding.sourceScenarioId, runId: observed.run.id, runRoot: observed.runRoot, scenarioId: scenario.id, inputFingerprint: observed.run.inputFingerprint,
       environment: observed.run.inputs.environment.name, status: scenario.status, stability: scenario.stability, counts: scenario.counts, issues: scenario.issues,
       ...observationDetails(scenario),
       ...(scenario.requiredLifecycleComplete === undefined ? {} : {requiredLifecycleComplete: scenario.requiredLifecycleComplete})};
@@ -107,7 +107,7 @@ export function validateReportingObserved(source, input) {
   unique(content.cases.map(row => row.id), 'reporting observed cases');
   unique(content.cases.map(row => fingerprint([row.runId, row.scenarioId])), 'reporting execution bindings');
   for (const row of content.cases) {
-    keys(row, ['id', 'runId', 'scenarioId', 'inputFingerprint', 'environment', 'status', 'stability', 'counts', 'issues', 'reason', 'nextAction', 'requiredLifecycleComplete'], 'reporting observed case');
+    keys(row, ['id', 'runId', 'runRoot', 'scenarioId', 'inputFingerprint', 'environment', 'status', 'stability', 'counts', 'issues', 'reason', 'nextAction', 'requiredLifecycleComplete'], 'reporting observed case');
     requireThat(content.source.scenarios.some(scenario => scenario.id === row.id) && ['PASS', 'FAIL', 'BLOCKED', 'SKIPPED', 'NEEDS_REVIEW'].includes(row.status), 'Unknown reporting observed case or status.');
   }
   return {...content, fingerprint: claimed};

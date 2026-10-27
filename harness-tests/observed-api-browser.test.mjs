@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {EventEmitter} from 'node:events';
 import vm from 'node:vm';
-import {readFileSync, existsSync} from 'node:fs';
+import {readFileSync, existsSync, writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {nativeCaptureCode, readApiDiscoverySummary} from '../scripts/lib/browser/api-capture.mjs';
 import {defineOperation} from '../scripts/lib/execution-core/index.mjs';
@@ -10,6 +10,10 @@ import {runBrowserScenario} from '../scripts/lib/browser/index.mjs';
 import {listApiCandidates} from '../scripts/lib/api/discovery.mjs';
 import {fixture} from './fixtures/sequential.mjs';
 import {fakeNative} from './fixtures/fake-native.mjs';
+import {createGenerationHandoff, createReportingAssessment, sourceExpectations, beginGeneration} from '../scripts/lib/generation/index.mjs';
+import {automationReportView, writeAutomationReport} from '../scripts/lib/generation/report.mjs';
+import {fingerprint} from '../scripts/lib/execution-core/data.mjs';
+import {transaction} from '../scripts/lib/generation/storage.mjs';
 
 const identity = {runId: 'run', scenarioId: 'case', operationId: 'open', invocationId: 'open-call', attemptId: 'attempt-one', phase: 'EXERCISE', number: 1};
 test('native capture passively binds request-start ownership across pages, redacts header values and bounds bodies', async () => {
@@ -81,4 +85,43 @@ test('unavailable optional capture leaves the native business outcome intact and
   assert.equal(result.status, 'PASS');
   const summary = readApiDiscoverySummary(f.roots, f.roots.runRoot, f.run.id);
   assert.deepEqual(summary.gaps, ['capture-unavailable']); assert(!JSON.stringify(summary).includes('private-native-diagnostic'));
+});
+
+for (const context of ['reporting', 'handoff']) test(`automation ${context} retains discovery gaps from the original assessed run without candidates`, async t => {
+  const operation = defineOperation({id: 'observe', family: 'browser', target: 'ui', capability: 'browserReads', source: {kind: 'inline', reference: 'fixture', version: '1'}, definition: {intent: 'Observe order'}});
+  const f = await fixture(t, [{operation, phase: 'EXERCISE', checks: [{id: 'visible'}]}], {browser: true});
+  const native = fakeNative(), factory = async roots => {const session = await native.factory(roots); session.capture = async () => {throw new Error('optional unavailable');}; return session;};
+  const result = await f.start({exercise: phase => phase.browser.attempt({operation, invocationId: 'observe'}, async browser => {
+    await browser.native(['tab-list']); const evidence = await browser.evidence('observation', {visible: true});
+    browser.assertion({id: 'visible', status: 'PASS', reliable: true, evidenceIds: [evidence]});
+  })}, {browser: {target: 'ui', nativeSession: factory}});
+  assert.equal(result.status, 'PASS');
+  const source = {version: 1, id: 'discovery-report', title: 'Discovery report', scenarios: [{id: 'case', title: 'Observe order', steps: [{action: 'Observe order', expected: ['Order is visible']}]}]};
+  const executions = [{run: f.run, roots: f.roots, observations: JSON.parse(readFileSync(join(f.roots.runRoot, 'observations.json'), 'utf8'))}];
+  let options = {sourceId: source.id};
+  if (context === 'reporting') options = {source, reporting: {source, observed: createReportingAssessment(source, executions, [{sourceScenarioId: 'case', runId: f.run.id, scenarioId: 'case'}])}};
+  else await beginGeneration(f.roots, createGenerationHandoff(source, executions, [{key: sourceExpectations(source)[0].key, runId: f.run.id, scenarioId: 'case', expectationId: 'visible'}]), 'fixture-author');
+  const expected = [{runId: f.run.id, candidates: [], gaps: ['capture-unavailable']}];
+  const view = await automationReportView(f.roots, options);
+  assert.deepEqual(view.apiDiscoveries, expected);
+  assert(!JSON.stringify(view).includes('"runRoot"'));
+  const report = await writeAutomationReport(f.roots, options);
+  assert.equal(report.status, 'WRITTEN'); assert.deepEqual(report.apiDiscoveries, expected);
+  const saved = JSON.parse(readFileSync(join(f.roots.projectRoot, report.directory, 'result.json'), 'utf8'));
+  assert.deepEqual(saved.apiDiscoveries, expected);
+  if (context === 'reporting') {
+    const changed = structuredClone(options.reporting.observed);
+    changed.cases[0].runRoot = join(f.roots.projectRoot, 'other-run');
+    const {fingerprint: _previous, ...content} = changed; changed.fingerprint = fingerprint(content);
+    await assert.rejects(automationReportView(f.roots, {...options, reporting: {source, observed: changed}}), /assessing execution|claimed verdict/i);
+    const {fingerprint: claimed, ...outward} = saved.observed; assert.equal(claimed, fingerprint(outward));
+    await beginGeneration(f.roots, createGenerationHandoff(source, executions, [{key: sourceExpectations(source)[0].key, runId: f.run.id, scenarioId: 'case', expectationId: 'visible'}]), 'fixture-author', options.reporting);
+    assert.deepEqual((await automationReportView(f.roots, {sourceId: source.id})).apiDiscoveries, expected);
+  }
+  writeFileSync(join(f.roots.runRoot, 'api-discovery.json'), JSON.stringify({runId: 'other-run', candidates: [], gaps: ['capture-unavailable']}));
+  assert.deepEqual((await automationReportView(f.roots, options)).apiDiscoveries, [{runId: f.run.id, candidates: [], gaps: ['discovery-summary-unavailable']}]);
+  if (context === 'handoff') {
+    await transaction(f.roots, source.id, (state, save) => {delete state.handoff.observations[0].runRoot; save(state);});
+    assert.deepEqual((await automationReportView(f.roots, options)).apiDiscoveries, [{runId: f.run.id, candidates: [], gaps: ['discovery-summary-unavailable']}]);
+  }
 });

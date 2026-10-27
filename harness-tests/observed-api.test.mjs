@@ -1,11 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdirSync, writeFileSync, readFileSync} from 'node:fs';
+import {mkdirSync, writeFileSync, readFileSync, unlinkSync} from 'node:fs';
 import {join} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {createRun, defineOperation, registerEvidence} from '../scripts/lib/execution-core/index.mjs';
 import {createApiRuntime} from '../scripts/lib/api/index.mjs';
-import {fixture, operation} from './fixtures/api.mjs';
+import {fingerprint} from '../scripts/lib/execution-core/data.mjs';
+import {fixture, operation, statusCheck} from './fixtures/api.mjs';
 import {sanitizeApiObservation, storeApiCandidate, readApiCandidate, listApiCandidates,
   reviewApiCandidate, readReviewedApi, promoteObservedCollection} from '../scripts/lib/api/discovery.mjs';
 
@@ -16,8 +17,8 @@ function raw(baseUrl, patch = {}) {
     responseHeaders: [{name: 'set-cookie', value: 'session=private-session-sentinel'}, {name: 'content-type', value: 'application/json'}],
     requestBody: {state: 'omitted'}, responseBody: {state: 'known', contentType: 'application/json', text: JSON.stringify({items: [{id: privateValue, email: 'private@example.invalid', token: '<session-private-sentinel>'}]})}, status: 200, ...patch};
 }
-async function setup(t, {definition = operation('read-items', {request: {method: 'GET', path: '/items', query: {search: {$input: 'search'}}}}), auth = false, values = [['search', 'synthetic']]} = {}) {
-  const f = await fixture(t, ({reply}) => reply(200, {items: []}), [definition], {values, auth,
+async function setup(t, {definition = operation('read-items', {request: {method: 'GET', path: '/items', query: {search: {$input: 'search'}}}}), auth = false, values = [['search', 'synthetic']], additionalOperations = [], handler = ({reply}) => reply(200, {items: []})} = {}) {
+  const f = await fixture(t, handler, [definition, ...additionalOperations], {values, auth,
     runtime: auth ? {resolveCredential: () => ({authorization: 'Bearer synthetic-validation'})} : {}});
   const browser = defineOperation({id: 'browser-observe', family: 'browser', target: 'app', capability: 'browserReads', source: {kind: 'inline', reference: 'fixture', version: '1'}, definition: {intent: 'Observe items'}});
   const run = createRun({environment: {...f.environment, browserTargets: ['app'], targets: {...f.environment.targets, browser: {app: {origins: [new URL(f.environment.targets.api['fixture-api'].baseUrl).origin]}}}}, operations: [browser],
@@ -76,6 +77,84 @@ test('Postman JSON preserves verified scalar input types when variables are subs
   await promoteObservedCollection(f.roots, {application: 'orders', reviewedIds: [variant.id]});
   const variants = JSON.parse(readFileSync(exported.path, 'utf8')).item; assert.equal(variants.length, 2);
   assert.equal(variants.filter(item => item.request.body.raw.includes('fixed-synthetic')).length, 1);
+});
+
+test('Postman response examples preserve captured null values at every nesting level', async t => {
+  const f = await setup(t), candidate = f.capture({responseBody: {state: 'known', contentType: 'application/json', text: '{"value":null,"items":[null,{"value":null}]}'}});
+  const reviewed = await review(f, candidate), exported = await promoteObservedCollection(f.roots, {application: 'orders', reviewedIds: [reviewed.id]});
+  const collection = JSON.parse(readFileSync(exported.path, 'utf8'));
+  assert.deepEqual(JSON.parse(collection.item[0].response[0].body), {value: null, items: [null, {value: null}]});
+});
+
+async function mutationValidation(t, {tracked = true, unrelated = false, secondResource = false} = {}) {
+  const definition = operation('create-item', {method: 'POST', extract: [{name: 'recordId', type: 'string', sensitivity: 'public', select: {from: 'json', path: ['id']}}, ...(secondResource ? [{name: 'otherId', type: 'string', sensitivity: 'public', select: {from: 'json', path: ['orderId']}}] : [])]});
+  const cleanup = unrelated ? operation('unrelated-read', {checks: [statusCheck('read', 200)]}) : operation('remove-item', {method: 'DELETE', path: '/items/{recordId}', checks: [statusCheck('removed', 200)]});
+  const otherCleanup = operation('remove-other-item', {method: 'DELETE', path: '/items/{otherId}', checks: [statusCheck('other-removed', 200)]});
+  const f = await setup(t, {definition, additionalOperations: [cleanup, ...(secondResource ? [otherCleanup] : [])], handler: ({request, reply, items}) => {
+    if (request.method === 'POST') {items.set('synthetic-item', true); if (secondResource) items.set('other-item', true); reply(200, {id: 'synthetic-item', ...(secondResource ? {orderId: 'other-item'} : {})});}
+    else {if (request.method === 'DELETE') items.delete(request.path.split('/').at(-1)); reply(200);}
+  }});
+  const candidate = f.capture({method: 'POST', url: `${f.environment.targets.api['fixture-api'].baseUrl}/items`, responseBody: {state: 'known', contentType: 'application/json', text: JSON.stringify({id: 'private-item', ...(secondResource ? {orderId: 'private-other-item'} : {})})}});
+  const created = await f.call(definition, {...(tracked ? {resource: {id: 'owned-item', output: 'recordId', ownership: 'harness', intent: 'temporary'}} : {})});
+  const removed = await f.call(cleanup, {phase: 'CLEANUP', inputs: created.outputs, ...(tracked && !unrelated ? {lifecycle: {resourceId: 'owned-item'}} : {})});
+  const otherRemoved = secondResource && await f.call(otherCleanup, {phase: 'CLEANUP', inputs: created.outputs});
+  assert.equal(f.runtime.finish().status, 'PASS');
+  writeFileSync(join(f.roots.projectRoot, 'review.md'), 'Independent synthetic mutation and cleanup review.');
+  const request = {candidateId: candidate.id, operation: definition, review: {reviewer: 'fixture-reviewer', artifact: 'review.md', purpose: 'Create item', inputs: 'No request inputs.', authentication: {kind: 'none'}, responseExtraction: 'Extract the created item identity.', stateEffects: 'Creates an owned item.', cleanup: {kind: 'verified', operationId: cleanup.id}},
+    validation: {run: f.run, roots: f.roots, observations: JSON.parse(readFileSync(join(f.roots.runRoot, 'observations.json'), 'utf8')), attemptId: created.identity.attemptId}};
+  if (secondResource) {
+    // The API adapter tracks one resource per call; the core also accepts a bulk mutation's typed resource bindings.
+    const observations = request.validation.observations, scenario = observations.scenarios[0];
+    const origin = scenario.attempts.find(item => item.identity.attemptId === created.identity.attemptId), lifecycle = scenario.attempts.find(item => item.identity.attemptId === otherRemoved.identity.attemptId);
+    origin.effect.resourceIds.push('other-owned-item'); lifecycle.effect.resourceIds.push('other-owned-item');
+    const path = 'evidence/other-lifecycle.json'; writeFileSync(join(f.roots.runRoot, path), JSON.stringify({resourceId: 'other-owned-item', complete: true}));
+    const proof = registerEvidence(f.run, f.roots, {id: 'other-lifecycle', identity: lifecycle.identity, kind: 'lifecycle', path, sanitized: true});
+    observations.evidence.push(proof); lifecycle.evidenceIds.push(proof.id);
+    scenario.resources.push({id: 'other-owned-item', originAttemptId: created.identity.attemptId, identity: {attemptId: created.identity.attemptId, name: 'otherId'}, ownership: 'harness', intent: 'temporary', lifecycle: {action: 'cleanup', status: 'completed', attemptId: lifecycle.identity.attemptId, evidenceIds: [proof.id]}});
+  }
+  return {...f, request, created, removed};
+}
+
+test('verified mutation cleanup cannot be replaced by an unrelated successful cleanup-phase read', async t => {
+  const f = await mutationValidation(t, {tracked: false, unrelated: true});
+  assert.equal(f.items.size, 1);
+  assert.throws(() => reviewApiCandidate(f.roots, f.request), /cleanup|lifecycle|resource/i);
+});
+
+test('verified cleanup must cover every applicable resource of the validated mutation', async t => {
+  const f = await mutationValidation(t, {secondResource: true});
+  assert.equal(f.items.size, 0);
+  assert.throws(() => reviewApiCandidate(f.roots, f.request), /every.*resource|named.*lifecycle/i);
+});
+
+for (const tamper of ['delete', 'change']) test(`reviewed mutation reuse and promotion reject ${tamper}d cleanup evidence`, async t => {
+  const f = await mutationValidation(t), reviewed = reviewApiCandidate(f.roots, f.request);
+  assert.equal(f.items.size, 0);
+  assert.equal(readReviewedApi(f.roots, reviewed.id).id, reviewed.id);
+  const exported = await promoteObservedCollection(f.roots, {application: 'orders', reviewedIds: [reviewed.id]}), before = readFileSync(exported.path, 'utf8');
+  const dependent = f.request.validation.observations.evidence.filter(item => f.removed.evidenceIds.includes(item.id));
+  assert.equal(dependent.length, 5);
+  assert(dependent.every(item => reviewed.verification.evidence.some(saved => saved.id === item.id && saved.sha256 === item.sha256)));
+  assert.equal(reviewed.verification.cleanup[0].resource.originAttemptId, f.created.identity.attemptId);
+  assert.deepEqual(reviewed.verification.cleanup[0].attempt.identity, f.removed.identity);
+  for (const item of dependent) {
+    const path = join(f.roots.runRoot, item.path);
+    if (tamper === 'delete') unlinkSync(path); else writeFileSync(path, Buffer.alloc(item.bytes, 'x'));
+  }
+  assert.throws(() => readReviewedApi(f.roots, reviewed.id));
+  await assert.rejects(promoteObservedCollection(f.roots, {application: 'orders', reviewedIds: [reviewed.id]}));
+  assert.equal(readFileSync(exported.path, 'utf8'), before);
+});
+
+test('legacy verified cleanup without bound lifecycle dependencies requires a new review', async t => {
+  const f = await mutationValidation(t), reviewed = reviewApiCandidate(f.roots, f.request);
+  const {id: _id, path: _path, ...legacy} = structuredClone(reviewed);
+  delete legacy.verification.cleanup;
+  legacy.verification.evidence = legacy.verification.evidence.filter(item => item.identity.attemptId === f.created.identity.attemptId).map(({path, sha256, bytes}) => ({path, sha256, bytes}));
+  const legacyId = fingerprint(legacy);
+  writeFileSync(join(f.roots.projectRoot, '.harness/knowledge/api/records', `${legacyId}.json`), JSON.stringify({id: legacyId, ...legacy}));
+  assert.throws(() => readReviewedApi(f.roots, legacyId), /dependencies are unavailable.*review.*again/i);
+  await assert.rejects(promoteObservedCollection(f.roots, {application: 'orders', reviewedIds: [legacyId]}), /dependencies are unavailable.*review.*again/i);
 });
 
 test('review refuses JSON input bindings whose verified types differ from the observation', async t => {

@@ -217,12 +217,21 @@ export function reviewApiCandidate(roots, {candidateId, operation, review, valid
   const observedAuthentication = observation.request.headerNames.some(name => AUTH_HEADERS.has(name));
   requireThat(!observedAuthentication || checked.authentication.kind === 'configured' && Boolean(config.credentialRef), 'Observed authentication needs a configured credential reference and verified resolver.');
   requireThat(checked.authentication.kind !== 'configured' || Boolean(config.credentialRef), 'Configured authentication requires a credential reference.');
+  const cleanup = [];
   if (checked.cleanup.kind === 'verified') {
     id(checked.cleanup.operationId);
-    requireThat(result.scenarios.some(scenario => scenario.attempts.some(item => item.identity.operationId === checked.cleanup.operationId && ['CLEANUP', 'RESTORE'].includes(item.identity.phase) && item.outcome === 'SUCCESS')), 'Cleanup must be a verified lifecycle operation.');
+    const scenario = result.scenarios.find(item => item.id === attempt.identity.scenarioId);
+    const resources = scenario.resources.filter(resource => attempt.effect.resourceIds.includes(resource.id) && ['cleanup', 'restore'].includes(resource.lifecycle.action));
+    requireThat(resources.length > 0, 'Verified cleanup needs a lifecycle resource bound to the validated operation.');
+    for (const resource of resources) {
+      const lifecycleAttempt = scenario.attempts.find(item => item.identity.attemptId === resource.lifecycle.attemptId);
+      requireThat(resource.lifecycle.status === 'completed' && lifecycleAttempt?.identity.operationId === checked.cleanup.operationId && lifecycleAttempt.outcome === 'SUCCESS', 'Every bound resource needs the named verified lifecycle operation.');
+      cleanup.push({resource, attempt: {identity: lifecycleAttempt.identity, operationFingerprint: lifecycleAttempt.operationFingerprint, evidenceIds: lifecycleAttempt.evidenceIds}});
+    }
   } else requireThat(operation.definition.effects.readOnlyContract || ['intentional-persistence', 'no-owned-resource'].includes(checked.cleanup.reason), 'Mutation cleanup requires a verified route or an explicit reviewed lifecycle reason.');
+  const evidenceIds = new Set([...attempt.evidenceIds, ...cleanup.flatMap(item => item.attempt.evidenceIds)]);
   const verification = {runId: validation.run.id, inputFingerprint: validation.run.inputFingerprint, attemptId: validation.attemptId, operationFingerprint: operation.fingerprint,
-    environment: environment.name, targetFingerprint: fingerprint(config), inputTypes, evidence: result.evidence.filter(item => attempt.evidenceIds.includes(item.id)).map(item => ({path: relative(roots.projectRoot, join(validation.roots.runRoot, item.path)).replaceAll('\\', '/'), sha256: item.sha256, bytes: item.bytes}))};
+    environment: environment.name, targetFingerprint: fingerprint(config), inputTypes, ...(cleanup.length ? {cleanup} : {}), evidence: result.evidence.filter(item => evidenceIds.has(item.id)).map(item => ({id: item.id, identity: item.identity, kind: item.kind, path: relative(roots.projectRoot, join(validation.roots.runRoot, item.path)).replaceAll('\\', '/'), sha256: item.sha256, bytes: item.bytes}))};
   return saveImmutable(roots, REVIEWED, {version: 1, status: 'reviewed-verified', candidateId, operation, review: {...checked, artifact}, verification});
 }
 
@@ -230,6 +239,15 @@ export function readReviewedApi(roots, reviewedId) {
   const record = loadImmutable(roots, REVIEWED, reviewedId); validateApiOperation(record.operation); const candidate = readApiCandidate(roots, record.candidateId);
   if (Object.hasOwn(record.operation.definition.request, 'json')) verifyJsonInputTypes(candidate.observation.request.body.structure, record.operation.definition.request.json, record.verification.inputTypes ?? []);
   requireThat(fingerprint(reviewArtifact(roots, record.review.artifact.path)) === fingerprint(record.review.artifact), 'Review artifact changed.');
+  if (record.review.cleanup.kind === 'verified') {
+    requireThat(Array.isArray(record.verification.cleanup) && record.verification.cleanup.length > 0, 'Reviewed cleanup dependencies are unavailable; validate and review the lifecycle again.');
+    for (const {resource, attempt} of record.verification.cleanup) {
+      requireThat(resource.lifecycle.status === 'completed' && resource.lifecycle.attemptId === attempt.identity.attemptId && attempt.identity.runId === record.verification.runId && attempt.identity.operationId === record.review.cleanup.operationId && attempt.identity.phase === resource.lifecycle.action.toUpperCase(), 'Reviewed cleanup identity changed.');
+      requireThat(resource.lifecycle.evidenceIds.length > 0 && resource.lifecycle.evidenceIds.every(id => attempt.evidenceIds.includes(id)) &&
+        attempt.evidenceIds.every(id => record.verification.evidence.some(item => item.id === id && fingerprint(item.identity) === fingerprint(attempt.identity))) &&
+        record.verification.evidence.some(item => resource.lifecycle.evidenceIds.includes(item.id) && item.kind === 'lifecycle'), 'Reviewed cleanup evidence is missing or unbound.');
+    }
+  }
   for (const evidence of record.verification.evidence) {
     const path = location(roots, '.', evidence.path), stat = lstatSync(path);
     requireThat(stat.isFile() && !stat.isSymbolicLink() && stat.size === evidence.bytes, 'Verification evidence changed.');
@@ -259,7 +277,8 @@ function example(structure) {
   if (!structure || structure.type === 'empty') return '';
   if (structure.type === 'object') return Object.fromEntries(structure.fields.map(field => [field.name, example(field.value)]));
   if (structure.type === 'array') return structure.items.map(example);
-  return {string: 'synthetic', number: 0, boolean: false, null: null}[structure.type] ?? 'synthetic';
+  if (structure.type === 'null') return null;
+  return {string: 'synthetic', number: 0, boolean: false}[structure.type] ?? 'synthetic';
 }
 function collectionItem(roots, record) {
   const observation = readApiCandidate(roots, record.candidateId).observation;
