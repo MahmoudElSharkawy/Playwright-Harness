@@ -2,6 +2,35 @@
 
 ## Unreleased
 
+## 4.2.1 — Complete document context and observed API reuse
+
+### Upgrade actions
+
+- Update to the 4.2.1 archive and re-run setup in each consumer project. Review
+  customized managed instructions through the existing merge process, then reload
+  skills or restart the host to load the updated guidance.
+- Explicitly refresh selected Markdown/text documents to adopt the corrected
+  section reader, including when their bytes have not changed. Existing supported
+  captures remain readable; read/search alone does not reparse them. Refresh can
+  change passage IDs and citations while preserving prior history.
+- Existing execution and automation histories remain usable. Reuse existing API
+  business methods and supplied collections first. Review and verify captured API
+  candidates before reuse; exporting a separate observed collection is optional.
+
+### Changes
+
+- Preserve native document sections, heading ancestry, lists, tables, fenced
+  examples and multiline setext headings. Add bounded surrounding evidence and
+  per-hit section completeness so Q&A retains relevant conditions and exceptions
+  without treating a partial search result as a complete rule. Preserve explicit
+  source selection, snapshot-only answers and compatible capture history. (#112)
+- Passively capture sanitized API candidates during browser execution and
+  automation exploration. Bind candidates to run evidence, review missing
+  operation contracts and verify them through the configured API runtime before
+  promoting reusable knowledge. Support incremental, consumer-owned observed
+  Postman collections while preserving supplied libraries, authentication and
+  cleanup requirements, independent review and two scoped green runs. (#119)
+
 ## 4.2.0 — Test planning, change impact and maintenance diagnosis
 
 ### Upgrade actions
