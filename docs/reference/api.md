@@ -5,7 +5,106 @@ execution with shared [records and assessment](execution-model.md). They require
 no AI host, browser, Allure or catalog service. Put POM business operations in
 `src/apis/` and technical transport/reporting in `src/utils/`; follow the
 [service-class skill](../../.agents/skills/service-classes/SKILL.md) and source
-endpoints from the consumer's team collections first.
+endpoints from existing business methods and applicable supplied collections first.
+Reviewed, runtime-verified observations may supply missing operations without making
+a collection a prerequisite.
+
+## Observed API knowledge
+
+Manual execution and automation exploration share passive browser capture. Sanitized
+evidence is bound to its run/input fingerprint, scenario, operation, invocation,
+attempt, environment and configured target fingerprint. Candidates live in
+`.harness/knowledge-candidates/api/records/`; reviewed definitions live in
+`.harness/knowledge/api/records/`. See [capture limits](browser.md#passive-api-discovery)
+and the [two-origin collection policy](../../resources/apisCollections/README.md).
+
+Import the following library functions from
+`playwright-pom-harness/scripts/lib/api/discovery.mjs`:
+
+| Interface | Contract |
+|---|---|
+| `listApiCandidates(roots, {runId?, scenarioId?})` / `readApiCandidate(roots, id)` | Read bounded unreviewed candidates; recheck immutable content and original evidence |
+| `reviewApiCandidate(roots, {candidateId, operation, review, validation})` | Establish a reviewed definition using an actual successful configured API run and retained review artifact |
+| `readReviewedApi(roots, id)` / `listReviewedApis(roots)` | Recheck candidate/review/verification evidence and return the ordinary `operation` record |
+| `promoteObservedCollection(roots, {application, reviewedIds})` | Incrementally write the consumer-owned observed Postman v2.1 collection |
+
+The browser adapter uses `sanitizeApiObservation(raw, {run, identity, browserTarget,
+sequence, variantId?, relationships?})` and `storeApiCandidate(run, roots,
+{observation, evidence})`. These are internal capture boundaries, not request-replay
+commands. Store the original sanitizer result with its matching registered observation
+evidence; raw values or a claimed `sanitized` flag are insufficient.
+
+Captures remove scalar values, host coordinates and unknown path segments. The fixed
+public route vocabulary is `api`, `v1`, `v2`, `v3`, `orders`, `items`, `records`,
+`users`, `customers`, `draft`, `submit`, `status`, `create`, `update`, `delete`,
+`search`, `lookup`, `login`, `logout`, `auth` and `token`. Review cannot change retained
+literals. Opaque `{segmentN}` placeholders do not prove a variable route; review must
+establish their actual literals or parameter boundaries from permitted evidence.
+Known structural field
+names are retained under a conservative allowlist. Unknown request/query names become
+redacted fields and block reuse until a separately reviewed source establishes the
+contract. Unknown response names remain an explicit limitation; response extraction
+must name observed supported fields and does not require a complete response schema.
+Unsupported bodies, duplicated query fields and unsupported session/CSRF headers
+remain gaps. Observed responses never become automatically accepted expected values.
+
+The following wiring assumes `verifiedOperation`, `validationRun`, `validationRoots`,
+`validationObservations` and `validatedAttempt` already come from an ordinary scoped
+API execution with source-grounded checks, configured targets and completed lifecycle:
+
+```js
+const reviewed = reviewApiCandidate(roots, {
+  candidateId,
+  operation: verifiedOperation,
+  review: {
+    reviewer: 'independent-reviewer',
+    artifact: '.harness/state/api-review.md',
+    purpose: 'Find the owned draft order',
+    inputs: 'orderId comes from this case\'s verified create output.',
+    authentication: {kind: 'configured'},
+    responseExtraction: 'Extract the declared order identity through the service.',
+    stateEffects: 'The reviewed lookup contract is read-only.',
+    cleanup: {kind: 'none'}
+  },
+  validation: {
+    run: validationRun, roots: validationRoots,
+    observations: validationObservations,
+    attemptId: validatedAttempt.identity.attemptId
+  }
+});
+const reusableOperation = readReviewedApi(roots, reviewed.id).operation;
+const exported = await promoteObservedCollection(roots, {
+  application: 'orders', reviewedIds: [reviewed.id]
+});
+```
+
+The reviewer identity is an auditable attestation, not authentication. Review records
+purpose, inputs, authentication, response extraction, state effects and cleanup.
+`authentication.kind` is `none` or `configured`; observed credential use requires a
+configured `credentialRef` and verified resolver. `cleanup` is `{kind: 'verified',
+operationId}` for a verified cleanup/restoration operation, or `{kind: 'none'}` for a
+read-only contract. A mutation exemption needs an explicit reviewed `reason` of
+`intentional-persistence` or `no-owned-resource`, grounded in the recorded state-effects
+rationale. A create observation never proves a delete endpoint. All existing lifecycle,
+ownership, recovery and permission rules still apply; no mandatory per-endpoint user
+approval is added.
+
+Validation re-assesses actual evidence and requires a successful matching operation,
+unchanged environment/target and complete lifecycle. Captures cannot silently update
+frozen inputs or existing reviewed records. Keep referenced sanitized capture/API
+evidence and review artifacts available; changed bytes invalidate reuse. New facts
+need new reviewed records and explicit conflict resolution.
+
+Use the reviewed operation through existing catalog/helper/inline/exploration sources
+and ordinary `Apis<Domain>`/technical-facade layers. Preserve environment coordinates
+and credential references in configuration, scenario values in paired test data, and
+per-run IDs in test-local state. Export is optional for reuse. When requested by the
+workflow, promotion writes `resources/apisCollections/orders-observed.postman_collection.json`
+with `{{<target>BaseUrl}}` variables, parameterized inputs, synthetic response examples,
+stable names, provenance and a sanitization ledger. Equivalent definitions deduplicate;
+distinct variants remain separate. Supplied exports are unchanged, and conflicts or
+drift are not silently resolved. Promote before generation candidate freeze; existing
+independent review and two fresh scoped green runs still govern generated tests.
 
 ## Define, freeze and execute
 

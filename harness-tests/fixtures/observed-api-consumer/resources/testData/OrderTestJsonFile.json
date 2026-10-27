@@ -1,0 +1,10 @@
+{
+  "tc119": {
+    "idPrefix": "tc119-order-",
+    "ownerPrefix": "tc119-owner-",
+    "label": "Synthetic test order",
+    "createdHttpStatus": 201,
+    "draftStatus": "Draft",
+    "submittedStatus": "Submitted"
+  }
+}

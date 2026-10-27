@@ -11,6 +11,7 @@ import {timestampedReportDirectory} from '../reporting/directories.mjs';
 import {renderAutomationHtml, outcome, automationCoverageText, caseNeedsAttention} from '../reporting/case-view.mjs';
 import {markdownText as md, caseReason, stageLabel} from '../reporting/text.mjs';
 import {reportSource, reportingContext} from './reporting-context.mjs';
+import {readApiDiscoverySummary} from '../browser/api-capture.mjs';
 export {renderAutomationHtml};
 
 const identity = test => fingerprint([test.spec, test.project, test.titlePath]);
@@ -152,10 +153,18 @@ export async function automationReportView(roots, {sourceId, source: sourceInput
     const coverage = {total: cases.length, selected: selected.scenarios.length, ready: cases.filter(row => row.status === 'READY').length,
       blocked: cases.filter(row => row.status === 'BLOCKED').length, scopeKnown: Boolean(reporting || !state)};
     coverage.complete = coverage.scopeKnown && coverage.ready === coverage.total;
+    const discoveryRuns = [...(state?.handoff.observations ?? []), ...(reporting?.observed?.cases ?? [])];
+    const apiDiscoveries = [...new Set(discoveryRuns.map(row => row.runId))].map(runId => {
+      const bindings = discoveryRuns.filter(row => row.runId === runId), runRoot = bindings[0].runRoot;
+      if (!runRoot || bindings.some(row => row.runRoot !== runRoot || row.inputFingerprint !== bindings[0].inputFingerprint)) return {runId, candidates: [], gaps: ['discovery-summary-unavailable']};
+      return readApiDiscoverySummary(roots, runRoot, runId);
+    }).filter(row => row.candidates.length || row.gaps.length);
+    const observed = reporting?.observed && data({version: reporting.observed.version, source: reporting.observed.source, cases: reporting.observed.cases.map(({runRoot, ...row}) => row)});
+    if (observed) observed.fingerprint = fingerprint(observed);
     return frozen(data({version: 1, id: `automation-${randomUUID()}`, workflow: 'automate-test', sourceId, title: source.title,
       createdAt: new Date().toISOString(), sourceFingerprint: fingerprint(source), selectedSourceFingerprint: fingerprint(selected), status: readiness.status, rounds: readiness.rounds, greens: readiness.greens,
       environment: [...new Set([...(state?.handoff.observations ?? []).map(run => run.environment), ...(reporting?.observed?.cases ?? []).map(row => row.environment)].filter(Boolean))].join(', ') || 'Not recorded',
-      ...(blocker ? {blocker} : {}), coverage, cases, source, ...(retainedNotes ? {notes: retainedNotes} : {}), ...(reporting?.observed ? {observed: reporting.observed} : {})}, 8 * 1024 * 1024, {maxNodes: 200000}));
+      ...(blocker ? {blocker} : {}), coverage, cases, source, ...(apiDiscoveries.length ? {apiDiscoveries} : {}), ...(retainedNotes ? {notes: retainedNotes} : {}), ...(observed ? {observed} : {})}, 8 * 1024 * 1024, {maxNodes: 200000}));
   });
 }
 
@@ -178,6 +187,6 @@ export async function writeAutomationReport(roots, options = {}) {
     const artifacts = files.map(([name, body]) => {writeFileSync(join(output, name), body, {flag: 'wx', mode: 0o600}); return {path: name, bytes: Buffer.byteLength(body), sha256: digest(body)};});
     const manifest = {version: 1, status: 'WRITTEN', sourceId: view.sourceId, sourceFingerprint: view.sourceFingerprint, readiness: view.status, coverage: view.coverage, cases: view.cases.length, artifacts};
     writeFileSync(join(output, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n', {flag: 'wx', mode: 0o600, flush: true});
-    return {...manifest, directory, html: `${directory}/index.html`};
+    return {...manifest, directory, html: `${directory}/index.html`, ...(view.apiDiscoveries ? {apiDiscoveries: view.apiDiscoveries} : {})};
   } catch {return {status: 'FAILED', reason: 'Automation report input, integrity validation or delivery failed; generation history and verdicts are unchanged.'};}
 }

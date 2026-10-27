@@ -110,6 +110,7 @@ database or authenticated-host gates without separate available prerequisites.
 | Probe script | Purpose/prerequisites |
 |---|---|
 | probe:cli, probe:browser | Pinned native viability/browser fixtures |
+| probe:observed-api | Disposable order API/GUI consumer, reviewed discoveries, incremental collections, independent review and two scoped greens |
 | probe:database, probe:postgresql | Owned disposable real engines; Docker |
 | probe:mysql | Pinned MySQL 8.4 CRUD, failure and mixed UI/API/DB proof; Docker and browser |
 | probe:mixed | SQL-backed HTTP/UI; Docker and browser |

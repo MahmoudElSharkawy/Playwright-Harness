@@ -84,6 +84,16 @@ test('reviewed CI cache references do not exempt other upstream coordinates',()=
 test('empty runtime histories pass but populated histories fail',()=>{
  assert.equal(privacyFindings('events.jsonl','\n').length,0);assert.equal(privacyFindings('events.jsonl','{"event":"run"}').length,1);
 });
+
+test('reviewed Postman schema reference does not exempt other URLs on its host',()=>{
+ const schema='https://schema.getpostman.com/json/collection/v2.1.0/collection.json';
+ assert.deepEqual(privacyFindings('collection.json',schema),[]);
+ for(const url of [schema+'?workspace=private', schema+'#private', schema+'/other', schema.replace('.com/', '.com:8443/'), schema.replace('https:', 'http:'), new URL('/private',schema).href]) {
+  assert(privacyFindings('collection.json',url).some(f=>f.rule==='unreviewed-url'));
+ }
+ const authenticated=new URL(schema);authenticated.username='synthetic-user';
+ assert(privacyFindings('collection.json',authenticated.href).some(f=>f.rule==='url-userinfo'));
+});
 test('a dynamic URL path does not exempt a literal private host',()=>{
  const url=['https:','','internal-host.local','${recordId}'].join('/');
  assert(privacyFindings('guide.md',url).some(f=>f.rule==='unreviewed-url'));

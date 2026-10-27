@@ -15,6 +15,28 @@ It is not a prerequisite, a replacement for the ADO plan ID or execution authori
 Source expectations, readiness, ownership, reporting and delivery rules remain
 authoritative; planned coverage is not an executed result.
 
+## API discovery during browser execution
+
+The shared browser runtime passively records relevant fetch/XHR traffic within the
+selected browser origins, without replay or extra application requests. Each run's
+`api-discovery.json` summarizes bounded, sanitized candidates in
+`.harness/knowledge-candidates/api/`, associated with the actual scenario and attempt.
+Capture does not generate POM code or passing assertions. Missing data, unsupported
+formats, unresolved authentication and required cleanup remain explicit gaps.
+
+Reuse business methods and applicable supplied collections before deriving a missing
+operation from [reviewed API knowledge](reference/api.md#observed-api-knowledge).
+Review and scoped configured-runtime validation can preserve useful discoveries for
+later automation and optional incremental observed collection promotion. Collection
+serialization is not required before using a valid reviewed definition. No new user
+command or per-endpoint approval is introduced; existing permissions, frozen source,
+expectations, API/DB preparation and GUI behavior remain authoritative.
+
+Report relevant discoveries, verified/reused operations, unresolved gaps and any saved
+`resources/apisCollections/<application>-observed.postman_collection.json` alongside
+the existing case report. Continue unrelated supported cases under the normal partial
+reporting rules. Discovery never replaces a failure, blocker or delivery-readiness gate.
+
 ## Start, refine and freeze
 
 Ask for `/execute-test suite <id> [plan <id>] [on qa] [checkpoint]` or
@@ -229,8 +251,9 @@ npx --no pom-harness execute publish-results <exec>
 After concrete preview and authorization, repeat with `--execute`. Story executions
 can file bugs; suite executions can also publish manual results. See
 [ADO delivery](azure-devops.md#manual-execution-delivery) for revision controls,
-aggregation, duplicate handling and uncertain writes. Manual execution neither
-updates tracker events nor promotes reviewed knowledge.
+aggregation, duplicate handling and uncertain writes. Manual execution does not
+update tracker events. Passive capture does not automatically promote reviewed
+knowledge; the separate review/verification contract above governs reuse.
 
 ## Limits and validation
 

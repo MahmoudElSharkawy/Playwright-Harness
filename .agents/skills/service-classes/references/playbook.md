@@ -76,8 +76,9 @@ its sample literals (identity numbers, policy numbers, IPs) never become test da
 the full contract lives in `resources/Queries/README.md`. Writing a query the library
 already knows, from scratch, is a review finding (`query-library-bypassed`).
 
-**Source new API endpoints from the team collection library first (2026-08-26 ruling).**
-Before authoring any `<operation>_serviceName`, search `resources/apisCollections/` —
+**Reuse API business methods, then supplied collections, then reviewed discoveries.**
+Before authoring any `<operation>_serviceName`, search existing services and applicable
+team exports in `resources/apisCollections/` —
 the team's curated Postman collections (endpoints, payload shapes, auth flow,
 request-chaining recipes). When a matching request exists, adapt it: the request path
 becomes the `_serviceName` field; the base URL stays in config (practice 4's
@@ -88,6 +89,17 @@ its sample literals (sponsor/member ids, GUIDs, IBANs, phone numbers, emails) ne
 become test data — the full contract lives in `resources/apisCollections/README.md`.
 Defining an endpoint the collection already covers, from scratch, is a review finding
 (`collection-library-bypassed`).
+
+When the collection or operation is missing, consult immutable reviewed definitions
+under `.harness/knowledge/api/` through
+[the discovery interfaces](../../../../docs/reference/api.md#observed-api-knowledge).
+Unreviewed traffic cannot supply a working endpoint or expected result. Review and
+configured runtime verification establish routes, input bindings, authentication,
+extraction, effects and lifecycle; unsupported body/session requirements remain gaps.
+The separate `<application>-observed.postman_collection.json` is an optional reusable
+serialization, not a gate before service authoring. Preserve the consumer's existing
+facade, paired test data and test-local output state. API/DB setup, GUI journeys,
+UI-specific checks and owned cleanup retain their existing criteria.
 
 ## 4. The constructor wires the facade — methods never touch the raw client
 

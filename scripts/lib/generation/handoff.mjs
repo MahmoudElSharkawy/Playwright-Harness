@@ -18,7 +18,7 @@ export function createGenerationHandoff(sourceInput, executions, bindings) {
   const runs = executions.map(({run, roots, observations}) => {
     const result = assessRun(run, roots, observations);
     requireThat(['PASS', 'FAIL'].includes(result.status) && result.scenarios.every(s => s.requiredLifecycleComplete && !s.issues.length && s.stability !== 'unstable' && s.counts.evaluated === s.counts.required), 'Resolve indeterminate execution and lifecycle obligations before generation.');
-    return {runId: run.id, inputFingerprint: run.inputFingerprint, status: result.status, stability: result.stability, environment: run.inputs.environment.name,
+    return {runId: run.id, runRoot: roots.runRoot, inputFingerprint: run.inputFingerprint, status: result.status, stability: result.stability, environment: run.inputs.environment.name,
       scope: run.inputs.scenarios, operations: result.operations, scenarios: result.scenarios, evidence: result.evidence};
   });
   unique(runs.map(run => run.runId), 'observed runs');
@@ -33,7 +33,7 @@ export function createGenerationHandoff(sourceInput, executions, bindings) {
     requireThat(expected && scenario?.attempts.some(a => a.assertions.some(e => e.id === binding.expectationId && e.reliable && ['PASS', 'FAIL'].includes(e.status))), 'A source assertion needs a reliably evaluated execution assertion.');
   }
   // Include identities, definitions and lifecycle facts, never raw response bodies or protected values.
-  const observations = runs.map(run => ({runId: run.runId, inputFingerprint: run.inputFingerprint, status: run.status, stability: run.stability, environment: run.environment,
+  const observations = runs.map(run => ({runId: run.runId, runRoot: run.runRoot, inputFingerprint: run.inputFingerprint, status: run.status, stability: run.stability, environment: run.environment,
     scope: run.scope, operations: run.operations, evidence: run.evidence,
     scenarios: run.scenarios.map(s => ({id: s.id, status: s.status, stability: s.stability, counts: s.counts, resources: s.resources,
       attempts: s.attempts.map(a => ({identity: a.identity, operationFingerprint: a.operationFingerprint, outcome: a.outcome,

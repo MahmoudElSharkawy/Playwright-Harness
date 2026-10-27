@@ -21,9 +21,10 @@ service method with a business name.
    practices for anatomy, endpoint/query fields, facade wiring, step-wrapped actions,
    parameterized queries, validations, and the `close()` lifecycle. New SQL is sourced
    from the team query library `resources/Queries/` first (practice 3; contract in
-   `resources/Queries/README.md`). New API endpoints are sourced from the team
-   collection library `resources/apisCollections/` first (same practice 3; contract in
-   `resources/apisCollections/README.md`).
+   `resources/Queries/README.md`). Reuse API business methods first, then applicable
+   supplied collections in `resources/apisCollections/`; reviewed, runtime-verified
+   observations may fill missing operations without a collection prerequisite.
+   Follow practice 3 and the library README for both origins and their provenance.
 
 ## Boundaries
 

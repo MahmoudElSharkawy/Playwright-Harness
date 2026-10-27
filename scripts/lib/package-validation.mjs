@@ -101,6 +101,8 @@ const PUBLIC_HOSTS = new Set(['github.com', 'api.github.com', 'raw.githubusercon
 const PUBLIC_METADATA_URLS=new Set(['https://www.patreon.com/feross','https://feross.org/support','https://dotenvx.com/','https://opencollective.com/fastify','https://opencollective.com/express','https://opencollective.com/preact','https://paulmillr.com/funding/']);
 // Reviewed Google-managed CI cache and its official documentation; no host-wide exception.
 const PUBLIC_CI_URLS = new Set(['https://mirror.gcr.io', 'https://mirror.gcr.io/', 'https://docs.cloud.google.com/artifact-registry/docs/pull-cached-dockerhub-images']);
+// Official collection format identifier; other Postman coordinates still require review.
+const PUBLIC_SCHEMA_URLS = new Set(['https://schema.getpostman.com/json/collection/v2.1.0/collection.json']);
 export function privacyFindings(file, text) {
   const findings = [];
   const push = (line, rule) => findings.push({ file, line, rule });
@@ -124,7 +126,7 @@ export function privacyFindings(file, text) {
       if (host === 'dev.azure.com') {
         const organization=value.replace(/^https?:\/\/[^/]+\//,'').split('/')[0];
         if (!organization.startsWith('${') && !/^(?:your-org|example-org)$/.test(organization)) push(n, 'organization-url');
-      } else if (!synthetic && !PUBLIC_HOSTS.has(host) && !PUBLIC_METADATA_URLS.has(url.href) && !PUBLIC_CI_URLS.has(value)) push(n, 'unreviewed-url');
+      } else if (!synthetic && !PUBLIC_HOSTS.has(host) && !PUBLIC_METADATA_URLS.has(url.href) && !PUBLIC_CI_URLS.has(value) && !PUBLIC_SCHEMA_URLS.has(value)) push(n, 'unreviewed-url');
     }
   });
   if (/\.jsonl$/.test(file) && text.trim()) push(1, 'populated-runtime-history');

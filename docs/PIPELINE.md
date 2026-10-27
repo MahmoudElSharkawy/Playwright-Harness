@@ -158,6 +158,25 @@ and record what actually happens before any code is written.
   cleaned up, required restorations are explicit, and intentionally persistent outcomes
   may remain. Knowledge candidates need review before promotion.
 
+The shared browser boundary also writes `api-discovery.json` and sanitized,
+source-bound candidates under `.harness/knowledge-candidates/api/`. This is passive
+observation, without extra application requests. Reuse existing business methods and
+applicable supplied collections first. When an operation is missing, follow
+[observed API review and verification](reference/api.md#observed-api-knowledge).
+Review establishes route, required inputs, authentication/session, extraction,
+effects and lifecycle from permitted evidence; verification uses the configured API
+runtime. Neither capture nor an observed response changes the source's expectations.
+
+Use reviewed definitions through ordinary service/facade layers; an exported
+collection is optional. Preserve API/DB preparation where supported, source GUI
+journeys and required UI checks, shared `beforeEach` preconditions, case-owned inputs,
+fresh contexts and owned cleanup. A missing cleanup route or unresolved prerequisite
+stays visible. Discovery before the first API seed needs an already permitted setup
+path or fixture. Review/promote useful knowledge and optional observed collections
+before CANDIDATE; later file changes use the existing review and two-green gates.
+Summarize relevant discoveries, verified/reused operations, gaps and any saved
+collection path without claiming complete API coverage or changing run verdicts.
+
 For a specific record on a list page, apply
 [search-first targeting](../.agents/skills/pom-architecture/references/design-conventions.md#4b-record-targeting-on-list-pages).
 Observe the real control, supported identifiers, match semantics and search scope;
@@ -551,6 +570,7 @@ Details: [Azure DevOps](azure-devops.md),
 | `.harness/sources/` | Versioned scenario sources |
 | `.harness/runs/` | Loader records, exploration runs and evidence (ignored) |
 | `.harness/knowledge/` | Reviewed, sanitized project knowledge |
+| `.harness/knowledge/api/records/` | Immutable reviewed and runtime-verified API definitions |
 | `.harness/knowledge-candidates/` | Unreviewed observations awaiting review (ignored) |
 | `.harness/state/` | Generation command inputs and review artifacts |
 | `.harness/state/generation/<source-id>/` | Append-only, hash-linked generation history |

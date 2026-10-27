@@ -1,14 +1,19 @@
-# resources/apisCollections/ — the team API-collection knowledge library
+# resources/apisCollections/ — API knowledge from two origins
 
-The Postman collection exports (v2.1) in this folder are the QA team's curated API
-knowledge for the backends of the application under test: the endpoints that matter,
-their methods, payload shapes, auth flow, and the variable-chaining recipes that string
-them into working journeys (e.g. authenticate → create a record → confirm it). They are
-the API counterpart of `resources/Queries/` — durable application knowledge the harness
-consults instead of rediscovering. Governed by the 2026-08-26 "Team API-collection
-library & configuration sources" ruling (design-conventions, Decision records).
+Postman v2.1 files in this folder have two distinct authorities:
 
-## Ownership & lifecycle — curated on import (differs from `resources/Queries/`)
+| Origin | Filename | Authority |
+|---|---|---|
+| Supplied team export | `<collection-slug>.postman_collection.json` | The team's Postman workspace; import ritual below |
+| Observed collection | `<application>-observed.postman_collection.json` | Reviewed, sanitized consumer run evidence and verified API definitions |
+
+Search existing framework business methods first, then applicable supplied requests,
+then reviewed and verified observations for missing operations. A collection is not
+a prerequisite for execution or authoring. Both origins are derive-only knowledge;
+neither grants target access or changes API/DB channel selection. The 2026-10-26
+observed-API ruling extends the 2026-08-26 team-library ruling.
+
+## Team exports — ownership and import
 
 - **The source of truth is the team's Postman workspace.** Endpoint corrections happen
   there and arrive by re-export.
@@ -37,6 +42,43 @@ library & configuration sources" ruling (design-conventions, Decision records).
    (including "Generated from cURL" provenance notes), sample values, and item order.
 6. **Update the index below** and note anything odd for the team to confirm.
 
+## Observed collections — review and incremental promotion
+
+The shared browser boundary passively retains bounded, source-bound API candidates
+under `.harness/knowledge-candidates/api/`. Capture is not verification. Raw traffic
+stays in protected run storage; durable candidates remove scalar values and unknown
+path segments. Only a fixed public route vocabulary is retained, with bounded
+structures, ordering, provenance and explicit gaps. Opaque `{segmentN}` placeholders
+do not establish parameter names or prove a parameterized route.
+Unknown field names are removed under a conservative allowlist. Unknown request/query
+names block reuse; unknown response names remain a limitation, and extraction must
+refer to observed supported fields. See [API discovery](../../docs/reference/api.md#observed-api-knowledge).
+
+Review establishes the actual route, purpose, inputs, authentication/session needs,
+response extraction, effects and lifecycle from permitted evidence. A successful,
+source-bound validation through the configured API runtime is required before
+`reviewApiCandidate` writes immutable `.harness/knowledge/api/` records. A create
+observation never proves a delete route; unresolved authentication, body formats or
+cleanup remain gaps. This uses ordinary review and permitted execution, with no new
+per-endpoint approval ceremony. Reviewed definitions can be used before collection
+serialization through the existing catalog/helper/inline/exploration interfaces.
+
+`promoteObservedCollection` writes the separate observed filename with a writer lock,
+an integrity marker, stable request names, parameterized hosts/inputs, synthetic
+response examples where supported, review/validation provenance and a sanitization
+ledger in `x-harness-observed`. Equivalent reviewed definitions are deduplicated;
+distinct request definitions remain separate. Repeated promotion is idempotent.
+Authentication and chaining come only from established contracts; promotion adds no
+Postman scripts or invented authentication recipe.
+
+Supplied files remain unchanged. Review conflicts against applicable team requests
+explicitly and record the resolution; an observed collection never replaces the
+team contract. A changed owned collection or conflicting reviewed operation is
+refused rather than silently reconciled. New evidence creates new candidate/review
+records. Promote knowledge and collections before freezing a generation candidate;
+later changes require the existing review/verification workflow. Keep referenced
+sanitized evidence and review artifacts available for integrity checks.
+
 ## How the harness consumes the library — derive-only
 
 The library is **read, understood, and derived from — never replayed as-is**.
@@ -44,7 +86,7 @@ Consumption paths:
 
 | Consumer | When | What it derives |
 |---|---|---|
-| automate-test REFINE / prerequisite dictionary `api` routes | converting seed/verification intents to `api:` steps | proposed `integration/*_api.json` catalog entries (user-confirmed before EXPLORE) |
+| automate-test REFINE / prerequisite knowledge | resolving supported seed/verification intents | parameterized catalog/helper/inline/exploration definitions under existing permissions |
 | automate-test GENERATE / service-classes | authoring `Apis<Domain>` classes | `readonly <operation>_serviceName` fields, request payload shapes (typed parameter objects), auth flow |
 | test-data reusability ladder (step 2) | a rerun fails on consumed/stale data | the API seed/cleanup route that makes the case re-runnable |
 | Manual execution / native API runtime | frozen operation definitions | derive collection requests into parameterized defineApiOperation definitions; source samples are never replayed |
@@ -74,10 +116,11 @@ Consumption paths:
    reference numbers, and names flow between requests). Derive the
    equivalent TypeScript in the framework's test-data/utils layers; never execute the
    JavaScript itself.
-5. **Auth is the chained `{{token}}`** from the Token request — in the framework this
-   is an `Apis<Domain>` action whose response feeds subsequent calls; in native execution
-   it is the target credentialRef and protected input indirection. Literal tokens never appear
-   anywhere.
+5. **Authentication follows the established contract.** If a supplied Token request
+   documents chaining, derive the appropriate service action; native execution uses
+   the configured target credentialRef and protected inputs. Observed collections
+   do not invent token requests, session/CSRF flows or scripts. Literal tokens never
+   appear in code or observed collections.
 6. **Internal-host requests** (ops/back-office endpoints on internal IPs) are ops
    levers, not customer-facing endpoints — treat them as seed/fixture material with
    the same care the automate-test triage applies to anything hard-to-reverse.
@@ -90,9 +133,14 @@ Consumption paths:
 
 ### Sanitization ledger
 
-Append one dated subsection per import/re-export
+For team exports, append one dated subsection per import/re-export
 (`### <collection-slug>.postman_collection.json (imported <date>)`) recording exactly
 what the import ritual changed — filename normalization, dropped junk requests,
 renamed requests, stripped secrets/cookies/vault artifacts, host parametrization —
 so the diff against the team's next export stays explainable. Bodies, scripts,
 descriptions, and item order are never touched, and each entry says so.
+
+Observed promotion records its sanitization ledger inside the collection, keyed by
+immutable reviewed identity. It states which captured data was removed and that
+reviewed semantics and supplied files were preserved. Review this ledger with the
+collection diff; capture does not claim complete API coverage.
