@@ -1,6 +1,10 @@
 import {keys, fingerprint, requireThat} from '../execution-core/data.mjs';
 import {contextData} from '../context/model.mjs';
 import {escapeHtml} from '../requirements/review.mjs';
+import {parseStepsXml} from '../integrations/ado-steps.mjs';
+import {editableSteps} from '../integrations/ado-step-edit.mjs';
+import {dependencyGaps} from './references.mjs';
+import {reviewEvidenceStatus} from './review-evidence.mjs';
 
 export const TEST_TYPES = Object.freeze(['Functional', 'Accessibility', 'Compatibility', 'UIUX', 'Security', 'Performance', 'Responsiveness', 'Localization']);
 export const SCENARIO_TYPES = Object.freeze(['Positive', 'Negative']);
@@ -64,9 +68,10 @@ export function validateDesign(raw, state, requirements) {
 
 export function validateAssessment(raw, state) {
   const input = contextData(raw, 2 * 1024 * 1024);
-  keys(input, ['version', 'proposal', 'reviewer', 'cases', 'requirements'], 'independent design assessment');
+  keys(input, ['version', 'proposal', 'reviewer', 'cases', 'requirements', 'duplicates', 'evidence'], 'independent design assessment');
   requireThat(input.version === 1 && input.proposal === state.proposal, 'Assessment must bind the complete current proposal.');
   text(input.reviewer, 'Reviewer'); requireThat(input.reviewer !== state.draft.author, 'Use an independent reviewer and retain its actual assessment.');
+  requireThat(input.evidence, 'Retained independent reviewer run evidence is required.');
   requireThat(Array.isArray(input.cases) && input.cases.length === state.draft.cases.length && unique(input.cases.map(row => row.id)), 'Review every complete case once.');
   for (const row of input.cases) {keys(row, ['id', 'verdict', 'reason'], 'case assessment'); requireThat(state.draft.cases.some(item => item.id === row.id) && ['pass', 'revise'].includes(row.verdict), 'Invalid case assessment.'); text(row.reason, 'Source-grounding and expectation review evidence');}
   const entries = state.requirements.inventory.filter(entry => ['requirement', 'criterion'].includes(entry.kind));
@@ -78,19 +83,56 @@ export function validateAssessment(raw, state) {
     requireThat(Array.isArray(row.caseIds) && unique(row.caseIds) && row.caseIds.every(id => state.draft.mappings.some(mapping => mapping.caseId === id && mapping.requirementId === row.id)), 'Coverage assessment must cite actual mapped cases.');
     requireThat(row.verdict !== 'covered' || entry.disposition === 'accepted' && row.caseIds.length > 0 && row.caseIds.every(id => input.cases.find(item => item.id === id)?.verdict === 'pass'), 'Covered requirements need accepted source and passing independent case reviews.');
   }
+  const duplicates = exactDuplicates(state);
+  requireThat(Array.isArray(input.duplicates) && input.duplicates.length === duplicates.length && unique(input.duplicates.map(row => row.id)), 'Review every exact-content duplicate warning once.');
+  for (const row of input.duplicates) {
+    keys(row, ['id', 'verdict', 'reason'], 'duplicate assessment');
+    requireThat(duplicates.some(group => group.id === row.id) && ['retain', 'revise'].includes(row.verdict), 'Duplicate warnings need an explicit retain or revise decision.');
+    text(row.reason, 'Duplicate decision evidence');
+  }
   return input;
 }
 
-export function coverage(state, selected, {confirmed = false} = {}) {
+/** Compare exact content only; never infer missing native setup or merge case identities. */
+export function exactDuplicates(state) {
+  if (!state.draft) return [];
+  const groups = new Map();
+  const add = (content, row) => {const hash = fingerprint(content); if (!groups.has(hash)) groups.set(hash, []); groups.get(hash).push(row);};
+  for (const row of state.draft.cases) {
+    const preparation = state.draft.preparations.find(item => item.caseId === row.id);
+    add({prerequisites: row.prerequisites, testData: row.testData, steps: row.steps, setup: preparation?.steps ?? []}, {id: row.id, origin: 'proposal', coverageReferences: row.coverageReferences});
+  }
+  for (const item of state.evidence.existing ?? []) {
+    if (state.draft.cases.some(row => row.id === String(item.id))) continue;
+    try {
+      const xml = item.fields['Microsoft.VSTS.TCM.Steps']; editableSteps(xml, item.fields);
+      const steps = parseStepsXml(xml).map(({action, expected}) => ({action, expected}));
+      const match = /^Preparation\nPrerequisites: ([\s\S]+?)\nTest data: ([\s\S]+)$/.exec(steps[0]?.action ?? '');
+      if (!match || steps.slice(1).some(step => /^Preparation \d+\n/.test(step.action))) continue;
+      add({prerequisites: match[1], testData: match[2], steps: steps.slice(1), setup: []}, {id: String(item.id), origin: 'captured', coverageReferences: [{description: item.fields['System.Description'] ?? '', revision: item.rev}]});
+    } catch { /* Unsupported native preparation is not guessed for duplicate detection. */ }
+  }
+  return [...groups].filter(([, rows]) => new Set(rows.map(row => row.id)).size > 1)
+    .map(([id, cases]) => ({id, caseIds: cases.filter(row => row.origin === 'proposal').map(row => row.id), cases}));
+}
+
+export function duplicateGaps(state, ids) {
+  return exactDuplicates(state).filter(group => group.caseIds.some(id => ids.includes(id)) && state.review?.duplicates?.find(row => row.id === group.id)?.verdict !== 'retain');
+}
+
+export function coverage(state, selected, {confirmed = false, roots} = {}) {
   const ids = selectedIds(state.draft, selected), entries = state.requirements.inventory.filter(entry => ['requirement', 'criterion'].includes(entry.kind));
+  const reviewEvidence = reviewEvidenceStatus(roots, state), dependencies = dependencyGaps(state);
   const included = confirmed ? ids.filter(id => confirmedOutcomes(state).some(row => row.caseId === id)) : ids;
   const rows = entries.map(entry => {
     const assessment = state.review?.requirements.find(row => row.id === entry.id), mapped = state.draft.mappings.filter(row => row.requirementId === entry.id && included.includes(row.caseId));
-    const covered = entry.disposition === 'accepted' && assessment?.verdict === 'covered' && assessment.caseIds.length > 0 && assessment.caseIds.every(id => included.includes(id)) && mapped.length > 0;
-    return {requirementId: entry.id, status: covered ? 'covered' : entry.disposition !== 'accepted' ? 'unresolved' : 'gap', caseIds: mapped.map(row => row.caseId), reason: covered ? assessment.reason : assessment?.reason ?? 'Independent semantic coverage review is required.'};
+    const required = dependencies.filter(row => row.requirementIds.includes(entry.id));
+    const duplicates = duplicateGaps(state, assessment?.caseIds ?? []);
+    const covered = reviewEvidence.valid && !required.length && entry.disposition === 'accepted' && assessment?.verdict === 'covered' && assessment.caseIds.length > 0 && assessment.caseIds.every(id => included.includes(id)) && mapped.length > 0 && !duplicates.length;
+    return {requirementId: entry.id, status: covered ? 'covered' : entry.disposition !== 'accepted' || required.length ? 'unresolved' : 'gap', caseIds: mapped.map(row => row.caseId), reason: !reviewEvidence.valid ? reviewEvidence.reason : required.length ? required.map(row => `${row.referenceId}: ${row.status}; ${row.reason}`).join(' ') : duplicates.length ? 'Affected exact-content duplicate needs an independent retain or revise decision.' : assessment?.reason ?? 'Independent semantic coverage review is required.', ...(required.length ? {dependencies: required} : {})};
   });
   const gaps = rows.filter(row => row.status !== 'covered');
-  return {basis: confirmed ? 'confirmed applied or unchanged' : 'reviewed proposal', complete: entries.length > 0 && gaps.length === 0 && state.evidence.requirements.omissions.filter(row => !['absent', 'not-selected'].includes(row.reason)).length === 0, requirements: rows, gaps};
+  return {basis: confirmed ? 'confirmed applied or unchanged' : 'reviewed proposal', complete: entries.length > 0 && gaps.length === 0 && state.evidence.requirements.omissions.filter(row => !['absent', 'not-selected'].includes(row.reason)).length === 0, requirements: rows, gaps, reviewEvidence, dependencies};
 }
 
 const cell = value => escapeHtml(String(value)).replaceAll('|', '&#124;').replace(/[\\`*_~\[\]{}]/g, '\\$&').replace(/\r\n?|\n/g, '<br>');

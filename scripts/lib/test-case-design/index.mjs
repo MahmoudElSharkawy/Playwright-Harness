@@ -8,7 +8,9 @@ import {validateLocalSource} from '../local-source.mjs';
 import {readRequirements} from '../requirements/index.mjs';
 import {consumerIdentity} from '../requirements/sources.mjs';
 import {captureDesign, requireFreshDesign} from './sources.mjs';
-import {validateDesign, validateAssessment, renderDesign, coverage, selectedIds, proposalFingerprint, preparationSteps, confirmedOutcomes} from './review.mjs';
+import {validateDesign, validateAssessment, renderDesign, coverage, selectedIds, proposalFingerprint, preparationSteps, confirmedOutcomes, exactDuplicates, duplicateGaps} from './review.mjs';
+import {retainReviewEvidence, reviewEvidenceStatus} from './review-evidence.mjs';
+import {dependencyGaps} from './references.mjs';
 
 export const designPath = (roots, designId, name) => {id(designId); return consumerPath(roots, `.harness/state/test-case-design/${designId}/${name}`);};
 export function lockDesign(roots, designId) {
@@ -63,7 +65,7 @@ export function assessDesign(roots, designId, input) {
   const release = lockDesign(roots, designId);
   try {
     const state = readDesign(roots, designId); requireThat(state?.draft && !state.delivery, 'Save the full proposal and reconcile delivery before assessment.');
-    const review = validateAssessment(input, state);
+    const review = retainReviewEvidence(roots, state, validateAssessment(input, state));
     return saveDesignState(roots, designId, {...state, review, assessment: fingerprint(review)});
   } finally {release();}
 }
@@ -76,14 +78,18 @@ export function rejectDesign(roots, designId) {
 }
 export function designView(roots, designId, selected) {
   const state = readDesign(roots, designId); requireThat(state, 'Design is not prepared.');
-  return {...state, ...(state.draft ? {rendered: renderDesign(state.draft), coverage: coverage(state, selected), ...(state.delivery || state.deliveryHistory?.length ? {confirmedCoverage: coverage(state, selected, {confirmed: true})} : {})} : {})};
+  return {...state, ...(state.draft ? {rendered: renderDesign(state.draft), coverage: coverage(state, selected, {roots}), duplicates: exactDuplicates(state), ...(state.delivery || state.deliveryHistory?.length ? {confirmedCoverage: coverage(state, selected, {confirmed: true, roots})} : {})} : {})};
 }
-export function requireReviewed(state, selected) {
+export function requireReviewed(state, selected, roots) {
   requireThat(state?.draft && state.review, 'Independent source-grounding and semantic coverage assessment is required.');
+  const evidence = reviewEvidenceStatus(roots, state); requireThat(evidence.valid, evidence.reason);
   const ids = selectedIds(state.draft, selected); requireThat(ids.length > 0, 'Select at least one case.');
   for (const id of ids) {
     const row = state.draft.cases.find(row => row.id === id);
     requireThat(state.review.cases.find(row => row.id === id)?.verdict === 'pass', 'Affected case needs independent review corrections.');
+    const gaps = dependencyGaps(state, row.coverageReferences.map(ref => ref.requirementId));
+    requireThat(!gaps.length, `Resolve required reference evidence before delivering case ${id}: ${gaps.map(row => `${row.referenceId} (${row.status})`).join(', ')}.`);
+    requireThat(!duplicateGaps(state, [id]).length, 'Affected exact-content duplicate needs an independent retain or revise decision.');
     for (const ref of row.coverageReferences) requireThat(state.requirements.inventory.find(row => row.id === ref.requirementId)?.disposition === 'accepted', 'Resolve required business decisions before accepting or publishing the affected case.');
   }
   return ids;
@@ -91,9 +97,9 @@ export function requireReviewed(state, selected) {
 export async function designHandoff(roots, designId, options = {}) {
   const release = lockDesign(roots, designId);
   try {
-  const state = readDesign(roots, designId), ids = requireReviewed(state, options.selected);
+  const state = readDesign(roots, designId), ids = requireReviewed(state, options.selected, roots);
   requireThat(readRequirements(roots, state.analysisId)?.head === state.requirements.head, 'Requirements changed; revalidate before handoff.');
-  await requireFreshDesign(roots, state, options);
+  await requireFreshDesign(roots, state, {...options, selected: ids});
   const source = validateLocalSource({version: 1, id: designId, title: `Reviewed cases: ${designId}`, scenarios: ids.map(id => {
     const row = state.draft.cases.find(row => row.id === id), receipt = confirmedOutcomes(state).find(row => row.caseId === id);
     return {id, title: row.title, steps: [...preparationSteps(row, state.draft.preparations.find(row => row.caseId === id)), ...row.steps].map(step => ({action: step.action, expected: [step.expected]})),
@@ -103,7 +109,7 @@ export async function designHandoff(roots, designId, options = {}) {
     const stepOffset = source.scenarios.find(row => row.id === mapping.caseId).steps.length - state.draft.cases.find(row => row.id === mapping.caseId).steps.length;
     return {...mapping, checks: mapping.checks.map(check => ({...check, step: check.step + stepOffset}))};
   });
-  const content = {version: 1, proposal: state.proposal, sourceFingerprint: state.source, selected: ids, source, coverage: coverage(state, ids), mappings, execution: 'not-run', automation: 'not-generated', maintenance: 'Accepted revisions affecting existing automation belong to maintain-test; preserve failure history, cumulative budgets, independent review and two fresh scoped green runs.'};
+  const content = {version: 1, proposal: state.proposal, sourceFingerprint: state.source, selected: ids, source, coverage: coverage(state, ids, {roots}), mappings, execution: 'not-run', automation: 'not-generated', maintenance: 'Accepted revisions affecting existing automation belong to maintain-test; preserve failure history, cumulative budgets, independent review and two fresh scoped green runs.'};
   const identity = fingerprint(content), path = `.harness/sources/test-case-design/${designId}/${identity}.json`, tracePath = `.harness/state/test-case-design/${designId}/handoffs/${identity}.json`, result = {...content, path};
   for (const [relative, value] of [[path, source], [tracePath, result]]) {
     const file = consumerPath(roots, relative);

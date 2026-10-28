@@ -17,6 +17,7 @@ and mutable state. Never derive consumer paths from a skill's installation direc
 | `.harness/state/test-case-design/` | Case proposals, independent assessments, approvals, operation outcomes and recovery history |
 | `.harness/state/tracker/` | Consumer plan registries and append-only history |
 | `.harness/knowledge/prerequisites.md` | Reviewed prerequisite facts |
+| `.harness/knowledge/test-case-design-conventions.json` | Optional agreed business defaults; never acceptance or runtime configuration |
 | `.harness/knowledge/ui/` | Reviewed UI facts |
 | `.harness/knowledge/api/records/` | Immutable reviewed, runtime-verified API definitions and provenance |
 | `.harness/knowledge-candidates/` | Unreviewed observations, separate from reviewed knowledge |

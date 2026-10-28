@@ -42,6 +42,23 @@ disclose the gap. Do not invoke context-qa, refresh/build context, download unse
 attachments or expand neighboring regression scope. Captures with older broad
 attachment ingestion need explicit reselection.
 
+Use the captured reference diagnostics and [reference workflow](../../../docs/test-case-design.md#referenced-rules-and-provenance).
+Classify each direct reference as required, supporting, incidental or unresolved;
+keep every originating occurrence and affected selected-story inventory entry.
+Choose exact relevant rule passages, resolve deeper required evidence only through
+explicit supplemental selection, and reuse current owner decisions bound to the
+reference identity/revision/content through the existing acceptance workflow.
+Retrieval and classification never accept rules. Conflicts, unavailable rules and
+unresolved delegation remain affected gaps; unrelated valid cases can proceed.
+Relevant reference changes need affected revalidation and renewed approval even
+when the selected story is unchanged. Never backfill accepted historical captures.
+
+Reuse existing settings and selected reviewed context before the optional
+[conventions profile](../../../docs/test-case-design.md#optional-agreed-conventions).
+Accepted requirements and current authorized choices override defaults. Missing,
+stale or conflicting profiles permit supported design. Conventions cannot invent
+credentials, fixtures, expectations or locale coverage; preserve case/run ownership.
+
 Only accepted selected-story description/criteria authorize expected outcomes.
 Comments, conventions and neighboring stories can clarify or expose gaps; they do
 not automatically accept rules. Resolve contradictions, missing decisions and
@@ -135,6 +152,19 @@ not evidence of independent review. Fix findings and revalidate edited content.
 Record residual gaps after edits, selection and delivery. Never equate publication,
 approval or valid unchanged cases with passing execution.
 
+Ask the reviewer: “Can another agent identify the actor, starting state, target,
+inputs, action, observable outcome and necessary cleanup without inventing business
+information?” Name ambiguous cases/steps for source-backed clarification or revision;
+selectors and login bindings remain downstream refinement work. Retain the actual
+host run reference and complete reviewer output using the
+[assessment evidence contract](../../../docs/test-case-design.md#proposal-and-independent-assessment).
+Missing/stale output cannot pass the enhanced gate; names and hashes alone do not
+prove independence. Review every exact-content duplicate warning and record retain
+or revise with a reason. Consolidate only through explicit edits preserving all
+verifying mappings and real published IDs. Keep these concise diagnostics outside
+the unchanged case tables. Review or conventions never promote optional suggestions
+without both conditions in FR-4.
+
 ## Show the agreed chat review
 
 Display the renderer's summary first: distinct-case total, all eight test-type
@@ -193,8 +223,9 @@ uncertain outcomes and immutable receipts. Use real ADO IDs in subsequent propos
 ## Handoff
 
 Use `handoff` to write validated local scenarios and adjacent source/impact mappings
-for [execute-test](../execute-test/SKILL.md) or
-[automate-test](../automate-test/SKILL.md). Accepted revisions affecting existing
+for [automate-test](../automate-test/SKILL.md); published ADO cases use existing
+story/suite [execute-test](../execute-test/SKILL.md) intake. Preserve setup, explicit
+inputs/variations, every ordered action/expectation and necessary cleanup. Accepted revisions affecting existing
 automation go to [maintain-test](../maintain-test/SKILL.md). Preserve failure history,
 cumulative repair budgets, independent review and two fresh scoped green runs.
 Handoff/publication does not set tracker completion or claim repaired automation.
