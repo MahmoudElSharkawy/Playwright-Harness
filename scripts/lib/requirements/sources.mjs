@@ -12,14 +12,33 @@ export function requirementsClient(roots, options = {}) {
 }
 
 /** Strip real markup first; decode each entity alone so nested references stay literal. */
-export function ordinaryHtmlText(html) {
-  const text = html.replace(/<!--[\s\S]*?-->|<(\/?)([A-Za-z][A-Za-z0-9:-]*)(?:[^"'<>]|"[^"]*"|'[^']*')*>/g, (_, closing, tag) => {
+export function ordinaryHtmlText(html) {return normalizedHtml(html).text;}
+
+function normalizedHtml(html, located = false) {
+  let text = html, positions = located ? Array.from({length: html.length}, (_, index) => index) : null;
+  function replace(pattern, replacement) {
+    if (!located) {text = text.replace(pattern, replacement); return;}
+    let result = '', previous = 0; const next = [];
+    function copy(start, end) {result += text.slice(start, end); for (let index = start; index < end; index++) next.push(positions[index]);}
+    for (const match of text.matchAll(pattern)) {
+      copy(previous, match.index);
+      const value = typeof replacement === 'function' ? replacement(...match) : replacement;
+      if (value === match[0]) copy(match.index, match.index + match[0].length);
+      else {result += value; for (let index = 0; index < value.length; index++) next.push(positions[match.index]);}
+      previous = match.index + match[0].length;
+    }
+    copy(previous, text.length); text = result; positions = next;
+  }
+  replace(/<!--[\s\S]*?-->|<(\/?)([A-Za-z][A-Za-z0-9:-]*)(?:[^"'<>]|"[^"]*"|'[^']*')*>/g, (_, closing, tag) => {
     if (!tag) return '';
     tag = tag.toLowerCase();
     if (tag === 'br' || closing && /^(p|div|li|tr|h[1-6])$/.test(tag)) return '\n';
     return !closing && tag === 'li' ? '- ' : '';
-  }).replace(/&(?:#[xX][\da-fA-F]+|#\d+|[A-Za-z]+);/g, entity => decodeEntities(entity.replace(/^&#X/, '&#x')));
-  return redactRequirementLinks(text.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').replace(/[ \t]{2,}/g, ' ').trim());
+  });
+  replace(/&(?:#[xX][\da-fA-F]+|#\d+|[A-Za-z]+);/g, entity => decodeEntities(entity.replace(/^&#X/, '&#x')));
+  replace(/[ \t]+\n/g, '\n'); replace(/\n{3,}/g, '\n\n'); replace(/[ \t]{2,}/g, ' '); replace(/^\s+|\s+$/g, '');
+  replace(/https?:\/\/[^\s<>"']+/gi, value => requirementDestination(value).status === 'redacted' ? '[REDACTED LINK]' : value);
+  return {text, positions};
 }
 
 const redactRequirementLinks = text => text.replace(/https?:\/\/[^\s<>"']+/gi, value => requirementDestination(value).status === 'redacted' ? '[REDACTED LINK]' : value);
@@ -36,7 +55,7 @@ export function requirementDestination(value) {
 
 /** Inspect real anchors before decoding: encoded markup remains ordinary literal text. */
 export function requirementLinks(html, sourceId, revision, location) {
-  const links = [], text = ordinaryHtmlText(html), tags = /<!--[\s\S]*?-->|<(\/?)([A-Za-z][A-Za-z0-9:-]*)(?:[^"'<>]|"[^"]*"|'[^']*')*>/g;
+  const links = [], {positions} = normalizedHtml(html, true), tags = /<!--[\s\S]*?-->|<(\/?)([A-Za-z][A-Za-z0-9:-]*)(?:[^"'<>]|"[^"]*"|'[^']*')*>/g;
   let anchor;
   for (const match of html.matchAll(tags)) {
     if (match[2]?.toLowerCase() !== 'a') continue;
@@ -48,13 +67,20 @@ export function requirementLinks(html, sourceId, revision, location) {
   }
   if (anchor) save(anchor, html.length, false);
   function save(value, end, closed) {
-    const attribute = /(?:\s)href\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/i.exec(value.tag);
-    const destination = attribute ? (attribute[1] ?? attribute[2] ?? attribute[3]).replace(/&(?:#[xX][\da-fA-F]+|#\d+|[A-Za-z]+);/g, entity => decodeEntities(entity.replace(/^&#X/, '&#x'))) : '';
-    const visible = ordinaryHtmlText(html.slice(value.body, end)), prefix = ordinaryHtmlText(html.slice(0, value.body));
-    const textStart = visible ? text.indexOf(visible, Math.max(0, prefix.length - 1)) : prefix.length;
+    const attributes = value.tag.replace(/^<a\b/i, '').slice(0, -1), hrefs = []; let cursor = 0, valid = true;
+    for (const match of attributes.matchAll(/([^\s="'<>/]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/g)) {
+      if (attributes.slice(cursor, match.index).trim()) valid = false;
+      if (match[1].toLowerCase() === 'href') hrefs.push(match[2] ?? match[3] ?? match[4]);
+      cursor = match.index + match[0].length;
+    }
+    if (attributes.slice(cursor).trim().replace(/\/$/, '')) valid = false;
+    const destination = typeof hrefs[0] === 'string' ? hrefs[0].replace(/&(?:#[xX][\da-fA-F]+|#\d+|[A-Za-z]+);/g, entity => decodeEntities(entity.replace(/^&#X/, '&#x'))) : '';
+    const visible = ordinaryHtmlText(html.slice(value.body, end));
+    const boundary = raw => {let low = 0, high = positions.length; while (low < high) {const middle = (low + high) >>> 1; if (positions[middle] < raw) low = middle + 1; else high = middle;} return low;};
+    const textStart = boundary(value.body), textEnd = boundary(end);
     const safeText = contextParts(visible ? [{location, text: visible}] : []).contributions[0]?.text ?? '';
     const safe = requirementDestination(destination);
-    links.push({sourceId, revision, location, start: value.start, end, textStart, textEnd: textStart < 0 ? -1 : textStart + visible.length, text: safeText, ...safe, ...(!closed && safe.status !== 'redacted' ? {status: 'malformed'} : {})});
+    links.push({sourceId, revision, location, start: value.start, end, textStart, textEnd, text: safeText, ...safe, ...((!closed || !valid || hrefs.length !== 1) && safe.status !== 'redacted' ? {status: 'malformed'} : {})});
   }
   return links;
 }

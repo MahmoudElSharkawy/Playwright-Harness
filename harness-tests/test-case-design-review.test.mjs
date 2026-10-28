@@ -42,6 +42,9 @@ test('exact-content warnings preserve mappings and meaningful differences; ambig
   assert.equal(groups[0].cases.flatMap(row => row.coverageReferences).length, 2);
   const changed = structuredClone(state); changed.draft.cases[1].testData += ' Different locale.';
   assert.equal(review.exactDuplicates(changed).length, 0);
+  const differentReadiness = structuredClone(state);
+  differentReadiness.draft.preparations[1].expected = 'The dedicated account is disabled.';
+  assert.equal(review.exactDuplicates(differentReadiness).length, 0, 'Different required starting states are not exact duplicates.');
   const assessment = assessmentFor(state); assessment.cases[0] = {id: 'NEW-01', verdict: 'revise', reason: 'The action does not identify the target account; source-backed clarification is required.'};
   assessment.requirements[0].verdict = 'gap';
   assessDesign(f.roots, 'login', retainAssessment(f.roots, state, assessment));
@@ -97,6 +100,9 @@ test('captured native duplicate detection preserves coverage and skips unsupport
   state.evidence.existing.push({id: 101, rev: 7, fields: {'Microsoft.VSTS.TCM.Steps': xml, 'System.Description': 'Story 200 accepted rule'}});
   const group = review.exactDuplicates(state)[0];
   assert.deepEqual(group.cases.map(row => row.id), ['NEW-01', '101']); assert.equal(group.cases[1].coverageReferences[0].revision, 7);
+  const differentReadiness = steps.map((step, index) => ({id: index + 1, action: {text: step.action}, expected: {text: index === 0 ? 'The dedicated account is disabled.' : step.expected}}));
+  state.evidence.existing[0].fields['Microsoft.VSTS.TCM.Steps'] = editStepsXml('<steps id="0" last="0"></steps>', {}, differentReadiness);
+  assert.deepEqual(review.exactDuplicates(state), [], 'Native preparation expectations also preserve starting-state differences.');
   state.evidence.existing[0].fields['Microsoft.VSTS.TCM.Steps'] = '<steps><compref id="1" ref="99"/></steps>';
   assert.deepEqual(review.exactDuplicates(state), []);
   for (const field of ['prerequisites', 'testData']) {const variant = structuredClone(state); const copy = {...structuredClone(row), id: 'NEW-copy', [field]: row[field] + ' Different role, locale or state.'}; variant.draft.cases.push(copy); assert.deepEqual(review.exactDuplicates(variant), []);}

@@ -100,7 +100,7 @@ export function exactDuplicates(state) {
   const add = (content, row) => {const hash = fingerprint(content); if (!groups.has(hash)) groups.set(hash, []); groups.get(hash).push(row);};
   for (const row of state.draft.cases) {
     const preparation = state.draft.preparations.find(item => item.caseId === row.id);
-    add({prerequisites: row.prerequisites, testData: row.testData, steps: row.steps, setup: preparation?.steps ?? []}, {id: row.id, origin: 'proposal', coverageReferences: row.coverageReferences});
+    add({prerequisites: row.prerequisites, testData: row.testData, steps: row.steps, setup: preparation?.steps ?? [], readiness: preparation?.expected ?? null}, {id: row.id, origin: 'proposal', coverageReferences: row.coverageReferences});
   }
   for (const item of state.evidence.existing ?? []) {
     if (state.draft.cases.some(row => row.id === String(item.id))) continue;
@@ -109,7 +109,7 @@ export function exactDuplicates(state) {
       const steps = parseStepsXml(xml).map(({action, expected}) => ({action, expected}));
       const match = /^Preparation\nPrerequisites: ([\s\S]+?)\nTest data: ([\s\S]+)$/.exec(steps[0]?.action ?? '');
       if (!match || steps.slice(1).some(step => /^Preparation \d+\n/.test(step.action))) continue;
-      add({prerequisites: match[1], testData: match[2], steps: steps.slice(1), setup: []}, {id: String(item.id), origin: 'captured', coverageReferences: [{description: item.fields['System.Description'] ?? '', revision: item.rev}]});
+      add({prerequisites: match[1], testData: match[2], steps: steps.slice(1), setup: [], readiness: steps[0].expected}, {id: String(item.id), origin: 'captured', coverageReferences: [{description: item.fields['System.Description'] ?? '', revision: item.rev}]});
     } catch { /* Unsupported native preparation is not guessed for duplicate detection. */ }
   }
   return [...groups].filter(([, rows]) => new Set(rows.map(row => row.id)).size > 1)

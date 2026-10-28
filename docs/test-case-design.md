@@ -290,7 +290,7 @@ upgraded into enhanced review evidence. Edited proposals need a newly bound revi
 
 The `duplicates` diagnostic compares exact prerequisites, test data and ordered
 action/expectation content, ignoring IDs and titles. It includes captured existing
-cases when their native preparation can be interpreted without guessing. Split setup,
+cases when their native preparation can be interpreted without guessing. Preparation outcomes, split setup,
 roles, languages, data, states and outcomes remain meaningful differences. Every
 warning needs an assessment entry `{id, verdict: "retain" | "revise", reason}`;
 use `[]` when there are none. A `revise` decision withholds affected delivery until

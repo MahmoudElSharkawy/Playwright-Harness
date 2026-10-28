@@ -22,6 +22,27 @@ async function fixture(t, text = 'Apply postcode validation from #1180.') {
   return f;
 }
 const reference = state => state.evidence.references.items.find(row => row.workItemId === 1180);
+
+test('hyperlink offsets bind the actual repeated-text paragraph instead of an earlier equal label', async t => {
+  const f = await fixture(t, '<p>A</p><p><a href="https://ado.example.test/collection/demo/_workitems/edit/1180">A</a> applies.</p>');
+  let state = await f.prepare();
+  const part = state.evidence.requirements.parts.find(row => row.location === criteria);
+  const link = state.evidence.requirements.links.find(row => row.location === criteria);
+  assert.equal(link.textStart, 2); assert.equal(link.textEnd, 3);
+  updateInventory(f.roots, 'postcode', {version: 1, snapshot: state.requirements.snapshot, partitions: [{partId: part.id, entries: [{id: 'unrelated', start: 0, end: 1}, {id: 'delegated', start: 2, end: part.text.length}]}], changes: []});
+  state = await f.prepare({version: 1, analysisId: 'postcode'});
+  const {dependencyGaps} = await import('../scripts/lib/test-case-design/references.mjs');
+  assert.deepEqual(reference(state).requirementIds, ['delegated']);
+  assert.equal(dependencyGaps(state, ['delegated']).length, 1);
+  assert.equal(dependencyGaps(state, ['unrelated']).length, 0);
+});
+
+test('href-looking text inside another quoted attribute cannot replace the real destination', async t => {
+  const f = await fixture(t, `<a title=' href="https://ado.example.test/collection/demo/_workitems/edit/999"' href="https://ado.example.test/collection/demo/_workitems/edit/1180">rules</a>`);
+  const state = await f.prepare();
+  assert(reference(state));
+  assert(!f.state.requests.some(row => row.path === 'wit/workitems/999'));
+});
 const selectionFor = state => {
   const ref = reference(state), entry = state.requirements.inventory.find(row => row.kind === 'criterion');
   return {version: 1, analysisId: 'postcode', references: [{id: ref.id, classification: 'required', requirementIds: [entry.id], reason: 'Selected story delegates postcode validation.', rules: [{location: criteria, quote: ref.source.parts.find(row => row.location === criteria).text}]}]};
