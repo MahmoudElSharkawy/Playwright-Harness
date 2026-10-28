@@ -81,6 +81,39 @@ After accepting or partitioning inventory entries, run design `prepare` again wi
 `{"version":1,"analysisId":"sign-in"}` to bind that updated acceptance head before
 saving the proposal. Include the same selected context/case IDs when applicable.
 
+## Quality considerations
+
+Use these as internal prompts under the canonical skill's
+[quality guidance and FR-4](../.agents/skills/test-case-design/SKILL.md#consider-optional-quality-suggestions),
+not mandatory cases or an additional review form. For affected UI, normally consider
+responsiveness, accessibility and visual/usability risks. Select concerns in proportion
+to the feature's behavior, platform, dependencies and impact, including material
+uncertainty; do not treat absence from acceptance criteria as evidence of irrelevance.
+
+- **General:** UI/visual consistency; UX/usability; responsive/adaptive layouts;
+  accessibility; browser/OS/device compatibility; input validation and edge cases;
+  application states/feedback; authentication/authorization; security/privacy;
+  performance/scalability; reliability/error recovery; data integrity/concurrency;
+  integrations; localization/RTL; end-to-end journeys/regression impact.
+- **Accessibility, where applicable:** keyboard/focus behavior, screen-reader
+  semantics and feedback, contrast, text resizing/reflow, touch targets and non-text
+  alternatives, guided by the changed feature and agreed target. These are examples,
+  not an exhaustive checklist or assumed compliance obligation.
+- **Native/cross-platform mobile, where relevant:** OS conventions; shared versus
+  platform-specific behavior; mobile layouts/input/accessibility; lifecycle and
+  interruptions; connectivity/offline behavior; permissions/device integrations;
+  installation, updates and device resources. A website may still have mobile-browser
+  input, layout and network risks; native lifecycle or installation prompts do not
+  imply native-app scope or offline support.
+
+Keep accepted required coverage authoritative, reference adequate reusable cases in
+scope and leave additional concerns advisory. Do not assume empty or special-character
+inputs must be rejected, infer thresholds, or expand into neighboring workflows.
+Show only useful suggestions outside the existing tables; no routine 22-area or N/A
+matrix. An explicitly requested applicability assessment can explain feature-specific
+exclusions. The checkout example below demonstrates selection and promotion without
+changing the case schema or requiring reference-resolution capabilities from #128.
+
 ## Proposal and independent assessment
 
 Save a version-1 JSON proposal with `author`, returned `source` fingerprint,
@@ -190,6 +223,165 @@ business verification; it is not a separately maintained case field or cleanup r
 Display every full case with this single-table structure, continuing long cases.
 No extra final-result row, review status, priority, execution layer, technique,
 counterexample, risk block, nested tables or step-summary substitution is supported.
+
+### Checkout example
+
+Illustrative requirements and data only; these are not live project evidence or executed tests. This example preserves the current main-proposal format and shows the optional addition separately. AC/BR labels below are readable sample references; real proposals retain their actual inventory identities and verifying-step mappings.
+
+#### Supplied story and accepted requirements
+
+**Edit the delivery address during checkout.** A signed-in shopper can edit their cart's delivery address. The change introduces a two-column form, a custom country selector, and an external address-lookup service.
+
+- **AC-1:** Saving a populated address updates the checkout summary and persists after reload.
+- **AC-2:** An empty postcode prevents saving, displays "Postcode is required," and preserves the previously saved address.
+- **AC-3:** Cancel closes the editor without saving changes.
+- **BR-1, in the accepted description:** A signed-in shopper cannot update another shopper's cart. Denied attempts leave that cart unchanged.
+
+This release is an English-language website. Supported browser/screen-size matrices, accessibility targets, and lookup-failure behavior were not supplied. No existing cases were supplied, so reuse cannot yet be confirmed.
+
+Each case uses its own disposable cart. Accepted synthetic fixtures:
+
+- **Original address:** 12 Oak Road, London, SW1A 1AA, United Kingdom.
+- **Replacement address:** 24 Rue des Fleurs, Paris, 75001, France.
+
+#### Main proposal — existing format
+
+**Total cases: 4 · Positive: 2 · Negative: 2**
+
+| Test type | Total |
+|---|---:|
+| Functional | 3 |
+| Accessibility | 0 |
+| Compatibility | 0 |
+| UIUX | 0 |
+| Security | 1 |
+| Performance | 0 |
+| Responsiveness | 0 |
+| Localization | 0 |
+
+| ID | Proposed action | Title | Prerequisites | Final expected results | Coverage reference | Test type | Scenario type |
+|---|---|---|---|---|---|---|---|
+| NEW-01 | Create | Save the delivery address | Signed-in shopper with an editable cart | Replacement address appears in checkout after reload | AC-1 | Functional | Positive |
+| NEW-02 | Create | Prevent saving without a postcode | Cart has an existing address | Required-field error appears; existing address remains saved | AC-2 | Functional | Negative |
+| NEW-03 | Create | Cancel address changes | Cart has an existing address | Editor closes; existing address remains saved | AC-3 | Functional | Positive |
+| NEW-04 | Create | Deny changes to another shopper's cart | Two shoppers with separate carts | Update is denied; target cart's address remains unchanged | Description: BR-1 | Security | Negative |
+
+| **1. CASE DETAILS** | | | | |
+|---|---|---|---|---|
+| **ID** | **Title** | **Coverage reference** | **Test type** | **Scenario type** |
+| NEW-01 | Save the delivery address | AC-1 | Functional | Positive |
+| **2. SETUP** | | | | |
+| **Prerequisites** | Shopper is signed in; an editable cart contains the original address | | | |
+| **Test data** | Original and replacement addresses listed above | | | |
+| **3. STEPS** | **Step action** | **Step expected result** | | |
+| **1** | Open the cart's delivery-address editor | The editor displays the original address | | |
+| **2** | Enter the replacement address and select Save | The checkout summary displays the replacement street, city, postcode, and country | | |
+| **3** | Reload checkout | The replacement address remains displayed for the same cart | | |
+
+| **1. CASE DETAILS** | | | | |
+|---|---|---|---|---|
+| **ID** | **Title** | **Coverage reference** | **Test type** | **Scenario type** |
+| NEW-02 | Prevent saving without a postcode | AC-2 | Functional | Negative |
+| **2. SETUP** | | | | |
+| **Prerequisites** | Shopper is signed in; an editable cart contains the original address | | | |
+| **Test data** | Replacement address with its postcode empty; original address retained for comparison | | | |
+| **3. STEPS** | **Step action** | **Step expected result** | | |
+| **1** | Open the delivery-address editor | The editor displays the original address | | |
+| **2** | Enter the replacement address, leave postcode empty, and select Save | "Postcode is required" appears; saving is prevented | | |
+| **3** | Reload checkout | The original address remains saved; the attempted replacement was not persisted | | |
+
+| **1. CASE DETAILS** | | | | |
+|---|---|---|---|---|
+| **ID** | **Title** | **Coverage reference** | **Test type** | **Scenario type** |
+| NEW-03 | Cancel address changes | AC-3 | Functional | Positive |
+| **2. SETUP** | | | | |
+| **Prerequisites** | Shopper is signed in; an editable cart contains the original address | | | |
+| **Test data** | Original and replacement addresses listed above | | | |
+| **3. STEPS** | **Step action** | **Step expected result** | | |
+| **1** | Open the editor and enter the replacement address | The editor contains the replacement values as unsaved edits | | |
+| **2** | Select Cancel | The editor closes; checkout displays the original address | | |
+| **3** | Reload checkout | The original address remains saved | | |
+
+| **1. CASE DETAILS** | | | | |
+|---|---|---|---|---|
+| **ID** | **Title** | **Coverage reference** | **Test type** | **Scenario type** |
+| NEW-04 | Deny changes to another shopper's cart | Description: BR-1 | Security | Negative |
+| **2. SETUP** | | | | |
+| **Prerequisites** | Dedicated shoppers A and B have separate carts; B's cart contains the original address; the cart-update interface is available for testing | | | |
+| **Test data** | A's authenticated session; B's cart identifier; replacement address | | | |
+| **3. STEPS** | **Step action** | **Step expected result** | | |
+| **1** | Using A's session, submit an address update targeting B's cart through the cart-update interface | The update is denied | | |
+| **2** | In B's isolated session, open B's checkout | B's cart still displays the original address | | |
+
+#### Optional quality suggestions
+
+| Area | Suggested check | Decision or context needed |
+|---|---|---|
+| **Save recovery and unsaved work** | Check recovery after a lost save response or retry, and what happens when navigating away with unsaved edits. Cancel is already covered by AC-3. | Expected saved-state confirmation, retry behavior and treatment of unsaved edits. |
+| **Lookup integration and feedback** | Check delayed, empty, failed or unexpected lookup responses and the user's next available action. | Loading/error behavior, fallback options and any response-time target. |
+| **Privacy** | Check which address fields reach the lookup provider and whether personal data appears in diagnostics. | Applicable data-sharing, logging and retention policies. |
+| **Accessibility** | Check keyboard operation, focus, labels and validation announcements for the custom controls. | Applicable accessibility target and supported assistive technologies. |
+| **Layout and browser/input compatibility** | Check the form, selector and validation messages across supported viewports, zoom levels, browsers and input methods. | Supported combinations, design expectations and existing shared coverage. |
+
+> Selected for the changed layout, custom control, external lookup and personal data; overlapping concerns are grouped. These suggestions add no cases: the proposal remains at four. Request selected additions under [FR-4](../.agents/skills/test-case-design/SKILL.md#fr-4-promote-only-requested-supported-suggestions).
+
+#### User-controlled promotion
+
+This exchange illustrates [FR-4](../.agents/skills/test-case-design/SKILL.md#fr-4-promote-only-requested-supported-suggestions);
+it is not evidence of a completed evaluation, execution or publication.
+
+1. **Context without a creation request.** The user says, “Approve the four cases.
+   Supported viewports are 390×844, 768×1024 and 1440×900.” Keep the four cases,
+   IDs, mappings and counts. Reuse those sizes if responsive coverage is requested;
+   approval of the original proposal selects no suggestions and triggers no delivery.
+2. **Request with unresolved expectations.** The user says, “Create responsive cases
+   only; leave the other suggestions pending.” Retain that request and ask only the
+   remaining layout decision: “Should controls avoid clipping and unintended overlap,
+   with no horizontal page scrolling, and remain reachable and operable using vertical
+   scrolling where necessary, for the initial form, expanded selector and postcode
+   validation state at 100% zoom?” These are proposed expectations, not accepted rules;
+   the proposal still has four cases.
+3. **Request plus captured agreement.** The user accepts those expectations for all
+   three states and sizes at 100% zoom and asks to record the accepted addition.
+   Update the selected local source or capture the authorized owner decision through
+   the existing requirements workflow, retain acceptance evidence, and prepare again
+   before saving the new case. Do not invent an inventory ID or automatically edit
+   a remote story. The earlier creation request remains valid; no repeated request
+   or confirmation is needed. Only responsive coverage is selected.
+
+The following additional case uses **R-1** as a readable sample label for the
+accepted addition; actual mappings use the captured inventory identity. AC-2 still
+supports the required-field message. Map the shared layout checks at every state,
+not only the initial form, in each configured viewport.
+
+| **1. CASE DETAILS** | | | | |
+|---|---|---|---|---|
+| **ID** | **Title** | **Coverage reference** | **Test type** | **Scenario type** |
+| NEW-05 | Use the address form at supported viewport sizes | Description: R-1 — Responsive address form; AC-2 | Responsiveness | Positive |
+| **2. SETUP** | | | | |
+| **Prerequisites** | Signed-in shopper with an editable cart containing the original address; a fresh original-address fixture for each viewport configuration | | | |
+| **Test data** | Viewports: 390×844, 768×1024, 1440×900 CSS pixels; browser zoom: 100%; original address above; replacement country for selector interaction. Repeat the steps for each configuration. | | | |
+| **3. STEPS** | **Step action** | **Step expected result** | | |
+| **1** | Set the viewport and open the address editor | No controls are clipped or unintentionally overlapped; no horizontal page scrolling occurs. Fields and actions remain reachable and operable, using vertical scrolling where necessary. | | |
+| **2** | Expand the country selector, inspect the expanded state, then select the replacement country | While expanded, no controls or options are clipped or unintentionally overlapped; no horizontal page scrolling occurs. Fields, actions and options remain reachable and operable, using vertical scrolling where necessary. | | |
+| **3** | Clear the postcode and select Save | In the validation state, no controls are clipped or unintentionally overlapped; no horizontal page scrolling occurs. Fields and actions remain reachable and operable, using vertical scrolling where necessary. “Postcode is required” remains readable without obscuring fields or actions. | | |
+
+The refreshed ordinary proposal has **5 cases · Positive: 3 · Negative: 2**:
+Functional 3, Security 1, Responsiveness 1, and zero for the other five test types.
+Render the full summary, five-row overview and all five complete case tables again,
+including the unchanged original four; this illustrative delta is not a replacement
+for the normal review. The overview's final result comes from the last mapped
+verification. Review NEW-05 independently; approval of the original four does not
+approve the addition. Unselected suggestions remain advisory. Partial approval keeps
+unapproved cases and required gaps visible, with existing publication safeguards.
+
+If an accepted criterion instead requires an unavailable referenced rule, retain an
+affected requirement gap while supported cases proceed through existing gates. If
+only an optional suggestion lacks a design reference, keep that missing context
+advisory. Supplied targets or languages alone add no suggestion-derived cases.
+Already accepted accessibility requirements belong in the main proposal; adequate
+shared coverage is proposed for reuse without cloning, merging or deleting cases.
+When no material additional concern remains, omit the suggestions section entirely.
 
 ## Preview, approve, publish and recover
 

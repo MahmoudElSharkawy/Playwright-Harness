@@ -48,6 +48,54 @@ not automatically accept rules. Resolve contradictions, missing decisions and
 unaccepted assumptions before delivering affected cases. Empty values, spaces and
 special characters do not automatically imply rejection.
 
+## Consider optional quality suggestions
+
+Use the [quality considerations](../../../docs/test-case-design.md#quality-considerations)
+as internal prompts across the existing eight test types. Judge relevance from
+behavior, platform, scope, dependencies, affected workflows and risk; absence from
+acceptance criteria alone does not make an area irrelevant. Match depth to risk,
+complexity and impact. Reference adequate reusable coverage within authorized scope.
+Select only material concerns not already covered; no category quotas, forced
+combinations, placeholder cases or routine full-checklist/N/A matrix.
+
+Accepted in-scope quality requirements belong in the main proposal with normal
+source/step/data/expectation mappings. Missing evidence or decisions needed for
+accepted behavior remain affected requirement gaps. Missing context for an optional
+suggestion does not block otherwise valid cases or alter required-coverage totals.
+Clearly highlight material security or data-loss risks without expanding scope.
+Distinguish explicit requirements, applicable documented standards/design systems/
+agreed targets, quality risks and assumptions; a retrieved reference alone accepts
+no new behavior and requests no cases.
+
+When useful, place a short optional suggestions section outside the case tables.
+Put material concerns first, consolidate overlaps and explain selection once in a
+short footer. Each suggestion identifies the affected behavior/risk, proposed check
+and any missing scope, rule, standard or observable expected-result decision.
+Omit clearly irrelevant areas; flag material uncertainty instead of guessing.
+Zero suggestions is valid. Suggestions have no case IDs, case counts or accepted
+coverage credit, and never enter publication or execution/automation handoffs.
+
+### FR-4: Promote only requested, supported suggestions
+
+Create suggestion-derived cases only when the user explicitly requests the selected
+cases **and** their scope and observable expected results are agreed, documented and
+supported through the existing accepted-source workflow. Neither condition alone
+is enough. Reviewing suggestions, confirming relevance, supplying targets or
+approving the original proposal does not request extra cases. A clear selection
+such as “Create cases for responsiveness and accessibility” is sufficient as the
+request; keep it across turns and resolve only remaining essential decisions,
+reusing agreed context without repeated confirmation. One message may satisfy both
+conditions. Generic approval cannot settle an unspecified business rule or target.
+
+Before saving an affected case, capture any agreed addition through the existing
+authorized source-update/inventory acceptance process and prepare again against
+that accepted source. Bind normal mappings to actual inventory identities, steps,
+data and expectations; never invent IDs, messages, rejection behavior, thresholds,
+environments or compliance obligations, or automatically edit remote story fields.
+Add only requested, supported cases to the ordinary proposal and independent review;
+leave unselected or unresolved suggestions advisory. Refresh normal counts and full
+rendering. Existing publication and execution authorizations remain separate.
+
 ## Design and independently evaluate
 
 Choose Create, Update, Reuse unchanged or no-change from actual differences and
@@ -65,7 +113,10 @@ action is a review control. Choose one test type: Functional, Accessibility,
 Compatibility, UIUX, Security, Performance, Responsiveness or Localization; choose
 Positive or Negative. Nonfunctional cases require accepted conditions, environments
 and measurable targets in these ordinary fields. Missing workloads, thresholds or
-compliance decisions remain gaps; classification authorizes no execution.
+compliance decisions for accepted requirements remain gaps; optional concerns follow
+[FR-4](#fr-4-promote-only-requested-supported-suggestions). Classification authorizes
+no execution. Apply positive, negative, boundary and failure variations where
+meaningful within the existing fields.
 
 Map every accepted in-scope criterion and testable description requirement to actual
 verifying steps, exact expectations and test data. One criterion may need several
