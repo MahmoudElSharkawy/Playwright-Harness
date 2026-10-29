@@ -316,6 +316,9 @@ Show `rendered.markdown` in chat. It starts with the distinct-case total, counts
 for both scenario types and all eight test types, including zeros. The overview
 contains every case. The final expected result is derived from the last mapped
 business verification; it is not a separately maintained case field or cleanup result.
+The complete output also includes review identity/status, current gaps and supplied
+advisory notes outside these tables. Deliver its [Markdown copy](#markdown-review-copy)
+alongside the full chat review.
 
 **Total cases: 1 · Positive: 1 · Negative: 0**
 
@@ -348,6 +351,53 @@ business verification; it is not a separately maintained case field or cleanup r
 Display every full case with this single-table structure, continuing long cases.
 No extra final-result row, review status, priority, execution layer, technique,
 counterexample, risk block, nested tables or step-summary substitution is supported.
+
+### Markdown review copy
+
+`review`, `edit`, `assess` and `read` automatically write the exact returned
+`rendered.markdown` bytes to the consumer-owned
+`.harness/runs/test-case-design/<design-id>/<state-head>.md`. The existing renderer
+still owns the summary, overview and every complete case table. Review identity,
+recorded independent-review verdict counts, retained-evidence status, coverage gaps,
+duplicate decisions and recorded delivery outcomes appear separately after the
+tables. A local design does not need an ADO story ID.
+
+The filename uses the existing state head; the content also identifies the existing
+proposal revision. Case edits and assessments return their current file paths.
+Repeated reads atomically replace that revision's derived copy so changed advisory
+notes or unavailable retained review evidence cannot leave stale displayed status.
+Older state revisions retain their separate copies. Neither writing nor sharing a
+copy accepts requirements, approves cases, publishes them or establishes execution
+readiness. Approval fingerprints and execution/automation handoffs are unchanged.
+
+If the host adds relevant gaps, conventions/reference clarification or optional
+suggestions to the review, supply exactly those notes as Markdown strings in an
+optional consumer JSON file (maximum 64 KiB):
+
+```json
+{
+  "gaps": "The fixture owner still needs confirmation; supported cases remain available.",
+  "suggestions": "- Consider keyboard focus for the custom selector after the team agrees the expected focus order. No additional case has been requested."
+}
+```
+
+```bash
+npx --no pom-harness test-case-design read --id sign-in --notes review-notes.json
+```
+
+`--notes` also works with `review`, `edit` and `assess`. Omit unused keys or the
+entire option. These notes are advisory output, not proposal fields or saved
+acceptance; pass them explicitly on later reviews only while still relevant.
+Secret references remain references; credential-like literals are rejected.
+
+Show the returned `rendered.markdown` in full, then one **Markdown review** link
+using the host's existing local-file/attachment facility and the absolute
+`reviewFile.path`. Only `reviewFile.status: "written"` reports a created copy.
+If the host cannot expose that file, report the delivery limitation rather than
+claiming a successful download. File or notes failures return
+`reviewFile.status: "unavailable"` and a reason without a path; the complete chat
+tables remain available and the command succeeds. Display those tables and the
+file-specific limitation. Do not reuse a previous link as the current review.
 
 ### Checkout example
 
@@ -449,6 +499,13 @@ Each case uses its own disposable cart. Accepted synthetic fixtures:
 | **Layout and browser/input compatibility** | Check the form, selector and validation messages across supported viewports, zoom levels, browsers and input methods. | Supported combinations, design expectations and existing shared coverage. |
 
 > Selected for the changed layout, custom control, external lookup and personal data; overlapping concerns are grouped. These suggestions add no cases: the proposal remains at four. Request selected additions under [FR-4](../.agents/skills/test-case-design/SKILL.md#fr-4-promote-only-requested-supported-suggestions).
+
+For this example's delivered review, save that same suggestions section and footer
+as the `suggestions` string in a consumer notes JSON file, then run `read --notes`
+as above. Show the full four-case review plus those notes and link its returned
+Markdown copy. After an edit, repeat with the current revision and current notes;
+the file and chat must agree. If the copy is unavailable, keep these full tables
+and suggestions in chat and report the file limitation instead of a link.
 
 #### User-controlled promotion
 

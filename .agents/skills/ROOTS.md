@@ -24,6 +24,7 @@ and mutable state. Never derive consumer paths from a skill's installation direc
 | `.harness/knowledge-candidates/api/records/` | Sanitized API capture candidates bound to run evidence |
 | `.harness/runs/` | Consumer run outputs and evidence |
 | `.harness/runs/test-planning/<plan-id>/<version>.md` | Optional versioned cycle plan, source/decision baseline, risks and criteria; not tracker or execution state |
+| `.harness/runs/test-case-design/<design-id>/<state-head>.md` | Derived complete Markdown review copies; no approval, publication or execution authority |
 | `.harness/runs/<report>/bug-report/` | Editable bug state, immutable revisions/previews and approved delivery bindings |
 
 Install, update and configure the harness with the [harness-setup](harness-setup/SKILL.md)
