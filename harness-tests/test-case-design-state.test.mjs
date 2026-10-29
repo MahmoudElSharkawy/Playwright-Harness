@@ -1,3 +1,4 @@
+import {retainAssessment} from './fixtures/design-review.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtempSync, readFileSync} from 'node:fs';
@@ -106,7 +107,7 @@ test('reuse rejects conflicting native scenario or test classifications without 
     let state = await prepareDesign(f.roots, 'reuse-conflict', {version: 1, analysisId: 'login', caseIds: [101]}, {client: f.client});
     const row = {...f.proposal.cases[1], proposedAction: 'Reuse unchanged'};
     state = saveDesign(f.roots, 'reuse-conflict', {...f.proposal, source: state.source, cases: [row], mappings: f.proposal.mappings.filter(row => row.caseId === '101'), preparations: f.proposal.preparations.filter(row => row.caseId === '101')});
-    assessDesign(f.roots, 'reuse-conflict', {version: 1, proposal: state.proposal, reviewer: 'fresh-reviewer', cases: [{id: '101', verdict: 'pass', reason: 'The step checks the correct account identity.'}], requirements: [{id: row.coverageReferences[0].requirementId, verdict: 'covered', reason: 'The step verifies the accepted outcome.', caseIds: ['101']}]});
+    assessDesign(f.roots, 'reuse-conflict', retainAssessment(f.roots, state, {version: 1, proposal: state.proposal, reviewer: 'fresh-reviewer', cases: [{id: '101', verdict: 'pass', reason: 'The step checks the correct account identity.'}], requirements: [{id: row.coverageReferences[0].requirementId, verdict: 'covered', reason: 'The step verifies the accepted outcome.', caseIds: ['101']}]}));
     await assert.rejects(previewDesign(f.roots, 'reuse-conflict', options), /classification/);
     assert.equal(f.control.writes, 1); assert(item.fields['System.Tags'].includes('team-owned'));
   }
@@ -150,7 +151,7 @@ test('a selected attachment missing from verified story relations stays an expli
   updateInventory(f.roots, 'missing-attachment', {version: 1, snapshot: prepared.requirements.snapshot, changes: [{id: entry.id, disposition: 'accepted', evidence: [{kind: 'source', partId: part.id, revision: part.revision, quote: part.text}]}]});
   let state = await prepareDesign(f.roots, 'missing-attachment', {version: 1, analysisId: 'missing-attachment', caseIds: [101]}, {client: f.client});
   state = saveDesign(f.roots, 'missing-attachment', {...f.proposal, source: state.source});
-  assessDesign(f.roots, 'missing-attachment', {...f.design.review, proposal: state.proposal});
+  assessDesign(f.roots, 'missing-attachment', retainAssessment(f.roots, state, {...f.design.review, proposal: state.proposal}));
   await assert.rejects(previewDesign(f.roots, 'missing-attachment', {client: f.client}), /incomplete source evidence/);
   assert.equal(f.control.writes, 0);
 });

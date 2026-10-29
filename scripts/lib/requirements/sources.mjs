@@ -4,6 +4,7 @@ import {fingerprint, digest, requireThat, keys} from '../execution-core/data.mjs
 import {createAdoClient} from '../integrations/ado-client.mjs';
 import {loadAdoConfiguration, adoId, adoGuid} from '../integrations/config.mjs';
 import {decodeEntities} from '../integrations/ado-steps.mjs';
+import {credentialName, secretFindings} from '../package-validation.mjs';
 
 export const consumerIdentity = (roots, project, application) => fingerprint({root: roots.projectRoot, project, application});
 export function requirementsClient(roots, options = {}) {
@@ -11,14 +12,77 @@ export function requirementsClient(roots, options = {}) {
 }
 
 /** Strip real markup first; decode each entity alone so nested references stay literal. */
-function ordinaryHtmlText(html) {
-  const text = html.replace(/<!--[\s\S]*?-->|<(\/?)([A-Za-z][A-Za-z0-9:-]*)(?:[^"'<>]|"[^"]*"|'[^']*')*>/g, (_, closing, tag) => {
+export function ordinaryHtmlText(html) {return normalizedHtml(html).text;}
+
+function normalizedHtml(html, located = false) {
+  let text = html, positions = located ? Array.from({length: html.length}, (_, index) => index) : null;
+  function replace(pattern, replacement) {
+    if (!located) {text = text.replace(pattern, replacement); return;}
+    let result = '', previous = 0; const next = [];
+    function copy(start, end) {result += text.slice(start, end); for (let index = start; index < end; index++) next.push(positions[index]);}
+    for (const match of text.matchAll(pattern)) {
+      copy(previous, match.index);
+      const value = typeof replacement === 'function' ? replacement(...match) : replacement;
+      if (value === match[0]) copy(match.index, match.index + match[0].length);
+      else {result += value; for (let index = 0; index < value.length; index++) next.push(positions[match.index]);}
+      previous = match.index + match[0].length;
+    }
+    copy(previous, text.length); text = result; positions = next;
+  }
+  replace(/<!--[\s\S]*?-->|<(\/?)([A-Za-z][A-Za-z0-9:-]*)(?:[^"'<>]|"[^"]*"|'[^']*')*>/g, (_, closing, tag) => {
     if (!tag) return '';
     tag = tag.toLowerCase();
     if (tag === 'br' || closing && /^(p|div|li|tr|h[1-6])$/.test(tag)) return '\n';
     return !closing && tag === 'li' ? '- ' : '';
-  }).replace(/&(?:#[xX][\da-fA-F]+|#\d+|[A-Za-z]+);/g, entity => decodeEntities(entity.replace(/^&#X/, '&#x')));
-  return text.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').replace(/[ \t]{2,}/g, ' ').trim();
+  });
+  replace(/&(?:#[xX][\da-fA-F]+|#\d+|[A-Za-z]+);/g, entity => decodeEntities(entity.replace(/^&#X/, '&#x')));
+  replace(/[ \t]+\n/g, '\n'); replace(/\n{3,}/g, '\n\n'); replace(/[ \t]{2,}/g, ' '); replace(/^\s+|\s+$/g, '');
+  replace(/https?:\/\/[^\s<>"']+/gi, value => requirementDestination(value).status === 'redacted' ? '[REDACTED LINK]' : value);
+  return {text, positions};
+}
+
+const redactRequirementLinks = text => text.replace(/https?:\/\/[^\s<>"']+/gi, value => requirementDestination(value).status === 'redacted' ? '[REDACTED LINK]' : value);
+
+/** Destinations are provenance, not routes. Never retain credentials hidden in links. */
+export function requirementDestination(value) {
+  if (typeof value !== 'string' || !value.trim() || value.length > 2048 || /[\x00-\x20\\]/.test(value)) return {destination: '[invalid destination]', status: 'malformed'};
+  if (secretFindings('reference.txt', value).length) return {destination: '[REDACTED]', status: 'redacted'};
+  let url;
+  try {url = new URL(value);} catch {return {destination: value, status: 'malformed'};}
+  if (url.username || url.password || [...url.searchParams.keys()].some(credentialName) || secretFindings('reference.txt', value).length) return {destination: '[REDACTED]', status: 'redacted'};
+  return {destination: value, status: url.protocol === 'https:' ? 'candidate' : 'unsupported'};
+}
+
+/** Inspect real anchors before decoding: encoded markup remains ordinary literal text. */
+export function requirementLinks(html, sourceId, revision, location) {
+  const links = [], {positions} = normalizedHtml(html, true), tags = /<!--[\s\S]*?-->|<(\/?)([A-Za-z][A-Za-z0-9:-]*)(?:[^"'<>]|"[^"]*"|'[^']*')*>/g;
+  let anchor;
+  for (const match of html.matchAll(tags)) {
+    if (match[2]?.toLowerCase() !== 'a') continue;
+    if (!match[1]) {
+      if (anchor) save(anchor, match.index, false);
+      anchor = {start: match.index, body: match.index + match[0].length, tag: match[0]};
+    } else if (anchor) {save(anchor, match.index, true); anchor = undefined;}
+    requireThat(links.length <= 1000, 'Source hyperlinks exceed bounded scope.');
+  }
+  if (anchor) save(anchor, html.length, false);
+  function save(value, end, closed) {
+    const attributes = value.tag.replace(/^<a\b/i, '').slice(0, -1), hrefs = []; let cursor = 0, valid = true;
+    for (const match of attributes.matchAll(/([^\s="'<>/]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/g)) {
+      if (attributes.slice(cursor, match.index).trim()) valid = false;
+      if (match[1].toLowerCase() === 'href') hrefs.push(match[2] ?? match[3] ?? match[4]);
+      cursor = match.index + match[0].length;
+    }
+    if (attributes.slice(cursor).trim().replace(/\/$/, '')) valid = false;
+    const destination = typeof hrefs[0] === 'string' ? hrefs[0].replace(/&(?:#[xX][\da-fA-F]+|#\d+|[A-Za-z]+);/g, entity => decodeEntities(entity.replace(/^&#X/, '&#x'))) : '';
+    const visible = ordinaryHtmlText(html.slice(value.body, end));
+    const boundary = raw => {let low = 0, high = positions.length; while (low < high) {const middle = (low + high) >>> 1; if (positions[middle] < raw) low = middle + 1; else high = middle;} return low;};
+    const textStart = boundary(value.body), textEnd = boundary(end);
+    const safeText = contextParts(visible ? [{location, text: visible}] : []).contributions[0]?.text ?? '';
+    const safe = requirementDestination(destination);
+    links.push({sourceId, revision, location, start: value.start, end, textStart, textEnd, text: safeText, ...safe, ...((!closed || !valid || hrefs.length !== 1) && safe.status !== 'redacted' ? {status: 'malformed'} : {})});
+  }
+  return links;
 }
 
 /** Comments have their own response-body pagination, unlike ADO value lists. */
@@ -53,9 +117,9 @@ export async function captureRequirements(roots, raw, options = {}) {
   if (request.attachments !== undefined) requireThat(request.storyId !== undefined && Array.isArray(request.attachments) && request.attachments.length <= 100 && new Set(request.attachments.map(item => item.attachmentId?.toLowerCase())).size === request.attachments.length && request.attachments.every(item => adoGuid(item.attachmentId) && item.extraction && typeof item.extraction === 'object'), 'Attachment reader receipts need distinct ADO attachment identities.');
   if (request.attachmentIds !== undefined) requireThat(request.storyId !== undefined && Array.isArray(request.attachmentIds) && request.attachmentIds.length <= 100 && request.attachmentIds.every(adoGuid) && new Set(request.attachmentIds.map(value => value.toLowerCase())).size === request.attachmentIds.length, 'Select distinct attachment IDs explicitly for one story.');
   requireThat(request.includeHistory === undefined || typeof request.includeHistory === 'boolean', 'History selection must be boolean.');
-  const parts = [], omissions = [], revisions = [], sourceKeys = new Set();
+  const parts = [], omissions = [], revisions = [], links = [], sourceKeys = new Set();
   function add(sourceId, revision, values, kind = 'requirement') {
-    const safe = contextParts(values);
+    const safe = contextParts(values.map(value => ({...value, text: redactRequirementLinks(value.text)})));
     if (safe.redacted) omissions.push({sourceId, reason: 'sensitive-content-omitted', count: safe.redacted});
     for (const part of safe.contributions) {
       const key = fingerprint({sourceId, location: part.location});
@@ -72,6 +136,7 @@ export async function captureRequirements(roots, raw, options = {}) {
     origin = {organizationUrl: client.configuration.organizationUrl, projectId: project.id, project: project.name, storyId};
     for (const [field, kind] of [['System.Title', 'context'], ['System.Description', 'requirement'], ['Microsoft.VSTS.Common.AcceptanceCriteria', 'criterion']]) {
       const value = item.fields[field];
+      if (field !== 'System.Title' && typeof value === 'string') links.push(...requirementLinks(value, 'story', String(item.rev), field));
       if (typeof value === 'string' && value.trim()) add('story', String(item.rev), [{location: field, text: field === 'System.Title' ? value : ordinaryHtmlText(value)}], kind);
       else omissions.push({sourceId: 'story', location: field, reason: 'absent'});
     }
@@ -126,10 +191,11 @@ export async function captureRequirements(roots, raw, options = {}) {
     // Supplied paths are explicit inputs; reuse the existing bounded, sanitizing readers.
     const record = await readFileContext(roots, source, readerOptions), revision = record.hash ?? 'unavailable';
     revisions.push({id: source.id, revision});
+    for (const part of record.contributions) links.push(...requirementLinks(part.text, source.id, revision, part.location));
     add(source.id, revision, record.contributions.map(({location, text}) => ({location, text})));
     if (record.coverage !== 'complete' || record.redacted) omissions.push({sourceId: source.id, reason: record.coverage, redacted: record.redacted ?? 0});
   }
   requireThat(parts.length > 0, 'No sanitized requirements are available; prepared/prior state is unchanged.');
-  const snapshot = contextData({version: 1, consumer: consumerIdentity(roots, request.project, request.application), request, parts, omissions, revisions, ...(origin ? {origin} : {})});
+  const snapshot = contextData({version: 1, consumer: consumerIdentity(roots, request.project, request.application), request, parts, omissions, revisions, linksVersion: 1, links, ...(origin ? {origin} : {})});
   return {...snapshot, fingerprint: fingerprint(snapshot)};
 }

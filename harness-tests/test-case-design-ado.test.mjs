@@ -1,3 +1,4 @@
+import {retainAssessment} from './fixtures/design-review.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync, writeFileSync} from 'node:fs';
@@ -62,12 +63,12 @@ test('reuse verifies native content and repeated update reconciles existing prep
   const proposal = {...f.proposal, source: state.source, cases: [row], mappings: f.proposal.mappings.filter(row => row.caseId === '101'), preparations: f.proposal.preparations.filter(row => row.caseId === '101')};
   state = saveDesign(f.roots, 'login', proposal);
   const assessment = {version: 1, proposal: state.proposal, reviewer: 'fresh-reviewer', cases: [{id: '101', verdict: 'pass', reason: 'Actual native content matches the accepted story.'}], requirements: [{id: row.coverageReferences[0].requirementId, verdict: 'covered', reason: 'Exact observable outcome verifies the accepted rule.', caseIds: ['101']}]};
-  assessDesign(f.roots, 'login', assessment);
+  assessDesign(f.roots, 'login', retainAssessment(f.roots, state, assessment));
   const unchanged = await previewDesign(f.roots, 'login', options); assert.equal(unchanged.operations[0].request, null);
   const reused = await publishDesign(f.roots, 'login', {...options, approval: unchanged.fingerprint}); assert.equal(reused.outcomes[0].status, 'unchanged'); assert.equal(f.control.writes, 1);
   state = await prepareDesign(f.roots, 'second-edit', {version: 1, analysisId: 'login', caseIds: [101]}, {client: f.client});
   row.proposedAction = 'Update'; row.title = 'Sign in with the correct identity';
-  state = saveDesign(f.roots, 'second-edit', {...proposal, source: state.source, cases: [row]}); assessDesign(f.roots, 'second-edit', {...assessment, proposal: state.proposal});
+  state = saveDesign(f.roots, 'second-edit', {...proposal, source: state.source, cases: [row]}); assessDesign(f.roots, 'second-edit', retainAssessment(f.roots, state, {...assessment, proposal: state.proposal}));
   const changed = await previewDesign(f.roots, 'second-edit', options); await publishDesign(f.roots, 'second-edit', {...options, approval: changed.fingerprint});
   assert.equal(parseStepsXml(f.state.items.get(101).fields['Microsoft.VSTS.TCM.Steps']).filter(step => step.action.startsWith('Preparation')).length, 1); assert.equal(f.control.writes, 2);
 });

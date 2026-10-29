@@ -81,6 +81,97 @@ After accepting or partitioning inventory entries, run design `prepare` again wi
 `{"version":1,"analysisId":"sign-in"}` to bind that updated acceptance head before
 saving the proposal. Include the same selected context/case IDs when applicable.
 
+## Referenced rules and provenance
+
+New captures retain visible hyperlink text and destination separately, with field,
+revision and occurrence offsets. Literal encoded markup stays literal and entities
+decode once. Secret-bearing destinations are redacted; malformed, unsupported and
+out-of-scope links are diagnostics, never arbitrary fetch routes. Historical captures
+remain unchanged. An older ADO capture without link metadata requires an explicit
+source refresh before claiming complete reference coverage.
+
+Preparation discovers explicit `#1180` tokens, hyperlinks and verified work-item
+relationships. Ordinary numbers are not IDs. Repeated verified destinations share a
+read and retain all occurrences. Inline references initially need classification;
+relationships alone are incidental and cause no fetch or coverage gap. Classify the
+returned stable reference IDs as `required`, `supporting`, `incidental` or `unresolved`:
+
+```json
+{
+  "version": 1,
+  "analysisId": "postcode",
+  "references": [{
+    "id": "<returned reference ID>",
+    "classification": "required",
+    "requirementIds": ["<affected selected-story inventory ID>"],
+    "reason": "The selected story delegates postcode validation.",
+    "rules": [{"location": "Microsoft.VSTS.Common.AcceptanceCriteria", "quote": "<exact relevant captured rule>"}]
+  }]
+}
+```
+
+Use `unresolved` with a reason for conflicting, superseded or ambiguous applicability;
+never use `supporting` to hide a required decision. Keep every affected inventory entry
+on required/unresolved references. Rules must quote exact located captured passages.
+Read only direct references and explicitly selected `referenceIds` (at most 20 IDs),
+with at most 20 unique target reads per preparation. Deeper dependencies are exposed
+without recursive fetching; select a necessary deeper item explicitly. Cycles and
+exhausted bounds remain visible. Fetching a reference downloads no attachments,
+refreshes no context and adds no neighboring regression scope.
+
+Accepting “apply #1180” does not accept unseen rules. Reuse actual owner acceptance
+through the existing requirements inventory. The existing owner-decision JSON may
+include `references: [{"id":"<reference ID>","revision":"<revision>",
+"content":"<returned reference content fingerprint>"}]`, alongside its ordinary
+consumer/snapshot/requirement/content/disposition/actor/statement bindings. Record
+only a real decision; use the returned reference fingerprint after selecting relevant
+rules. Submit that decision through `requirements inventory`, then prepare again with
+the same reference selection. A current matching decision is reused without another
+confirmation. The selected story remains coverage authority; referenced rules are
+supporting evidence mapped to its inventory, not new primary requirements.
+
+Required or unresolved delegated evidence keeps affected requirements incomplete and
+blocks affected cases. Supported unrelated cases can still be reviewed and published.
+Selection, edits and reconciliation recalculate these gaps. Relevant referenced
+revisions and retained acceptance are checked before delivery even if the story is
+unchanged. Refresh, revalidate and renew approval after a change; earlier previews and
+receipts remain immutable. Reconciliation preserves confirmed writes while reporting
+stale referenced coverage separately.
+
+## Optional agreed conventions
+
+Reuse existing project settings and selected reviewed business context first. If agreed
+business defaults have no existing home, optionally save
+`.harness/knowledge/test-case-design-conventions.json`:
+
+```json
+{
+  "version": 1,
+  "project": "Example",
+  "application": "checkout",
+  "status": "current",
+  "agreement": {"actor": "Project owner", "reference": "Retained agreement reference"},
+  "defaults": {
+    "persona": "Customer",
+    "terminology": {"basket": "cart"},
+    "titleConvention": "Describe the observable business objective",
+    "setupOwnership": "Use disposable case-owned setup",
+    "dataOwnership": "Keep per-case and per-run identity; use secret references",
+    "languages": ["English", "Arabic"]
+  }
+}
+```
+
+All defaults are optional. Current authorized choices and accepted requirements govern;
+existing compatible settings/context take precedence over this fallback. Do not copy
+credentials or runtime targets into it, infer available fixtures, invent expectations,
+or create locale cases merely because languages are listed. Mark stale/conflicting
+agreements `stale` or `conflicting`; do not silently merge contradictory prose.
+Absent, malformed, foreign or stale profiles are advisory diagnostics and permit useful
+supported design. No mandatory setup or extra approval is introduced. Bound profile
+changes require affected revalidation. Optional suggestions still need both the explicit
+creation request and accepted expectations described in FR-4.
+
 ## Quality considerations
 
 Use these as internal prompts under the canonical skill's
@@ -173,6 +264,40 @@ entry must be accepted, have actual mapped verifying checks and pass independent
 case review. List all cases needed collectively for that requirement; selection
 that removes a required branch exposes a gap. The host must conduct actual fresh
 independent review; different actor names and JSON hashes cannot prove independence.
+
+The reviewer must ask: “Can another agent identify the actor, starting state, target,
+inputs, action, observable outcome and necessary cleanup without inventing business
+information?” Mark an ambiguous case/step `revise`, name the missing information,
+and correct it from source-backed clarification before re-review. Selectors and login
+bindings remain downstream refinement details, not invented case requirements.
+
+Retain the actual host review run and its output. Add
+`evidence: {"host":"<host>","runId":"<actual run reference>","source":"<source fingerprint>",
+"output":{"path":"<consumer-relative JSON export>","sha256":"<SHA-256 of exported bytes>"}}`
+to the assessment. The exported JSON contains `version: 1`, that `host`, `runId`,
+`source`, `proposal`, `reviewer`, the actual `cases`, `requirements`, `duplicates`
+arrays, and `clarityQuestion` containing the exact question above. The arrays must
+match the assessment, including findings and dispositions. Use the host's actual
+export/storage facilities; never manufacture an identifier or output to pass a gate.
+These references make the review auditable; the CLI verifies retention and bindings,
+not the authenticity of an independent actor or the quality of semantic judgment.
+
+`assess` sanitizes the export and retains an immutable copy under the design's
+`reviews/` directory. Preview, handoff and each pending publication check that copy.
+Missing/stale evidence is a limitation, not a completed enhanced review. Older
+records and uncertain-write reconciliation remain readable; they are never silently
+upgraded into enhanced review evidence. Edited proposals need a newly bound review.
+
+The `duplicates` diagnostic compares exact prerequisites, test data and ordered
+action/expectation content, ignoring IDs and titles. It includes captured existing
+cases when their native preparation can be interpreted without guessing. Preparation outcomes, split setup,
+roles, languages, data, states and outcomes remain meaningful differences. Every
+warning needs an assessment entry `{id, verdict: "retain" | "revise", reason}`;
+use `[]` when there are none. A `revise` decision withholds affected delivery until
+the proposal is corrected and reviewed. Consolidation is an explicit edit: retain
+all verifying coverage mappings and real ADO identities, then recalculate totals.
+Never delete, merge or renumber published cases automatically. Equal titles alone
+are not a duplicate test.
 
 Review all accepted conditions, branches, boundaries and outcomes, including
 requirements stated only in the description. Keep assumptions and missing targets
@@ -442,7 +567,11 @@ The handoff writes an ordinary validated local scenario source under
 `.harness/sources/test-case-design/` and adjacent source/coverage/impact references.
 Its mapping check numbers address the emitted source steps, including preparation;
 the saved proposal keeps its original business-step numbers.
-Use existing [execution](manual-execution.md) and [automation](PIPELINE.md) intake.
+Use local sources through existing [automation](PIPELINE.md) intake; published ADO
+cases use existing [execution](manual-execution.md) story/suite intake. Preserve
+preparation, exact inputs and explicit variations, every ordered action/expectation
+and necessary cleanup through parsing and refinement. An omitted action or result is
+a handoff defect, not permission to invent one. No new intake route is introduced.
 Confirmed ADO IDs become external references; proposed cases never receive invented
 numeric identities. Accepted revisions affecting existing automation belong to
 [maintain-test](maintenance.md). Preserve failure history, cumulative repair budgets,

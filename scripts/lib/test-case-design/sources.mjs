@@ -6,9 +6,11 @@ import {readContextOverview, searchContext} from '../context/search.mjs';
 import {contextData} from '../context/model.mjs';
 import {keys, fingerprint, requireThat} from '../execution-core/data.mjs';
 import {confirmedOutcomes} from './review.mjs';
+import {captureReferences, requireFreshReferences} from './references.mjs';
+import {captureConventions} from './conventions.mjs';
 
 export async function captureDesign(roots, raw, options = {}) {
-  const input = contextData(raw); keys(input, ['version', 'analysisId', 'request', 'caseIds', 'context'], 'design source selection');
+  const input = contextData(raw); keys(input, ['version', 'analysisId', 'request', 'caseIds', 'context', 'references', 'referenceIds'], 'design source selection');
   requireThat(input.version === 1 && typeof input.analysisId === 'string', 'Select one requirements analysis.');
   let requirements;
   if (input.request) {
@@ -49,7 +51,10 @@ export async function captureDesign(roots, raw, options = {}) {
       context = {selection: input.context, overview, result: searchContext(roots, id, {...query, limit: 10, maxBytes: 24000})};
     } catch (error) {context = {selection: input.context, unavailable: true, reason: error.message};}
   }
-  return {request: input, requirements: source, inventory: requirements, existing, related, ...(story ? {story} : {}), context};
+  const references = await captureReferences(roots, source, requirements, story, input, options);
+  // Keep the selected sanitized source fields; arbitrary raw markup can hide credentials in hrefs.
+  const retainedStory = story && {id: story.id, rev: story.rev, fields: Object.fromEntries(source.parts.filter(part => part.sourceId === 'story').map(part => [part.location, part.text]))};
+  return {request: input, requirements: source, inventory: requirements, existing, related, ...(retainedStory ? {story: retainedStory} : {}), context, references, conventions: captureConventions(roots, requirements), reviewContract: 'retained-run-v1'};
 }
 
 export async function requireFreshDesign(roots, state, options = {}) {
@@ -57,7 +62,7 @@ export async function requireFreshDesign(roots, state, options = {}) {
   requireThat(requirements?.head === state.requirements.head, 'Requirement acceptance or source changed; revalidate and renew approval.');
   const before = state.evidence.requirements, request = {...before.request, ...(before.origin ? {attachmentIds: before.request.attachmentIds ?? []} : {})};
   let current = await captureRequirements(roots, request, options);
-  const signature = value => fingerprint({consumer: value.consumer, parts: value.parts, revisions: value.revisions, omissions: value.omissions.filter(row => row.reason !== 'not-selected'), origin: value.origin ?? null});
+  const signature = value => fingerprint({consumer: value.consumer, parts: value.parts, revisions: value.revisions, omissions: value.omissions.filter(row => row.reason !== 'not-selected'), origin: value.origin ?? null, ...(before.linksVersion === 1 ? {linksVersion: value.linksVersion, links: value.links} : {})});
   if (signature(current) !== signature(before) && before.origin && confirmedOutcomes(state).some(row => row.caseId.startsWith('NEW-') && row.status === 'applied')) current = await accountForCreatedLinks(roots, state, current, options);
   requireThat(signature(current) === signature(before), 'Story, comments, history, selected attachment or local source changed; refresh and renew approval.');
   requireThat(!current.omissions.some(row => /inaccessible|incomplete|sensitive|unverified/.test(row.reason)), 'Unavailable or incomplete source evidence blocks publication.');
@@ -66,6 +71,8 @@ export async function requireFreshDesign(roots, state, options = {}) {
     const now = searchContext(roots, id, {...query, limit: 10, maxBytes: 24000});
     requireThat(fingerprint(now) === fingerprint(state.evidence.context.result), 'Selected captured business context changed; revalidate and renew approval.');
   }
+  await requireFreshReferences(roots, state, options);
+  if (state.evidence.conventions) requireThat(fingerprint(captureConventions(roots, requirements)) === fingerprint(state.evidence.conventions), 'Design conventions changed; revalidate affected defaults and renew approval.');
   return requirements;
 }
 
@@ -93,6 +100,7 @@ async function accountForCreatedLinks(roots, state, current, options) {
   // selected attachments and prior history still compare byte-for-byte below.
   const normalized = structuredClone(current);
   normalized.parts = normalized.parts.filter(part => part.sourceId !== 'history' || Number(part.revision) <= baseline).map(part => part.sourceId === 'story' ? {...part, revision: String(baseline)} : part);
+  if (normalized.links) normalized.links = normalized.links.map(link => link.sourceId === 'story' ? {...link, revision: String(baseline)} : link);
   for (const row of normalized.revisions) if (['story', 'history'].includes(row.id)) Object.assign(row, before.revisions.find(item => item.id === row.id));
   return normalized;
 }

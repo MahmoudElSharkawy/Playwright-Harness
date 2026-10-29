@@ -16,6 +16,12 @@ or `/execute-test story <id> [on <environment>]`. Execute sequentially, pausing
 on blockers. In checkpoint mode, pause after each case. Authorization already
 given by the user remains in force for ordinary permitted application operations.
 
+Published [test-case-design](../test-case-design/SKILL.md) cases enter through these
+existing ADO routes. Preserve preparation, explicit inputs/variations, all ordered
+actions and expected results, and cleanup through parsing/refinement. Publication
+and design review are not execution evidence; missing business details need
+source-backed clarification before the affected case can execute.
+
 Browser steps passively save sanitized API candidates and `api-discovery.json`
 through the shared runtime. Follow [observed API knowledge](../../../docs/reference/api.md#observed-api-knowledge):
 reuse business methods and applicable supplied collections first, then reviewed,

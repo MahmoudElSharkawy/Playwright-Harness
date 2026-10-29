@@ -32,6 +32,11 @@ the same workflow below. Local input requires no ADO configuration.
 Preserve the original revision-bearing `_suite.json` snapshot for post-run bug
 review. A later fetch cannot establish which source revision the run exercised.
 
+For a reviewed [test-case-design](../test-case-design/SKILL.md) local handoff,
+preserve setup, explicit inputs and variations, every ordered action/expectation,
+and necessary cleanup. Missing business information returns for source-backed
+clarification; selectors and login bindings are ordinary downstream refinement.
+
 Read the
 [generation procedure](../../../docs/PIPELINE.md) for the executable handoff,
 review and verification contracts before running the pipeline:
