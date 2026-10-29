@@ -11,6 +11,7 @@ import {captureDesign, requireFreshDesign} from './sources.mjs';
 import {validateDesign, validateAssessment, renderDesign, coverage, selectedIds, proposalFingerprint, preparationSteps, confirmedOutcomes, exactDuplicates, duplicateGaps} from './review.mjs';
 import {retainReviewEvidence, reviewEvidenceStatus} from './review-evidence.mjs';
 import {dependencyGaps} from './references.mjs';
+import {withReviewCopy} from './review-copy.mjs';
 
 export const designPath = (roots, designId, name) => {id(designId); return consumerPath(roots, `.harness/state/test-case-design/${designId}/${name}`);};
 export function lockDesign(roots, designId) {
@@ -76,9 +77,10 @@ export function rejectDesign(roots, designId) {
     return saveDesignState(roots, designId, {...state, review: null, assessment: null, approvalGeneration: (state.approvalGeneration ?? 0) + 1, history: [...state.history, {head: state.head, proposal: state.proposal, reason: 'rejected'}]});
   } finally {release();}
 }
-export function designView(roots, designId, selected) {
+export function designView(roots, designId, selected, options = {}) {
   const state = readDesign(roots, designId); requireThat(state, 'Design is not prepared.');
-  return {...state, ...(state.draft ? {rendered: renderDesign(state.draft), coverage: coverage(state, selected, {roots}), duplicates: exactDuplicates(state), ...(state.delivery || state.deliveryHistory?.length ? {confirmedCoverage: coverage(state, selected, {confirmed: true, roots})} : {})} : {})};
+  if (!state.draft) return state;
+  return withReviewCopy(roots, {...state, rendered: renderDesign(state.draft), coverage: coverage(state, selected, {roots}), duplicates: exactDuplicates(state), ...(state.delivery || state.deliveryHistory?.length ? {confirmedCoverage: coverage(state, selected, {confirmed: true, roots})} : {})}, options);
 }
 export function requireReviewed(state, selected, roots) {
   requireThat(state?.draft && state.review, 'Independent source-grounding and semantic coverage assessment is required.');

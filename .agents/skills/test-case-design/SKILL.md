@@ -167,6 +167,26 @@ without both conditions in FR-4.
 
 ## Show the agreed chat review
 
+Every complete `review`, `edit`, `assess` or `read` returns `rendered.markdown`
+and a derived Markdown copy under the consumer's `.harness/runs/test-case-design/`.
+Display that full Markdown in chat and provide one link to the current
+`reviewFile.path` through the host's existing local-file/attachment facility, only
+when `reviewFile.status` is `written` and the host can deliver it. Use the new
+returned path after revisions; never substitute an earlier copy.
+
+When adding user-facing gaps or optional suggestions, put the same Markdown in a
+consumer JSON file with optional `gaps` and `suggestions` strings and run
+`read --id <design> --notes <review-notes-json>` for the final view. The notes stay
+outside the unchanged case tables and never become cases, acceptance or coverage
+credit. Omit unused sections. Reuse this notes file explicitly on subsequent
+reviews when still relevant; it is not part of saved proposal state.
+
+The copy identifies the design/story, existing proposal/state revision and actual
+recorded review/delivery status. It does not approve or publish cases or establish
+execution readiness. If file creation or host delivery fails, still display the
+full chat review and explain the file-specific limitation; provide no success link
+or download claim. See the [Markdown copy workflow](../../../docs/test-case-design.md#markdown-review-copy).
+
 Display the renderer's summary first: distinct-case total, all eight test-type
 counts including zeros, and both scenario counts. Then the overview containing
 every case with exactly ID, Proposed action, Title, Prerequisites, Final expected
