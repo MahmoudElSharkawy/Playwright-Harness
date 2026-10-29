@@ -20,8 +20,11 @@ and mutable state. Never derive consumer paths from a skill's installation direc
 | `.harness/knowledge/test-case-design-conventions.json` | Optional agreed business defaults; never acceptance or runtime configuration |
 | `.harness/knowledge/ui/` | Reviewed UI facts |
 | `.harness/knowledge/api/records/` | Immutable reviewed, runtime-verified API definitions and provenance |
+| `.harness/knowledge/db/records/` | Immutable reviewed, runtime-verified DB definitions and schema/source provenance |
+| `.harness/state/db-reuse/records/` | Evidence-bound current query selections for reporting; not operation authority or execution passes |
 | `.harness/knowledge-candidates/` | Unreviewed observations, separate from reviewed knowledge |
 | `.harness/knowledge-candidates/api/records/` | Sanitized API capture candidates bound to run evidence |
+| `.harness/knowledge-candidates/db/records/` | Parameterized SELECT candidates derived from bounded runtime schema evidence |
 | `.harness/runs/` | Consumer run outputs and evidence |
 | `.harness/runs/test-planning/<plan-id>/<version>.md` | Optional versioned cycle plan, source/decision baseline, risks and criteria; not tracker or execution state |
 | `.harness/runs/test-case-design/<design-id>/<state-head>.md` | Derived complete Markdown review copies; no approval, publication or execution authority |
@@ -37,6 +40,15 @@ For API discovery, follow [the API reference](../../docs/reference/api.md#observ
 Supplied collections and separate consumer-owned observed collections are derive-only
 inputs. Promote before freezing generation; retained evidence/review references remain
 subject to integrity checks and new captures never rewrite existing reviewed records.
+
+For DB discovery, follow [the database reference](../../docs/reference/databases.md#schema-backed-query-discovery).
+Reuse methods and applicable supplied queries before reviewed discoveries. Only
+permitted SQL Server metadata can establish missing exact-key read candidates;
+credentials or an empty query folder do not authorize broader access. Promotion
+derives consumer-owned `resources/Queries/<application>-discovered.md` separately
+from untouched supplied exports. Both origins are derive-only. Fresh reuse checks
+current relevant schema and retained source/review/verification evidence; readings
+never create expected values or mutation recipes. Complete promotion before freeze.
 
 Use [context-qa](context-qa/SKILL.md) only when the user explicitly invokes it for a
 snapshot-only answer. Its evidence comes only from one selected capture through

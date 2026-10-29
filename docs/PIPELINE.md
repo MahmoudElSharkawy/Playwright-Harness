@@ -141,6 +141,15 @@ fetched spec) is the legacy ADO one.
 Details: [reviewed knowledge](configuration.md),
 [refinement procedure](../.agents/skills/execute-test/references/refinement.md).
 
+For missing DB lookups/verification, follow
+[schema-backed discovery](reference/databases.md#schema-backed-query-discovery)
+during refinement/exploration. Reuse methods, supplied queries and current reviewed
+knowledge first; an empty query folder is not a blocker by itself. Establish
+schema and identity through permitted SQL Server metadata, derive a parameterized
+candidate, then review and verify it through the configured runtime. Save reviewed
+knowledge before generation freeze. Read discovery does not supply missing seed
+or cleanup operations, replace suitable API preparation, or remove UI checks.
+
 ## 3. EXPLORE
 
 Run each refined scenario against the configured application with the shared runtimes,

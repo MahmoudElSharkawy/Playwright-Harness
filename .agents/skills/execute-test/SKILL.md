@@ -30,6 +30,18 @@ unresolved gaps and any separately promoted observed collection without changing
 case verdicts or generating POM code. Capture alone never promotes reviewed knowledge,
 invents cleanup/authentication, or makes a collection a prerequisite.
 
+For missing DB lookup/verification operations, follow
+[schema-backed discovery](../../../docs/reference/databases.md#schema-backed-query-discovery)
+during refinement, before freeze. Reuse methods and applicable supplied queries
+first, then current reviewed knowledge. An empty folder does not block permitted
+SQL Server metadata discovery. Retain sanitized candidates, review business
+semantics, verify matching operations through the configured runtime, and promote
+the separate consumer-owned discovered document. Fresh reuse requires current
+schema and intact supporting evidence. This route generates no POM code, adds no
+per-query approval ceremony and never invents required mutation recipes. Missing
+metadata/identity/semantics or cleanup remains a case gap. Return to refinement
+instead of mutating a frozen step; report saved paths separately from verdicts.
+
 1. Run `prepare suite|story <id> [--plan <id>] [--environment <name>] [--checkpoint]`.
    Read the captured source and exclusions. Edit only its draft `refinement.json`,
    following [refinement](references/refinement.md); then run `freeze <exec>`.

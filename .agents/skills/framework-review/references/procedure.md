@@ -84,6 +84,11 @@ Apply §6, with these review procedures and additional harness checks:
   (class: `query-library-bypassed`); raw sample literals surfacing in test data or
   code is a finding (class: `query-sample-literal-leaked`). Exported library files
   themselves are never edited in a diff (README/index maintenance excepted).
+  Consumer-owned `<application>-discovered.md` documents are the recorded exception:
+  require immutable reviewed operation authority, bounded schema evidence, matching
+  configured-runtime verification, fresh-schema reuse checks and atomic promotion.
+  Refute invented status meanings, copied runtime values, implicit mutation recipes,
+  changed supplied exports or discovery used to bypass lifecycle/UI/review gates.
 - **New API endpoints** in the diff: when `resources/apisCollections/` already holds
   a matching request, the `<op>_serviceName` field / `integration/*_api.json` entry
   must derive from it (path as the field, base URL via config/env keys, payload as

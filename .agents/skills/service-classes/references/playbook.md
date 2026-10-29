@@ -71,10 +71,22 @@ knowledge base (table names, join paths, status codes, verify and seed recipes f
 application databases). When a matching query exists, adapt it into the field: ONE statement
 per field, `@param` placeholders replacing its hardcoded sample values (practice 7),
 Notion export artifacts cleaned (e.g. `[a.Id](https://column-name.invalid/)` → `a.Id`). The library is
-derive-only: its markdown is read, never executed as-is, never edited by sessions, and
+derive-only: its markdown is read, never executed as-is, supplied exports are never edited by sessions, and
 its sample literals (identity numbers, policy numbers, IPs) never become test data —
 the full contract lives in `resources/Queries/README.md`. Writing a query the library
 already knows, from scratch, is a review finding (`query-library-bypassed`).
+
+Reuse existing DB business methods before deriving SQL. When applicable supplied
+queries omit a needed read, consult reviewed discoveries under `.harness/knowledge/db/`.
+Their consumer-owned `<application>-discovered.md` documents are derived from
+authoritative reviewed operations, not a second SQL authority. Follow
+[schema-backed discovery](../../../../docs/reference/databases.md#schema-backed-query-discovery)
+for bounded metadata, complete unique-key selection, source/semantic review,
+configured-runtime verification and fresh schema/evidence checks on reuse.
+No query files are required for permitted SQL Server discovery. Never infer joins,
+status meanings, accepted expectations or seed/cleanup recipes from one row.
+Derive the reviewed SELECT into the normal `_query` field and typed facade calls;
+preserve per-run identities, paired expected data, Allure and lifecycle rules.
 
 **Reuse API business methods, then supplied collections, then reviewed discoveries.**
 Before authoring any `<operation>_serviceName`, search existing services and applicable

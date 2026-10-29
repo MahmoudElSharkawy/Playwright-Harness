@@ -1,6 +1,6 @@
-# resources/Queries/ — the team DB-query knowledge library
+# resources/Queries/ — the DB-query knowledge library
 
-The markdown files in this folder are the QA team's curated SQL knowledge for the
+The supplied Markdown exports in this folder are the QA team's curated SQL knowledge for the
 application under test's databases, exported from the team's Notion workspace: the
 tables that matter, the join paths between them, status-code semantics, and proven
 verify/seed recipes. They are the DB counterpart of the page map
@@ -9,6 +9,14 @@ instead of rediscovering. Governed by the 2026-08-24 "Team DB-query library" rul
 (design-conventions, Decision records).
 
 ## Ownership & lifecycle
+
+- **Discovered query documents are consumer-owned.**
+  `<application>-discovered.md` is derived from immutable reviewed, runtime-verified
+  operation records under `.harness/knowledge/db/records/`. Only the discovery
+  promotion interface updates these documents; it checks ownership/integrity,
+  merges verified entries atomically and retains provenance. They are separate
+  from supplied exports and remain derive-only. See
+  [schema-backed discovery](../../docs/reference/databases.md#schema-backed-query-discovery).
 
 - **The exported query files are team-owned.** Sessions never edit, rename, or delete
   them; corrections happen in the team's source and arrive by re-export. Filenames
@@ -68,3 +76,11 @@ Domain semantics the snippets teach (read the inline comments — they carry sta
 meaning): numeric status columns (e.g. `Status IN (2, 3)`) map to business states the
 comments name. Verify such codes against the live schema before relying on them — the
 library records what the team observed, not a frozen contract.
+
+Schema alone cannot establish status meanings, tenant ownership or soft-delete
+rules. Retain source evidence and review those semantics explicitly. Reuse business
+methods and applicable supplied queries first, then reviewed discoveries whose
+supporting evidence and fresh relevant schema still match. Missing query files are
+not a prerequisite failure when permitted discovery can establish the needed read.
+Initial automatic discovery supports SQL Server exact-key SELECT queries only;
+read discovery never establishes a seed, delete or restore recipe.

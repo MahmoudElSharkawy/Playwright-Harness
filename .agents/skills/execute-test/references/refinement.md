@@ -11,6 +11,13 @@ equal the original expectation. Never rewrite or weaken it. Drafts default to
 observational conditions; choose a deterministic predicate when it can be checked.
 REFINE must explicitly complete required login bindings, API/DB operation definitions,
 check provenance and resource/cleanup declarations; the draft does not infer these.
+For a missing DB read, use [schema-backed discovery](../../../../docs/reference/databases.md#schema-backed-query-discovery)
+before freeze: search methods/supplied queries/reviewed discoveries, inspect only
+relevant permitted schema, derive typed SELECT inputs and preserve source-grounded
+checks. Review and runtime verification establish reusable knowledge. Copy the
+reviewed definition into the ordinary step operation and retain its check provenance;
+never execute the Markdown document or alter an already frozen operation. A read
+cannot supply missing seed/cleanup semantics.
 Freeze reports the missing step/binding and returns scoped `readiness`. Configured
 users without login produce guidance, without blocking unrelated scenarios.
 Source/refinement/freeze aggregates permit 500 scenarios, 64 MiB, 2,000,000 JSON

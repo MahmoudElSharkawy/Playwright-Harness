@@ -9,9 +9,10 @@ import {generationBlocker, GENERATION_STAGES} from './reasons.mjs';
 import {caseNotes} from '../reporting/case-notes.mjs';
 import {timestampedReportDirectory} from '../reporting/directories.mjs';
 import {renderAutomationHtml, outcome, automationCoverageText, caseNeedsAttention} from '../reporting/case-view.mjs';
-import {markdownText as md, caseReason, stageLabel} from '../reporting/text.mjs';
+import {markdownText as md, caseReason, stageLabel, dbDiscoveryLines} from '../reporting/text.mjs';
 import {reportSource, reportingContext} from './reporting-context.mjs';
 import {readApiDiscoverySummary} from '../browser/api-capture.mjs';
+import {readDbDiscoverySummary} from '../database/discovery.mjs';
 export {renderAutomationHtml};
 
 const identity = test => fingerprint([test.spec, test.project, test.titlePath]);
@@ -154,6 +155,7 @@ export async function automationReportView(roots, {sourceId, source: sourceInput
       blocked: cases.filter(row => row.status === 'BLOCKED').length, scopeKnown: Boolean(reporting || !state)};
     coverage.complete = coverage.scopeKnown && coverage.ready === coverage.total;
     const discoveryRuns = [...(state?.handoff.observations ?? []), ...(reporting?.observed?.cases ?? [])];
+    const dbDiscoveries = readDbDiscoverySummary(roots, {runIds: [...new Set(discoveryRuns.map(row => row.runId))], scenarioIds: source.scenarios.map(row => row.id)});
     const apiDiscoveries = [...new Set(discoveryRuns.map(row => row.runId))].map(runId => {
       const bindings = discoveryRuns.filter(row => row.runId === runId), runRoot = bindings[0].runRoot;
       if (!runRoot || bindings.some(row => row.runRoot !== runRoot || row.inputFingerprint !== bindings[0].inputFingerprint)) return {runId, candidates: [], gaps: ['discovery-summary-unavailable']};
@@ -164,7 +166,7 @@ export async function automationReportView(roots, {sourceId, source: sourceInput
     return frozen(data({version: 1, id: `automation-${randomUUID()}`, workflow: 'automate-test', sourceId, title: source.title,
       createdAt: new Date().toISOString(), sourceFingerprint: fingerprint(source), selectedSourceFingerprint: fingerprint(selected), status: readiness.status, rounds: readiness.rounds, greens: readiness.greens,
       environment: [...new Set([...(state?.handoff.observations ?? []).map(run => run.environment), ...(reporting?.observed?.cases ?? []).map(row => row.environment)].filter(Boolean))].join(', ') || 'Not recorded',
-      ...(blocker ? {blocker} : {}), coverage, cases, source, ...(apiDiscoveries.length ? {apiDiscoveries} : {}), ...(retainedNotes ? {notes: retainedNotes} : {}), ...(observed ? {observed} : {})}, 8 * 1024 * 1024, {maxNodes: 200000}));
+      ...(blocker ? {blocker} : {}), coverage, cases, source, ...(apiDiscoveries.length ? {apiDiscoveries} : {}), ...(dbDiscoveryLines(dbDiscoveries).length ? {dbDiscoveries} : {}), ...(retainedNotes ? {notes: retainedNotes} : {}), ...(observed ? {observed} : {})}, 8 * 1024 * 1024, {maxNodes: 200000}));
   });
 }
 
@@ -174,7 +176,7 @@ export function automationCompanions(view) {
   const attention = view.cases.filter(caseNeedsAttention);
   const coverage = automationCoverageText(view);
   return [
-    ['summary.md', `# ${md(view.title)}\n\n${md(coverage)}\n\n${view.cases.map(describe).join('')}`],
+    ['summary.md', `# ${md(view.title)}\n\n${md(coverage)}\n\n${view.cases.map(describe).join('')}${view.dbDiscoveries ? `\n## Database query knowledge\n\n${dbDiscoveryLines(view.dbDiscoveries).map(md).join('\n\n')}\n` : ''}`],
     ['defects.md', `# Defects and cases needing attention\n\n${md(coverage)}\n\nThese are recorded failures, blockers and review findings, not filed product bugs.\n\n${attention.map(describe).join('') || 'No cases currently need attention.\n'}`]
   ];
 }
@@ -187,6 +189,6 @@ export async function writeAutomationReport(roots, options = {}) {
     const artifacts = files.map(([name, body]) => {writeFileSync(join(output, name), body, {flag: 'wx', mode: 0o600}); return {path: name, bytes: Buffer.byteLength(body), sha256: digest(body)};});
     const manifest = {version: 1, status: 'WRITTEN', sourceId: view.sourceId, sourceFingerprint: view.sourceFingerprint, readiness: view.status, coverage: view.coverage, cases: view.cases.length, artifacts};
     writeFileSync(join(output, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n', {flag: 'wx', mode: 0o600, flush: true});
-    return {...manifest, directory, html: `${directory}/index.html`, ...(view.apiDiscoveries ? {apiDiscoveries: view.apiDiscoveries} : {})};
+    return {...manifest, directory, html: `${directory}/index.html`, ...(view.apiDiscoveries ? {apiDiscoveries: view.apiDiscoveries} : {}), ...(view.dbDiscoveries ? {dbDiscoveries: view.dbDiscoveries} : {})};
   } catch {return {status: 'FAILED', reason: 'Automation report input, integrity validation or delivery failed; generation history and verdicts are unchanged.'};}
 }

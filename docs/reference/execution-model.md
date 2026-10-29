@@ -1,5 +1,12 @@
 # Execution model
 
+Scenario-scoped [DB discovery](databases.md#schema-backed-query-discovery) uses
+the configured database runtime during refinement/exploration. Metadata receipts
+are evidence separate from business attempts; they cannot satisfy expectations.
+Derived queries use the existing operation schema, frozen inputs and ordinary
+execution checks. Discovery neither changes lifecycle obligations nor mutates a
+frozen manual execution step.
+
 Browser, API and database work share records for frozen inputs, observations,
 effects, recovery and lifecycle obligations. Assessment derives a verdict from
 those records and verified evidence; a reporter cannot turn incomplete evidence

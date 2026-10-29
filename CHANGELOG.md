@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Add scenario-scoped SQL Server schema discovery for exact-key SELECT lookups and
+  verification, with immutable candidates, source/semantic review, runtime proof,
+  fresh-schema reuse checks and incremental consumer-owned discovered query
+  documents. Supplied query exports, mutation boundaries and workflow gates remain
+  intact. PostgreSQL/MySQL query discovery is not yet supported. (#134)
+
 ## 4.3.0 — Stronger test design review and references
 
 ### Upgrade actions

@@ -11,6 +11,8 @@ import {caseNotes} from '../reporting/case-notes.mjs';
 import {restoreRun, deleteLogin} from './host.mjs';
 import {aggregateSourceConditions, ASSERTION_BYTES, compareRead, matchingRead, coverageAllows} from './verdicts.mjs';
 import {readApiDiscoverySummary} from '../browser/api-capture.mjs';
+import {readDbDiscoverySummary} from '../database/discovery.mjs';
+import {dbDiscoveryLines} from '../reporting/text.mjs';
 
 export const markdownText = value => String(value).replace(/\r?\n/g, ' ').replace(/[\\`*_{}\[\]()<>#+.!|~-]/g, '\\$&');
 export function diagnosticSignature(text, {bindings = {}, values = []} = {}) {
@@ -156,6 +158,7 @@ export function deliverableDefects(view, include = '') {
 export function writeExecutionReport(roots, executionId, {keepLogin = false, notes} = {}) {
   const view = collectExecution(roots, executionId, {notes}), defects = executionDefects(view), {directory: path, path: output} = timestampedReportDirectory(roots, {parent: 'reports/harness', prefix: 'execution-'}), artifacts = [];
   const apiDiscoveries = view.runs.filter(row => row.roots).map(row => readApiDiscoverySummary(roots, row.roots.runRoot, row.runId)).filter(row => row.candidates.length || row.gaps.length);
+  const dbDiscoveries = readDbDiscoverySummary(roots, {runIds: view.runs.map(row => row.runId).filter(Boolean), scenarioIds: view.scenarios.map(row => row.id)});
   const write = (name, body) => {writeFileSync(join(output, name), body, {flag: 'wx', mode: 0o600, flush: true}); artifacts.push({path: name, sha256: digest(body), bytes: Buffer.byteLength(body)});};
   write('defects.json', JSON.stringify(defects, null, 2) + '\n');
   write('defects.md', `# Defect list\n\n${defects.map(item => `- ${markdownText(item.title)} (${item.occurrences.length} occurrence(s))`).join('\n') || 'No findings recorded.'}\n`);
@@ -181,10 +184,12 @@ export function writeExecutionReport(roots, executionId, {keepLogin = false, not
     screenshots.set(row.runId, images);
   }
   const summary = `# ${markdownText(view.source.title)}\n\n${view.scenarios.map(row => {const explanation = executionCaseExplanation(row, view.runs.filter(run => run.scenarioId === row.id), assertionEvidence); return `## Case ${markdownText(row.caseId ?? row.id)}: ${markdownText(row.title)}\n\nStatus: ${markdownText(outcome(row.status ?? row.state).label)}\n\n${explanation.reason ? `Reason: ${markdownText(explanation.reason)}\n\n` : ''}${explanation.nextAction ? `Next action: ${markdownText(explanation.nextAction)}\n\n` : ''}`;}).join('')}`;
-  write('summary.md', summary);
+  const discoveryLines = dbDiscoveryLines(dbDiscoveries);
+  write('summary.md', summary + (discoveryLines.length ? `\n## Database query knowledge\n\n${discoveryLines.map(markdownText).join('\n\n')}\n` : ''));
   if (apiDiscoveries.length) write('api-discovery.json', JSON.stringify(apiDiscoveries, null, 2) + '\n');
-  write('index.html', renderExecutionHtml(view, {defectCount: defects.length, screenshots, assertionEvidence}));
+  if (discoveryLines.length) write('db-discovery.json', JSON.stringify(dbDiscoveries, null, 2) + '\n');
+  write('index.html', renderExecutionHtml({...view, dbDiscoveries}, {defectCount: defects.length, screenshots, assertionEvidence}));
   const manifest = {version: 1, status: 'WRITTEN', executionId, sourceFingerprint: view.execution.sourceFingerprint, freezeFingerprint: view.execution.freezeFingerprint, revisionCheck: view.revisionCheck, scenarios: view.scenarios, defects: defects.length, artifacts};
   writeFileSync(join(output, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n', {flag: 'wx', mode: 0o600, flush: true});
-  if (!keepLogin) deleteLogin(roots, executionId); return {status: 'WRITTEN', executionId, directory: path, html: `${path}/index.html`, scenarios: view.scenarios, defects: defects.length, ...(apiDiscoveries.length ? {apiDiscoveries} : {})};
+  if (!keepLogin) deleteLogin(roots, executionId); return {status: 'WRITTEN', executionId, directory: path, html: `${path}/index.html`, scenarios: view.scenarios, defects: defects.length, ...(apiDiscoveries.length ? {apiDiscoveries} : {}), ...(discoveryLines.length ? {dbDiscoveries} : {})};
 }

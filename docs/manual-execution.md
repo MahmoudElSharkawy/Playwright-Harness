@@ -37,6 +37,25 @@ Report relevant discoveries, verified/reused operations, unresolved gaps and any
 the existing case report. Continue unrelated supported cases under the normal partial
 reporting rules. Discovery never replaces a failure, blocker or delivery-readiness gate.
 
+## DB query discovery during refinement
+
+When a selected case needs a missing DB lookup or verification query, follow
+[schema-backed discovery](reference/databases.md#schema-backed-query-discovery)
+before freeze. Search business methods, supplied query exports and current reviewed
+discoveries first. Permitted SQL Server metadata can establish an exact-key SELECT
+without user-supplied SQL; credentials alone do not permit exploration. Retain
+source expectations, review semantics, verify through the configured runtime and
+save the reviewed operation and separate
+`resources/Queries/<application>-discovered.md` document. Both library origins stay
+derive-only. A later invocation requires fresh matching schema and intact evidence.
+
+Discovery generates no POM code and introduces no new user command or per-query
+approval ceremony. Missing metadata, identity/semantics or required mutation
+recipes remain explicit case gaps; continue unrelated supported cases. A frozen
+step cannot be changed in place: return to refinement if a new operation is needed.
+Report discovered, verified/reused, saved and unresolved operations with the library
+path, independently of existing verdicts and readiness.
+
 ## Start, refine and freeze
 
 Ask for `/execute-test suite <id> [plan <id>] [on qa] [checkpoint]` or

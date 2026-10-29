@@ -72,7 +72,8 @@ export async function runSequentialScenario(run, roots, options = {}, callbacks 
       const context = Object.freeze({
         observationBudgetReached: () => observationBudgetReached(state),
         api: Object.freeze({execute: input => track(() => api.execute(invocation(input)))}),
-        database: Object.freeze({execute: input => track(() => database.execute(invocation(input)))}),
+        database: Object.freeze({execute: input => track(() => database.execute(invocation(input))),
+          inspectSchema: input => track(() => {requireThat(input.phase === undefined || input.phase === phase, 'Schema inspection must use the active lifecycle phase.'); return database.inspectSchema({...input, phase});})}),
         ...(browser ? {browser: Object.freeze({attempt: (input, action) => track(() => browser.attempt(invocation(input), action))})} : {}),
         value: name => {requireActive(); const value = run.inputs.values.find(item => item.name === name && item.producer.scenarioId === state.scope.id); requireThat(value, 'Initial binding is absent.'); return value;},
         output: (attempt, name, alias = name) => {requireActive(); requireThat(state.scenario.attempts.includes(attempt), 'Output must come from a completed scenario attempt.'); const output = attempt.outputs.find(item => item.name === name); requireThat(output, 'Selected output is absent.'); return frozen({...output, name: alias});},

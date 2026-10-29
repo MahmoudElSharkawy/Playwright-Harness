@@ -16,6 +16,7 @@ as an HTML block; its words and recorded results are unchanged.
 
 | Original document | Historical record | Current topic |
 |---|---|---|
+| Issue 134 DB query discovery | [Implementation and proof](validation/DB-QUERY-DISCOVERY-134.md) | [Current guide](../reference/databases.md) |
 | `ADO-STORY-VALIDATION.md` | [Archive](validation/ADO-STORY-VALIDATION.md) | [Current guide](../azure-devops.md) |
 | `ALLURE3-VALIDATION.md` | [Archive](validation/ALLURE3-VALIDATION.md) | [Current guide](../reporting.md) |
 | Issue 112 context sections | [Implementation and proof](context-sections-112.md) | [Current guide](../context-qa.md) |
