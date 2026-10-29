@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+## 4.3.1 — Schema-backed DB query discovery
+
+### Upgrade actions
+
+- Update to the 4.3.1 archive and re-run setup in each consumer project. Review
+  customized managed instructions, then reload skills or restart the host to load
+  the updated execution, automation and DB-service guidance.
+- No migration of supplied query exports or existing execution histories is
+  required. Reuse existing business methods and applicable supplied queries first.
+  SQL Server discovery requires a configured target and permitted metadata/read
+  capabilities; review and runtime-verify discovered queries before promotion,
+  and check fresh schema evidence before later reuse.
+
+### Changes
+
 - Add scenario-scoped SQL Server schema discovery for exact-key SELECT lookups and
   verification, with immutable candidates, source/semantic review, runtime proof,
   fresh-schema reuse checks and incremental consumer-owned discovered query
