@@ -10,11 +10,11 @@ import {inventory} from '../lib/package-validation.mjs';
 import sql from 'mssql';
 
 export const sqlServerImage = 'mcr.microsoft.com/mssql/server@sha256:4402d880dd4c34bfa7d8705e56a86cd6c88da80a1f6bbbe741f999e76264a090';
-const args = process.argv.slice(2), linux = args.includes('--linux-client'), mixed = args.includes('--mixed'), neutrality = args.includes('--neutrality');
-if (mixed && neutrality || new Set(args).size !== args.length || args.some(arg => !['--linux-client','--mixed','--neutrality'].includes(arg) && !/^--browser-client-image=sha256:[a-f0-9]{64}$/.test(arg))) throw new Error('Unsupported probe option.');
+const args = process.argv.slice(2), linux = args.includes('--linux-client'), mixed = args.includes('--mixed'), neutrality = args.includes('--neutrality'), discovery = args.includes('--discovery');
+if ([mixed, neutrality, discovery].filter(Boolean).length > 1 || discovery && linux || new Set(args).size !== args.length || args.some(arg => !['--linux-client','--mixed','--neutrality','--discovery'].includes(arg) && !/^--browser-client-image=sha256:[a-f0-9]{64}$/.test(arg))) throw new Error('Unsupported probe option.');
 const browserImages = args.filter(arg => arg.startsWith('--browser-client-image='));
 if (browserImages.length > 1 || (linux && mixed ? browserImages.length !== 1 : browserImages.length !== 0)) throw new Error('Mixed Linux proof needs exactly one pinned browser-client image.');
-const milestone = neutrality ? 'M10' : mixed ? 'M9' : 'M8', suite = neutrality ? 'harness-tests/database-neutrality.integration.mjs' : mixed ? 'harness-tests/mixed.integration.mjs' : 'harness-tests/sqlserver.integration.mjs';
+const milestone = discovery ? 'DBDiscovery' : neutrality ? 'M10' : mixed ? 'M9' : 'M8', suite = discovery ? 'scripts/probes/discovered-db.mjs' : neutrality ? 'harness-tests/database-neutrality.integration.mjs' : mixed ? 'harness-tests/mixed.integration.mjs' : 'harness-tests/sqlserver.integration.mjs';
 const name = `harness-${milestone.toLowerCase()}-${randomUUID()}`, generate = () => `${randomBytes(32).toString('hex')}aA1!`;
 const clientName = `${name}-client`, networkName = `${name}-network`;
 const nodeImage = mixed && linux ? browserImages[0].slice('--browser-client-image='.length) : 'node@sha256:5711a0d445a1af54af9589066c646df387d1831a608226f4cd694fc59e745059';
@@ -41,6 +41,7 @@ try {
     CREATE TABLE m8.OtherItems (Id int NOT NULL PRIMARY KEY, Label nvarchar(500) NULL);
     CREATE TABLE dbo.OutsideScope (Id int);
     INSERT dbo.OutsideScope VALUES (1)`);
+  if (discovery) await pool.request().query("CREATE TABLE m8.DiscoveredOrders (Id nvarchar(100) NOT NULL PRIMARY KEY, Owner nvarchar(100) NOT NULL, Status nvarchar(30) NOT NULL, CustomerNote nvarchar(100) NOT NULL DEFAULT N'CustomerPrivateDiscovery134')");
   const version = (await pool.request().query("SELECT CAST(SERVERPROPERTY('ProductVersion') AS nvarchar(128)) AS version")).recordset[0].version;
   const target = {engine: 'sqlserver', connectionRef: 'env:M8_DB_CREDENTIAL', server: 'localhost', port, database: 'HarnessM8', schema: 'm8', encrypt: true, trustServerCertificate: true};
   const testEnvironment = {HARNESS_M8_TARGET: JSON.stringify({...target,...(linux?{server:'database',port:1433}:{})}), M8_DB_CREDENTIAL: JSON.stringify({user: 'harness_runner', password: runnerCredential}), HARNESS_M8_ADMIN: JSON.stringify({...config, database: 'HarnessM8',...(linux?{server:'database',port:1433}:{})})};
@@ -53,9 +54,9 @@ try {
       `mkdir -m 700 /package && tar -xf /source.tar -C /package && cd /package && npm ci --ignore-scripts --no-audit --no-fund && node --version && node --test --test-concurrency=1 ${mixed?'harness-tests/sequential-runtime.test.mjs':'harness-tests/database-runtime.test.mjs'} ${suite}`],testEnvironment); clientCreated=true;
     docker(['cp',join(staging,'source.tar'),`${clientName}:/source.tar`]);
   }
-  const child = linux ? spawn('docker',['start','-a',clientName],{stdio:'inherit'}) : spawn(process.execPath, ['--test','--test-concurrency=1',suite], {stdio: 'inherit', env: {...process.env,...testEnvironment}});
+  const child = linux ? spawn('docker',['start','-a',clientName],{stdio:'inherit'}) : spawn(process.execPath, [...(discovery ? [] : ['--test','--test-concurrency=1']),suite], {stdio: 'inherit', env: {...process.env,...testEnvironment}});
   status = await new Promise(resolve => {child.once('error', () => resolve(1)); child.once('exit', code => resolve(code ?? 1));});
-  console.log(JSON.stringify({probe: mixed ? 'mixed' : 'sqlserver', status: status === 0 ? 'PASS' : 'FAIL', image: sqlServerImage, version, driver: 'mssql-12.7.2', ...(linux?{clientImage:nodeImage,platform:'linux'}:{node:process.version,platform:process.platform}), liveDatabase: true, ...(mixed?{nativeBrowserRequired:true}:{} )}));
+  console.log(JSON.stringify({probe: discovery ? 'discovered-db' : mixed ? 'mixed' : 'sqlserver', status: status === 0 ? 'PASS' : 'FAIL', image: sqlServerImage, version, driver: 'mssql-12.7.2', ...(linux?{clientImage:nodeImage,platform:'linux'}:{node:process.version,platform:process.platform}), liveDatabase: true, ...(mixed || discovery?{nativeBrowserRequired:true}:{} )}));
 } catch {status = 1; console.error(JSON.stringify({probe: 'sqlserver', status: 'ERROR', reason: 'Fixture setup or runner failed; native output withheld.'}));}
 finally {
   if (pool) await pool.close().catch(() => {});

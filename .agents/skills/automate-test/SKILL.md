@@ -8,6 +8,16 @@ description: Automate test cases from a user story, an ADO suite or local scenar
 Resolve this skill to its real path and read [package and consumer boundaries](../ROOTS.md).
 Mutable state and generated code belong to the consumer; installed skills stay immutable.
 
+For missing DB lookups or verification, use
+[schema-backed discovery](../../../docs/reference/databases.md#schema-backed-query-discovery)
+during normal refinement/exploration. Reuse methods, supplied queries and current
+reviewed discoveries first. Derive only permitted SQL Server exact-key SELECTs;
+retain candidates, review source semantics and verify through the configured
+runtime before saving the discovered query document. Complete promotion before
+generation freeze. Required GUI checks, mutation preparation/cleanup, independent
+framework review and two scoped greens remain mandatory. Report saved library
+paths and unresolved gaps without changing verdicts or readiness.
+
 For existing failed, flaky, changed or blocked cases, start with
 [maintain-test](../maintain-test/SKILL.md) to diagnose and resume this workflow
 without resetting source history or repair counts.

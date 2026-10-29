@@ -39,6 +39,8 @@
     "test:api": "node --test harness-tests/api-runtime.test.mjs",
     "test:database": "node --test harness-tests/database-runtime.test.mjs",
     "probe:database": "node scripts/probes/sqlserver.mjs",
+    "test:db-discovery": "node --test --test-concurrency=1 harness-tests/database-schema.test.mjs harness-tests/database-discovery.test.mjs harness-tests/database-discovery-report.test.mjs",
+    "probe:discovered-db": "node scripts/probes/sqlserver.mjs --discovery",
     "test:sequential": "node --test harness-tests/sequential-runtime.test.mjs",
     "probe:mixed": "node scripts/probes/sqlserver.mjs --mixed",
     "test:postgresql": "node --test harness-tests/postgresql-runtime.test.mjs harness-tests/database-neutrality-assessment.test.mjs",

@@ -25,6 +25,11 @@ service method with a business name.
    supplied collections in `resources/apisCollections/`; reviewed, runtime-verified
    observations may fill missing operations without a collection prerequisite.
    Follow practice 3 and the library README for both origins and their provenance.
+   DB queries follow the same reuse order: existing business methods, applicable
+   supplied queries, then reviewed discoveries with fresh schema/evidence checks.
+   Missing SQL Server reads may use [schema-backed discovery](../../../docs/reference/databases.md#schema-backed-query-discovery).
+   Discovered Markdown stays derive-only; derive ordinary typed `Dbs<Domain>`
+   operations through the supported facade and preserve lifecycle obligations.
 
 ## Boundaries
 

@@ -10,6 +10,7 @@ import * as sqlserver from './sqlserver-driver.mjs';
 import * as postgresql from './postgresql-driver.mjs';
 import * as mysql from './mysql-driver.mjs';
 import {consumerEnvironment} from '../consumer-env.mjs';
+import {inspectDatabaseSchema} from './schema.mjs';
 
 export {defineDatabaseOperation, databaseCapabilities} from './definition.mjs';
 const phases = {SETUP: 0, EXERCISE: 1, VERIFY: 2, CLEANUP: 3, RESTORE: 3};
@@ -197,5 +198,9 @@ export function createDatabaseRuntime(run, inputRoots, {signal, resolveCredentia
     requireThat(!execution && !busy && !finished, 'Finish needs an idle active standalone database runtime.'); finished = true;
     return finishScenario(state);
   }
-  return Object.freeze({execute, selectOutput, finish});
+  async function inspectSchema(options) {
+    requireThat(!finished && !busy, 'Schema inspection needs an active sequential database runtime.');
+    return inspectDatabaseSchema(state, options, {signal, resolveCredential});
+  }
+  return Object.freeze({execute, inspectSchema, selectOutput, finish});
 }

@@ -66,6 +66,118 @@ escaped literal database grant when `partial_revokes` is off. Database owners mu
 review triggers and definer dependencies; a DML-only principal cannot inspect all
 such bodies. These checks do not isolate an untrusted database administrator.
 
+## Schema-backed query discovery
+
+During `execute-test` refinement or `automate-test` refinement/exploration, first
+search existing business methods, applicable supplied queries and reviewed DB
+knowledge. When the selected scenario still needs a lookup or persisted-state
+check, an empty `resources/Queries/` does not block discovery. Credentials alone
+grant nothing: the selected target must permit both `dbSelect` and `dbExploration`.
+Keep suitable API preparation, required GUI journeys and UI-specific checks.
+
+Initial discovery supports **SQL Server ordinary tables and exact unique-key
+SELECTs**. PostgreSQL/MySQL execution is unchanged; their automatic discovery and
+durable generated MySQL services are unsupported. Joins, views, functions,
+ambiguous keys, unsupported native types and automatic mutation recipes remain
+explicit gaps. Metadata relationships are evidence, never inferred join semantics.
+
+`createDatabaseRuntime(...).inspectSchema({target, operationId, invocationId,
+tables, phase})` inspects one to eight explicitly selected relevant table names.
+When names are unknown, supply `tableHint` instead of `tables`: a literal term of
+3–128 characters from the selected scenario. A parameterized catalog search returns
+at most eight matching names in the configured schema, then inspects those tables.
+No matches or more than eight matches is an explicit gap. Matches do not establish
+business meaning; choose the exact relevant table from verified source evidence.
+The invocation must serve a frozen scenario expectation. The shared sequential
+callback exposes the same method at `context.database.inspectSchema`. Fixed
+catalog requests use the existing SQL Server driver, target/principal preflight,
+typed parameters, cancellation and result limits; no metadata SQL is accepted from
+callers and no privileges are broadened. Each run permits at most eight inspections
+and eight distinct target/table pairs, with a 10-second inspection ceiling, fewer
+than 512 metadata rows per table and 256 KiB overall. No application rows are read.
+
+The returned `{schema, evidence}` receipt binds run/scenario, target fingerprint,
+engine, database/schema, columns, native types, ordered unique keys and foreign
+keys. It is registered evidence separate from business assertions; metadata never
+creates a passing case. Missing permissions or incomplete/unsupported metadata
+produce a specific `DB_SCHEMA_*` gap. Use source-bound case notes for unresolved
+discovery and continue unrelated supported cases.
+
+The library interfaces in `scripts/lib/database/discovery.mjs` derive a candidate
+from a live receipt, explicit key/output mapping and source artifact. Derivation
+generates one parameterized SELECT with a complete nonnullable unique key,
+explicit selected columns and native parameter types. It accepts no caller SQL,
+row samples, SQL comments or literal expected values. Check expectations remain
+frozen scenario inputs; current IDs remain run state. Review must establish exact
+identity correlation, business status meanings, tenant/soft-delete semantics and
+source-defined expectations; one observed row cannot establish any of them.
+
+Candidates live under `.harness/knowledge-candidates/db/records/`. Review requires
+a retained artifact covering purpose, target/schema, SQL, inputs, extraction and
+semantics, plus a successful execution of the matching operation through the
+configured runtime with reliable source-grounded checks and complete required
+lifecycle. The authoritative ordinary operation record lives under
+`.harness/knowledge/db/records/`. Promotion derives
+`resources/Queries/<application>-discovered.md`, preserving supplied exports,
+equivalent-definition deduplication, distinct variants, and previous provenance.
+An exclusive lock and flushed atomic replacement prevent partial publication;
+an interrupted lock is a recovery gap, never permission to steal another writer.
+Conflicting operation identities and externally changed documents fail visibly.
+
+Fresh reuse requires a new live schema receipt for the selected run and checks
+every retained source, metadata, review and verification artifact. Missing/changed
+evidence, target drift or relevant schema drift invalidates reuse until resolved.
+Markdown is documentation, never executable SQL or an independent authority.
+Review prose is an explicit sanitization responsibility; source contents and
+actual inputs/results are not copied into durable knowledge.
+
+Library API example (values and expectations are already frozen from the source):
+
+```js
+import {deriveDbCandidate, reviewDbCandidate, readReviewedDb,
+  promoteDiscoveredQueries} from 'playwright-pom-harness/scripts/lib/database/discovery.mjs';
+
+const schema = await runtime.inspectSchema({target: 'orders-db',
+  operationId: 'verify-order', invocationId: 'verify-order', tableHint: 'Order'});
+const candidate = deriveDbCandidate(run, roots, {schema,
+  operationId: 'verify-order', invocationId: 'verify-order', table: 'Orders',
+  purpose: 'Read the selected order state', key: [{column: 'Id', input: 'orderId'}],
+  columns: ['Id', 'Status'], checks: [
+    {id: 'one-order', input: 'expectedCount'},
+    {id: 'order-state', column: 'Status', input: 'expectedStatus'}
+  ], source: {artifact: '.harness/sources/order.json', scenarioId: 'order-case'}});
+// Review the candidate, then freeze candidate.operation in a validation run.
+// Execute it with typed scenario inputs through createDatabaseRuntime.
+const reviewed = reviewDbCandidate(roots, {candidateId: candidate.id,
+  review: {reviewer: 'contract-reviewer', artifact: '.harness/state/order-review.md',
+    purpose: 'Read the selected order state', inputs: 'Exact selected order identity',
+    extraction: 'Explicit identity and status fields; no result samples retained',
+    semantics: 'Source establishes identity, status meanings and applicable tenant/deletion rules'},
+  validation: {run: validationRun, roots: validationRoots, observations, attemptId}});
+await promoteDiscoveredQueries(roots, {application: 'orders', reviewedIds: [reviewed.id]});
+// A later invocation inspects the relevant schema again before reuse.
+const reusable = readReviewedDb(roots, reviewed.id, {run: laterRun, roots: laterRoots, schema: freshSchema});
+```
+
+`readDbCandidate` / `listDbCandidates` inspect candidates; `listReviewedDbs` is
+historical inspection only. Only `readReviewedDb` with a current live receipt
+establishes schema compatibility for reuse. The example names and mapping are
+illustrative, not evidence that a consumer has an `Orders` table.
+
+Current selections retain an integrity-bound receipt under
+`.harness/state/db-reuse/records/`, including the fresh schema evidence and current
+run/scenario. Reports distinguish that selection from successful SQL execution and
+bind review labels to the exact candidate. Historical knowledge alone cannot claim
+reuse in a later run; missing or changed evidence remains a separate visible gap.
+
+Manual execution completes this work before freezing operation/check provenance;
+a missing operation discovered later returns to refinement. It may save knowledge
+but generates no POM code. Automation derives a normal `Dbs<Domain>` operation
+through the existing `DBActions` facade, promotes before generation freeze, and
+retains independent framework review and two fresh scoped green runs. Required
+seed/cleanup/restoration still needs an existing supported operation. Discovery
+summaries and library paths never change case verdicts or delivery readiness.
+
 ## Definitions and parameter binding
 
 Import `defineDatabaseOperation`/`createDatabaseRuntime` from

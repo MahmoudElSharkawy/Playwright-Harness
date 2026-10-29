@@ -1,4 +1,16 @@
 export const escapeHtml = value => String(value).replace(/[&<>"']/g, char => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[char]));
+export function dbDiscoveryLines(summary) {
+  if (!summary || !Object.values(summary).some(items => Array.isArray(items) && items.length)) return [];
+  const reviewed = new Set(summary.reviewed.map(item => item.candidateId).filter(Boolean));
+  return [
+    `${summary.candidates.length} query candidates; ${summary.reviewed.length} reviewed and verified records.`,
+    ...summary.candidates.map(item => `${item.purpose ?? item.operationId} (${item.target}): ${reviewed.has(item.id) ? 'reviewed and verified' : 'unreviewed candidate'}.`),
+    ...(summary.reused ?? []).map(item => `${item.purpose ?? item.operationId} (${item.target}): selected for reuse; fresh schema checked. Execution outcomes are recorded separately.`),
+    ...summary.libraries.map(item => `Saved query library: ${item.path}`),
+    ...summary.gaps.map(() => 'Discovery evidence is unavailable or changed; resolve it before reuse.'),
+    'Historical knowledge requires a fresh schema check before reuse; case outcomes remain unchanged.'
+  ];
+}
 export const markdownText = value => String(value).replace(/\r?\n/g, ' ').replace(/[\\`*_{}\[\]()<>#+.!|~-]/g, '\\$&');
 export const stageLabel = value => ({SOURCE: 'Source review', REFINE: 'Preparation', EXPLORE: 'Exploration', PREPARE: 'Preparation', AUTHOR: 'Automation', REVIEW: 'Review', VERIFY: 'Verification', EXECUTE: 'Execution'}[String(value).split(' · ')[0]] ?? 'Review');
 const explanations = new Map([

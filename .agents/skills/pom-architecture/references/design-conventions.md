@@ -343,6 +343,17 @@ Rulings recorded by the team; specialists implement them — a future change her
 | 2026-10-12 | Direct page entry | Every directly routable page owns a public async `navigate()` action, a fixed `url` immediately after `page` when applicable, and configured environment resolution. Route parameters are explicit typed inputs; `goto` stays in the owning navigation action, with one business Allure step and separate arrival validations. Shared areas and unsupported transient entry have documented exceptions; source link/menu/redirect journeys and prerequisites are preserved. Detectable ownership violations are advisory warnings; route eligibility and ambiguous/customized methods require independent review. | page-classes §3, action-methods, test-methods, automate-test, framework-review, convention checker |
 | 2026-10-26 | Observed API knowledge and collection ownership | Extend the 2026-08-26 team-library ruling with a second origin: consumer-owned `<application>-observed.postman_collection.json`, derived from reviewed, sanitized run evidence and configured-runtime-verified API definitions. Reuse business methods first, applicable supplied collections second, reviewed discoveries for missing operations third. Both origins remain derive-only; supplied import sanitization never rewrites request/response semantics. Passive capture grants no execution authority or oracle. Review establishes route, inputs, authentication/session, extraction, effects and lifecycle; missing cleanup or unsupported data remains a gap. Promote incrementally with provenance, sanitization ledger, conflict/drift checks and immutable reviewed records before generation freeze. Collection export is not required for valid definition reuse. Preserve API/DB preparation, GUI journeys/checks, data ownership, cleanup, Allure, independent review and two scoped greens. | resources/apisCollections/README.md, service-classes, automate-test, execute-test, framework-review, docs/reference/api.md |
 
+The 2026-10-29 DB-discovery extension to the 2026-08-24 ruling adds consumer-owned
+`resources/Queries/<application>-discovered.md` documents derived from immutable
+reviewed, configured-runtime-verified operations. Supplied exports remain untouched.
+Reuse business methods, applicable supplied queries, then current reviewed discoveries.
+Bounded SQL Server metadata may establish missing exact-key SELECT candidates, never
+captured application SQL, business status meanings, accepted expectations or mutation
+recipes. Fresh reuse validates relevant schema and all supporting evidence. Both
+origins remain derive-only; promote atomically before generation freeze and retain
+GUI, data ownership, lifecycle, Allure, independent review and two-green gates.
+The operational authority is [database discovery](../../../../docs/reference/databases.md#schema-backed-query-discovery).
+
 **Doctrine-ownership map (2026-09-01)** — the canonical homes of the big cross-cutting rules; consult the home before editing any citer:
 
 | Rule | Ruling | Operational procedure |

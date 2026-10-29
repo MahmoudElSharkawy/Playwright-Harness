@@ -59,6 +59,7 @@ or weaken rules to hide new violations.
 | Setup/local sources | test:adoption, test:local-source |
 | CLI/core | test:cli-spike, test:core |
 | Runtimes | test:browser, test:api, test:database, test:postgresql, test:mysql, test:sequential, test:parallel |
+| DB schema discovery/persistence | test:db-discovery |
 | Hosts/workflow | test:hosts, test:workflow |
 | ADO | test:integrations, test:fetch |
 | Generation/reporting | test:generation, test:reporting, test:allure |
@@ -111,6 +112,7 @@ database or authenticated-host gates without separate available prerequisites.
 |---|---|
 | probe:cli, probe:browser | Pinned native viability/browser fixtures |
 | probe:observed-api | Disposable order API/GUI consumer, reviewed discoveries, incremental collections, independent review and two scoped greens |
+| probe:discovered-db | Disposable SQL Server/GUI consumer, bounded schema discovery, reviewed queries, fresh-process reuse, independent review and two scoped greens; Docker and browser |
 | probe:database, probe:postgresql | Owned disposable real engines; Docker |
 | probe:mysql | Pinned MySQL 8.4 CRUD, failure and mixed UI/API/DB proof; Docker and browser |
 | probe:mixed | SQL-backed HTTP/UI; Docker and browser |
