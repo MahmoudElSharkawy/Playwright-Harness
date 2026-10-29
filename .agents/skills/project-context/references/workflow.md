@@ -10,7 +10,7 @@ Q&A always uses the direct runner and only read/search.
 A context is a saved business-source collection, not a repository inventory.
 Resolve the consumer and project/application/environment identity from the request
 or established scope. Read connection configuration only as necessary for the
-selected ADO destination. Do not scan POM/code, harness skills, root configuration,
+selected tracker destination. Do not scan POM/code, harness skills, root configuration,
 reviewed automation knowledge or unrelated files for business evidence.
 
 Create a request under ignored `.harness/runs/`:
@@ -51,6 +51,11 @@ the new scope (for example `{"areaPath":"shop\\Checkout"}`) and desired policy.
 Other independently selected documents/collections remain until explicitly removed.
 
 ## Live ADO criteria
+
+This section preserves the Azure schema. For Jira fixed issue keys or saved JQL,
+explicit attachments, discussion/history selection and unavailable-state handling,
+use [tracker providers](../../../../docs/tracker-providers.md). Both feed this same
+capture, extraction, staging and refresh workflow; refresh preserves the saved provider.
 
 Keep organization/project and credential references in the existing
 `.harness/integrations.json`; never put secrets in requests.
@@ -133,7 +138,7 @@ An independently supplied file remains independent of its originating work item.
 npx --no pom-harness context update --request .harness/runs/context-request.json
 npx --no pom-harness context update --id checkout-qa
 ```
-The second form reuses all saved documents and ADO collections. `retrieve` and
+The second form reuses all saved documents and tracker collections. `retrieve` and
 `stage` also accept `--id`. Supplying `sources: []` alongside an ADO request
 refreshes only that collection. A request containing only version/contextId is
 equivalent to `--id`. Explicit removal is `{"id":"checkout-guide","status":"removed"}`.

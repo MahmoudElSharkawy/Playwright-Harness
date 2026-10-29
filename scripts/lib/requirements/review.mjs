@@ -126,3 +126,15 @@ export function renderComment(draft, state, source, mentions) {
   const summary = renderReviewSummary(draft);
   return {text: summary + '\n\n' + (draft.comment === null ? renderChatTable(draft, state, source) : markdownBody(draft.comment)), html: recipients + '<p>' + reviewSummaryLines(draft, htmlText, htmlStrong).join('<br>') + '</p>' + body};
 }
+
+/** The same reviewed rows rendered as native Jira content, without a separate review workflow. */
+export function renderCommentDocument(draft, state, source, mentions) {
+  requireThat(draft.comment !== null || draft.findings.length > 0, 'Zero findings has no outgoing comment.');
+  const plain = value => value;
+  const paragraph = value => ({type: 'paragraph', content: value.split(/\r\n?|\n/).flatMap((line, index) => [...(index ? [{type: 'hardBreak'}] : []), ...(line ? [{type: 'text', text: line}] : [])])});
+  const content = reviewSummaryLines(draft, plain, plain).map(paragraph);
+  if (mentions.length) content.unshift({type: 'paragraph', content: mentions.flatMap((person, index) => [...(index ? [{type: 'text', text: ' '}] : []), {type: 'mention', attrs: {id: person.id, text: '@' + person.displayName}}])});
+  if (draft.comment !== null) content.push(paragraph(draft.comment));
+  else content.push({type: 'table', attrs: {isNumberColumnEnabled: false, layout: 'default'}, content: [columns, ...rows(draft, state, source, plain, plain)].map((row, index) => ({type: 'tableRow', content: row.map(cell => ({type: index === 0 ? 'tableHeader' : 'tableCell', content: [paragraph(cell)]}))}))});
+  return {version: 1, type: 'doc', content};
+}

@@ -1,5 +1,8 @@
 # Change impact analysis
 
+See [tracker providers](tracker-providers.md) for shared Azure/Jira selection,
+Xray/Zephyr Scale capabilities, and local cases without a plugin. The same source, review and readiness rules apply to every selected mode.
+
 Use [impact-analysis](../.agents/skills/impact-analysis/SKILL.md) to identify what a
 selected story, bug fix or technical change could affect and recommend regression
 scope. It works before implementation and without a failing test:

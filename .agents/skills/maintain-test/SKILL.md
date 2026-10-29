@@ -5,6 +5,10 @@ description: Diagnose failed, flaky, changed or blocked tests. Support diagnose 
 
 # Maintain tests
 
+Use the shared [tracker provider contract](../../../docs/tracker-providers.md) for
+Azure, Jira with Xray or Zephyr Scale, and Jira without a plugin. Keep the same
+workflow and gates; select native adapters and preserve the captured source identity.
+
 Resolve this skill to its real path and read [ROOTS](../ROOTS.md). Work in the
 consumer, preserving its instructions and customizations. Accept existing case IDs,
 source files, run IDs or failure reports, for example:
@@ -43,6 +47,8 @@ requests stay here, with one maintenance assessment/history and the existing gat
 For routing-only questions, return owners and next actions without creating an
 assessment or investigating co-located cases/history.
 
+For Jira case revisions, use the shared [test-case-design](../test-case-design/SKILL.md)
+review/publication workflow. Without a plugin, revise the source-bound local cases.
 For direct requests to update original ADO case titles, actions, expected results
 or step order, follow [case editing](../../../docs/ado-case-editing.md) first. That
 workflow edits only selected source cases. Refetch with `--revisions` into a fresh

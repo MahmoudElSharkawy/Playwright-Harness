@@ -294,11 +294,11 @@ are deliberate and settled — do not "helpfully" reintroduce the Java form:
 | Validation methods start with `Validate` | Start with `verify` (`verifyErrorMessage`). Existing `assert*` methods are legacy aliases — align opportunistically | `verify*` is the dominant project pattern |
 | Locator variables `private` | `private readonly` in **new** page classes; existing public `readonly` fields are legacy — tighten only when already editing that file | Same encapsulation goal, TS idiom, minimal churn |
 | Packages `src/main/java`, `src/test/java` | `src/{pages,apis,dbs,utils,config}` for framework code; `tests/` and `resources/` top-level (2026-09-01 layout ruling — deliberately NOT `src/main`/`src/test`: a test repo ships no "main" artifact) | Framework-code vs specs split, TS idiom |
-| Test class named after JIRA story (`WFDT_1234.java`) | `<Feature>Tests.spec.ts`; traceability via `allure.tms('<id>')` and the test title | File-per-feature reads better; links carry the traceability |
+| Test class named after JIRA story (`WFDT_1234.java`) | `<Feature>Tests.spec.ts`; traceability via source-matching native links/identity and the test title | File-per-feature reads better; links carry the traceability |
 | Test data file named after story (`WFDT_1234.json`) | `<Feature>TestJsonFile.json` matching its spec file | Same pairing rule, project naming |
 | `@Step` | `step('title', async () => { … })` from `allure-js-commons` | Direct equivalent |
 | `@Epic` / `@Feature` / `@Story` | `allure.epic()` / `allure.feature()` / `allure.story()` as the first lines inside the test body | Direct equivalent |
-| `@TmsLink` / `@Issue` | `await allure.tms('id')` / `await allure.issue('id')` — literal IDs, with actual destinations configured in the existing Allure reporter link templates; issues only for real associated bugs | Reporting IDs are exempt from scenario-data externalization; no URL helper needed |
+| `@TmsLink` / `@Issue` | `await allure.tms('id')` / `await allure.issue('id')` — literal native IDs with matching reporter templates, or explicit native links and site-qualified `testCaseId` for mixed sites/plugins; issues only for real associated bugs | Reporting IDs are exempt from scenario-data externalization; no URL helper needed |
 | `@Test(description, groups)` | The test title is the description (JIRA id inside it when applicable); groups → Playwright tags (`{ tag: ['@smoke'] }`) | Playwright idiom |
 | Properties files for env variables | `playwright.config.ts` (`baseURL`, projects) + `src/config/*.ts` + `process.env` (dotenv wiring exists, commented, in the config) | TS-native configuration |
 | Java method overloading for variants | Optional/default parameters or a second intent-named method | TS idiom |
@@ -436,7 +436,7 @@ full QA inventory, source-coverage verifier or two-green readiness gate.
 - [ ] Business methods receive operation-sized inputs, never complete spec-schema dependencies; necessary shared operation types have demonstrated reuse; useful typing is preserved, never replaced with `any`
 - [ ] Credentials classified by provenance: external access via env/CI, fixed synthetic inputs in paired JSON, disposable generated values retained/reused in test scope
 - [ ] Required cleanup follows §4a: retain attempted identities before mutation, reconcile ownership, preserve foreign records, verify absence/restoration, and keep original failures; report protection is limited as documented in utility-classes §20
-- [ ] Each test: independent, parallel-safe, re-runnable, ≥1 validation, awaited `allure.feature` plus a real literal `allure.tms` or local `allure.testCaseId`
+- [ ] Each test: independent, parallel-safe, re-runnable, ≥1 validation, awaited `allure.feature` plus source-matching identity: native `allure.tms`, explicit native links plus site-qualified `testCaseId`, or local `testCaseId`
 - [ ] Setup seeds via API/DB, teardown cleans up before disposal; built-in isolated page/context by default, justified public fixtures preserved
 - [ ] Prerequisites seeded through API/DB layers wherever a lower-layer path exists
 - [ ] Data unique per case AND per run: mutable inputs live in the case's `tc<id>` cluster, TC id in the base value (suffix-tolerant fields; format-constrained fields get distinct valid per-case values instead), module timestamp appended by default with extra discrimination only when needed; no two tests share a mutable record or key (rows of one parameterized case share its cluster by design)

@@ -8,7 +8,7 @@ import {validateLocalSource} from '../local-source.mjs';
 import {readRequirements} from '../requirements/index.mjs';
 import {consumerIdentity} from '../requirements/sources.mjs';
 import {captureDesign, requireFreshDesign} from './sources.mjs';
-import {validateDesign, validateAssessment, renderDesign, coverage, selectedIds, proposalFingerprint, preparationSteps, confirmedOutcomes, exactDuplicates, duplicateGaps} from './review.mjs';
+import {validateDesign, validateAssessment, renderDesign, coverage, selectedIds, proposalFingerprint, preparationSteps, nativeDesignSteps, confirmedOutcomes, exactDuplicates, duplicateGaps} from './review.mjs';
 import {retainReviewEvidence, reviewEvidenceStatus} from './review-evidence.mjs';
 import {dependencyGaps} from './references.mjs';
 import {withReviewCopy} from './review-copy.mjs';
@@ -104,14 +104,18 @@ export async function designHandoff(roots, designId, options = {}) {
   await requireFreshDesign(roots, state, {...options, selected: ids});
   const source = validateLocalSource({version: 1, id: designId, title: `Reviewed cases: ${designId}`, scenarios: ids.map(id => {
     const row = state.draft.cases.find(row => row.id === id), receipt = confirmedOutcomes(state).find(row => row.caseId === id);
-    return {id, title: row.title, steps: [...preparationSteps(row, state.draft.preparations.find(row => row.caseId === id)), ...row.steps].map(step => ({action: step.action, expected: [step.expected]})),
-      ...(receipt?.adoId ? {externalReferences: [{system: 'ado', id: String(receipt.adoId)}]} : {})};
+    const origin = state.evidence.requirements.origin;
+    const references = receipt?.adoId ? [{system: 'ado', id: String(receipt.adoId)}] : origin?.provider === 'jira' ? [{system: 'jira', id: `${origin.siteUrl}/browse/${origin.storyId}`}, ...(receipt?.externalReferences ?? [])] : [];
+    const steps = [...preparationSteps(row, state.draft.preparations.find(row => row.caseId === id)), ...row.steps];
+    const preserved = origin?.provider === 'jira' ? nativeDesignSteps(steps, state.evidence.existing.find(item => String(item.id) === id)) : steps;
+    return {id, title: row.title, steps: preserved.map(step => ({action: step.action + (step.data ? '\nTest data:\n' + step.data : ''), expected: [step.expected]})),
+      ...(references.length ? {externalReferences: references} : {})};
   })});
   const mappings = state.draft.mappings.filter(row => ids.includes(row.caseId)).map(mapping => {
     const stepOffset = source.scenarios.find(row => row.id === mapping.caseId).steps.length - state.draft.cases.find(row => row.id === mapping.caseId).steps.length;
     return {...mapping, checks: mapping.checks.map(check => ({...check, step: check.step + stepOffset}))};
   });
-  const content = {version: 1, proposal: state.proposal, sourceFingerprint: state.source, selected: ids, source, coverage: coverage(state, ids, {roots}), mappings, execution: 'not-run', automation: 'not-generated', maintenance: 'Accepted revisions affecting existing automation belong to maintain-test; preserve failure history, cumulative budgets, independent review and two fresh scoped green runs.'};
+  const content = {version: 1, proposal: state.proposal, sourceFingerprint: state.source, ...(state.sourceVerification ? {sourceVerification: state.sourceVerification} : {}), selected: ids, source, coverage: coverage(state, ids, {roots}), mappings, execution: 'not-run', automation: 'not-generated', maintenance: 'Accepted revisions affecting existing automation belong to maintain-test; preserve failure history, cumulative budgets, independent review and two fresh scoped green runs.'};
   const identity = fingerprint(content), path = `.harness/sources/test-case-design/${designId}/${identity}.json`, tracePath = `.harness/state/test-case-design/${designId}/handoffs/${identity}.json`, result = {...content, path};
   for (const [relative, value] of [[path, source], [tracePath, result]]) {
     const file = consumerPath(roots, relative);

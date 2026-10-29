@@ -5,6 +5,10 @@ description: Identify affected areas and recommend regression scope for selected
 
 # Change impact analysis
 
+Use the shared [tracker provider contract](../../../docs/tracker-providers.md) for
+Azure, Jira with Xray or Zephyr Scale, and Jira without a plugin. Keep the same
+workflow and gates; select native adapters and preserve the captured source identity.
+
 Resolve this linked skill to its real path. Read [ROOTS](../ROOTS.md).
 
 ## Choose the owner before analysis

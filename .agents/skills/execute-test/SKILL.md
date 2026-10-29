@@ -1,9 +1,13 @@
 ---
 name: execute-test
-description: Execute an ADO suite or story through live browser, API and database runtimes, without generating automation code. Produce verified reports and optionally file bugs or publish suite outcomes.
+description: Execute Azure, Jira plugin or local cases through live browser, API and database runtimes, without generating automation code. Produce verified reports and optionally file bugs or publish native outcomes.
 ---
 
 # Execute manual tests
+
+Use the shared [tracker provider contract](../../../docs/tracker-providers.md) for
+Azure, Jira with Xray or Zephyr Scale, and Jira without a plugin. Keep the same
+workflow and gates; select native adapters and preserve the captured source identity.
 
 Resolve [ROOTS](../ROOTS.md) first. Run the consumer's installed CLI with
 `npx --no pom-harness execute`; use [automate-test](../automate-test/SKILL.md)
@@ -17,7 +21,7 @@ on blockers. In checkpoint mode, pause after each case. Authorization already
 given by the user remains in force for ordinary permitted application operations.
 
 Published [test-case-design](../test-case-design/SKILL.md) cases enter through these
-existing ADO routes. Preserve preparation, explicit inputs/variations, all ordered
+existing native or local routes. Preserve preparation, explicit inputs/variations, all ordered
 actions and expected results, and cleanup through parsing/refinement. Publication
 and design review are not execution evidence; missing business details need
 source-backed clarification before the affected case can execute.
@@ -42,7 +46,9 @@ per-query approval ceremony and never invents required mutation recipes. Missing
 metadata/identity/semantics or cleanup remains a case gap. Return to refinement
 instead of mutating a frozen step; report saved paths separately from verdicts.
 
-1. Run `prepare suite|story <id> [--plan <id>] [--environment <name>] [--checkpoint]`.
+1. Run `prepare suite|story <id> [--provider ado|jira] [--plan <id>] [--environment <name>] [--checkpoint]`.
+   Jira also supports native `case|plan|execution|folder` where the selected plugin
+   provides it. Use `prepare local <source.json>` for local/no-plugin cases.
    Read the captured source and exclusions. Edit only its draft `refinement.json`,
    following [refinement](references/refinement.md); then run `freeze <exec>`.
    Complete required login, API/DB operations, provenance and cleanup declarations.
@@ -76,6 +82,8 @@ instead of mutating a frozen step; report saved paths separately from verdicts.
    Present complete drafts and remaining investigation/repair items for edits,
    selection or deferral. Reuse verified run evidence. Drafting does not
    authorize filing or additional reproduction.
-   Read [delivery](references/delivery.md) only when ADO delivery is requested.
+   Use the [provider guide](../../../docs/tracker-providers.md) for Jira/local delivery;
+   read [Azure delivery](references/delivery.md) for Azure.
    Preview first. External writes require `--execute`; the request must authorize
-   the concrete delivery. Story scope supports bugs only.
+   the concrete delivery. Azure story scope supports bugs only. Jira native results
+   require an explicit execution/cycle destination; no-plugin results stay local.

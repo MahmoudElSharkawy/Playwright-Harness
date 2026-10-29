@@ -38,6 +38,7 @@ export function readVerifiedEvidence(roots, record) {
 }
 export function defectFingerprint(source, item) {
   const canonical = {v: 1, org: source.organizationUrl, project: source.project, caseId: item.caseId, kind: item.kind, sourceStep: item.sourceStep,
+    ...(source.provider ? {provider: source.provider, sourceIdentity: Object.fromEntries(['kind', 'siteUrl', 'project', 'projectId', 'testManagement', 'path', 'sourceId'].filter(key => source.scope?.[key] !== undefined).map(key => [key, source.scope[key]]))} : {}),
     ...(item.kind === 'expectation' ? {expectedIndex: item.expectedIndex, conditionIndex: item.conditionIndex, conditionTemplate: item.conditionTemplate} : {signature: item.signature})};
   return `harness-defect-${fingerprint(canonical).slice(0, 12)}`;
 }

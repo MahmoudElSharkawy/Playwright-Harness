@@ -2,7 +2,10 @@
 
 Use the discoverable `test-case-design` skill to design cases from a selected story
 or supplied requirements, review them in chat and optionally publish an explicitly
-approved selection to Azure DevOps. Local design requires no ADO credentials.
+approved selection to Azure, Xray or Zephyr Scale, or keep local cases without a plugin.
+Local design requires no remote credentials. [Tracker providers](tracker-providers.md)
+defines provider selection, native identities and no-plugin handoff; all modes use
+the review, freshness, approval and recovery pipeline below.
 The agent performs design and semantic review; scripts own schemas, rendering,
 snapshots, approval binding and durable delivery. No external design engine runs.
 
@@ -11,7 +14,7 @@ snapshots, approval binding and durable delivery. No external design engine runs
 Run commands from the consumer with `npx --no pom-harness test-case-design ...`.
 Canonical scripts also accept `--project-root <consumer>` when invoked directly.
 Use the existing [requirements inventory](requirements-analysis.md), including its
-acceptance evidence and stable IDs. A design selection has this shape:
+acceptance evidence and stable IDs. An Azure design selection has this shape:
 
 ```json
 {
@@ -38,6 +41,11 @@ cases is valid. `context` is optional; it selects a narrow read of captured busi
 context, with optional `sourceId` or `workItemId`. It never builds or refreshes context.
 Missing or incompatible context remains an explicit gap. Related story links are
 returned as leads, not automatically fetched or added to scope.
+
+For Jira, set `request.provider: "jira"` and an issue key in `storyId`; selected
+native `caseIds` are opaque strings. Without a plugin, optional `localCaseSource`
+selects an existing neutral source to reuse; approved cases stay local with story
+references. Do not infer remote case capability from a Jira origin alone.
 
 ```sh
 npx --no pom-harness test-case-design prepare --id sign-in --input design-source.json
@@ -231,7 +239,7 @@ design `head`. Cases contain exactly:
 Use actual inventory IDs, never invented `AC-1` labels as authority. Labels are
 readable references; internal IDs preserve traceability. New IDs begin `NEW-`;
 existing IDs are numeric strings with action Update or Reuse unchanged. A case
-already created must use its returned ADO ID in later proposals. Unsupported extra
+already created must use its returned native ID in later proposals. Unsupported extra
 case fields are rejected. Exactly one of the eight test types and one of Positive /
 Negative is required. A zero-case proposal is valid but does not imply complete
 coverage.
@@ -295,7 +303,7 @@ roles, languages, data, states and outcomes remain meaningful differences. Every
 warning needs an assessment entry `{id, verdict: "retain" | "revise", reason}`;
 use `[]` when there are none. A `revise` decision withholds affected delivery until
 the proposal is corrected and reviewed. Consolidation is an explicit edit: retain
-all verifying coverage mappings and real ADO identities, then recalculate totals.
+all verifying coverage mappings and captured native identities, then recalculate totals.
 Never delete, merge or renumber published cases automatically. Equal titles alone
 are not a duplicate test.
 
@@ -360,7 +368,7 @@ counterexample, risk block, nested tables or step-summary substitution is suppor
 still owns the summary, overview and every complete case table. Review identity,
 recorded independent-review verdict counts, retained-evidence status, coverage gaps,
 duplicate decisions and recorded delivery outcomes appear separately after the
-tables. A local design does not need an ADO story ID.
+tables. A local design does not need a remote story ID.
 
 The filename uses the existing state head; the content also identifies the existing
 proposal revision. Case edits and assessments return their current file paths.
@@ -584,7 +592,7 @@ capabilities require revalidation and renewed approval. Unselected cases and res
 gaps remain saved. Publication can deliver valid selected cases even when unrelated
 requirements remain unresolved.
 
-Native publication maps title to Title; coverage reference to a marked story-specific
+For Azure, native publication maps title to Title; coverage reference to a marked story-specific
 Description block (keeping unrelated existing content); exact test/scenario values
 to separate tags (keeping unrelated tags); and preparation plus business actions/
 expectations to native Steps XML. Example first step action:
@@ -605,14 +613,29 @@ gaps, never invented defaults. Creation includes the approved Tested By relation
 atomically. Updates preserve relationships and native history. A previewed History
 entry records the stable operation marker; it adds no custom fields or extra tags.
 
+For Jira, the same preview/publish/reconcile pipeline maps cases to native
+Xray/Zephyr titles, ordinary steps, classification labels and exact story links.
+Native step `data` is optional and preserved when action/expectation are unchanged.
+If a changed step had captured data, supply its explicit reviewed `data`; use an
+empty string only to clear it intentionally. Omission must not silently erase it.
+The owned remote marker and returned native identity support uncertain-create
+recovery. Metadata checks do not imply Azure's validate-only or atomic-create-link
+capabilities. Unsupported native content remains a gap. No-plugin publication
+retains approved local cases; it does not fabricate native tests or revisions.
+
 Immutable previews persist before dispatch. Per-case ordered intent, request
 fingerprints, returned IDs/URLs, and pending/applied/unchanged/failed/uncertain states
 stay in consumer records and existing integration receipts. A lost acknowledgement
-is reconciled against exact operation marker, expected history revision, full native
+is reconciled against exact owned operation marker, captured native revision/content, full native
 fields and story relation, never title matching. Unknown/mismatched results remain
 uncertain. Repeated invocation never recreates confirmed cases or replays uncertain
 writes. After reconciliation, reuse the same approved `publish` command to perform
 only remaining authorized work. Do not bypass failed recovery by editing receipts.
+`reconcile` is read-only by default. With `--execute --approval <original-fingerprint>`,
+it may finish a missing native step/coverage-link operation only when current
+readback and durable receipts prove that operation was never dispatched or was
+rejected without execution. Unknown dispatched effects stay uncertain and are
+never blindly retried; approval alone does not prove a write was absent.
 
 ## Handoff and ownership
 
@@ -624,12 +647,13 @@ The handoff writes an ordinary validated local scenario source under
 `.harness/sources/test-case-design/` and adjacent source/coverage/impact references.
 Its mapping check numbers address the emitted source steps, including preparation;
 the saved proposal keeps its original business-step numbers.
-Use local sources through existing [automation](PIPELINE.md) intake; published ADO
-cases use existing [execution](manual-execution.md) story/suite intake. Preserve
+Use local sources through existing [automation](PIPELINE.md) or local
+[execution](manual-execution.md) intake; published native cases use the selected
+provider's story/group intake. Preserve
 preparation, exact inputs and explicit variations, every ordered action/expectation
 and necessary cleanup through parsing and refinement. An omitted action or result is
 a handoff defect, not permission to invent one. No new intake route is introduced.
-Confirmed ADO IDs become external references; proposed cases never receive invented
+Confirmed native IDs become source-qualified external references; proposed cases never receive invented
 numeric identities. Accepted revisions affecting existing automation belong to
 [maintain-test](maintenance.md). Preserve failure history, cumulative repair budgets,
 independent review and two fresh scoped green runs. Publication/handoff cannot mark

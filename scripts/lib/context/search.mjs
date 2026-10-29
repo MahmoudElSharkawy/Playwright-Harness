@@ -5,6 +5,7 @@ import {dirname} from 'node:path';
 import {fingerprint, requireThat} from '../execution-core/data.mjs';
 import {contextFile, readManifest, storeFor, capturedCustom} from './storage.mjs';
 import {scopeKey, inactive, RECIPE, HASH, contextData, businessSource} from './model.mjs';
+import {jiraIssueKey} from '../integrations/jira-config.mjs';
 
 const NORMALIZER = 'unicode-arabic-v1';
 export function normalize(text) {
@@ -96,8 +97,9 @@ function businessCatalog(roots, manifest) {
   return records.filter(source => businessSource(source) && !inactive.has(source.status));
 }
 function citation(source, location, manifest) {
-  const fields = {'System.Title': 'Title', 'System.Description': 'Description', 'Microsoft.VSTS.Common.AcceptanceCriteria': 'Acceptance criteria', 'Microsoft.VSTS.TCM.Steps': 'Test steps', 'Microsoft.VSTS.TCM.ReproSteps': 'Reproduction steps'};
-  const label = source.kind === 'work-item' ? `Work item #${source.workItemId} — ${source.title || 'Untitled'}` : source.name ?? source.path?.replaceAll('\\', '/').split('/').at(-1) ?? source.id;
+  const fields = {'System.Title': 'Title', 'System.Description': 'Description', 'Microsoft.VSTS.Common.AcceptanceCriteria': 'Acceptance criteria', 'Microsoft.VSTS.TCM.Steps': 'Test steps', 'Microsoft.VSTS.TCM.ReproSteps': 'Reproduction steps', summary: 'Title', description: 'Description'};
+  const label = source.kind === 'work-item' ? `${source.provider === 'jira' ? 'Jira issue ' : 'Work item #'}${source.workItemId} — ${source.title || 'Untitled'}` : source.name ?? source.path?.replaceAll('\\', '/').split('/').at(-1) ?? source.id;
+  if (source.provider === 'jira') return {label, ...(location ? {location: fields[location] ?? location} : {}), ...(source.kind === 'work-item' && manifest.jiraProject ? {url: `${manifest.jiraProject.siteUrl}/browse/${source.workItemId}`} : {})};
   const project = manifest.adoProject;
   return {label, ...(location ? {location: fields[location] ?? location} : {}), ...(source.kind === 'work-item' && project ? {url: `${project.organizationUrl}/${encodeURIComponent(project.name)}/_workitems/edit/${source.workItemId}`} : {})};
 }
@@ -133,7 +135,7 @@ function surroundingPage(roots, manifest, options, pagination, window) {
     const neighbors = [...preceding, anchor, ...following], rows = neighbors.filter(allowed), results = [], store = storeFor(roots, manifest);
     const counts = db.prepare('SELECT sum(rowid<?) AS preceding,sum(rowid>?) AS following FROM entries WHERE sourceId=?').get(anchor.rowid, anchor.rowid, anchor.sourceId);
     const response = {status: 'SURROUNDING', contextId: manifest.contextId, revision: manifest.revision, scope: manifest.scope,
-      ...(manifest.adoProject ? {adoProject: manifest.adoProject} : {}), results, total: rows.length, omitted: Math.max(0, rows.length - offset), cursor: null,
+      ...(manifest.adoProject ? {adoProject: manifest.adoProject} : {}), ...(manifest.jiraProject ? {jiraProject: manifest.jiraProject} : {}), results, total: rows.length, omitted: Math.max(0, rows.length - offset), cursor: null,
       surrounding: {anchor: options.around, before, after, omittedBefore: Math.max(0, counts.preceding - preceding.length), omittedAfter: Math.max(0, counts.following - following.length), excludedByFilters: neighbors.length - rows.length}};
     requireThat(offset < rows.length, 'Surrounding cursor is outside its evidence window.');
     const finish = () => {response.omitted = rows.length - offset - results.length; response.cursor = response.omitted ? Buffer.from(JSON.stringify({binding, offset: offset + results.length})).toString('base64url') : null;};
@@ -151,7 +153,7 @@ export function readContextOverview(roots, id) {
   capturedCustom(roots, manifest);
   // Current generations publish business-only counts. Preserve cheap overview reads
   // without opening unrelated evidence records or consulting the live sources.
-  if (manifest.version === 2) return {status: 'CAPTURED', version: 2, contextId: id, identity: manifest.identity, scope: manifest.scope, ...(manifest.adoProject ? {adoProject: manifest.adoProject} : {}),
+  if (manifest.version === 2) return {status: 'CAPTURED', version: 2, contextId: id, identity: manifest.identity, scope: manifest.scope, ...(manifest.adoProject ? {adoProject: manifest.adoProject} : {}), ...(manifest.jiraProject ? {jiraProject: manifest.jiraProject} : {}),
     revision: manifest.revision, updatedAt: manifest.updatedAt,
     ...(manifest.index?.recipe === RECIPE ? {coverage: manifest.status, counts: manifest.counts, freshness: manifest.freshness, gaps: manifest.gaps} : {coverage: 'unverified', counts: {sources: 0, activeSources: 0, facts: 0, conflicts: 0, gaps: 1}, gaps: [{coverage: 'business-selection-required'}], migration: 'Explicit business-source selection/update required; history is preserved.'})};
   const sources = businessCatalog(roots, manifest), store = manifest.version === 2 ? storeFor(roots, manifest) : undefined;
@@ -165,7 +167,7 @@ export function readContextOverview(roots, id) {
   const gaps = sources.filter(source => source.status !== 'verified').map(source => ({sourceId: source.id, label: citation(source, undefined, manifest).label, status: source.status, coverage: source.coverage}));
   if (conflicts) gaps.push({status: 'conflicting', coverage: 'conflicting-facts'});
   const times = sources.map(source => source.verifiedAt).filter(Boolean).sort();
-  return {status: 'CAPTURED', version: manifest.version, contextId: id, identity: manifest.identity, scope: manifest.scope, ...(manifest.adoProject ? {adoProject: manifest.adoProject} : {}),
+  return {status: 'CAPTURED', version: manifest.version, contextId: id, identity: manifest.identity, scope: manifest.scope, ...(manifest.adoProject ? {adoProject: manifest.adoProject} : {}), ...(manifest.jiraProject ? {jiraProject: manifest.jiraProject} : {}),
     revision: manifest.revision, coverage: gaps.length ? 'partial' : sources.length ? 'complete' : manifest.status, updatedAt: manifest.updatedAt,
     counts: {sources: sources.length, activeSources: sources.length, facts: facts.size, conflicts, gaps: gaps.length},
     freshness: {oldestVerifiedAt: times[0] ?? null, newestVerifiedAt: times.at(-1) ?? null}, gaps: gaps.slice(0, 8),
@@ -178,9 +180,9 @@ export function searchContext(roots, id, options = {}) {
   requireThat(Number.isSafeInteger(limit) && limit >= 1 && limit <= 25 && Number.isSafeInteger(maxBytes) && maxBytes >= 4096 && maxBytes <= 65536, 'Search limits are 1–25 results and 4096–65536 output bytes.');
   const query = options.query ?? ''; requireThat(typeof query === 'string' && Buffer.byteLength(query) <= 4096, 'Search query exceeds 4096 bytes.');
   for (const key of ['sourceId', 'topic']) requireThat(options[key] === undefined || typeof options[key] === 'string' && options[key].length > 0 && options[key].length <= 200, 'Invalid search filter.');
-  const inferredId = /^#?[1-9][0-9]*$/.test(query.trim()) ? Number(query.trim().replace('#', '')) : undefined;
-  const workItemId = options.workItemId === undefined ? inferredId : Number(options.workItemId);
-  requireThat(workItemId === undefined || Number.isSafeInteger(workItemId) && workItemId > 0, 'Invalid work item identifier.');
+  const inferredId = jiraIssueKey(query.trim()) ? query.trim() : /^#?[1-9][0-9]*$/.test(query.trim()) ? Number(query.trim().replace('#', '')) : undefined;
+  const workItemId = options.workItemId === undefined ? inferredId : jiraIssueKey(options.workItemId) ? options.workItemId : Number(options.workItemId);
+  requireThat(workItemId === undefined || jiraIssueKey(workItemId) || Number.isSafeInteger(workItemId) && workItemId > 0, 'Invalid work item identifier.');
   const terms = [...new Set(normalize(query).match(/[\p{L}\p{N}]+/gu) ?? [])]; requireThat(terms.length <= 32, 'Search query exceeds 32 terms.');
   const window = {before: Number(options.before ?? 2), after: Number(options.after ?? 2)};
   requireThat(options.around !== undefined ? HASH.test(options.around) && options.sourceId && options.revision === manifest.revision && !query && !options.catalog : ['revision', 'before', 'after'].every(key => options[key] === undefined), 'Surrounding search needs a passage anchor, source and current capture revision, without query/catalog.');
@@ -219,7 +221,7 @@ export function searchContext(roots, id, options = {}) {
   const filters = [], args = {};
   if (options.sourceId) {filters.push('e.sourceId=$source'); args.$source = options.sourceId;}
   if (options.topic) {filters.push('e.topic=$topic'); args.$topic = options.topic;}
-  if (workItemId !== undefined) {filters.push('e.workItemId=$item');}
+  if (options.workItemId !== undefined || typeof inferredId === 'number') {filters.push('e.workItemId=$item');}
   const filter = filters.length ? ` AND ${filters.join(' AND ')}` : '';
   args.$exact = options.sourceId ?? query.trim(); args.$item = workItemId ?? -1;
   args.$fts = terms.map(term => `"${term.replaceAll('"', '""')}"`).join(' OR ') || '""';
@@ -234,7 +236,7 @@ export function searchContext(roots, id, options = {}) {
     const total = db.prepare(`${cte} SELECT count(*) AS n FROM ranked`).get(args).n;
     const rows = db.prepare(`${cte} SELECT e.*,r.priority FROM ranked r JOIN entries e ON e.rowid=r.rowid ORDER BY r.priority,r.score,e.key LIMIT $limit OFFSET $offset`).all({...args, $limit: limit, $offset: offset});
     const store = storeFor(roots, manifest), results = [];
-    const response = {status: total ? 'MATCHES' : 'NO_EVIDENCE', contextId: id, revision: manifest.revision, scope: manifest.scope, ...(manifest.adoProject ? {adoProject: manifest.adoProject} : {}), results, total, omitted: Math.max(0, total - offset), cursor: null};
+    const response = {status: total ? 'MATCHES' : 'NO_EVIDENCE', contextId: id, revision: manifest.revision, scope: manifest.scope, ...(manifest.adoProject ? {adoProject: manifest.adoProject} : {}), ...(manifest.jiraProject ? {jiraProject: manifest.jiraProject} : {}), results, total, omitted: Math.max(0, total - offset), cursor: null};
     const finish = () => {response.omitted = Math.max(0, total - offset - results.length); response.cursor = response.omitted ? Buffer.from(JSON.stringify({binding, offset: offset + results.length})).toString('base64url') : null;};
     for (const row of rows) {
       results.push(capturedHit(store, manifest, row)); finish();

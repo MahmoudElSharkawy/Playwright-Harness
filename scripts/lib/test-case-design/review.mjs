@@ -9,7 +9,7 @@ import {reviewEvidenceStatus} from './review-evidence.mjs';
 export const TEST_TYPES = Object.freeze(['Functional', 'Accessibility', 'Compatibility', 'UIUX', 'Security', 'Performance', 'Responsiveness', 'Localization']);
 export const SCENARIO_TYPES = Object.freeze(['Positive', 'Negative']);
 const text = (value, label) => requireThat(typeof value === 'string' && value.trim() && value.length <= 65536 && !/[\x00-\x08\x0b\x0c\x0e-\x1f]/.test(value), `${label} needs nonempty bounded text.`);
-const caseId = value => typeof value === 'string' && (/^NEW-[A-Za-z0-9_-]{1,60}$/.test(value) || /^[1-9]\d{0,9}$/.test(value) && Number(value) <= 2147483647);
+const caseId = value => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,199}$/.test(value);
 const unique = values => new Set(values).size === values.length;
 const selectedIds = (draft, selected) => {const ids = selected ?? draft.cases.map(row => row.id); requireThat(Array.isArray(ids) && unique(ids) && ids.every(id => draft.cases.some(row => row.id === id)), 'Select distinct known case IDs.'); return ids;};
 export {selectedIds};
@@ -27,18 +27,20 @@ export function validateDesign(raw, state, requirements) {
   requireThat(Array.isArray(input.cases) && input.cases.length <= 500 && unique(input.cases.map(row => row.id)), 'Design needs distinct cases, at most 500.');
   for (const row of input.cases) {
     keys(row, ['id', 'proposedAction', 'title', 'prerequisites', 'testData', 'coverageReferences', 'testType', 'scenarioType', 'steps'], 'designed case');
-    requireThat(caseId(row.id) && ['Create', 'Update', 'Reuse unchanged'].includes(row.proposedAction) && (row.id.startsWith('NEW-') ? row.proposedAction === 'Create' : row.proposedAction !== 'Create'), 'Use stable NEW- IDs for creation and real ADO IDs for existing cases.');
-    requireThat(!state.created?.[row.id], 'This temporary ID was already created; refresh and use its returned ADO ID.');
+    const captured = state.evidence.existing.find(item => String(item.id) === row.id);
+    requireThat(caseId(row.id) && ['Create', 'Update', 'Reuse unchanged'].includes(row.proposedAction) && (row.proposedAction === 'Create' ? !captured && /^NEW-[A-Za-z0-9_-]{1,60}$/.test(row.id) : !!captured), 'Use stable NEW- IDs for creation and captured IDs for existing cases.');
+    requireThat(!state.created?.[row.id], 'This temporary ID was already created; refresh and use its returned native ID.');
     for (const field of ['title', 'prerequisites', 'testData']) text(row[field], field);
-    requireThat(row.title.length <= 255 && !/[\r\n]/.test(row.title), 'Case title exceeds ADO bounds.');
+    requireThat(row.title.length <= 255 && !/[\r\n]/.test(row.title), 'Case title exceeds supported bounds.');
     requireThat(TEST_TYPES.includes(row.testType) && SCENARIO_TYPES.includes(row.scenarioType), 'Unsupported test/scenario classification.');
     requireThat(Array.isArray(row.steps) && row.steps.length > 0 && row.steps.length < 1000, 'Case needs 1–999 complete ordered business steps.');
-    for (const step of row.steps) {keys(step, ['action', 'expected'], 'business step'); text(step.action, 'Step action'); text(step.expected, 'Step expectation');}
+    for (const step of row.steps) {keys(step, ['action', 'expected', 'data'], 'business step'); text(step.action, 'Step action'); text(step.expected, 'Step expectation');
+      if (step.data !== undefined) {requireThat(state.evidence.requirements.origin?.provider === 'jira' && typeof step.data === 'string' && step.data.length <= 65536, 'Native step data requires bounded Jira case data.');}}
     requireThat(Array.isArray(row.coverageReferences) && row.coverageReferences.length > 0 && unique(row.coverageReferences.map(ref => ref.requirementId)), 'Case needs distinct coverage references.');
     for (const ref of row.coverageReferences) {
       keys(ref, ['requirementId', 'label'], 'coverage reference'); text(ref.label, 'Coverage label');
       const entry = requirements.inventory.find(entry => entry.id === ref.requirementId), part = entry && state.evidence.requirements.parts.find(part => part.id === entry.partId);
-      requireThat(entry && part && ['requirement', 'criterion'].includes(entry.kind) && (part.sourceId === 'story' || !state.evidence.requirements.origin), 'Coverage must reference available selected-story description or acceptance criteria.');
+      requireThat(entry && part && ['requirement', 'criterion'].includes(entry.kind) && (['story', 'jira-story'].includes(part.sourceId) || !state.evidence.requirements.origin), 'Coverage must reference available selected-story description or acceptance criteria.');
     }
     if (!row.id.startsWith('NEW-')) requireThat(state.evidence.existing.some(item => String(item.id) === row.id), 'Existing case must come from captured current case evidence.');
   }
@@ -60,7 +62,8 @@ export function validateDesign(raw, state, requirements) {
     if (preparation.steps === undefined) {text(preparation.expected, 'Observable preparation readiness'); requireThat(preparation.reason === undefined, 'Only split preparation needs a reason.');}
     else {
       requireThat(preparation.expected === undefined && Array.isArray(preparation.steps) && preparation.steps.length >= 2 && preparation.steps.length <= 20 && preparation.steps.length + row.steps.length <= 1000, 'Split preparation needs 2–20 distinct verified setup actions within the step bound.'); text(preparation.reason, 'Reason for independent setup verification');
-      for (const step of preparation.steps) {keys(step, ['action', 'expected'], 'preparation step'); text(step.action, 'Setup action'); text(step.expected, 'Observable setup expectation');}
+      for (const step of preparation.steps) {keys(step, ['action', 'expected', 'data'], 'preparation step'); text(step.action, 'Setup action'); text(step.expected, 'Observable setup expectation');
+        if (step.data !== undefined) requireThat(state.evidence.requirements.origin?.provider === 'jira' && typeof step.data === 'string' && step.data.length <= 65536, 'Native preparation data requires bounded Jira case data.');}
     }
   }
   const {head, ...draft} = input; return draft;
@@ -105,11 +108,12 @@ export function exactDuplicates(state) {
   for (const item of state.evidence.existing ?? []) {
     if (state.draft.cases.some(row => row.id === String(item.id))) continue;
     try {
-      const xml = item.fields['Microsoft.VSTS.TCM.Steps']; editableSteps(xml, item.fields);
-      const steps = parseStepsXml(xml).map(({action, expected}) => ({action, expected}));
+      const xml = item.fields?.['Microsoft.VSTS.TCM.Steps']; if (!item.provider) editableSteps(xml, item.fields);
+      if (item.provider && item.steps.some(step => step.data)) continue;
+      const steps = item.provider ? item.steps.map(({action, expected}) => ({action, expected})) : parseStepsXml(xml).map(({action, expected}) => ({action, expected}));
       const match = /^Preparation\nPrerequisites: ([\s\S]+?)\nTest data: ([\s\S]+)$/.exec(steps[0]?.action ?? '');
       if (!match || steps.slice(1).some(step => /^Preparation \d+\n/.test(step.action))) continue;
-      add({prerequisites: match[1], testData: match[2], steps: steps.slice(1), setup: [], readiness: steps[0].expected}, {id: String(item.id), origin: 'captured', coverageReferences: [{description: item.fields['System.Description'] ?? '', revision: item.rev}]});
+      add({prerequisites: match[1], testData: match[2], steps: steps.slice(1), setup: [], readiness: steps[0].expected}, {id: String(item.id), origin: 'captured', coverageReferences: [{description: item.fields?.['System.Description'] ?? '', revision: item.revision ?? item.rev}]});
     } catch { /* Unsupported native preparation is not guessed for duplicate detection. */ }
   }
   return [...groups].filter(([, rows]) => new Set(rows.map(row => row.id)).size > 1)
@@ -149,13 +153,22 @@ export function renderDesign(draft) {
     [row.id, row.title, reference(row), row.testType, row.scenarioType].map(cell),
     ['**2. SETUP**', '', '', '', ''], ['**Prerequisites**', cell(row.prerequisites), '', '', ''], ['**Test data**', cell(row.testData), '', '', ''],
     ['**3. STEPS**', '**Step action**', '**Step expected result**', '', ''],
-    ...row.steps.map((step, index) => [`**${index + 1}**`, cell(step.action), cell(step.expected), '', '']),
+    ...row.steps.map((step, index) => [`**${index + 1}**`, cell(step.action + (step.data ? '\nTest data:\n' + step.data : '')), cell(step.expected), '', '']),
   ]));
   return {summary, summaryText, overview, details, markdown: [summaryText, overview, ...details].join('\n\n')};
 }
 
 export const proposalFingerprint = (source, draft, requirements) => fingerprint({source, draft, inventory: requirements.inventory});
+export function nativeDesignSteps(steps, before) {
+  return steps.map((step, index) => {
+    if (step.data !== undefined) return {...step};
+    const matches = (before?.steps ?? []).filter(prior => prior.action === step.action && prior.expected === step.expected);
+    const values = [...new Set(matches.map(prior => prior.data ?? ''))];
+    requireThat(values.length <= 1 && (matches.length || !before?.steps[index]?.data), 'Changed native step data needs an explicit reviewed data value; use an empty string only to clear it intentionally.');
+    return {...step, data: values[0] ?? ''};
+  });
+}
 export function preparationSteps(row, preparation) {
   const setup = `Preparation\nPrerequisites: ${row.prerequisites}\nTest data: ${row.testData}`;
-  return preparation.steps ? preparation.steps.map((step, index) => ({action: index ? `Preparation ${index + 1}\n${step.action}` : `${setup}\n${step.action}`, expected: step.expected})) : [{action: setup, expected: preparation.expected}];
+  return preparation.steps ? preparation.steps.map((step, index) => ({action: index ? `Preparation ${index + 1}\n${step.action}` : `${setup}\n${step.action}`, expected: step.expected, ...(step.data !== undefined ? {data: step.data} : {})})) : [{action: setup, expected: preparation.expected}];
 }

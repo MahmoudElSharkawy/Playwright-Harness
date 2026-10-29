@@ -1,5 +1,8 @@
 # Plan a testing cycle
 
+See [tracker providers](tracker-providers.md) for shared Azure/Jira selection,
+Xray/Zephyr Scale capabilities, and local cases without a plugin. The same source, review and readiness rules apply to every selected mode.
+
 Use [test-planning](../.agents/skills/test-planning/SKILL.md) to decide a cycle's
 objectives, selected scope, risk priorities, strategy, feasibility and measurable
 criteria. It accepts local sources and existing evidence without a tracker. Plans

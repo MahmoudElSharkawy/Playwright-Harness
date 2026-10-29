@@ -1,9 +1,13 @@
 ---
 name: test-case-design
-description: Design, review, create or revise source-grounded test cases for a selected story or supplied requirements, reuse suitable existing cases, and optionally publish an approved proposal to Azure DevOps. Use for test-case design, not test execution, automation generation or direct edits to already selected case text.
+description: Design, review, create or revise source-grounded test cases for a selected story or supplied requirements, reuse suitable existing cases, and optionally publish an approved proposal to Azure, Xray or Zephyr Scale, or keep local cases without a plugin. Use for test-case design, not test execution or automation generation.
 ---
 
 # Test case design
+
+Use the shared [tracker provider contract](../../../docs/tracker-providers.md) for
+Azure, Jira with Xray or Zephyr Scale, and Jira without a plugin. Keep the same
+workflow and gates; select native adapters and preserve the captured source identity.
 
 Resolve this linked skill to its real package path. Read [ROOTS.md](../ROOTS.md)
 and the [workflow, formats and example](../../../docs/test-case-design.md).
@@ -17,7 +21,7 @@ Resolve the selected story/local requirements, project/application, relevant sav
 context and prior design/requirements IDs from available conversation and project
 information. Bundle only essential missing choices. Use an existing #62 requirements
 inventory where available; otherwise capture the accepted sources through
-`test-case-design prepare`. Local design never needs ADO access. Use `requirements
+`test-case-design prepare`. Local design never needs remote access. Use `requirements
 inventory` to partition compound source statements, preserving IDs across reordering,
 and record actual acceptance evidence. Never invent an owner decision merely to
 make publication possible. Captured headings and setup introductions can remain
@@ -116,7 +120,7 @@ rendering. Existing publication and execution authorizations remain separate.
 ## Design and independently evaluate
 
 Choose Create, Update, Reuse unchanged or no-change from actual differences and
-coverage. Preserve real ADO IDs; new cases retain stable `NEW-...` IDs until the
+coverage. Preserve captured native IDs, including opaque Jira/plugin keys; new cases retain stable `NEW-...` IDs until the
 server assigns one. Reuse suitable cases without copies or cosmetic rewrites.
 Keep one coherent objective and executable path per case. Use meaningful partitions,
 boundaries, decisions and state transitions where accepted behavior needs them.
@@ -206,7 +210,7 @@ Use `reject` to invalidate an unattempted preview; retain its draft/history. Sav
 against the current head and repeat affected review. Partial approval preserves the
 unapproved cases and gaps.
 
-## Optional ADO publication
+## Optional publication
 
 When requested, generate `preview` for selected IDs. Show the complete proposal and
 exact native changes, destination and shared-case effects. Outside the case tables,
@@ -221,9 +225,9 @@ Obtain one consolidated approval for this complete unchanged preview. Reuse alre
 given authorization when it covers exactly this content, selection, operations and
 destination. Changed content, relevant source/case revisions, destination or missing
 acceptance requires affected revalidation and renewed approval. Use only `publish`
-with its exact fingerprint; do not bypass it with direct ADO writes.
+with its exact fingerprint; do not bypass it with direct provider writes.
 
-Native Title receives the title. Description receives the selected-story coverage
+For Azure, native Title receives the title. Description receives the selected-story coverage
 block while retaining unrelated content. Two separate tags use the exact test/scenario
 values, preserving unrelated tags. Native steps begin with combined Preparation and
 its readiness check, followed by all reviewed business steps; update reconciles
@@ -234,17 +238,27 @@ requirements are explicit publication gaps; never drop fields or create custom o
 New cases link to the approved story atomically. Native History carries the previewed
 operation marker needed for unambiguous recovery.
 
+For Jira, use the selected Xray or Zephyr Scale adapter through this same pipeline.
+Preview native steps, labels, owned recovery marker and exact story link. Preserve
+opaque keys and source-qualified references. Without a plugin, keep approved cases
+local with Jira story links; publication does not create remote test entities.
+
 On partial/interrupted delivery, `reconcile` reads exact native history, fields and
 story links against durable request fingerprints. Never identify by title, blindly
 retry, recreate uncertain cases or repeat confirmed writes. Resume only remaining
 authorized work using the same approval. Retain returned IDs/URLs, failed/pending/
-uncertain outcomes and immutable receipts. Use real ADO IDs in subsequent proposals.
+uncertain outcomes and immutable receipts. Use returned native IDs in subsequent proposals.
+Reconcile stays read-only unless `--execute --approval <original-fingerprint>` is
+explicit. That continuation may finish only missing native steps/coverage links
+whose readback and receipts prove no dispatch or rejection without execution.
+Never retry an unknown dispatched effect.
 
 ## Handoff
 
 Use `handoff` to write validated local scenarios and adjacent source/impact mappings
-for [automate-test](../automate-test/SKILL.md); published ADO cases use existing
-story/suite [execute-test](../execute-test/SKILL.md) intake. Preserve setup, explicit
+for [automate-test](../automate-test/SKILL.md) or local
+[execute-test](../execute-test/SKILL.md) intake; published native cases use the
+selected provider's story/group intake. Preserve setup, explicit
 inputs/variations, every ordered action/expectation and necessary cleanup. Accepted revisions affecting existing
 automation go to [maintain-test](../maintain-test/SKILL.md). Preserve failure history,
 cumulative repair budgets, independent review and two fresh scoped green runs.

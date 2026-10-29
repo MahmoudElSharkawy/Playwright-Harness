@@ -3,10 +3,13 @@ import {dirname, extname, isAbsolute, relative, join} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {consumerPath} from '../consumer-paths.mjs';
 import {data, digest, fingerprint, id, requireThat} from '../execution-core/data.mjs';
-import {readBounded, writeJson} from '../execute/storage.mjs';
+import {readBounded, writeJson, ownedFile} from '../execute/storage.mjs';
 import {withTransition} from '../execute/lock.mjs';
-import {createAdoClient} from '../integrations/ado-client.mjs';
-import {loadAdoConfiguration} from '../integrations/config.mjs';
+import {createTrackerClient, trackerProvider, selectedTestManagement} from '../integrations/selection.mjs';
+import {jiraStoryRevision} from '../integrations/jira-requirements.mjs';
+import {jiraIssueKey} from '../integrations/jira-config.mjs';
+import {matchesJiraBugSource, reconcileJiraBugStory} from '../integrations/jira-bugs.mjs';
+import {checkJiraSourceRevisions} from '../integrations/jira-source.mjs';
 import {createAdoTestSource} from '../integrations/ado-source.mjs';
 import {checkSourceRevisions} from '../execute/source.mjs';
 import {deliverBugReports} from '../execute/delivery.mjs';
@@ -111,6 +114,8 @@ function verifiedAttachments(roots, state) {
 }
 async function sourceFresh(client, state) {
   const source = state.intake.source;
+  const sourceProvider = source?.provider ?? (source?.jira ? 'jira' : source?.ado || typeof source?.storyId === 'number' ? 'ado' : undefined);
+  if (sourceProvider && trackerProvider(client) !== sourceProvider) client = state.sourceClient ?? createTrackerClient(state.roots, {provider: sourceProvider});
   if (source?.postRun) {
     const review = await reviewRunFailures(state.roots, source.postRun.run);
     requireThat(review.hash === source.postRun.hash, 'Post-run source or observations changed; classify the current failures and review new drafts.');
@@ -128,11 +133,29 @@ async function sourceFresh(client, state) {
     }
     return;
   }
+  if (source?.jira) {
+    const captured = source.jira;
+    requireThat(captured.scope.siteUrl === client.configuration.siteUrl && captured.scope.project === client.configuration.project, 'Automated Jira source differs from the configured source.');
+    const management = selectedTestManagement(state.roots, client, state.dependencies);
+    const file = ownedFile(state.roots, state.reportId, 'delivery/bugs.json');
+    const reconciled = await reconcileJiraBugStory(client, captured, existsSync(file) ? readBounded(file).entries : []);
+    const changes = await checkJiraSourceRevisions(reconciled, management, client);
+    requireThat(changes.length === 0, 'Automated Jira case or story changed; review current source before filing.'); return;
+  }
   if (source?.executionId) {
     const view = collectExecution(state.roots, source.executionId);
     requireThat(!view.integrityFailures.length && view.execution.sourceFingerprint === source.sourceFingerprint, 'Original execution source or evidence changed.');
     const defect = deliverableDefects(view).defects.find(item => item.fingerprint === source.defectFingerprint);
     requireThat(defect && fingerprint(defect.occurrences) === source.observationsFingerprint, 'Execution observations changed; review the current defect.');
+    if (view.source.provider === 'jira') {
+      if (trackerProvider(client) !== 'jira') client = state.sourceClient ?? createTrackerClient(state.roots, {...state.dependencies, client: undefined, provider: 'jira'});
+      requireThat(view.source.scope.siteUrl === client.configuration.siteUrl && view.source.scope.project === client.configuration.project, 'Executed Jira source differs from the configured source.');
+      const original = view.source.cases.find(item => item.id === defect.caseId), management = selectedTestManagement(state.roots, client, state.dependencies);
+      const file = ownedFile(state.roots, state.reportId, 'delivery/bugs.json');
+      const reconciled = await reconcileJiraBugStory(client, view.source, existsSync(file) ? readBounded(file).entries : []);
+      const changes = await checkJiraSourceRevisions({...reconciled, cases: [original]}, management, client);
+      requireThat(changes.length === 0, 'Executed Jira case or story changed; review current source before filing.');
+    }
     if (view.source.organizationUrl) {
       requireThat(view.source.organizationUrl === client.configuration.organizationUrl && view.source.project.toLowerCase() === client.configuration.project.toLowerCase(), 'Bug destination differs from the captured execution source.');
       const original = view.source.cases.find(item => item.id === defect.caseId), latest = await client.read(`wit/workitems/${defect.caseId}?api-version=7.1`); await client.requireWorkItemProject(latest);
@@ -144,16 +167,30 @@ async function sourceFresh(client, state) {
     return;
   }
   if (!source?.storyId) return;
+  if (sourceProvider === 'jira') {
+    requireThat(jiraIssueKey(source.storyId) && source.siteUrl === client.configuration.siteUrl && source.project === client.configuration.project && typeof source.revision === 'string' && /^[a-f0-9]{64}$/.test(source.revision), 'Selected Jira story needs its captured site, project, key and revision.');
+    const item = await client.issue(source.storyId), current = jiraStoryRevision(client, item, {attachmentIds: source.attachmentIds ?? []});
+    let matches = current.revision === source.revision;
+    const file = ownedFile(state.roots, state.reportId, 'delivery/bugs.json');
+    if (!matches && existsSync(file)) for (const row of readBounded(file).entries) {
+      const original = row.sourceLinks?.find(link => link.target === source.storyId)?.sourceVersion;
+      if (original?.revision === source.revision && matchesJiraBugSource(original, current, row, source.storyId)) {
+        const bug = await client.issue(row.workItemId); matches = bug.fields.labels?.includes(`harness-filing-${row.filingId}`) === true; if (matches) break;
+      }
+    }
+    requireThat(matches, 'Selected Jira story revision changed; capture and review the updated source.'); return;
+  }
   requireThat(Number.isSafeInteger(source.storyId) && source.storyId > 0 && Number.isSafeInteger(source.revision), 'Selected story needs a captured ID and revision.');
   const item = await client.read(`wit/workitems/${source.storyId}?api-version=7.1`); await client.requireWorkItemProject(item);
   requireThat(item.id === source.storyId && item.rev === source.revision, 'Selected story revision changed; capture and review the updated source.');
 }
-function projection(state, attachments) {
+function projection(state, attachments, client) {
   const fp = state.intake.source?.defectFingerprint ?? `harness-defect-${fingerprint({source: state.intake.source ?? null, description: state.intake.description}).slice(0, 12)}`;
-  const source = state.intake.source, scope = source?.storyId ? {kind: 'story', storyId: source.storyId} : {kind: 'report'};
+  const source = state.intake.source, nativeStory = source?.storyId && (source.provider ?? (typeof source.storyId === 'number' ? 'ado' : 'jira')) === trackerProvider(client), scope = nativeStory ? {kind: 'story', storyId: source.storyId} : {kind: 'report'};
   return {fingerprint: fp, view: {execution: {id: state.reportId, freezeFingerprint: state.intakeFingerprint}, source: {scope, cases: [], scenarios: []}, reportContext: {origin: source?.executionId ? 'execution' : 'user-report', source: source ?? null, confirmation: state.confirmation}, reportDefects: [{fingerprint: fp, title: state.draft.title, ...(source?.caseId ? {caseId: source.caseId} : {}), occurrences: []}], reportAttachments: attachments}};
 }
-const clientFor = (roots, supplied) => supplied ?? createAdoClient({...loadAdoConfiguration(roots), roots});
+const clientFor = (roots, dependencies) => createTrackerClient(roots, dependencies);
+const clientDestination = client => trackerProvider(client) === 'jira' ? {provider: 'jira', siteUrl: client.configuration.siteUrl, project: client.configuration.project} : {organizationUrl: client.configuration.organizationUrl, project: client.configuration.project};
 async function preparePreview(roots, reportId, dependencies) {
   const state = readBugReport(roots, reportId), attachments = verifiedAttachments(roots, state), problems = [];
   for (const name of ['title', 'description', 'expected', 'actual']) if (!hasText(state.draft[name])) problems.push({field: name, code: 'missing'});
@@ -163,10 +200,10 @@ async function preparePreview(roots, reportId, dependencies) {
   for (const message of state.intake.source?.postRun?.sourceGaps ?? []) problems.push({field: 'source', code: 'missing-original-revisions', message});
   const base = {version: 1, head: state.head, draft: state.draft, confirmation: state.confirmation, rejectedEvidence: state.evidence.filter(item => !item.eligible), annotations: state.annotations, problems, destination: null, ready: false, bugs: []};
   if (problems.length) return base;
-  const client = clientFor(roots, dependencies.client); await sourceFresh(client, {...state, roots});
-  const {view, fingerprint: fp} = projection(state, attachments), options = {draftValues: {[fp]: state.draft}, filingIds: {[fp]: state.filingId}};
+  const client = clientFor(roots, dependencies); await sourceFresh(client, {...state, roots, sourceClient: dependencies.sourceClient, dependencies});
+  const {view, fingerprint: fp} = projection(state, attachments, client), options = {draftValues: {[fp]: state.draft}, filingIds: {[fp]: state.filingId}};
   const prepared = await deliverBugReports(client, roots, reportId, view, options);
-  return {...base, ...prepared, ready: true, destination: {organizationUrl: client.configuration.organizationUrl, project: client.configuration.project}, planHash: prepared.planHash};
+  return {...base, ...prepared, ready: true, destination: clientDestination(client), planHash: prepared.planHash};
 }
 export async function previewBugReport(roots, reportId, dependencies = {}) {
   return withTransition(roots, async () => {
@@ -188,8 +225,8 @@ export async function fileBugReport(roots, reportId, hash, dependencies = {}) {
     requireThat(approval.hash === hash && approval.head === state.head, 'Bug approval is stale or missing.');
     const saved = readBounded(path(roots, reportId, 'preview.json')), {hash: savedHash, ...content} = saved;
     requireThat(savedHash === hash && fingerprint(content) === hash && saved.head === state.head && saved.ready, 'Approved bug preview changed.');
-    const client = clientFor(roots, dependencies.client); await sourceFresh(client, {...state, roots});
-    const attachments = verifiedAttachments(roots, state), {view, fingerprint: fp} = projection(state, attachments);
+    const client = clientFor(roots, {...dependencies, provider: dependencies.provider ?? saved.destination?.provider}); await sourceFresh(client, {...state, roots, sourceClient: dependencies.sourceClient, dependencies});
+    const attachments = verifiedAttachments(roots, state), {view, fingerprint: fp} = projection(state, attachments, client);
     return deliverBugReports(client, roots, reportId, view, {execute: true, approvedPlan: saved.planHash, draftValues: {[fp]: state.draft}, filingIds: {[fp]: state.filingId}});
   }), {key: `bug-report-${reportId}`, ...(dependencies.inventory ? {inventory: dependencies.inventory} : {})});
 }
@@ -219,7 +256,8 @@ export function bugReportFromExecution(roots, reportId, executionId, selected) {
       evidence.push({path: relative(roots.projectRoot, join(run.roots.runRoot, record.path)).replaceAll('\\', '/'), kind: record.kind === 'screenshot' ? 'screenshot' : 'log', origin: 'execution', sanitized: record.sanitized === true, verification: {privacy: record.sanitized === true, relevance: false}, context: `Execution ${executionId}; run ${occurrence.runId}; evidence ${record.id}; review attachment relevance before selection`});
     }
   }
-  return prepareBugReport(roots, reportId, {version: 1, description: defect.title, source: {executionId, caseId: defect.caseId, ...(view.source.scope.kind === 'story' ? {storyId: view.source.scope.storyId} : {}), sourceFingerprint: view.execution.sourceFingerprint, defectFingerprint: selected, observationsFingerprint: fingerprint(defect.occurrences), content: JSON.stringify({executionId, sourceFingerprint: view.execution.sourceFingerprint, caseId: defect.caseId, revision: tc.rev, occurrences: defect.occurrences}), expected: scenario.steps.flatMap(item => item.expected).join('; ')},
+  const jira = view.source.provider === 'jira', storyId = view.source.scope.kind === 'story' ? view.source.scope.storyId : jira && view.source.scope.selection.kind === 'story' ? view.source.scope.selection.id : undefined;
+  return prepareBugReport(roots, reportId, {version: 1, description: defect.title, source: {executionId, caseId: defect.caseId, ...(jira ? {provider: 'jira', siteUrl: view.source.scope.siteUrl, project: view.source.scope.project} : {}), ...(storyId ? {storyId} : {}), ...(scenario.externalReferences ? {externalReferences: scenario.externalReferences} : {}), sourceFingerprint: view.execution.sourceFingerprint, defectFingerprint: selected, observationsFingerprint: fingerprint(defect.occurrences), content: JSON.stringify({executionId, sourceFingerprint: view.execution.sourceFingerprint, caseId: defect.caseId, revision: tc.rev ?? tc.revision, occurrences: defect.occurrences}), expected: scenario.steps.flatMap(item => item.expected).join('; ')},
     draft: {title: defect.title, description: defect.title, prerequisites: [], steps: scenario.steps.map(item => item.action), expected: scenario.steps.flatMap(item => item.expected).join('; '), actual: executionBugActual(defect), fields: {}}, confirmation: {user: 'reported', agent: 'reproduced', notes: 'The failure was verified in the recorded execution; no additional reproduction was performed.'}, evidence: evidence.slice(0, 20)});
 }
 
@@ -253,10 +291,11 @@ export async function prepareRunBugReports(roots, batchId, raw, dependencies = {
     const confirmation = {user: 'reported', agent: classification === 'unknown' ? 'inconclusive' : input.run.workflow === 'execute-test' ? 'reproduced' : 'not-run', notes: 'Classification uses the recorded run; no additional reproduction was performed.'};
     const draft = {prerequisites: [], fields: {}, ...group.draft}; validateDraft(draft, confirmation);
     const references = rows.flatMap(row => row.references), first = references[0];
+    const jiraStory = first?.jira?.story && references.every(row => row.jira?.story?.id === first.jira.story.id && row.jira.scope.siteUrl === first.jira.scope.siteUrl && row.jira.scope.project === first.jira.scope.project) ? {provider: 'jira', siteUrl: first.jira.scope.siteUrl, project: first.jira.scope.project, storyId: first.jira.story.id} : {};
     const scenarioIds = new Set(rows.flatMap(row => [row.scenarioId, ...(row.occurrences ?? []).map(occurrence => occurrence.scenarioId)]));
     const scenarios = review.source.scenarios.filter(scenario => scenarioIds.has(scenario.id));
     const source = {content: JSON.stringify({title: review.source.title, scenarios}), expected: draft.expected, defectFingerprint: fp,
-      ...(first ? {caseId: first.caseId} : {}), ...(review.source.scope?.kind === 'story' ? {storyId: review.source.scope.storyId} : first?.ado?.storyId ? {storyId: first.ado.storyId} : {}),
+      ...(first ? {caseId: first.caseId} : {}), ...jiraStory, ...(review.source.scope?.kind === 'story' ? {storyId: review.source.scope.storyId} : first?.ado?.storyId ? {storyId: first.ado.storyId} : {}),
       postRun: {run: input.run, hash: review.hash, ...identity, classification, groupingReason: group.reason, classifications: members.map(member => classifications.get(member)), references, sourceGaps: rows.flatMap(row => row.sourceGaps ?? [])}};
     const intake = {version: 1, description: draft.description, source, draft, confirmation, evidence: group.evidence ?? []};
     return {reportId, members, classification, intake};

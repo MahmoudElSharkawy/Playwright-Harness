@@ -11,7 +11,7 @@ Browser, API and database work share records for frozen inputs, observations,
 effects, recovery and lifecycle obligations. Assessment derives a verdict from
 those records and verified evidence; a reporter cannot turn incomplete evidence
 into a pass. Use [automation](../PIPELINE.md) for POM generation or
-[manual execution](../manual-execution.md) for captured ADO cases.
+[manual execution](../manual-execution.md) for captured local or selected native cases.
 
 ## Core interfaces and frozen inputs
 

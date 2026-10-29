@@ -1,9 +1,13 @@
 ---
 name: harness-setup
-description: "Use when installing, updating, repairing, configuring or rolling back the Playwright POM harness in a project — \"install the harness from <repository>\", \"update the harness and preserve my customizations\", \"here is my project information; configure the harness\", adding an environment, application URL, API or database target, Azure DevOps, secrets or a CI pipeline, or when the harness skills are missing."
+description: "Use when installing, updating, repairing, configuring or rolling back the Playwright POM harness in a project — \"install the harness from <repository>\", \"update the harness and preserve my customizations\", \"here is my project information; configure the harness\", adding an environment, application URL, API or database target, Azure DevOps or Jira, secrets or a CI pipeline, or when the harness skills are missing."
 ---
 
 # Harness setup
+
+Use the shared [tracker provider contract](../../../docs/tracker-providers.md) for
+Azure, Jira with Xray or Zephyr Scale, and Jira without a plugin. Keep the same
+workflow and gates; select native adapters and preserve the captured source identity.
 
 Resolve this skill to its real path before following references. Read the
 [package and consumer boundaries](../ROOTS.md); mutable state belongs to the consumer.

@@ -218,9 +218,11 @@ generation history starts with `generate prepare`.
 
 ## Tracker and delivery
 
-For registered ADO cases, follow [plan-tracker](../.agents/skills/plan-tracker/SKILL.md)
+For registered Azure, Jira plugin or local cases, follow [plan-tracker](../.agents/skills/plan-tracker/SKILL.md)
 to append status events referencing the assessment and actual verification evidence.
 Statuses remain `todo`, `doing`, `done` and `blocked`; uncertainty belongs in the note.
+Preserve the exact source binding and native/local identity described in
+[tracker providers](tracker-providers.md); switching defaults never resets repair history.
 
 - Unresolved blockers stay `blocked`, including partial recovery and exhausted budgets.
 - Verified prerequisites plus resumed work permit `doing`, never `done` on unblocking alone.

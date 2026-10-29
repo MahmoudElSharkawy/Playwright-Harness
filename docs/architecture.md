@@ -12,7 +12,7 @@ you author. The two annotated layouts are shown in the [main README](../README.m
 | `.claude/skills/` | Compatibility entrypoints to the canonical library |
 | `.claude-plugin/plugin.json` | Native Claude plugin packaging used in proofs |
 | `scripts/cli.mjs` | Installed `pom-harness` command entrypoint |
-| `scripts/lib/` | Adoption, configuration, execution runtimes, generation, reporting and ADO adapters |
+| `scripts/lib/` | Shared adoption, execution, generation and reporting workflows with separate Azure/Jira/plugin adapters |
 | `scripts/hooks/` | Optional advisory host hooks |
 | `scripts/ci/` | Package, contract and installed-consumer checks |
 | `scripts/probes/`, `scripts/spikes/` | Opt-in live proofs and focused experiments |
@@ -68,13 +68,13 @@ preflights conflicts, and journals writes for recovery; see [getting started](ge
 
 ## Workflows and shared runtimes
 
-The [automation workflow](PIPELINE.md) loads local or ADO sources, preserves their
+The [automation workflow](PIPELINE.md) loads local, Azure or Jira plugin sources, preserves their
 expectations through refinement and exploration, authors POM code, obtains independent
 review and earns two scoped green runs. Generated POM tests run in the consumer's
 Playwright framework. The exploration runtimes establish observations and evidence
 before authoring; they are not a replacement framework for generated tests.
 
-[Standalone manual execution](manual-execution.md) runs ADO suites/stories through
+[Standalone manual execution](manual-execution.md) runs local or selected native cases through
 the same browser/API/DB runtime boundaries and produces verified reports without
 generating code. [Execution contracts](reference/execution-model.md) own frozen scope,
 typed values, effects, recovery, evidence and verdicts. The native Playwright CLI owns
@@ -95,7 +95,7 @@ output do not prove successful application execution. Evidence integrity checks
 verify association and bytes; they cannot independently prove an observation truthful.
 
 Optional host hooks are advisory and fail open. They do not enforce execution policy,
-grant permissions or replace native-host proof. External ADO writes and source-control
+grant permissions or replace native-host proof. External provider writes and source-control
 delivery are separate authorized steps. See [hosts](reference/hosts.md),
 [Azure DevOps](azure-devops.md), [reporting](reporting.md), and
 [contributing](contributing.md) for the relevant operational boundaries.

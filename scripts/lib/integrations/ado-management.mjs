@@ -1,5 +1,6 @@
 import {createHash} from 'node:crypto';
-import {assessRun, requireAssessedResult} from '../execution-core/index.mjs';
+import {assessRun} from '../execution-core/index.mjs';
+import {prepareExecutionRows, prepareLegacyRows, automationEligible} from './publication.mjs';
 import {adoId, requireValue} from './config.mjs';
 import {editAdoCases} from './ado-case-edits.mjs';
 
@@ -19,33 +20,12 @@ export function prepareRunPublication(run, roots, observations, mapping) {
 }
 /** Manual execution keeps iteration scope and every earlier validated FAIL. */
 export function prepareExecutionPublication(results, scope, comments = {}) {
-  results.forEach(requireAssessedResult);
-  requireValue(Array.isArray(scope) && scope.length > 0 && scope.length <= 500 && unique(scope.map(item => item.id)), 'Execution publication needs unique frozen iteration scope.');
-  requireValue(results.every(result => result.scenarios.every(scenario => scope.some(item => item.id === scenario.id))), 'Assessed result is outside publication scope.');
-  const cases = [...new Set(scope.map(item => adoId(item.caseId)))], rows = [];
-  for (const caseId of cases) {
-    const iterations = scope.filter(item => adoId(item.caseId) === caseId), relevant = results.flatMap(result => result.scenarios).filter(scenario => iterations.some(item => item.id === scenario.id));
-    if (!relevant.length) continue;
-    const statuses = iterations.map(item => {const history = relevant.filter(scenario => scenario.id === item.id); return history.some(scenario => scenario.status === 'FAIL') ? 'FAIL' : history.at(-1)?.status ?? 'BLOCKED';});
-    const status = ['FAIL', 'NEEDS_REVIEW', 'BLOCKED'].find(value => statuses.includes(value)) ?? (statuses.every(value => value === 'SKIPPED') ? 'SKIPPED' : 'PASS');
-    const comment = comments[caseId]; if (comment !== undefined) requireValue(typeof comment === 'string' && comment.length <= 400 && /^[\x20-\x7e]*$/.test(comment), 'Execution comments must be at most 400 ASCII characters.');
-    rows.push({caseId, status, stability: relevant.some(item => item.stability === 'unstable') ? 'unstable' : 'stable', classification: 'manual-execution', ...(comment === undefined ? {} : {comment})});
-  }
+  const rows = prepareExecutionRows(results, scope.map(item => ({...item, caseId: adoId(item.caseId)})), comments);
   return seal(rows, {kind: 'manual-execution', results, scope, comments});
 }
 /** Compatibility input is explicitly a legacy verification record, not M5 evidence proof. */
 export function prepareLegacyPublication(manifest, state) {
-  requireValue(Array.isArray(manifest.cases) && manifest.cases.length > 0 && state?.cases && typeof state.cases === 'object', 'Legacy publication needs a manifest and completed verification records.');
-  const ids = manifest.cases.map(item => adoId(item.id));
-  requireValue(unique(ids) && Object.keys(state.cases).length === ids.length && Object.keys(state.cases).every(id => ids.includes(adoId(id))), 'Legacy verification scope does not match the manifest.');
-  const statuses = {passed: 'PASS', failed: 'FAIL', fixme: 'FAIL', blocked: 'BLOCKED', skipped: 'SKIPPED', 'needs-review': 'NEEDS_REVIEW'};
-  return seal(ids.map(caseId => {
-    const item = state.cases[caseId]; requireValue(item && Object.hasOwn(statuses, item.status), 'Incomplete or unknown legacy verification status.');
-    if (item.status === 'passed') requireValue(Number.isInteger(item.greens) && item.greens >= 2, 'Legacy passed cases require two scoped green runs.');
-    const classification = item.classification ?? 'unclassified';
-    requireValue(['app-defect', 'script-defect', 'environment', 'unclassified'].includes(classification), 'Unknown legacy failure classification.');
-    return {caseId, status: statuses[item.status], stability: 'stable', classification};
-  }), {kind: 'legacy-verification', manifest, state});
+  return seal(prepareLegacyRows(manifest, state, adoId), {kind: 'legacy-verification', manifest, state});
 }
 
 export function createAdoTestManagement(client) {
@@ -156,7 +136,7 @@ export function createAdoTestManagement(client) {
     },
     async markAutomation({publication, tests, value = 'Automated', execute = false}) {
       requireValue(publications.has(publication) && ['Automated', 'Not Automated'].includes(value), 'Automation marking requires validated input and a supported value.');
-      const eligible = publication.filter(row => value !== 'Automated' || row.status === 'PASS' || (row.status === 'FAIL' && row.classification === 'app-defect'));
+      const eligible = automationEligible(publication, value);
       const byId = new Map(eligible.map(row => [row.caseId, tests?.[row.caseId]]));
       return updateItems('automation', eligible.map(row => row.caseId), execute, item => {
         const gen = byId.get(item.id), prefix = 'Microsoft.VSTS.TCM.';

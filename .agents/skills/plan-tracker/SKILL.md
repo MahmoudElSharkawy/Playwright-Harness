@@ -1,15 +1,19 @@
 ---
 name: plan-tracker
-description: "Use to record automation progress for the ADO test plan or to (re)generate the plan-tracker HTML report — \"update the tracker\", \"regenerate the plan tracker\", \"record these cases as done/blocked\", \"sync the tracker with the pipeline\", \"where are we on the plan\", or after any automation wave / bug filing / team ruling that changes case status or scope. The report is rendered on demand by scripts/generate-tracker.mjs from consumer-owned data: a structural plan registry plus an append-only dated history ledger."
+description: "Use to record automation progress for the selected Azure, Jira plugin or local source, or regenerate the plan-tracker HTML report — update the tracker, record cases as done/blocked, sync with the pipeline, or after a wave, bug filing or ruling changes status or scope. The report is rendered on demand from consumer-owned structural registry and append-only dated history."
 ---
 
 # Plan Tracker (Progress Report Generator)
+
+Use the shared [tracker provider contract](../../../docs/tracker-providers.md) for
+Azure, Jira with Xray or Zephyr Scale, and Jira without a plugin. Keep the same
+workflow and gates; select native adapters and preserve the captured source identity.
 
 Resolve this skill to its real path before following references. Read the
 [package and consumer boundaries](../ROOTS.md); mutable state belongs to the consumer.
 
 One self-contained HTML dashboard — donuts, per-suite trees, filters, bug/manual
-panels — for the automation status of your ADO test plan. The page is a disposable
+panels — for the automation status of your selected source. The page is a disposable
 *render*; the truth lives in two consumer-owned data files and is
 folded by `scripts/generate-tracker.mjs`. Never hand-edit the generated HTML.
 
@@ -20,6 +24,14 @@ folded by `scripts/generate-tracker.mjs`. Never hand-edit the generated HTML.
 | [assets/tracker-template.html](assets/tracker-template.html) | The page shell with a `/*__TRACKER_DATA__*/` injection point | Only for UI changes — it carries no data |
 
 Output: `reports/tracker/plan-<planId>-tracker.html` (gitignored, regenerate at will).
+Create an empty adjacent `history.jsonl` when starting a new registry.
+
+Keep the Azure template for existing numeric registries. For native Jira keys, start
+with the [source-bound example](assets/registry-jira-example.json), preserving the
+exact `source` site, project and plugin. Local registries bind
+`"source": {"provider": "local", "id": "<source-id>"}`. `planId`, suite and case
+IDs may then be opaque strings. Copy `sourceIdentity` from `tracker --json` into
+each hand-recorded history event for that source; unbound/foreign events do not apply.
 
 Run package scripts from the consumer working directory, or pass `--project-root <consumer>`.
 The renderer reads the HTML template from the installed package and writes only consumer state/output.
@@ -34,8 +46,9 @@ npx --no pom-harness tracker --archive             # also keep a timestamped cop
 npx --no pom-harness tracker --json                # machine-readable summary (for loops/agents)
 ```
 
-`--sync` maps pipeline state (`_verify-state.json` in `execution-tests/ado-suite-*/` and
-`execution-tests/ado-story-*/`) to tracker status: `passed`→done · `fixme`/`blocked`→blocked ·
+`--sync` maps source-bound Azure/Jira pipeline state (`_verify-state.json` alongside
+its matching native manifest), or local generation receipts, to tracker status:
+`passed`/generation `READY`→done · `fixme`/`blocked`→blocked ·
 `failed` at the 3-round cap→blocked, else doing · `pending-confirmation`→doing. A case
 whose folders disagree is skipped with a warning. It never touches cases under
 a `manual` ruling, and never overrides a history event newer than the verify-state
@@ -56,7 +69,7 @@ a newer event; never rewrite or delete lines):
 - Optional `assign`: `{"<name from registry names>": [caseIds]}`.
 - Status semantics match the pipeline's: **done = spec green ×2** (the
   rerun-reusability gate); **blocked** = fixme-on-app-defect / NEEDS-FIXTURE /
-  NEEDS-COLLECTION / environment; a filed ADO bug is NOT a status — add it to the
+  NEEDS-COLLECTION / environment; a filed bug is NOT a status — add it to the
   registry's `bugs` map (the page then shows "Bug filed" regardless of status);
   a non-automatable ruling goes in the registry's `manual` map with the reason.
 
@@ -81,12 +94,12 @@ event (one event, note = "imported <name>'s export of <date>").
 
 - Reassessing blocked or failed cases uses [maintain-test](../maintain-test/SKILL.md).
   Verified unblocking permits resumed work (`doing`), never `done` by itself.
-  Neutral generation uses an explicit history event from current generation
-  receipts; `--sync` reads only legacy `_verify-state.json`. Preserve unresolved
+  Neutral generation can sync current receipts when the registry binds its exact
+  local source ID; native sync also checks source fingerprints. Preserve unresolved
   blockers, exhausted repair budgets and manual rulings.
 
 - Suite-level pipeline state and NEEDS-HUMAN queue → `scripts/harness-metrics.mjs`
   (reads the same `_verify-state.json`; this skill renders the plan-scope view).
-- Filing the ADO bug itself is out of scope; this skill only registers the filed
+- Filing the bug itself is out of scope; this skill only registers the filed
   bug's id/severity/blocked-cases in the registry.
 - Tracker data edits ride the normal branch & PR law like every other change.

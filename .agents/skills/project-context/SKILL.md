@@ -5,6 +5,10 @@ description: "Build, retrieve or update business context from explicitly selecte
 
 # Build business context
 
+Use the shared [tracker provider contract](../../../docs/tracker-providers.md) for
+Azure, Jira with Xray or Zephyr Scale, and Jira without a plugin. Keep the same
+workflow and gates; select native adapters and preserve the captured source identity.
+
 Turn the selected requirements into an understandable account of the application:
 its purpose, users, capabilities, workflows, rules and domain terms. Read the
 actual requirements and acceptance criteria, not just titles or filenames.
@@ -15,7 +19,7 @@ Context includes only business work items selected by explicit IDs or criteria,
 and documents/attachments the user supplies or explicitly selects. Repository
 structure, POM methods, harness conventions, configuration and automation coverage
 are outside this collection. Connection configuration may resolve the selected
-ADO destination; it does not become business evidence.
+tracker destination; it does not become business evidence.
 
 ## Select, capture and explain
 
@@ -23,7 +27,7 @@ ADO destination; it does not become business evidence.
    missing or ambiguous selection. A saved ID list is fixed; saved criteria are
    rerun to discover new matching items. Both are explicit source selections.
 2. For the same context, reuse saved criteria or apply the user's new criteria.
-   A changed selection replaces membership of that named ADO collection;
+   A changed selection replaces membership of that named tracker collection;
    independently selected documents and other collections remain. Do not turn
    an item link or attachment link into permission to fetch it.
 3. Read the selected content through the existing runtime and appropriate file

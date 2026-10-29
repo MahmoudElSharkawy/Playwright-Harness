@@ -10,9 +10,9 @@ import {runCheck} from './lib/check.mjs';
 
 const SCRIPTS = {
   'check-conventions': 'check-conventions.mjs', tracker: 'generate-tracker.mjs', metrics: 'harness-metrics.mjs',
-  'fetch-suite': 'fetch-ado-suite.mjs', 'fetch-story': 'fetch-ado-story.mjs', 'publish-results': 'publish-ado-results.mjs',
-  'tag-workitem': 'tag-ado-workitem.mjs', 'relink-story': 'relink-ado-story.mjs', pr: 'ado-pr.mjs', 'load-source': 'load-local-source.mjs',
-  'edit-cases': 'edit-ado-cases.mjs',
+  'fetch-suite': ['integration.mjs', 'fetch-suite'], 'fetch-story': ['integration.mjs', 'fetch-story'], 'publish-results': ['integration.mjs', 'publish-results'],
+  'tag-workitem': ['integration.mjs', 'tag-workitem'], 'relink-story': ['integration.mjs', 'relink-story'], pr: 'ado-pr.mjs', 'load-source': 'load-local-source.mjs',
+  'edit-cases': ['integration.mjs', 'edit-cases'],
   generate: 'generate-tests.mjs', 'render-results': 'render-results.mjs', 'generate-allure': 'generate-allure.mjs',
   execute: 'execute-test.mjs', context: 'project-context.mjs', requirements: 'requirements-analysis.mjs', 'test-case-design': 'test-case-design.mjs', 'bug-report': 'bug-report.mjs',
 };
@@ -103,6 +103,7 @@ try {
     console.log(`Removed ${result.removed.length} harness links and pointer files.${result.kept.length ? ` Kept, not harness links: ${result.kept.join(', ')}.` : ''}`);
   } else if (SCRIPTS[command]) {
     const projectRoot = verifyInstallation(packageRoot);
-    process.exitCode = spawnSync(process.execPath, [join(packageRoot, 'scripts', SCRIPTS[command]), ...args], {cwd: projectRoot, stdio: 'inherit', windowsHide: true}).status ?? 1;
+    const [script, ...prefix] = Array.isArray(SCRIPTS[command]) ? SCRIPTS[command] : [SCRIPTS[command]];
+    process.exitCode = spawnSync(process.execPath, [join(packageRoot, 'scripts', script), ...prefix, ...args], {cwd: projectRoot, stdio: 'inherit', windowsHide: true}).status ?? 1;
   } else throw new Error(`Unknown command "${command}". Run "pom-harness help".`);
 } catch (error) {console.error(`pom-harness: ${error.message}`); process.exitCode = 1;}

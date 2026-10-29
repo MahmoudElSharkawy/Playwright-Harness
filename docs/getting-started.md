@@ -120,7 +120,8 @@ For automation, start with one small local source or configured ADO suite/story:
 Follow the [automation workflow](PIPELINE.md) through exploration, authoring,
 independent review and two scoped green runs. The convention checker must report
 nonzero file and rule counts. Use the [manual execution guide](manual-execution.md)
-for ADO cases you want to execute without generating code.
+for local or native cases you want to execute without generating code. Choose Azure,
+Jira with Xray/Zephyr Scale, or Jira with local cases using [tracker providers](tracker-providers.md).
 
 ## Teammates and CI
 

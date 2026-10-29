@@ -7,6 +7,8 @@ import {LINKS_FILE} from './adoption.mjs';
 import {readJson, validateConfiguration} from './project-config.mjs';
 import {consumerEnvironment} from './consumer-env.mjs';
 import {loadAdoConfiguration, workItemUrlTemplate} from './integrations/config.mjs';
+import {loadJiraConfiguration} from './integrations/jira-config.mjs';
+import {selectTracker} from './integrations/selection.mjs';
 import {allureLinkTemplates} from './convention-source.mjs';
 import {nativeCliInstallation} from './browser/native-cli.mjs';
 import {integrity} from './archive.mjs';
@@ -110,16 +112,33 @@ export function runCheck({projectRoot, packageRoot, addEnvKeys = false}) {
   if (!existsSync(consumerPath(roots, '.harness/integrations.json'))) feature('Azure DevOps', OPTIONAL);
   else {
     try {
-      const {configuration} = loadAdoConfiguration(roots);
-      if (present(configuration.credentialRef)) feature('Azure DevOps', READY);
-      else {missing.add(configuration.credentialRef); feature('Azure DevOps', WAITING, `missing secret: ${configuration.credentialRef}`);}
+      const integrations = readJson(consumerPath(roots, '.harness/integrations.json')), selected = selectTracker(roots), configured = {};
+      if (integrations.ado) {
+        const {configuration} = loadAdoConfiguration(roots); configured.ado = configuration;
+        if (present(configuration.credentialRef)) feature('Azure DevOps', READY);
+        else {missing.add(configuration.credentialRef); feature('Azure DevOps', WAITING, `missing secret: ${configuration.credentialRef}`);}
+      } else feature('Azure DevOps', OPTIONAL);
+      if (integrations.jira) {
+        const {configuration} = loadJiraConfiguration(roots); configured.jira = configuration;
+        const absent = [configuration.emailRef, configuration.credentialRef].filter(name => !present(name)); absent.forEach(name => missing.add(name));
+        feature('Jira', absent.length ? WAITING : READY, absent.length ? `missing secrets: ${absent.join(', ')}` : 'Configured; live permissions are checked before use.');
+        const plugin = configuration.testManagement, references = plugin.provider === 'xray' ? [plugin.clientIdRef, plugin.clientSecretRef] : plugin.provider === 'zephyr-scale' ? [plugin.credentialRef] : [];
+        const absentPlugin = references.filter(name => !present(name)); absentPlugin.forEach(name => missing.add(name));
+        feature('Jira test management', plugin.provider === 'none' ? OPTIONAL : absentPlugin.length ? WAITING : READY,
+          plugin.provider === 'none' ? 'Local cases, execution history and reports.' : absentPlugin.length ? `missing secrets: ${absentPlugin.join(', ')}` : plugin.provider);
+      }
       const config = ['ts', 'mts', 'cts', 'js', 'mjs', 'cjs'].map(extension => join(projectRoot, `playwright.config.${extension}`)).find(existsSync);
       const templates = config ? allureLinkTemplates(readFileSync(config, 'utf8')) : {state: 'NONE'};
-      const expected = workItemUrlTemplate(configuration.organizationUrl, configuration.project);
+      const configuration = configured[selected], expected = selected === 'jira' ? `${configuration.siteUrl}/browse/%s` : workItemUrlTemplate(configuration.organizationUrl, configuration.project);
+      const jiraMode = selected === 'jira' ? configuration.testManagement.provider : null;
       if (templates.state === 'CONFIGURED') feature('Work-item links', READY,
         Object.values(templates.links).every(template => template.urlTemplate === expected) ? 'literal reporter templates configured' : 'customized literal reporter templates configured');
       else if (templates.state === 'UNRESOLVED') feature('Work-item links', 'unresolved', 'Dynamic reporter templates are preserved; scoped capture cannot copy them and uses raw IDs.');
-      else feature('Work-item links', WAITING, `When linking is requested, configure reporter links.tms / links.issue with URL template ${expected} and names Test: #%s / Bug: #%s.`);
+      else feature('Work-item links', WAITING, jiraMode === 'zephyr-scale'
+        ? `Configure reporter links.issue with ${expected}. For tests, preserve each native Zephyr case URL using allure.link; do not use Jira issue URLs for Zephyr case keys.`
+        : jiraMode === 'none'
+          ? `Configure reporter links.issue with ${expected}. Local tests use stable allure.testCaseId values; no remote test-case link is required.`
+          : `When linking is requested, configure reporter links.tms / links.issue with URL template ${expected} and names Test: #%s / Bug: #%s.`);
     } catch (error) {errors.push(`.harness/integrations.json is invalid: ${error.message}`);}
   }
 

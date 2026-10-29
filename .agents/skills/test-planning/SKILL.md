@@ -5,6 +5,10 @@ description: Plan a testing cycle's objectives, scope, risk priorities, strategy
 
 # Test planning
 
+Use the shared [tracker provider contract](../../../docs/tracker-providers.md) for
+Azure, Jira with Xray or Zephyr Scale, and Jira without a plugin. Keep the same
+workflow and gates; select native adapters and preserve the captured source identity.
+
 Resolve this linked skill to its real package path and read [ROOTS](../ROOTS.md).
 The host prepares a source-grounded plan using the [playbook](references/playbook.md)
 and [template](assets/test-plan-template.md). The consumer owns the resulting

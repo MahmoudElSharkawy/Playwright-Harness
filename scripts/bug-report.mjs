@@ -9,7 +9,7 @@ try {
   for (let index = 0; index < rest.length; index++) {
     const name = rest[index].slice(2);
     if (rest[index] === '--execute') options.execute = true;
-    else if (rest[index].startsWith('--') && ['input', 'preview', 'approved', 'execution', 'fingerprint'].includes(name) && rest[index + 1] && !rest[index + 1].startsWith('--')) options[name] = rest[++index];
+    else if (rest[index].startsWith('--') && ['input', 'preview', 'approved', 'execution', 'fingerprint', 'provider'].includes(name) && rest[index + 1] && !rest[index + 1].startsWith('--')) options[name] = rest[++index];
     else throw new Error('Unknown or incomplete bug-report option.');
   }
   const input = () => {if (!options.input) throw new Error('--input needs a selected JSON file.'); return readBounded(consumerPath(roots, options.input));};
@@ -19,9 +19,9 @@ try {
   else if (command === 'from-run') result = await prepareRunBugReports(roots, reportId, input());
   else if (command === 'show') result = readBugReport(roots, reportId);
   else if (command === 'edit') result = editBugReport(roots, reportId, input());
-  else if (command === 'preview') result = await previewBugReport(roots, reportId);
+  else if (command === 'preview') result = await previewBugReport(roots, reportId, {provider: options.provider});
   else if (command === 'approve') result = approveBugReport(roots, reportId, options.preview);
-  else if (command === 'file') {if (!options.execute || !options.approved) throw new Error('Filing requires --approved <preview hash> and explicit --execute.'); result = await fileBugReport(roots, reportId, options.approved);}
+  else if (command === 'file') {if (!options.execute || !options.approved) throw new Error('Filing requires --approved <preview hash> and explicit --execute.'); result = await fileBugReport(roots, reportId, options.approved, {provider: options.provider});}
   else if (command === 'annotate') result = await annotateBugReport(roots, reportId, input());
   else if (command === 'review-annotation') result = reviewBugAnnotation(roots, reportId, input());
   else if (command === 'from-execution') result = bugReportFromExecution(roots, reportId, options.execution, options.fingerprint);

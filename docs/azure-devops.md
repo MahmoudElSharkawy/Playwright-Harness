@@ -1,5 +1,8 @@
 # Azure DevOps integration
 
+See [tracker providers](tracker-providers.md) for shared Azure/Jira selection,
+Xray/Zephyr Scale capabilities, and local cases without a plugin. This page retains the Azure-specific compatibility contract.
+
 ADO is optional for local automation and application browser/API/DB execution.
 Configure it for suite/story retrieval, traceability, publication, work-item changes
 or ADO PR delivery. Application operation permissions and external delivery authorization

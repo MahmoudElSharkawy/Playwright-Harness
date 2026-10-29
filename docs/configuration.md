@@ -98,10 +98,11 @@ are required. Browser credentials are needed only for selected login steps; API/
 manual runs do not need unrelated browser users.
 
 An API variable holds a bearer token; a database connection variable holds JSON
-with `user` and `password` fields. ADO's optional integration uses a bare variable
-name instead; see [Azure DevOps](azure-devops.md#configure-the-connection).
+with `user` and `password` fields. Optional tracker integrations use bare variable
+names instead; see [tracker providers](tracker-providers.md) for Azure and Jira
+classic/scoped tokens and separate Xray/Zephyr credentials.
 To prepare missing API/database credential keys for the default environment and
-the ADO credential key:
+the configured tracker/plugin credential keys:
 
 ```sh
 npx --no pom-harness check --add-env-keys
@@ -172,9 +173,10 @@ was loaded. Refinement writes a separate artifact and must preserve every expect
 and external identity. Credential-like literal checks are conservative; review prose
 for sensitive content. Errors do not echo source text.
 
-Local sources support the full [automation workflow](PIPELINE.md) without ADO.
-Standalone [manual execution](manual-execution.md) currently takes ADO suites/stories.
-ADO retrieval can export this neutral format; see [Azure DevOps](azure-devops.md).
+Local sources support the full [automation workflow](PIPELINE.md) and standalone
+[manual execution](manual-execution.md) without remote credentials. Azure and Jira
+plugin retrieval export this neutral format; Jira without a plugin uses local
+cases with Jira story references. See [tracker providers](tracker-providers.md).
 
 ## Reviewed knowledge and team libraries
 
@@ -192,7 +194,7 @@ inline definitions are valid peers; catalog registration is not a prerequisite.
 | Path | Contents and treatment |
 |---|---|
 | `.harness/project.json`, `.harness/targets.json` | Consumer settings with secret references only |
-| `.harness/integrations.json` | Optional [ADO settings](azure-devops.md) |
+| `.harness/integrations.json` | Optional [Azure/Jira provider settings](tracker-providers.md) |
 | `.harness/context/` | Captured [project context](project-context.md), source provenance and immutable history; ignored by default |
 | `.harness/sources/` | Versioned scenario inputs |
 | `.harness/knowledge/` | Reviewed, sanitized knowledge |

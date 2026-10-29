@@ -1,17 +1,18 @@
 # Execute manual test cases
 
 Use the [execute-test skill](../.agents/skills/execute-test/SKILL.md) to run captured
-Azure DevOps cases through browser, API and database runtimes, retaining evidence,
+local, Azure, Xray or Zephyr Scale cases through browser, API and database runtimes, retaining evidence,
 reports and defects. This workflow generates no POM code. Use
 [automation](PIPELINE.md) when you want durable tests.
 
-Manual execution currently accepts ADO suites/stories and runs sequentially.
+Manual execution runs sequentially for local sources or selected native cases/groups.
 API/DB-only cases start no browser. Configure the selected
-[environment](configuration.md) and [ADO connection](azure-devops.md) first.
+[environment](configuration.md), and the [provider connection](tracker-providers.md)
+when reading remote cases. Jira without a plugin uses the local route.
 
 An optional accepted [testing plan](test-planning.md#baseline-and-criteria-contract)
 can identify selected scope, risk/criterion links and its source/version baseline.
-It is not a prerequisite, a replacement for the ADO plan ID or execution authority.
+It is not a prerequisite, a replacement for a native plan identity or execution authority.
 Source expectations, readiness, ownership, reporting and delivery rules remain
 authoritative; planned coverage is not an executed result.
 
@@ -59,7 +60,9 @@ path, independently of existing verdicts and readiness.
 ## Start, refine and freeze
 
 Ask for `/execute-test suite <id> [plan <id>] [on qa] [checkpoint]` or
-`/execute-test story <id> [on qa]`. CLI equivalents run from the consumer:
+`/execute-test story <id> [on qa]`. Jira keys use `--provider jira`; local/no-plugin
+handoffs use `execute prepare local <source.json>`. See [native scope examples](tracker-providers.md).
+Azure CLI equivalents run from the consumer:
 
 ```sh
 npx --no pom-harness execute prepare suite 4521 --plan 4500 --environment qa
@@ -267,16 +270,18 @@ npx --no pom-harness execute file-bugs <exec>
 npx --no pom-harness execute publish-results <exec>
 ```
 
-After concrete preview and authorization, repeat with `--execute`. Story executions
-can file bugs; suite executions can also publish manual results. See
-[ADO delivery](azure-devops.md#manual-execution-delivery) for revision controls,
-aggregation, duplicate handling and uncertain writes. Manual execution does not
+After concrete preview and authorization, repeat with `--execute` and the original
+approval when required. Azure story executions can file bugs; Azure suites can also
+publish manual results. Jira results target an explicit native execution/cycle and
+status mapping; local/no-plugin results retain local history. See
+[tracker providers](tracker-providers.md) and [Azure delivery](azure-devops.md#manual-execution-delivery)
+for revision controls, aggregation, duplicate handling and uncertain writes. Manual execution does not
 update tracker events. Passive capture does not automatically promote reviewed
 knowledge; the separate review/verification contract above governs reuse.
 
 ## Limits and validation
 
-Parallel/local manual sources, file upload/download, per-step ADO outcomes, shared
+Parallel manual execution, file upload/download, per-step ADO outcomes, shared
 parameter sets, existing/restore lifecycles, visual baselines and cross-execution
 login are deferred. Existing consumer execute-test skills are preserved; rename a
 conflicting team skill folder/frontmatter rather than overwriting it.

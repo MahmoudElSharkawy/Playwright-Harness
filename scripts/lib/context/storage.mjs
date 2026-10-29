@@ -28,7 +28,7 @@ export function readManifest(roots, id) {
     keys(result, ['version', 'contextId', 'identity', 'scope', 'capturedAt', 'updatedAt', 'status', 'sources', 'facts', 'selections', 'custom', 'lastCompleteRevision', 'revision'], 'captured context');
     requireThat(Array.isArray(result.sources) && Array.isArray(result.facts), 'Invalid legacy context snapshot.'); return result;
   }
-  keys(result, ['version', 'contextId', 'identity', 'scope', 'adoProject', 'scopeKey', 'capturedAt', 'updatedAt', 'status', 'catalogs', 'selections', 'customRef', 'lastCompleteRevision', 'counts', 'freshness', 'gaps', 'index', 'revision'], 'captured context; edit custom.json for owner notes');
+  keys(result, ['version', 'contextId', 'identity', 'scope', 'adoProject', 'jiraProject', 'scopeKey', 'capturedAt', 'updatedAt', 'status', 'catalogs', 'selections', 'customRef', 'lastCompleteRevision', 'counts', 'freshness', 'gaps', 'index', 'revision'], 'captured context; edit custom.json for owner notes');
   const {revision, ...body} = result;
   requireThat(result.version === 2 && Buffer.byteLength(JSON.stringify(result)) <= 65536 && scopeKey(result) === result.scopeKey && fingerprint(body) === revision, 'Invalid captured context manifest or scope.');
   for (const name of ['sources', 'facts']) requireThat(Array.isArray(result.catalogs?.[name]) && result.catalogs[name].length === 64 && result.catalogs[name].every(ref => ref === null || HASH.test(ref)), 'Invalid captured context catalog.');
@@ -97,7 +97,7 @@ export function loadSnapshot(roots, manifest) {
     for (const ref of pages) selection.items.push(...store.get(ref, 'selection-items')); selections[name] = selection;
   }
   return {version: 2, contextId: manifest.contextId, identity: manifest.identity, scope: manifest.scope,
-    ...(manifest.adoProject ? {adoProject: manifest.adoProject} : {}), capturedAt: manifest.capturedAt, updatedAt: manifest.updatedAt, status: manifest.status,
+    ...(manifest.adoProject ? {adoProject: manifest.adoProject} : {}), ...(manifest.jiraProject ? {jiraProject: manifest.jiraProject} : {}), capturedAt: manifest.capturedAt, updatedAt: manifest.updatedAt, status: manifest.status,
     sources: [...store.entries(manifest.catalogs.sources)].map(entry => store.source(entry.ref)).sort((a, b) => a.id.localeCompare(b.id)), selections,
     ...(capturedCustom(roots, manifest) === undefined ? {} : {custom: capturedCustom(roots, manifest)}),
     ...(manifest.lastCompleteRevision === undefined ? {} : {lastCompleteRevision: manifest.lastCompleteRevision}), revision: manifest.revision};
@@ -124,7 +124,7 @@ export function prepareSnapshot(roots, snapshot) {
   if (businessFacts.some(f => f.status === 'conflicting')) gaps.push({status: 'conflicting', coverage: 'conflicting-facts'});
   if (!active.length && !Object.values(snapshot.selections).some(selection => selection.purpose === 'business-context' && selection.includedCount === 0)) gaps.push({status: 'unverified', coverage: 'no-selected-sources'});
   const manifest = {version: 2, contextId: snapshot.contextId, identity: snapshot.identity, scope: snapshot.scope,
-    ...(snapshot.adoProject ? {adoProject: snapshot.adoProject} : {}), scopeKey: scopeKey(snapshot), capturedAt: snapshot.capturedAt, updatedAt: snapshot.updatedAt, status: snapshot.status,
+    ...(snapshot.adoProject ? {adoProject: snapshot.adoProject} : {}), ...(snapshot.jiraProject ? {jiraProject: snapshot.jiraProject} : {}), scopeKey: scopeKey(snapshot), capturedAt: snapshot.capturedAt, updatedAt: snapshot.updatedAt, status: snapshot.status,
     catalogs: {sources: store.catalog(sourceEntries), facts: store.catalog([...factEntries].map(([id, ref]) => ({id, ref})))}, selections,
     ...(snapshot.custom === undefined ? {} : {customRef: store.put('custom', snapshot.custom)}),
     ...(snapshot.lastCompleteRevision === undefined ? {} : {lastCompleteRevision: snapshot.lastCompleteRevision}),

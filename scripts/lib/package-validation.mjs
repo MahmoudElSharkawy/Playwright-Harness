@@ -18,6 +18,7 @@ export function inventory(root) {
     for (const item of readdirSync(directory, { withFileTypes: true })) {
       const absolute = join(directory, item.name);
       const file = relative(root, absolute).replaceAll('\\', '/');
+      if (file === '.git' && item.isFile()) {excluded.push(file); continue;} // Managed worktree metadata, never package content.
       if (item.isSymbolicLink()) { unexpected.push({ file, rule: 'symbolic-link' }); continue; }
       if (item.isDirectory()) {
         if (OMIT_DIRS.has(item.name) || ['execution-tests', 'test', '.harness'].includes(file)) { excluded.push(file); continue; }
@@ -86,7 +87,11 @@ export function secretFindings(file, text) {
     if (/-----BEGIN (?:[A-Z]+ )?PRIVATE KEY-----/.test(line)) categories.add('private-key');
     if (/\beyJ[A-Za-z0-9_-]{15,}\.[A-Za-z0-9_-]{10,}(?:\.[A-Za-z0-9_-]+)?/.test(line)) categories.add('jwt');
     if (/\b(?:gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,}|AKIA[A-Z0-9]{16})\b/.test(line)) categories.add('access-key');
-    for (const match of line.matchAll(assignment)) if (credentialName(match[1]) && !placeholder(match[3])) categories.add('credential-assignment');
+    for (const match of line.matchAll(assignment)) {
+      // Jira's documented CSRF header and pagination cursor are not credentials.
+      const nonCredential = match[1] === 'nextPageToken' || match[1] === 'X-Atlassian-Token' && match[3] === 'no-check';
+      if (!nonCredential && credentialName(match[1]) && !placeholder(match[3])) categories.add('credential-assignment');
+    }
     if (wrappedLiterals.has(index + 1)) categories.add('credential-assignment');
     for (const match of line.matchAll(connection)) if (!expressions.has(offset + match.index) && !placeholder(match[1]) && !/^(?:process\.env|\$\{|@|<|\{)/.test(match[1])) categories.add('connection-credential');
     // Neither a convention suppression nor an unrelated env reference exempts a secret.
@@ -103,6 +108,9 @@ const PUBLIC_METADATA_URLS=new Set(['https://www.patreon.com/feross','https://fe
 const PUBLIC_CI_URLS = new Set(['https://mirror.gcr.io', 'https://mirror.gcr.io/', 'https://docs.cloud.google.com/artifact-registry/docs/pull-cached-dockerhub-images']);
 // Official collection format identifier; other Postman coordinates still require review.
 const PUBLIC_SCHEMA_URLS = new Set(['https://schema.getpostman.com/json/collection/v2.1.0/collection.json']);
+// Fixed public Cloud API origins and explicit example tenants used in isolated fixtures.
+// Other tenant hosts still require review; this is not an atlassian.net wildcard.
+const INTEGRATION_HOSTS = new Set(['api.atlassian.com', 'xray.cloud.getxray.app', 'api.zephyrscale.smartbear.com', 'eu.api.zephyrscale.smartbear.com', 'example.atlassian.net', 'example-other.atlassian.net', 'your-site.atlassian.net']);
 export function privacyFindings(file, text) {
   const findings = [];
   const push = (line, rule) => findings.push({ file, line, rule });
@@ -126,7 +134,7 @@ export function privacyFindings(file, text) {
       if (host === 'dev.azure.com') {
         const organization=value.replace(/^https?:\/\/[^/]+\//,'').split('/')[0];
         if (!organization.startsWith('${') && !/^(?:your-org|example-org)$/.test(organization)) push(n, 'organization-url');
-      } else if (!synthetic && !PUBLIC_HOSTS.has(host) && !PUBLIC_METADATA_URLS.has(url.href) && !PUBLIC_CI_URLS.has(value) && !PUBLIC_SCHEMA_URLS.has(value)) push(n, 'unreviewed-url');
+      } else if (!synthetic && !PUBLIC_HOSTS.has(host) && !INTEGRATION_HOSTS.has(host) && !PUBLIC_METADATA_URLS.has(url.href) && !PUBLIC_CI_URLS.has(value) && !PUBLIC_SCHEMA_URLS.has(value)) push(n, 'unreviewed-url');
     }
   });
   if (/\.jsonl$/.test(file) && text.trim()) push(1, 'populated-runtime-history');

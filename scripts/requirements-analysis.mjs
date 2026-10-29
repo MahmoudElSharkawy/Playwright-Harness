@@ -35,7 +35,7 @@ try {
   else if (command === 'plan') result = planningHandoff(roots, options.id);
   else if (command === 'preview') result = await previewRequirementsComment(roots, options.id);
   else if (command === 'post') result = await publishRequirementsComment(roots, options.id, {approval: options.approval});
-  else if (command === 'reconcile') result = await reconcileRequirementsComment(roots, options.id, options['comment-id'] ? {commentId: Number(options['comment-id'])} : {});
+  else if (command === 'reconcile') result = await reconcileRequirementsComment(roots, options.id, options['comment-id'] ? {commentId: options['comment-id']} : {});
   else throw new Error(usage);
   console.log(JSON.stringify(result, null, 2));
   if (['uncertain', 'not-executed', 'reconciliation-required'].includes(result?.mode)) process.exitCode = 1;

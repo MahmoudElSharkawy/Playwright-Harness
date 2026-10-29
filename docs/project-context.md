@@ -4,6 +4,11 @@ Use `project-context` to build or refresh business understanding from selected
 work items and supplied documents. Use `context-update` to refresh the saved
 selection, and explicitly invoke `context-qa` to answer from its saved evidence.
 
+Azure and Jira share this workflow. For Jira, save fixed issue keys or JQL, selected
+attachments and explicit discussion/history options using [tracker providers](tracker-providers.md).
+Refresh reuses that saved selection; permission failures remain unavailable or stale,
+never proof that an issue was deleted or a criteria result is empty.
+
 For example: "Build checkout context from stories 83, 90 and 91 plus this document,"
 or "Build context from all User Stories in the Checkout area." Later:
 "Refresh checkout context." The first selection stays fixed; the second discovers
@@ -17,14 +22,14 @@ new matching stories whenever it is refreshed.
 | context-update | Refresh the saved documents and exact IDs or criteria; accept an explicit narrower/new selection too. |
 | context-qa | Answer a business question using only selected saved evidence, with readable citations. |
 
-A new selection for an existing ADO collection replaces that collection's criteria
+A new selection for an existing tracker collection replaces that collection's criteria
 and reconciles its membership. Independently selected files/collections remain.
 Neither skill creates duplicate facts on repeated refresh. Ordinary questions do
 not silently retrieve, refresh or activate snapshot-only Q&A.
 
 Context excludes repository/POM structure, code, configuration and harness
 conventions. It does not automatically traverse linked work items or download
-attachments. A business document must be explicitly supplied/selected; an ADO
+attachments. A business document must be explicitly supplied/selected; a tracker
 attachment must be explicitly selected from the returned attachment metadata.
 Read [the workflow](../.agents/skills/project-context/references/workflow.md) for
 request examples, criteria, format readers and extraction receipts.

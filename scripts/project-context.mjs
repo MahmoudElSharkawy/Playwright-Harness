@@ -13,13 +13,13 @@ pom-harness context search --id <context-id> [--query <text>] [--source <source-
 pom-harness context search --id <context-id> --catalog sources [--cursor <cursor>] [--project-root <consumer>]
 pom-harness context search --id <context-id> --around <passage-id> --source <source-id> --revision <capture-revision> [--before <0-5>] [--after <0-5>] [--topic <topic>] [--work-item <id>] [--limit <1-25>] [--max-bytes <4096-65536>] [--cursor <cursor>] [--project-root <consumer>]
 pom-harness context export --id <context-id> --out <new-consumer-file> [--project-root <consumer>]
-pom-harness context policy --source <source-id> --policy <consumer-json> [--project-root <consumer>]
+pom-harness context policy --source <source-id> --policy <consumer-json> [--provider ado|jira] [--project-root <consumer>]
 
 retrieve previews selected business sources; update saves or refreshes a recoverable snapshot.
 --id reuses saved documents and work-item IDs/criteria; matching new items are discovered on refresh.
-stage and update save only explicitly selected ADO attachments under ignored .harness/runs/context/.
+stage and update save only explicitly selected attachments under ignored .harness/runs/context/.
 read returns a compact captured overview. search returns bounded captured evidence only.
-metadata pages every live ADO type/state without reading work items or saving context.
+metadata pages live tracker types/states without reading work items or saving context.
 export streams the complete logical snapshot to a new file. policy saves an explicit selection.`;
 function metadataPage(result, cursor) {
   const {metadata, ...summary} = result, revision = fingerprint(result);
@@ -42,7 +42,7 @@ function compact(result) {
   if (!snapshot) return bounded(rest);
   const sourceMap = new Map(snapshot.sources.map(source => [source.id, source])), selected = new Set(checked);
   const receipts = checked.length ? checked.map(id => sourceMap.get(id)) : snapshot.sources;
-  const output = {...rest, snapshot: {contextId: snapshot.contextId, identity: snapshot.identity, scope: snapshot.scope, ...(snapshot.adoProject ? {adoProject: snapshot.adoProject} : {}), revision: snapshot.revision, status: snapshot.status, updatedAt: snapshot.updatedAt,
+  const output = {...rest, snapshot: {contextId: snapshot.contextId, identity: snapshot.identity, scope: snapshot.scope, ...(snapshot.adoProject ? {adoProject: snapshot.adoProject} : {}), ...(snapshot.jiraProject ? {jiraProject: snapshot.jiraProject} : {}), revision: snapshot.revision, status: snapshot.status, updatedAt: snapshot.updatedAt,
     counts: {sources: snapshot.sources.length, facts: snapshot.facts.length, conflicts: snapshot.facts.filter(f => f.status === 'conflicting').length, gaps: gaps.length}},
     changes: Object.fromEntries(Object.entries(changes).map(([name, values]) => [name, {count: values.length, sample: values.slice(0, 8)}])), checked: {count: checked.length, sample: checked.slice(0, 8)}, gaps: {count: gaps.length, sample: gaps.slice(0, 8)},
     sources: {count: snapshot.sources.length, sample: receipts.slice(0, 8).map(source => Object.fromEntries(['id', 'kind', 'title', 'name', 'path', 'availableAttachments', 'localPath', 'hash', 'attemptedHash', 'version', 'attachmentId', 'status', 'coverage', 'verifiedAt'].filter(key => source[key] !== undefined).map(key => [key, source[key]])))}};
@@ -74,20 +74,20 @@ try {
   if (process.argv.slice(2).some(value => ['help', '--help', '-h'].includes(value))) {console.log(usage);}
   else {
     const {roots, args} = projectArgument(), [command, ...rest] = args, options = {};
-    const fields = command === 'search' ? ['id', 'query', 'source', 'topic', 'work-item', 'limit', 'max-bytes', 'cursor', 'catalog', 'around', 'revision', 'before', 'after'] : command === 'metadata' ? ['request', 'cursor'] : command === 'export' ? ['id', 'out'] : command === 'read' ? ['id'] : command === 'policy' ? ['source', 'policy'] : ['request', 'id'];
+    const fields = command === 'search' ? ['id', 'query', 'source', 'topic', 'work-item', 'limit', 'max-bytes', 'cursor', 'catalog', 'around', 'revision', 'before', 'after'] : command === 'metadata' ? ['request', 'cursor'] : command === 'export' ? ['id', 'out'] : command === 'read' ? ['id'] : command === 'policy' ? ['source', 'policy', 'provider'] : ['request', 'id'];
     for (let index = 0; index < rest.length; index += 2) {
       const name = rest[index].replace(/^--/, '');
       if (!rest[index].startsWith('--') || !fields.includes(name) || options[name] !== undefined || !rest[index + 1] || rest[index + 1].startsWith('--')) throw new Error(usage);
       options[name] = rest[index + 1];
     }
     const refresh = ['retrieve', 'update', 'stage'].includes(command);
-    if (refresh ? Boolean(options.request) === Boolean(options.id) : (command === 'search' ? ['id'] : command === 'metadata' ? ['request'] : fields).some(name => options[name] === undefined)) throw new Error(usage);
+    if (refresh ? Boolean(options.request) === Boolean(options.id) : (command === 'search' ? ['id'] : command === 'metadata' ? ['request'] : command === 'policy' ? ['source', 'policy'] : fields).some(name => options[name] === undefined)) throw new Error(usage);
     let result;
     if (command === 'read') result = readContextOverview(roots, options.id);
     else if (command === 'metadata') result = metadataPage(await readContextMetadata(roots, inputJson(roots, options.request)), options.cursor);
     else if (command === 'search') result = searchContext(roots, options.id, Object.fromEntries(Object.entries(options).filter(([key]) => key !== 'id').map(([key, value]) => [{source: 'sourceId', 'work-item': 'workItemId', 'max-bytes': 'maxBytes'}[key] ?? key, value])));
     else if (command === 'export') result = exportContext(roots, options.id, options.out);
-    else if (command === 'policy') result = await saveContextPolicy(roots, options.source, inputJson(roots, options.policy));
+    else if (command === 'policy') result = await saveContextPolicy(roots, options.source, inputJson(roots, options.policy), {provider: options.provider});
     else if (['retrieve', 'update', 'stage'].includes(command)) {
       const request = options.request ? inputJson(roots, options.request) : {version: 1, contextId: options.id};
       result = command === 'update' ? await updateContext(roots, request, {stageAttachments: true}) : await retrieveContext(roots, request, {stageAttachments: command === 'stage'});

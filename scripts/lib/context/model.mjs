@@ -31,7 +31,8 @@ export function facts(sources) {
 }
 export function scopeIdentity(snapshot) {
   return {contextId: snapshot.contextId, identity: snapshot.identity, scope: snapshot.scope,
-    ...(snapshot.adoProject ? {adoProject: {organizationUrl: snapshot.adoProject.organizationUrl, id: snapshot.adoProject.id}} : {})};
+    ...(snapshot.adoProject ? {adoProject: {organizationUrl: snapshot.adoProject.organizationUrl, id: snapshot.adoProject.id}} : {}),
+    ...(snapshot.jiraProject ? {jiraProject: {siteUrl: snapshot.jiraProject.siteUrl, id: snapshot.jiraProject.id}} : {})};
 }
 export const scopeKey = snapshot => fingerprint(scopeIdentity(snapshot));
 export const bucket = id => parseInt(digest(id).slice(0, 2), 16) % 64;
