@@ -2,6 +2,32 @@
 
 ## Unreleased
 
+## 4.3.0 — Stronger test design review and references
+
+### Upgrade actions
+
+- Update to the 4.3.0 archive and re-run setup in each consumer project. Review
+  customized managed instructions through the existing merge process, then reload
+  skills or restart the host to load the updated test-case design guidance.
+- Existing captures and design histories remain readable. Select and review relevant
+  referenced rules through the existing acceptance workflow; changed references
+  require affected revalidation and renewed approval. Retain independent review
+  output for the enhanced delivery gate. Optional quality suggestions do not add
+  cases or coverage without an explicit request and supported expectations.
+- Complete test-design reviews now produce consumer-owned Markdown copies. Use the
+  current returned path after revisions; provide optional review notes again when
+  they remain relevant.
+
+### Changes
+
+- Add risk-based optional quality suggestions across the existing test types, with
+  explicit user selection and accepted evidence required before promotion to cases. (#130)
+- Preserve reference origins and map selected rules to affected requirements; bind
+  decisions to current evidence, retain independent review output, review duplicate
+  warnings and support optional agreed conventions without expanding acceptance. (#131)
+- Deliver a current Markdown copy of complete test-case design reviews alongside
+  the full chat review, including optional advisory notes and recorded status. (#132)
+
 ## 4.2.1 — Complete document context and observed API reuse
 
 ### Upgrade actions
