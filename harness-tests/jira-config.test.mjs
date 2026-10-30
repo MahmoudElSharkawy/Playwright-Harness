@@ -41,6 +41,29 @@ test('selected plugin receives only its own credential references', t => {
   assert.deepEqual(loadJiraConfiguration(roots, {ZEPHYR_TOKEN: '<selected>'}).resolveTestManagementCredentials(), {token: '<selected>'});
 });
 
+test('selected native plugin accepts bounded case defaults and explicit field metadata selection', () => {
+  const config = configuration();
+  config.testManagement = {provider: 'xray', clientIdRef: 'XRAY_ID', clientSecretRef: 'XRAY_SECRET', testIssueTypeId: '10004', caseFields: {customfield_12345: {id: '7'}}};
+  assert.deepEqual(validateJiraConfiguration(config).testManagement.caseFields, config.testManagement.caseFields);
+  config.testManagement = {provider: 'zephyr-scale', credentialRef: 'ZEPHYR_TOKEN', region: 'eu', caseFields: {Risk: 'High'},
+    caseFieldSchema: {siteUrl: config.siteUrl, project: config.project, reviewedAt: '2026-10-30T00:00:00Z', fields: [{name: 'Risk', type: 'Select List (Single Choice)', required: true, allowedValues: ['High', 'Low']}], requiredStepFields: []}};
+  assert.deepEqual(validateJiraConfiguration(config).testManagement.caseFields, {Risk: 'High'});
+  config.testManagement.caseFieldSchema.siteUrl = 'https://example-other.atlassian.net';
+  assert.throws(() => validateJiraConfiguration(config), /site|project|binding/i);
+});
+
+test('native field configuration rejects unsupported or unsafe inputs and does not require schema for read-only setup', () => {
+  const config = configuration();
+  config.testManagement = {provider: 'zephyr-scale', credentialRef: 'ZEPHYR_TOKEN', region: 'eu'};
+  assert.equal(validateJiraConfiguration(config).testManagement.caseFieldSchema, undefined);
+  config.testManagement.caseFields = [];
+  assert.throws(() => validateJiraConfiguration(config), /fields/i);
+  config.testManagement = {provider: 'none', caseFields: {Risk: 'High'}};
+  assert.throws(() => validateJiraConfiguration(config));
+  config.testManagement = {provider: 'xray', clientIdRef: 'XRAY_ID', clientSecretRef: 'XRAY_SECRET', testIssueTypeId: '../1'};
+  assert.throws(() => validateJiraConfiguration(config), /issue.type/i);
+});
+
 test('configured Jira context retains fixed IDs or saved criteria without mixing them', () => {
   const config = configuration(); config.context = {sources: {release: {scope: {issueKeys: ['DEMO-1']}}}};
   assert.deepEqual(validateJiraConfiguration(config).context.sources.release.scope.issueKeys, ['DEMO-1']);

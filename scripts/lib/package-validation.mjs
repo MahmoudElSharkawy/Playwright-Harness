@@ -102,8 +102,8 @@ export function secretFindings(file, text) {
 }
 
 const PUBLIC_HOSTS = new Set(['github.com', 'api.github.com', 'raw.githubusercontent.com', 'playwright.dev', 'nodejs.org', 'www.npmjs.com', 'registry.npmjs.org', 'learn.microsoft.com', 'code.claude.com', 'learn.chatgpt.com', 'developers.openai.com', 'json.schemastore.org', 'www.w3.org', 'www.typescriptlang.org', 'allurereport.org', 'mit-license.org', 'opensource.org', 'aka.ms', 'go.microsoft.com', 'node-postgres.com', 'www.postgresql.org']);
-// Reviewed upstream funding links present in the dependency lockfile; no host-wide exception.
-const PUBLIC_METADATA_URLS=new Set(['https://www.patreon.com/feross','https://feross.org/support','https://dotenvx.com/','https://opencollective.com/fastify','https://opencollective.com/express','https://opencollective.com/preact','https://paulmillr.com/funding/']);
+// Reviewed upstream funding and native-field documentation links; no host-wide exception.
+const PUBLIC_METADATA_URLS=new Set(['https://www.patreon.com/feross','https://feross.org/support','https://dotenvx.com/','https://opencollective.com/fastify','https://opencollective.com/express','https://opencollective.com/preact','https://paulmillr.com/funding/', 'https://support.smartbear.com/zephyr-scale-cloud/api-docs/', 'https://support.smartbear.com/zephyr/docs/en/configuration/advanced-customization-options/custom-fields-for-test-cases,-cycles,-plans,-steps,-and-executions.html']);
 // Reviewed Google-managed CI cache and its official documentation; no host-wide exception.
 const PUBLIC_CI_URLS = new Set(['https://mirror.gcr.io', 'https://mirror.gcr.io/', 'https://docs.cloud.google.com/artifact-registry/docs/pull-cached-dockerhub-images']);
 // Official collection format identifier; other Postman coordinates still require review.

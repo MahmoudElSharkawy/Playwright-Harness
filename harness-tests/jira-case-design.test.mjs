@@ -12,13 +12,14 @@ import {updateInventory} from '../scripts/lib/requirements/index.mjs';
 import {createTestManagement} from '../scripts/lib/integrations/test-management.mjs';
 import {PluginError} from '../scripts/lib/integrations/plugin-client.mjs';
 import {requireFreshReferences} from '../scripts/lib/test-case-design/references.mjs';
-import {preparationSteps, nativeDesignSteps} from '../scripts/lib/test-case-design/review.mjs';
+import {preparationSteps, nativeDesignSteps, renderDesign, validateDesign} from '../scripts/lib/test-case-design/review.mjs';
+import {xrayIssueType, xrayMetadataList, zephyrCaseSchema} from './fixtures/native-case-fields.mjs';
 
 const adf = text => ({type: 'doc', version: 1, content: [{type: 'paragraph', content: [{type: 'text', text}]}]});
 async function jiraDesign(t, provider = 'none', {existing = false, localCaseSource} = {}) {
   const {roots} = fixture(t), items = new Map(), history = [], control = {writes: 0, lose: false, hide: false, afterWrite: null};
   const story = {id: '100', key: 'DEMO-1', fields: {project: {id: '10', key: 'DEMO'}, updated: '2026-10-29T08:00:00Z', summary: 'Save name', description: '', customfield_10001: adf('Saving a display name shows confirmation.'), attachment: []}};
-  const client = {configuration: {siteUrl: 'https://example.atlassian.net', project: 'DEMO', fields: {acceptanceCriteria: 'customfield_10001'}, testManagement: {provider}},
+  const client = {configuration: {siteUrl: 'https://example.atlassian.net', project: 'DEMO', fields: {acceptanceCriteria: 'customfield_10001'}, testManagement: {provider, ...(provider === 'zephyr-scale' ? {caseFieldSchema: zephyrCaseSchema()} : {})}},
     async projectIdentity() {return {id: '10', key: 'DEMO', name: 'Demo'};}, async issue(key) {assert.equal(key, story.key); return structuredClone(story);}, async list(route) {return route.endsWith('/changelog') ? structuredClone(history) : [];}};
   function native(id, desired) {const value = {provider, siteUrl: client.configuration.siteUrl, project: 'DEMO', id, nativeId: '300', title: desired.title, steps: desired.steps.map((row, index) => ({id: String(index + 1), data: '', ...row})), labels: desired.labels, externalReferences: [{system: provider, id: `${client.configuration.siteUrl}/browse/${id}`}], raw: {}}; value.revision = value.fingerprint = fingerprint(value); return value;}
   const testManagement = {provider, capabilities: {remoteCases: provider !== 'none'}, async storyCases() {return [...items.values()].map(item => structuredClone(item));}, async readCase(id) {assert(items.has(id)); return structuredClone(items.get(id));},
@@ -126,15 +127,18 @@ test('native reuse preserves captured per-step data in preview and local handoff
 
 test('real Xray adapter retains native key and timestamp while the shared receipt uses a safe content fingerprint', async t => {
   const f = await jiraDesign(t, 'xray'); let native, issue; const writes = [];
+  f.client.configuration.testManagement.testIssueTypeId = xrayIssueType.id;
   const storyRead = f.client.issue;
+  const originalList = f.client.list;
+  f.client.list = async route => route.startsWith('issue/createmeta/') ? xrayMetadataList(route) : originalList(route);
   f.client.issue = async key => key === 'DEMO-1' ? storyRead(key) : structuredClone(issue);
-  f.client.read = async route => {assert.equal(route, 'issueLinkType'); return {issueLinkTypes: [{id: '100', outward: 'tests', inward: 'is tested by'}]};};
+  f.client.read = async route => {if (route.startsWith('mypermissions?')) return {permissions: {CREATE_ISSUES: {havePermission: true}}}; assert.equal(route, 'issueLinkType'); return {issueLinkTypes: [{id: '100', outward: 'tests', inward: 'is tested by'}]};};
   f.client.request = async (route, options) => {assert.equal(route, 'issueLink'); options.beforeDispatch(); writes.push(route); issue.fields.issuelinks = [{id: '900', type: {id: '100'}, outwardIssue: {id: '100', key: 'DEMO-1'}}]; return {};};
   const project = {id: '10', key: 'DEMO', self: `${f.client.configuration.siteUrl}/rest/api/3/project/10`};
-  const transport = {destination: route => `https://xray.cloud.getxray.app/api/v2/${route}`, async query(query) {return query.includes('getCoverableIssue') ? {getCoverableIssue: {issueId: '100', jira: {key: 'DEMO-1', project}}} : {getTest: structuredClone(native)};}, async request(route, options) {
+  const transport = {destination: route => `https://xray.cloud.getxray.app/api/v2/${route}`, async query(query) {if (query.includes('getTests(')) return {getTests: {start: 0, total: native ? 1 : 0, results: native ? [{issueId: native.issueId, jira: native.jira}] : []}}; return query.includes('getCoverableIssue') ? {getCoverableIssue: {issueId: '100', jira: {key: 'DEMO-1', project}}} : {getTest: structuredClone(native)};}, async request(route, options) {
     options.beforeDispatch(); writes.push(route); const value = options.body.variables;
-    issue = {id: '300', key: 'DEMO-300', fields: {project: {id: '10', key: 'DEMO'}, summary: value.jira.fields.summary, labels: value.jira.fields.labels, updated: '2026-10-30T12:00:00+02:00'}};
-    native = {issueId: '300', projectId: '10', jira: {key: 'DEMO-300', project}, lastModified: '2026-10-30T12:00:00+02:00', testType: {name: 'Manual'}, dataset: null, steps: value.steps.map((step, i) => ({id: 'step-' + i, ...step, attachments: [], customFields: []})), preconditions: {total: 0, results: []}};
+    issue = {id: '300', key: 'DEMO-300', fields: {project: {id: '10', key: 'DEMO'}, issuetype: xrayIssueType, summary: value.jira.fields.summary, labels: value.jira.fields.labels, updated: '2026-10-30T12:00:00+02:00'}};
+    native = {issueId: '300', projectId: '10', jira: {key: 'DEMO-300', project, issuetype: xrayIssueType}, lastModified: '2026-10-30T12:00:00+02:00', testType: {name: 'Manual'}, dataset: null, steps: value.steps.map((step, i) => ({id: 'step-' + i, ...step, attachments: [], customFields: []})), preconditions: {total: 0, results: []}};
     return {createTest: {test: {issueId: '300', jira: {key: 'DEMO-300'}}}};
   }};
   f.options.testManagement = createTestManagement({jira: f.client, roots: f.roots, transport});
@@ -165,4 +169,49 @@ test('local handoff NEW identifiers can be reused unchanged with a fresh shared 
   assessDesign(f.roots, 'reuse', retainAssessment(f.roots, state, review));
   const preview = await previewDesign(f.roots, 'reuse', f.options), result = await publishDesign(f.roots, 'reuse', {...f.options, approval: preview.fingerprint});
   assert.equal(result.outcomes[0].status, 'unchanged'); assert.equal(f.control.writes, 0);
+});
+
+for (const provider of ['xray', 'zephyr-scale']) test(`${provider} native fields stay in the shared reviewed proposal and reach its adapter`, async t => {
+  const f = await jiraDesign(t, provider), original = readDesign(f.roots, 'names'), proposal = structuredClone(f.proposal);
+  const nativeFields = provider === 'xray' ? {customfield_12345: {id: '12'}} : {Risk: 'High'};
+  proposal.head = original.head; proposal.cases[0].nativeFields = nativeFields;
+  const state = saveDesign(f.roots, 'names', proposal);
+  assert.notEqual(state.proposal, original.proposal);
+  assert.deepEqual(state.draft.cases[0].nativeFields, nativeFields);
+  const rendered = renderDesign(state.draft).markdown;
+  assert(rendered.includes(provider === 'xray' ? 'customfield\\_12345' : 'Risk')); assert(rendered.includes(provider === 'xray' ? '12' : 'High')); assert.match(rendered, /Native fields/);
+  assessDesign(f.roots, 'names', retainAssessment(f.roots, state, {...original.review, proposal: state.proposal}));
+  const prepare = f.testManagement.prepareCase; let received;
+  f.testManagement.prepareCase = async input => {received = input; return prepare.call(f.testManagement, input);};
+  await previewDesign(f.roots, 'names', f.options);
+  assert.deepEqual(received.nativeFields, nativeFields); assert.equal(f.control.writes, 0);
+});
+
+for (const changed of ['schema', 'defaults']) test(`shared native publication blocks changed ${changed} before any write`, async t => {
+  const f = await jiraDesign(t, 'xray'), prepare = f.testManagement.prepareCase;
+  let schema = {required: false}; f.client.configuration.testManagement.caseFields = {customfield_12345: 'Portal'};
+  f.testManagement.prepareCase = async input => ({...await prepare.call(f.testManagement, input), fieldSchema: structuredClone(schema), nativeFields: structuredClone(f.client.configuration.testManagement.caseFields)});
+  const preview = await previewDesign(f.roots, 'names', f.options);
+  if (changed === 'schema') schema = {required: true}; else f.client.configuration.testManagement.caseFields.customfield_12345 = 'API';
+  await assert.rejects(publishDesign(f.roots, 'names', {...f.options, approval: preview.fingerprint}), /Native request changed/);
+  assert.equal(f.control.writes, 0);
+});
+
+test('edited native field values invalidate the previous shared proposal approval', async t => {
+  const f = await jiraDesign(t, 'xray'), preview = await previewDesign(f.roots, 'names', f.options), proposal = structuredClone(f.proposal);
+  proposal.head = readDesign(f.roots, 'names').head; proposal.cases[0].nativeFields = {customfield_12345: 'Portal'}; saveDesign(f.roots, 'names', proposal);
+  await assert.rejects(publishDesign(f.roots, 'names', {...f.options, approval: preview.fingerprint}), /Proposal|changed|approval/);
+  assert.equal(f.control.writes, 0);
+});
+
+test('native field inputs cannot silently enter Azure, local or unchanged-reuse proposals', async t => {
+  const f = await jiraDesign(t, 'xray'), captured = readDesign(f.roots, 'names'), proposal = structuredClone(f.proposal);
+  proposal.cases[0].nativeFields = {customfield_12345: 'Portal'};
+  for (const origin of [{provider: 'ado'}, {provider: 'jira', testManagement: 'none'}, undefined]) {
+    const state = structuredClone(captured); state.evidence.requirements.origin = origin;
+    assert.throws(() => validateDesign(proposal, state, state.requirements), /Native|native|plugin/);
+  }
+  const existing = await jiraDesign(t, 'xray', {existing: true}), reuse = structuredClone(existing.proposal);
+  reuse.head = readDesign(existing.roots, 'names').head; reuse.cases[0].proposedAction = 'Reuse unchanged'; reuse.cases[0].nativeFields = {customfield_12345: 'Portal'};
+  assert.throws(() => saveDesign(existing.roots, 'names', reuse), /Native|native|unchanged/);
 });

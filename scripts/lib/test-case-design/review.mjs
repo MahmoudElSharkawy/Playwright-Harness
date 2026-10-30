@@ -5,6 +5,7 @@ import {parseStepsXml} from '../integrations/ado-steps.mjs';
 import {editableSteps} from '../integrations/ado-step-edit.mjs';
 import {dependencyGaps} from './references.mjs';
 import {reviewEvidenceStatus} from './review-evidence.mjs';
+import {nativeFieldValues} from '../integrations/native-fields.mjs';
 
 export const TEST_TYPES = Object.freeze(['Functional', 'Accessibility', 'Compatibility', 'UIUX', 'Security', 'Performance', 'Responsiveness', 'Localization']);
 export const SCENARIO_TYPES = Object.freeze(['Positive', 'Negative']);
@@ -26,10 +27,14 @@ export function validateDesign(raw, state, requirements) {
   requireThat(input.version === 1 && input.source === state.source, 'Design needs the current source fingerprint.'); text(input.author, 'Design author');
   requireThat(Array.isArray(input.cases) && input.cases.length <= 500 && unique(input.cases.map(row => row.id)), 'Design needs distinct cases, at most 500.');
   for (const row of input.cases) {
-    keys(row, ['id', 'proposedAction', 'title', 'prerequisites', 'testData', 'coverageReferences', 'testType', 'scenarioType', 'steps'], 'designed case');
+    keys(row, ['id', 'proposedAction', 'title', 'prerequisites', 'testData', 'coverageReferences', 'testType', 'scenarioType', 'steps', 'nativeFields'], 'designed case');
     const captured = state.evidence.existing.find(item => String(item.id) === row.id);
     requireThat(caseId(row.id) && ['Create', 'Update', 'Reuse unchanged'].includes(row.proposedAction) && (row.proposedAction === 'Create' ? !captured && /^NEW-[A-Za-z0-9_-]{1,60}$/.test(row.id) : !!captured), 'Use stable NEW- IDs for creation and captured IDs for existing cases.');
     requireThat(!state.created?.[row.id], 'This temporary ID was already created; refresh and use its returned native ID.');
+    if (row.nativeFields !== undefined) {
+      requireThat(state.evidence.requirements.origin?.provider === 'jira' && ['xray', 'zephyr-scale'].includes(state.evidence.requirements.origin.testManagement) && row.proposedAction !== 'Reuse unchanged', 'Native fields require a Jira plugin create/update proposal; unchanged reuse and local/Azure cases do not write native fields.');
+      nativeFieldValues(row.nativeFields);
+    }
     for (const field of ['title', 'prerequisites', 'testData']) text(row[field], field);
     requireThat(row.title.length <= 255 && !/[\r\n]/.test(row.title), 'Case title exceeds supported bounds.');
     requireThat(TEST_TYPES.includes(row.testType) && SCENARIO_TYPES.includes(row.scenarioType), 'Unsupported test/scenario classification.');
@@ -151,6 +156,7 @@ export function renderDesign(draft) {
     ['**1. CASE DETAILS**', '', '', '', ''], Array(5).fill('---'),
     ['**ID**', '**Title**', '**Coverage reference**', '**Test type**', '**Scenario type**'],
     [row.id, row.title, reference(row), row.testType, row.scenarioType].map(cell),
+    ...(row.nativeFields === undefined ? [] : [['**Native fields**', cell(JSON.stringify(row.nativeFields)), '', '', '']]),
     ['**2. SETUP**', '', '', '', ''], ['**Prerequisites**', cell(row.prerequisites), '', '', ''], ['**Test data**', cell(row.testData), '', '', ''],
     ['**3. STEPS**', '**Step action**', '**Step expected result**', '', ''],
     ...row.steps.map((step, index) => [`**${index + 1}**`, cell(step.action + (step.data ? '\nTest data:\n' + step.data : '')), cell(step.expected), '', '']),

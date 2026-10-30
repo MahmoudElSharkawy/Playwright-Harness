@@ -1,5 +1,7 @@
 import {data, fingerprint, requireThat} from '../execution-core/data.mjs';
 import {capabilities, desiredCase, verifiedContent, automationIdentity, mappedStatus, validateResults, nativeRequest, writeRequest, testManagementDelivery} from './test-management-common.mjs';
+import {nativeFieldValues, sameFieldValue, validateNativeFields} from './native-fields.mjs';
+import {validateZephyrCaseFieldSchema} from './zephyr-fields.mjs';
 
 const AUTOMATION_START = '\n[pom-harness:automation]\n', AUTOMATION_END = '\n[/pom-harness:automation]';
 const AUTOMATED_LABEL = 'pom-harness-automated';
@@ -76,39 +78,77 @@ export function createZephyrScaleAdapter({jira, transport, roots}) {
     for (const name of ['createdOn', 'testScript', 'links', 'self']) delete raw[name];
     return {...raw, ...changes};
   }
+  async function activeUsers(schema, customFields, fieldReview) {
+    for (const field of schema.fields.filter(field => field.type === 'User Picker')) {
+      const value = customFields[field.name];
+      if (value == null) continue;
+      const error = () => Object.assign(new Error(`Zephyr field ${field.name} needs an exact active Jira account ID.`), {fieldProblems: [{field: field.name, code: 'active-user'}], fieldReview});
+      if (typeof value !== 'string' || !/^[A-Za-z0-9:_-]{1,200}$/.test(value)) throw error();
+      let user; try {user = await jira.read(`user?accountId=${encodeURIComponent(value)}`);} catch {throw error();}
+      if (user?.accountId !== value || user.active !== true) throw error();
+    }
+  }
+  async function reviewedFields(before, overrides, {steps = false} = {}) {
+    const {schema, fields} = validateZephyrCaseFieldSchema(config.testManagement.caseFieldSchema, config), creating = !before;
+    if (steps) requireThat(schema.requiredStepFields.length === 0, `Required Zephyr step fields need native review before writing steps: ${schema.requiredStepFields.join(', ')}.`);
+    const customFields = {...nativeFieldValues(creating ? config.testManagement.caseFields ?? {} : before.raw.case.customFields ?? {}), ...nativeFieldValues(overrides ?? {})};
+    if (!creating) for (const field of fields) {
+      const value = customFields[field.fieldId];
+      if (!field.required && (value == null || typeof value === 'string' && !value.trim() || Array.isArray(value) && !value.length)) customFields[field.fieldId] = null;
+    }
+    const fieldReview = validateNativeFields(fields, customFields, {creating, label: 'Zephyr case'});
+    await activeUsers(schema, customFields, fieldReview);
+    return {customFields, fieldReview, fieldSchemaFingerprint: fingerprint(schema)};
+  }
+  async function unchangedSchema(plan) {
+    const {schema, fields} = validateZephyrCaseFieldSchema(config.testManagement.caseFieldSchema, config);
+    requireThat(fingerprint(schema) === plan.fieldSchemaFingerprint, 'Zephyr case field schema changed after approval; review the fields and renew approval.');
+    if (plan.kind === 'case') requireThat(schema.requiredStepFields.length === 0, 'Required Zephyr step fields need native review before writing steps.');
+    const fieldReview = validateNativeFields(fields, plan.requests[0].body.customFields, {creating: plan.kind === 'case' && !plan.id, label: 'Zephyr case'});
+    await activeUsers(schema, plan.requests[0].body.customFields, fieldReview);
+  }
+  function verifiedFields(plan, item) {
+    const actual = item.raw.case.customFields ?? {}, approved = plan.requests[0].body.customFields;
+    requireThat(approved && Array.isArray(plan.fieldReview) && Object.keys(actual).every(name => plan.fieldReview.some(field => field.field === name))
+      && plan.fieldReview.every(field => sameFieldValue(actual[field.field], approved[field.field])), 'Zephyr custom field readback differs from the approved values.');
+  }
   function stepRequests(id, desired) {
     const requests = [];
     for (let start = 0; start < desired.steps.length; start += 100) requests.push(nativeRequest('write-case-steps', `testcases/${id}/teststeps`, 'POST', {mode: start ? 'APPEND' : 'OVERWRITE', items: desired.steps.slice(start, start + 100).map(step => ({inline: {description: step.action, testData: step.data, expectedResult: step.expected}}))}));
     return requests;
   }
   async function prepareCase(input) {
-    const desired = desiredCase(input); requireThat(desired.labels.length <= 50, 'Zephyr cases support at most 50 labels.'); await projectIdentity();
+    const desired = desiredCase(input), {customFields, ...fieldApproval} = await reviewedFields(input.before, input.nativeFields, {steps: true});
+    requireThat(desired.labels.length <= 50, 'Zephyr cases support at most 50 labels.'); await projectIdentity();
     const before = input.before;
     if (before) {key(before.id); const fresh = await readCase(before.id); requireThat(before.fingerprint === fresh.fingerprint, 'Zephyr case changed; refresh and renew approval.');}
     let story; if (input.storyKey) {story = await jira.issue(input.storyKey); requireThat(numberId(story.id), 'Jira story identity is incomplete.');}
-    const requests = before ? [nativeRequest('update-case', `testcases/${before.id}`, 'PUT', metadata(before, {name: desired.title, labels: desired.labels})), ...stepRequests(before.id, desired)]
-      : [nativeRequest('create-case', 'testcases', 'POST', {projectKey: config.project, name: desired.title, labels: desired.labels})];
-    return data({kind: 'case', provider, ...(before ? {id: before.id, beforeFingerprint: before.fingerprint, beforeCase: {metadata: metadata(before, {labels: [...before.labels].sort()}), steps: before.steps}} : {}), marker: input.marker, desired, requests,
+    const requests = before ? [nativeRequest('update-case', `testcases/${before.id}`, 'PUT', metadata(before, {name: desired.title, labels: desired.labels, customFields})), ...stepRequests(before.id, desired)]
+      : [nativeRequest('create-case', 'testcases', 'POST', {projectKey: config.project, name: desired.title, labels: desired.labels, customFields})];
+    return data({kind: 'case', provider, ...fieldApproval, ...(before ? {id: before.id, beforeFingerprint: before.fingerprint, beforeCase: {metadata: metadata(before, {labels: [...before.labels].sort()}), steps: before.steps}} : {}), marker: input.marker, desired, requests,
       ...(story ? {storyKey: story.key, storyId: String(story.id)} : {})}, 4 * 1024 * 1024);
   }
   async function writeCase(plan, delivery, {onIdentity} = {}) {
     requireThat(plan.provider === provider && plan.kind === 'case', 'Invalid Zephyr case plan.');
+    await unchangedSchema(plan);
     if (plan.id) requireThat((await readCase(plan.id)).fingerprint === plan.beforeFingerprint, 'Zephyr case changed after preview.');
     let id = plan.id;
     for (const request of plan.requests) {
+      await unchangedSchema(plan);
       let remembered = false;
       const result = await writeRequest(delivery, request, {onIdentity: async identity => {await onIdentity?.(identity); remembered = true;}});
       if (!id) {id = key(result?.key); if (!remembered) await onIdentity?.({externalId: id});}
     }
-    if (!plan.id) for (const request of stepRequests(id, plan.desired)) await writeRequest(delivery, request);
+    if (!plan.id) for (const request of stepRequests(id, plan.desired)) {await unchangedSchema(plan); await writeRequest(delivery, request);}
     if (plan.storyId) {
       const links = await transport.read(`testcases/${id}/links`); requireThat(Array.isArray(links.issues), 'Zephyr case links are incomplete.');
-      if (!links.issues.some(link => String(link.issueId) === plan.storyId)) await writeRequest(delivery, nativeRequest('link-case-story', `testcases/${id}/links/issues`, 'POST', {issueId: Number(plan.storyId)}));
+      if (!links.issues.some(link => String(link.issueId) === plan.storyId)) {await unchangedSchema(plan); await writeRequest(delivery, nativeRequest('link-case-story', `testcases/${id}/links/issues`, 'POST', {issueId: Number(plan.storyId)}));}
     }
     return id;
   }
   async function verifyCase(plan, id) {
     const item = verifiedContent(plan, await readCase(id));
+    verifiedFields(plan, item);
     const approved = plan.requests.find(request => request.method === 'PUT' && request.route === `testcases/${id}`)?.body;
     if (approved) requireThat(fingerprint(metadata(item, {labels: [...item.labels].sort()})) === fingerprint({...approved, labels: [...approved.labels].sort()}), 'Zephyr case metadata was not preserved by the approved update.');
     if (plan.storyId) {const links = await transport.read(`testcases/${id}/links`); requireThat(links.issues?.some(link => String(link.issueId) === plan.storyId), 'Created case lacks the approved story link.');}
@@ -147,6 +187,7 @@ export function createZephyrScaleAdapter({jira, transport, roots}) {
       requests = plan.requests.slice(completed);
     } else {
       requireThat(current.title === plan.desired.title && fingerprint([...current.labels].sort()) === fingerprint([...plan.desired.labels].sort()), 'Located Zephyr case metadata differs from the approved creation.');
+      verifiedFields(plan, current);
       requireThat(current.steps.length <= plan.desired.steps.length && current.steps.every((step, index) => fingerprint({action: step.action, data: step.data, expected: step.expected}) === fingerprint(plan.desired.steps[index])), 'Located Zephyr steps differ from the exact approved ordered prefix.');
       requireThat(current.steps.length === plan.desired.steps.length || current.steps.length % 100 === 0, 'Zephyr creation contains an incomplete native step batch; reconcile natively.');
       requests = current.steps.length === plan.desired.steps.length ? [] : stepRequests(id, plan.desired).slice(current.steps.length / 100);
@@ -155,6 +196,7 @@ export function createZephyrScaleAdapter({jira, transport, roots}) {
       const links = await transport.read(`testcases/${id}/links`); requireThat(Array.isArray(links.issues), 'Zephyr case links are incomplete.');
       if (!links.issues.some(link => String(link.issueId) === plan.storyId)) requests.push(nativeRequest('link-case-story', `testcases/${id}/links/issues`, 'POST', {issueId: Number(plan.storyId)}));
     }
+    if (requests.length) await unchangedSchema(plan);
     return {complete: requests.length === 0, requests};
   }
   async function prepareResults(input) {
@@ -229,12 +271,13 @@ export function createZephyrScaleAdapter({jira, transport, roots}) {
   }
   async function prepareAutomation({before, automated, identity}) {
     requireThat(typeof automated === 'boolean', 'Choose set or clear automation.'); key(before.id);
+    const {customFields, ...fieldApproval} = await reviewedFields(before);
     requireThat((await readCase(before.id)).fingerprint === before.fingerprint, 'Zephyr case changed; renew automation approval.');
     const value = automated ? automationIdentity(identity) : null, labels = before.labels.filter(label => label !== AUTOMATED_LABEL); if (automated) labels.push(AUTOMATED_LABEL);
-    const desired = {labels, objective: automationObjective(before, value)};
-    return data({kind: 'automation', provider, id: before.id, beforeFingerprint: before.fingerprint, automated, identity: value, desired, requests: [nativeRequest('update-automation', `testcases/${before.id}`, 'PUT', metadata(before, desired))]});
+    const desired = {labels, objective: automationObjective(before, value), customFields};
+    return data({kind: 'automation', provider, ...fieldApproval, id: before.id, beforeFingerprint: before.fingerprint, automated, identity: value, desired, requests: [nativeRequest('update-automation', `testcases/${before.id}`, 'PUT', metadata(before, desired))]});
   }
-  async function writeAutomation(plan, delivery) {requireThat((await readCase(plan.id)).fingerprint === plan.beforeFingerprint, 'Zephyr case changed after automation preview.'); for (const request of plan.requests) await writeRequest(delivery, request); return plan.id;}
+  async function writeAutomation(plan, delivery) {await unchangedSchema(plan); requireThat((await readCase(plan.id)).fingerprint === plan.beforeFingerprint, 'Zephyr case changed after automation preview.'); for (const request of plan.requests) {await unchangedSchema(plan); await writeRequest(delivery, request);} return plan.id;}
   async function verifyAutomation(plan) {
     const current = await readCase(plan.id), approved = plan.requests[0].body;
     requireThat(fingerprint(metadata(current, {labels: [...current.labels].sort()})) === fingerprint({...approved, labels: [...approved.labels].sort()}), 'Zephyr automation identity/status or preserved metadata readback differs.'); return current;
@@ -243,6 +286,7 @@ export function createZephyrScaleAdapter({jira, transport, roots}) {
     const current = await readCase(plan.id), approved = plan.requests[0].body;
     if (fingerprint(metadata(current, {labels: [...current.labels].sort()})) === fingerprint({...approved, labels: [...approved.labels].sort()})) return {complete: true, requests: []};
     requireThat(current.fingerprint === plan.beforeFingerprint, 'Zephyr source changed outside the approved automation update.');
+    await unchangedSchema(plan);
     return {complete: false, requests: plan.requests};
   }
   return Object.freeze({provider, capabilities, readCase, storyCases, groupCases, prepareCase, writeCase, verifyCase, findCase, caseCompletion, prepareResults, writeResults, verifyResults, findResults, reconcileResults, prepareAutomation, writeAutomation, verifyAutomation, automationCompletion,

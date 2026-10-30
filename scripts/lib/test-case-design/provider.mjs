@@ -47,7 +47,7 @@ export async function createDesignTarget(roots, origin, options = {}) {
         return {caseId: row.id, identity, provider: management?.provider ?? 'local', ...(management ? {externalId: before.id} : {}), revision: before.revision, beforeFingerprint: before.fingerprint, desired, request: null};
       }
       if (!management) return {caseId: row.id, identity, provider: 'local', revision: identity, desired, request: null};
-      const nativePlan = await management.prepareCase({...(before ? {before} : {}), ...desired, storyKey: origin.storyId, marker: 'pom-harness-' + identity, removeLabels: [...TEST_TYPES, ...SCENARIO_TYPES], labels: [row.testType, row.scenarioType]});
+      const nativePlan = await management.prepareCase({...(before ? {before} : {}), ...desired, ...(row.nativeFields === undefined ? {} : {nativeFields: row.nativeFields}), storyKey: origin.storyId, marker: 'pom-harness-' + identity, removeLabels: [...TEST_TYPES, ...SCENARIO_TYPES], labels: [row.testType, row.scenarioType]});
       return {caseId: row.id, identity, provider: management.provider, ...(before ? {externalId: before.id, revision: before.revision} : {}), nativePlan, request: {fingerprint: fingerprint(nativePlan)}};
     },
     async verify(operation, id) {

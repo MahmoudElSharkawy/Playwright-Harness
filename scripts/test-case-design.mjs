@@ -45,4 +45,4 @@ try {
   else result = await designHandoff(roots, options.id, selection);
   console.log(JSON.stringify(result, null, 2));
   if (['incomplete', 'reconciliation-required'].includes(result?.mode)) process.exitCode = 1;
-} catch (error) {console.error('test-case-design: ' + error.message); process.exitCode = 1;}
+} catch (error) {console.error('test-case-design: ' + error.message); if (error.fieldProblems) console.error(JSON.stringify({fieldProblems: error.fieldProblems, fieldReview: error.fieldReview}, null, 2)); process.exitCode = 1;}

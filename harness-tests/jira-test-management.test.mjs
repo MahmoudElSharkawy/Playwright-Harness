@@ -3,14 +3,16 @@ import assert from 'node:assert/strict';
 import {createTestManagement} from '../scripts/lib/integrations/test-management.mjs';
 import {createPluginClient, PluginError} from '../scripts/lib/integrations/plugin-client.mjs';
 import {desiredCase} from '../scripts/lib/integrations/test-management-common.mjs';
+import {xrayIssueType, xrayMetadataList, xrayEditMetadata, zephyrRiskSchema} from './fixtures/native-case-fields.mjs';
 
 const siteUrl = 'https://example.atlassian.net';
 function jira(provider = 'xray') {
-  return {configuration: {siteUrl, project: 'DEMO', timeoutMs: 1000, maxResponseBytes: 200000, testManagement: {provider, region: 'eu'}},
+  return {configuration: {siteUrl, project: 'DEMO', timeoutMs: 1000, maxResponseBytes: 200000, testManagement: {provider, region: 'eu', ...(provider === 'zephyr-scale' ? {caseFieldSchema: zephyrRiskSchema(), caseFields: {Risk: 'High'}} : {})}},
     projectIdentity: async () => ({id: '10001', key: 'DEMO', name: 'Demo'}),
-    issue: async key => ({id: key === 'DEMO-1' ? '10002' : '10003', key, fields: {project: {id: '10001', key: 'DEMO'}, summary: 'Buy', labels: ['team'], updated: '2026-10-28T01:02:03.000Z'}})};
+    list: async route => xrayMetadataList(route),
+    issue: async key => ({id: key === 'DEMO-1' ? '10002' : '10003', key, fields: {project: {id: '10001', key: 'DEMO'}, issuetype: xrayIssueType, summary: 'Buy', labels: ['team'], updated: '2026-10-28T01:02:03.000Z'}})};
 }
-const nativeJira = key => ({key, project: {id: '10001', key: 'DEMO', self: siteUrl + '/rest/api/2/project/10001'}});
+const nativeJira = key => ({key, project: {id: '10001', key: 'DEMO', self: siteUrl + '/rest/api/2/project/10001'}, issuetype: xrayIssueType});
 const manual = {issueId: '10003', projectId: '10001', jira: nativeJira('DEMO-2'), lastModified: '2026-10-28T01:02:03.000Z', testType: {name: 'Manual'}, steps: [{id: 'step-a', action: 'Buy', data: 'quantity 2', result: 'Order created', attachments: [], customFields: []}], dataset: null, preconditions: {total: 0, results: []}};
 const zproject = {id: 37, jiraProjectId: 10001, key: 'DEMO', enabled: true};
 const zcase = {id: 25, key: 'DEMO-T25', name: 'Buy', objective: 'Business goal', precondition: 'Signed in', project: {id: 37}, priority: {id: 2}, status: {id: 1}, labels: ['team'], customFields: {Risk: 'High'}};
@@ -39,7 +41,9 @@ test('Xray reads preserve native IDs, separate data, ordered expectations and si
 test('Xray refuses the same numeric issue/project IDs from another native Jira site before reads or creation', async () => {
   const foreign = key => ({...nativeJira(key), project: {...nativeJira(key).project, self: 'https://example-other.atlassian.net/rest/api/2/project/10001'}});
   const client = jira(); client.read = async () => ({issueLinkTypes: [{id: '1', outward: 'tests', inward: 'is tested by'}]});
-  const adapter = createTestManagement({jira: client, transport: {query: async query => query.includes('getCoverableIssue')
+  const adapter = createTestManagement({jira: client, transport: {query: async query => query.includes('getTests(')
+    ? {getTests: {start: 0, total: 1, results: [{issueId: '10003', jira: foreign('DEMO-2')}]}}
+    : query.includes('getCoverableIssue')
     ? {getCoverableIssue: {issueId: '10002', jira: foreign('DEMO-1')}}
     : query.includes('getTestSet') ? {getTestSet: {issueId: '10003', jira: foreign('DEMO-2'), tests: {start: 0, total: 0, results: []}}}
       : {getTest: {...manual, jira: foreign('DEMO-2')}}}});
@@ -84,9 +88,9 @@ test('Xray creation completion only proposes an absent approved story link', asy
   const marker = 'pom-harness-0123456789abcdef', client = jira(), item = await client.issue('DEMO-2');
   item.fields.labels = [marker]; item.fields.issuelinks = [];
   client.issue = async key => key === 'DEMO-1' ? {id: '10002', key, fields: {project: {id: '10001', key: 'DEMO'}}} : item;
-  client.read = async () => ({issueLinkTypes: [{id: 'link-type', outward: 'tests', inward: 'is tested by'}]});
+  client.read = async route => route.endsWith('/editmeta') ? xrayEditMetadata() : route.startsWith('mypermissions?') ? {permissions: {CREATE_ISSUES: {havePermission: true}, EDIT_ISSUES: {havePermission: true}}} : {issueLinkTypes: [{id: 'link-type', outward: 'tests', inward: 'is tested by'}]};
   client.search = async () => [{key: 'DEMO-2'}];
-  const adapter = createTestManagement({jira: client, transport: {query: async query => query.includes('getCoverableIssue') ? {getCoverableIssue: {issueId: '10002', jira: nativeJira('DEMO-1')}} : {getTest: manual}}});
+  const adapter = createTestManagement({jira: client, transport: {query: async query => query.includes('getTests(') ? {getTests: {total: 1, start: 0, results: [{issueId: '10003', jira: nativeJira('DEMO-2')}]}} : query.includes('getCoverableIssue') ? {getCoverableIssue: {issueId: '10002', jira: nativeJira('DEMO-1')}} : {getTest: manual}}});
   const plan = await adapter.prepareCase({title: 'Buy', steps: [{action: 'Buy', data: 'quantity 2', expected: 'Order created'}], storyKey: 'DEMO-1', marker});
   assert.equal((await adapter.findCase(marker)).id, 'DEMO-2');
   assert.equal((await adapter.caseCompletion(plan, 'DEMO-2')).requests[0].operation, 'link-case-story');

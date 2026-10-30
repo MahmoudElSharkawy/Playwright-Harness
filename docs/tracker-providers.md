@@ -76,7 +76,7 @@ in requests, examples, screenshots, logs or receipts. Credentials resolve only
 when the selected operation needs them; Jira-only work does not load plugin secrets.
 
 Optional Jira mappings use stable native field/type IDs or verified type names:
-`fields.acceptanceCriteria` and `issueTypes.bug`. Story/test-type overrides and
+`fields.acceptanceCriteria` and `issueTypes.bug`. Generic story/test-type overrides and
 generic issue-to-test step mappings are not implemented and are rejected.
 No acceptance-criteria mapping is required when the requirements are in Description.
 Missing mappings never authorize invented rules. Configure native bug defaults in
@@ -320,12 +320,72 @@ history event to the selected provider/site/project/plugin or local source. Stat
 still means the existing evidence: done requires two scoped greens, and failed,
 blocked or uncertain work remains visible.
 
+## Required native case fields
+
+Use `nativeFields` on a case in the existing design or `edit-cases` input. Xray
+uses Jira field IDs and native values; Zephyr uses custom field names and native
+values. For example:
+
+```json
+{"nativeFields":{"customfield_12345":{"id":"10001"}}}
+```
+
+```json
+{"nativeFields":{"Risk":"High"}}
+```
+
+Optional `jira.testManagement.caseFields` supplies creation defaults in the same
+format; each case's explicit values take precedence. Updates preserve existing
+values unless the reviewed proposal changes them. Required fields cannot be
+cleared. `Reuse unchanged`, Azure and local/no-plugin proposals do not accept
+`nativeFields`; Azure keeps its existing native field checks.
+
+Preview reports missing required fields, unsupported types, read-only/unknown
+fields and invalid options before any write. Fields and schema are included in
+the approval fingerprint. Changed inputs require a new preview and approval;
+readback and recovery verify the approved values as well as case content.
+
+Xray resolves the native Test issue type from existing native tests and reads
+Jira's current create/edit metadata. An empty project needs an explicit
+`jira.testManagement.testIssueTypeId`, checked against the available Jira issue
+types. A type's display name alone does not establish an Xray Test. See the
+[Xray createTest API](https://xray.cloud.getxray.app/doc/graphql/createtest.doc.html).
+
+Zephyr's [public API](https://support.smartbear.com/zephyr-scale-cloud/api-docs/)
+does not expose custom-field definitions. Before case writes, record the complete
+current field list from the selected project's Zephyr settings in
+`jira.testManagement.caseFieldSchema`:
+
+```json
+{
+  "siteUrl": "https://your-site.atlassian.net",
+  "project": "DEMO",
+  "reviewedAt": "2026-10-30T00:00:00Z",
+  "fields": [
+    {"name":"Risk","type":"Select List (Single Choice)","required":true,"allowedValues":["High","Low"]}
+  ],
+  "requiredStepFields": []
+}
+```
+
+Use the exact [Zephyr field types](https://support.smartbear.com/zephyr/docs/en/configuration/advanced-customization-options/custom-fields-for-test-cases,-cycles,-plans,-steps,-and-executions.html)
+and complete choices for select lists. Include optional fields too; `fields: []`
+explicitly records a reviewed project with no case custom fields. List all mandatory
+step-field names in `requiredStepFields`; nonempty lists block case step writes
+because custom step values are not supported. Do not infer an empty list from
+sample cases or failed creates.
+
+Missing or mismatched Zephyr schema blocks writes while read-only use remains
+available. Update this reviewed snapshot whenever project settings change; the
+API cannot detect unrecorded schema changes. Zephyr updates send the complete
+custom-field map, preserving existing values and representing optional blanks as
+`null`. Automation metadata updates use the same checks. Live acceptance must
+confirm the snapshot against the actual tenant.
+
 ## Validation and native limits
 
-Native case creation currently supplies the standard title, ordered steps, labels
-and story link. Custom mandatory case fields have no discovery/input path; the
-tenant must provide suitable defaults or publication remains a visible gap.
-Bug creation separately supports discovered required/custom Jira fields.
+Bug creation separately supports discovered required/custom Jira fields through
+the same field-value checks.
 
 The Jira adapters are covered by offline fixtures and shared Azure/local regression
 tests. This does not establish live tenant permissions, plugin licensing, configured

@@ -183,8 +183,8 @@ async function nativeCompatibility(client, management, command, roots, opt, depe
     return batch({kind: 'case-edits', input, prepare: async () => {
       const plans = [];
       for (const row of input.cases) {
-        keys(row, ['id', 'revision', 'title', 'steps', 'removeStepIds'], 'case edit');
-        requireValue(row.title !== undefined || row.steps !== undefined, 'Select a title or complete ordered steps for each case edit.');
+        keys(row, ['id', 'revision', 'title', 'steps', 'removeStepIds', 'nativeFields'], 'case edit');
+        requireValue(row.title !== undefined || row.steps !== undefined || row.nativeFields !== undefined, 'Select a title, complete ordered steps or native fields for each case edit.');
         const before = await management.readCase(row.id); requireValue(typeof row.revision === 'string' && row.revision === before.revision, 'Stale native case revision; refetch before editing.');
         requireValue(row.removeStepIds === undefined || row.steps !== undefined && Array.isArray(row.removeStepIds), 'Step removals need a complete ordered steps list.');
         if (row.removeStepIds) requireValue(row.removeStepIds.every(id => before.steps.some(step => step.id === id)) && new Set(row.removeStepIds).size === row.removeStepIds.length, 'Removed native step IDs are missing or duplicated.');
@@ -198,7 +198,7 @@ async function nativeCompatibility(client, management, command, roots, opt, depe
             requireValue(hash([...removed].sort()) === hash([...(row.removeStepIds ?? [])].sort()), 'Explicitly review removed native step IDs.');
           } else requireValue(!row.removeStepIds?.length, 'Step removals require native IDs on retained steps.');
         }
-        plans.push(await management.prepareCase({before, title: row.title ?? before.title, steps, marker: `pom-harness-edit-${hash({binding, input, id: row.id}).slice(0, 32)}`}));
+        plans.push(await management.prepareCase({before, title: row.title ?? before.title, steps, ...(row.nativeFields === undefined ? {} : {nativeFields: row.nativeFields}), marker: `pom-harness-edit-${hash({binding, input, id: row.id}).slice(0, 32)}`}));
       }
       return plans;
     }, delivery: approved => management.delivery('case-edits', true, approved), write: (plan, delivery) => management.writeCase(plan, delivery), verify: plan => management.verifyCase(plan, plan.id), completion: plan => management.caseCompletion(plan, plan.id)});
@@ -290,6 +290,6 @@ export function compatibilityDiagnostic(error) {
 export function compatibilityMain(command, argv = process.argv.slice(2)) {
   runCompatibility(command, argv).then(result => { if (result !== undefined) console.log(JSON.stringify(result, null, 2)); if (['incomplete', 'reconciliation-required'].includes(result?.mode)) process.exitCode = 1; }).catch(error => {
     // Never expose transport stacks, response bodies, credential values or filesystem error detail.
-    console.error(`[${command}] ${compatibilityDiagnostic(error)}`); process.exitCode = 1;
+    console.error(`[${command}] ${compatibilityDiagnostic(error)}`); if (error.fieldProblems) console.error(JSON.stringify({fieldProblems: error.fieldProblems, fieldReview: error.fieldReview}, null, 2)); process.exitCode = 1;
   });
 }

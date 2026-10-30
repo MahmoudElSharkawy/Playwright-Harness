@@ -1,11 +1,18 @@
 import {data, fingerprint, requireThat} from '../execution-core/data.mjs';
 import {jiraIssueKey} from './jira-config.mjs';
+import {nativeFieldValues, sameFieldValue, validateFieldMetadata, validateNativeFields} from './native-fields.mjs';
 import {capabilities, desiredCase, verifiedContent, automationIdentity, mappedStatus, validateResults, nativeRequest, writeRequest, testManagementDelivery} from './test-management-common.mjs';
 
 const PROPERTY = 'pom-harness.automation', AUTOMATED_LABEL = 'pom-harness-automated';
 const TEST_FIELDS = 'issueId projectId jira(fields:["key","project"]) lastModified testType { name } dataset { id } steps { id action data result libStepId callTestIssueId attachments { id } customFields { id value } } preconditions(limit:100) { total results { issueId projectId definition lastModified preconditionType { name } } }';
 const RUN_FIELDS = 'id lastModified comment status { name } test { issueId } testExecution { issueId } parameters { name value } steps { id action data result actualResult status { name } }';
 const mutation = (operation, query, variables) => nativeRequest(operation, 'graphql', 'POST', {query, variables});
+const ownedFields = ['project', 'issuetype', 'summary', 'labels', 'issuelinks', 'attachment', 'status'];
+const fieldId = value => typeof value === 'string' && /^(?:[a-z][a-zA-Z0-9]*|customfield_[1-9]\d*)$/.test(value);
+const typeId = value => typeof value === 'string' && /^[1-9]\d{0,19}$/.test(value);
+const trackedField = name => name.startsWith('customfield_') || ['issuetype', 'description', 'priority', 'resolution', 'assignee', 'reporter', 'components', 'fixVersions', 'versions', 'duedate', 'environment', 'security', 'timetracking', 'timeoriginalestimate', 'timeestimate', 'parent'].includes(name);
+const trackedFields = fields => Object.fromEntries(Object.entries(fields).filter(([name]) => trackedField(name)));
+const readableField = name => trackedField(name) || ['project', 'summary', 'labels', 'updated', 'issuelinks'].includes(name);
 
 export function createXrayAdapter({jira, transport, roots}) {
   const provider = 'xray', config = jira.configuration;
@@ -36,9 +43,9 @@ export function createXrayAdapter({jira, transport, roots}) {
       requireThat(item.projectId === project.id && item.preconditionType?.name === 'Manual' && typeof item.definition === 'string' && typeof item.lastModified === 'string', 'Unsupported Xray precondition definition.');
       return {id: String(item.issueId), text: item.definition, revision: item.lastModified};
     });
-    const stableIssue = {id: issue.id, key: issue.key, project: issue.fields.project ?? null, summary: issue.fields.summary, description: issue.fields.description ?? null, updated: issue.fields.updated ?? null, labels: issue.fields.labels ?? [],
+    const stableIssue = {id: issue.id, key: issue.key, project: issue.fields.project ?? null, summary: issue.fields.summary, description: issue.fields.description ?? null, updated: issue.fields.updated ?? null, labels: issue.fields.labels ?? [], nativeFields: trackedFields(issue.fields),
       links: (issue.fields.issuelinks ?? []).map(link => ({id: link.id, type: link.type?.id ?? null, inward: link.inwardIssue?.key ?? null, outward: link.outwardIssue?.key ?? null}))};
-    const retained = data({test: raw, issue: {id: issue.id, key: issue.key, fields: {project: stableIssue.project, summary: stableIssue.summary, description: stableIssue.description, updated: stableIssue.updated, labels: stableIssue.labels,
+    const retained = data({test: raw, issue: {id: issue.id, key: issue.key, fields: {...stableIssue.nativeFields, project: stableIssue.project, summary: stableIssue.summary, description: stableIssue.description, updated: stableIssue.updated, labels: stableIssue.labels,
       issuelinks: stableIssue.links.map(link => ({id: link.id, type: {id: link.type}, ...(link.inward ? {inwardIssue: {key: link.inward}} : {}), ...(link.outward ? {outwardIssue: {key: link.outward}} : {})}))}}}, 2 * 1024 * 1024);
     return {provider, siteUrl: config.siteUrl, project: config.project, id, nativeId: raw.issueId, revision: raw.lastModified, fingerprint: fingerprint({test: raw, issue: stableIssue}), title: issue.fields.summary, steps, preconditions, labels: issue.fields.labels ?? [],
       externalReferences: [{system: provider, id: `${config.siteUrl}/browse/${id}`}], raw: retained};
@@ -65,15 +72,109 @@ export function createXrayAdapter({jira, transport, roots}) {
     requireThat(matching.length === 1, 'Select the native Xray Tests issue-link type from current Jira metadata.');
     return {storyKey: issue.key, storyId: String(issue.id), linkType: String(matching[0].id)};
   }
+  async function testIssueType() {
+    const types = new Set(), seen = new Set(); let start = 0, total;
+    for (let page = 0; page < 5; page++) {
+      const result = (await transport.query('query($jql:String!,$start:Int!) { getTests(jql:$jql,limit:100,start:$start) { total start results { issueId jira(fields:["key","project","issuetype"]) } } }', {jql: `project = "${config.project}"`, start})).getTests;
+      requireThat(result && Array.isArray(result.results) && result.results.length <= 100 && result.start === start && Number.isSafeInteger(result.total) && result.total >= 0 && result.total <= 500 && (total === undefined || total === result.total), 'Xray Test issue-type discovery is incomplete or exceeds 500 cases.');
+      total = result.total;
+      for (const row of result.results) {
+        const id = key(row.jira?.key); requireThat(typeId(row.issueId) && typeId(row.jira?.issuetype?.id) && !seen.has(id), 'Xray native Test issue-type identity is incomplete or duplicated.');
+        await requireNativeSite(row, {id: row.issueId, key: id}); seen.add(id); types.add(row.jira.issuetype.id);
+      }
+      requireThat(types.size <= 1, 'Xray native Test issue types are ambiguous; select the native project configuration before continuing.');
+      start += result.results.length; requireThat(start <= total, 'Xray Test issue-type discovery total is inconsistent.');
+      if (start === total) break;
+      requireThat(result.results.length > 0 && page < 4, 'Xray Test issue-type discovery did not complete.');
+    }
+    const configured = config.testManagement.testIssueTypeId, discovered = [...types][0];
+    requireThat(!configured || typeId(configured), 'Configured Xray testIssueTypeId is invalid.');
+    requireThat(!configured || !discovered || configured === discovered, 'Configured Xray issue type differs from the discovered native Test type.');
+    requireThat(discovered || configured, 'The project has no existing Xray Test to identify its issue type; configure testIssueTypeId explicitly.');
+    return discovered ?? configured;
+  }
+  async function caseMetadata(before) {
+    const creating = !before, project = await jira.projectIdentity(); let issueTypeId, fields;
+    if (creating) {
+      issueTypeId = await testIssueType();
+      const types = await jira.list(`issue/createmeta/${project.key}/issuetypes`, {itemsKey: 'issueTypes'}), matches = types.filter(type => type.id === issueTypeId && type.subtask !== true);
+      requireThat(matches.length === 1, 'The native Xray Test issue type is unavailable in current Jira create metadata.');
+      fields = await jira.list(`issue/createmeta/${project.key}/issuetypes/${issueTypeId}`, {itemsKey: 'fields', maxItems: 1000});
+    } else {
+      issueTypeId = before.raw.issue.fields.issuetype?.id;
+      requireThat(typeId(issueTypeId), 'The existing Xray Test issue type is missing from Jira metadata.');
+      const result = await jira.read(`issue/${key(before.id)}/editmeta`);
+      requireThat(result?.fields && typeof result.fields === 'object' && !Array.isArray(result.fields), 'Xray Jira edit field metadata is incomplete.');
+      fields = Object.entries(result.fields).map(([fieldId, value]) => ({...value, fieldId}));
+    }
+    fields = validateFieldMetadata(fields);
+    requireThat(fields.length > 0 && fields.every(field => fieldId(field.fieldId)), 'Xray Jira field metadata is empty or contains invalid field IDs.');
+    const permission = creating ? 'CREATE_ISSUES' : 'EDIT_ISSUES', scope = creating ? `projectKey=${project.key}` : `issueKey=${before.id}`;
+    const permissions = await jira.read(`mypermissions?${scope}&permissions=${permission}`);
+    requireThat(permissions.permissions?.[permission]?.havePermission === true, `Xray Jira ${creating ? 'creation' : 'edit'} permission is unavailable.`);
+    const schema = {provider, siteUrl: config.siteUrl, project: project.key, projectId: String(project.id), creating, issueTypeId, fields, permission};
+    return {...schema, fingerprint: fingerprint(schema)};
+  }
+  function caseValues(plan) {
+    return {...plan.nativeFields, summary: plan.desired.title, labels: plan.desired.labels, ...(!plan.id ? {project: {id: plan.fieldSchema.projectId}, issuetype: {id: plan.fieldSchema.issueTypeId}} : {})};
+  }
+  function validateFieldReadback(schema, values, review) {
+    const checked = new Set([...Object.keys(values), ...schema.fields.filter(field => field.required).map(field => field.fieldId), ...review.filter(row => row.defaulted).map(row => row.field)]);
+    const problems = [...checked].filter(name => !readableField(name)).map(field => ({field, code: 'unsupported-readback'}));
+    if (problems.length) throw Object.assign(new Error(`Xray fields cannot be retained for verified readback: ${problems.map(row => row.field).join(', ')}. Review these fields before approval.`), {fieldProblems: problems, fieldReview: review});
+  }
+  async function validateUsers(fields, values, issueKey) {
+    const users = new Map();
+    for (const field of fields) {
+      const value = values[field.fieldId]; if (value === undefined || value === null) continue;
+      const selected = field.schema?.type === 'user' ? [value] : field.schema?.type === 'array' && field.schema.items === 'user' ? value : [];
+      for (const user of selected) users.set(`${field.fieldId === 'assignee' ? 'assignee' : 'user'}:${user.accountId}`, {accountId: user.accountId, assignee: field.fieldId === 'assignee'});
+    }
+    requireThat(users.size <= 100, 'Xray user fields exceed the 100-account validation bound.');
+    for (const {accountId, assignee} of users.values()) {
+      const encoded = encodeURIComponent(accountId);
+      if (assignee) {
+        const scope = issueKey ? `issueKey=${key(issueKey)}` : `project=${config.project}`;
+        const matches = await jira.read(`user/assignable/search?${scope}&accountId=${encoded}&startAt=0&maxResults=2`);
+        requireThat(Array.isArray(matches) && matches.length === 1 && matches[0].accountId === accountId && matches[0].active === true, 'Xray assignee must be the selected active, assignable Jira account.');
+      } else {
+        const user = await jira.read(`user?accountId=${encoded}`);
+        requireThat(user?.accountId === accountId && user.active === true, 'Xray user fields must identify existing active Jira accounts.');
+      }
+    }
+  }
+  async function refreshCaseFields(plan, current) {
+    requireThat(plan.fieldSchema && plan.nativeFields, 'Xray case plan needs a current approved native field schema.');
+    const schema = await caseMetadata(plan.id ? current : undefined);
+    requireThat(schema.fingerprint === plan.fieldSchema.fingerprint, 'Xray field metadata changed; refresh the preview and renew approval.');
+    const review = validateNativeFields(schema.fields, caseValues(plan), {existing: current?.raw.issue.fields ?? {}, implicit: ['project', 'issuetype'], creating: !plan.id, label: 'Xray case'});
+    validateFieldReadback(schema, plan.nativeFields, review);
+    await validateUsers(schema.fields, plan.nativeFields, plan.id);
+  }
+  function verifyCaseFields(plan, item) {
+    requireThat(item.raw.issue.fields.issuetype?.id === plan.fieldSchema.issueTypeId, 'Xray issue type differs from the approved native Test type at readback.');
+    const defaults = !plan.id ? Object.fromEntries(plan.fieldReview.filter(row => row.defaulted && Object.hasOwn(row, 'value')).map(row => [row.field, row.value])) : {};
+    const expected = {...defaults, ...plan.beforeFields, ...plan.nativeFields};
+    for (const [name, value] of Object.entries(expected)) requireThat(sameFieldValue(item.raw.issue.fields[name], value), `Xray field ${name} differs from the approved or preserved value at readback.`);
+    validateNativeFields(plan.fieldSchema.fields, {}, {existing: item.raw.issue.fields, creating: false, label: 'Xray case readback'});
+    return item;
+  }
   async function prepareCase(input) {
     const desired = desiredCase(input), before = input.before; await jira.projectIdentity();
     requireThat(before || input.storyKey, 'Xray creation needs a selected source story to verify the native credential site.');
     if (before) requireThat((await readCase(before.id)).fingerprint === before.fingerprint, 'Xray case changed; refresh and renew approval.');
     const link = input.storyKey ? await storyLink(input.storyKey, input.storyLinkTypeId) : {};
+    const nativeFields = nativeFieldValues({...(!before ? nativeFieldValues(config.testManagement.caseFields) : {}), ...nativeFieldValues(input.nativeFields)});
+    requireThat(Object.keys(nativeFields).every(name => fieldId(name) && !ownedFields.includes(name)), 'Xray native fields cannot replace owned case content, identity, links or status.');
+    const fieldSchema = await caseMetadata(before), values = {...nativeFields, summary: desired.title, labels: desired.labels, ...(!before ? {project: {id: fieldSchema.projectId}, issuetype: {id: fieldSchema.issueTypeId}} : {})};
+    const fieldReview = validateNativeFields(fieldSchema.fields, values, {existing: before?.raw.issue.fields ?? {}, implicit: ['project', 'issuetype'], creating: !before, label: 'Xray case'});
+    validateFieldReadback(fieldSchema, nativeFields, fieldReview);
+    await validateUsers(fieldSchema.fields, nativeFields, before?.id);
+    const beforeFields = before ? Object.fromEntries([...new Set([...Object.keys(trackedFields(before.raw.issue.fields)), ...fieldSchema.fields.map(field => field.fieldId)])].filter(name => !ownedFields.includes(name)).map(name => [name, before.raw.issue.fields[name] ?? null])) : undefined;
     const requests = [];
-    if (!before) requests.push(mutation('create-case', 'mutation($steps:[CreateStepInput],$jira:JSON!) { createTest(testType:{name:"Manual"},steps:$steps,jira:$jira) { test { issueId jira(fields:["key"]) } warnings } }', {steps: desired.steps.map(step => ({action: step.action, data: step.data, result: step.expected})), jira: {fields: {project: {key: config.project}, summary: desired.title, labels: desired.labels}}}));
+    if (!before) requests.push(mutation('create-case', 'mutation($steps:[CreateStepInput],$jira:JSON!) { createTest(testType:{name:"Manual"},steps:$steps,jira:$jira) { test { issueId jira(fields:["key"]) } warnings } }', {steps: desired.steps.map(step => ({action: step.action, data: step.data, result: step.expected})), jira: {fields: values}}));
     else {
-      requests.push(nativeRequest('update-case', `issue/${key(before.id)}`, 'PUT', {fields: {summary: desired.title, labels: desired.labels}}, 'jira'));
+      requests.push(nativeRequest('update-case', `issue/${key(before.id)}`, 'PUT', {fields: values}, 'jira'));
       for (let index = 0; index < desired.steps.length; index++) {
         const step = desired.steps[index], value = {action: step.action, data: step.data, result: step.expected};
         requests.push(index < before.steps.length
@@ -83,12 +184,14 @@ export function createXrayAdapter({jira, transport, roots}) {
       for (const step of before.steps.slice(desired.steps.length)) requests.push(mutation('remove-case-step', 'mutation($id:String!) { removeTestStep(stepId:$id) }', {id: step.id}));
     }
     const beforeCase = before ? {title: before.title, labels: before.labels, steps: before.steps, preconditions: before.preconditions, description: before.raw.issue.fields.description ?? null} : undefined;
-    return data({kind: 'case', provider, ...(before ? {id: before.id, beforeFingerprint: before.fingerprint, beforeCase} : {}), marker: input.marker, desired, requests, ...link}, 4 * 1024 * 1024);
+    return data({kind: 'case', provider, ...(before ? {id: before.id, beforeFingerprint: before.fingerprint, beforeCase, beforeFields} : {}), marker: input.marker, desired, fieldSchema, fieldReview, nativeFields, requests, ...link}, 4 * 1024 * 1024);
   }
   async function writeCase(plan, delivery, {onIdentity} = {}) {
     requireThat(plan.provider === provider && plan.kind === 'case', 'Invalid Xray case plan.');
-    if (plan.id) requireThat((await readCase(plan.id)).fingerprint === plan.beforeFingerprint, 'Xray case changed after preview.');
+    const current = plan.id ? await readCase(plan.id) : undefined;
+    if (plan.id) requireThat(current.fingerprint === plan.beforeFingerprint, 'Xray case changed after preview.');
     else requireThat(plan.storyKey && String((await nativeStory(plan.storyKey)).id) === plan.storyId, 'Xray creation story binding changed.');
+    await refreshCaseFields(plan, current);
     let id = plan.id;
     for (const request of plan.requests) {
       let remembered = false;
@@ -102,7 +205,7 @@ export function createXrayAdapter({jira, transport, roots}) {
     return id;
   }
   async function verifyCase(plan, id) {
-    const item = verifiedContent(plan, await readCase(id));
+    const item = verifyCaseFields(plan, verifiedContent(plan, await readCase(id)));
     if (plan.storyKey) requireThat((item.raw.issue.fields.issuelinks ?? []).some(link => String(link.type?.id) === plan.linkType && link.outwardIssue?.key === plan.storyKey), 'Xray case lacks its approved coverage link.');
     return item;
   }
@@ -118,18 +221,19 @@ export function createXrayAdapter({jira, transport, roots}) {
   }
   async function caseCompletion(plan, id) {
     requireThat((!plan.id || plan.id === id) && plan.provider === provider && plan.kind === 'case', 'Completion requires the original native case plan and identity.');
-    const current = await readCase(id); let requests = [];
-    if (!plan.id) verifiedContent(plan, current);
+    const current = await readCase(id); await refreshCaseFields(plan, current); let requests = [];
+    if (!plan.id) verifyCaseFields(plan, verifiedContent(plan, current));
     else {
-      const before = plan.beforeCase; requireThat(before && fingerprint(before.preconditions) === fingerprint(current.preconditions) && fingerprint(before.description) === fingerprint(current.raw.issue.fields.description ?? null), 'Xray case recovery requires unchanged source context and its original snapshot.');
+      const before = plan.beforeCase; requireThat(before && fingerprint(before.preconditions) === fingerprint(current.preconditions), 'Xray case recovery requires unchanged source context and its original snapshot.');
       requireThat(new Set(current.steps.map(step => step.id)).size === current.steps.length, 'Xray current step identities are duplicated.');
-      const state = structuredClone(before), originalIds = new Set(before.steps.map(step => step.id));
+      const state = {...structuredClone(before), fields: structuredClone(plan.beforeFields)}, originalIds = new Set(before.steps.map(step => step.id));
       const matches = () => state.title === current.title && fingerprint([...state.labels].sort()) === fingerprint([...current.labels].sort()) && state.steps.length === current.steps.length
+        && current.raw.issue.fields.issuetype?.id === plan.fieldSchema.issueTypeId && Object.entries(state.fields).every(([name, value]) => sameFieldValue(current.raw.issue.fields[name], value))
         && state.steps.every((step, index) => {const actual = current.steps[index]; return (step.id === null ? !originalIds.has(actual.id) : step.id === actual.id) && step.action === actual.action && step.data === actual.data && step.expected === actual.expected;});
       let completed = matches() ? 0 : -1;
       for (const [index, request] of plan.requests.entries()) {
         const variables = request.body?.variables;
-        if (request.operation === 'update-case') {state.title = request.body.fields.summary; state.labels = request.body.fields.labels;}
+        if (request.operation === 'update-case') {state.title = request.body.fields.summary; state.labels = request.body.fields.labels; Object.assign(state.fields, plan.nativeFields);}
         else if (request.operation === 'update-case-step') {
           const step = state.steps.find(step => step.id === variables.id); requireThat(step, 'Original Xray step update identity is missing.');
           Object.assign(step, {action: variables.step.action, data: variables.step.data, expected: variables.step.result});

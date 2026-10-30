@@ -4,17 +4,19 @@ import {readFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {fixture} from './fixtures/execution-core.mjs';
 import {createTestManagement} from '../scripts/lib/integrations/test-management.mjs';
+import {xrayIssueType, xrayMetadataList, xrayEditMetadata, zephyrRiskSchema} from './fixtures/native-case-fields.mjs';
 
 const marker = 'pom-harness-0123456789abcdef', siteUrl = 'https://example.atlassian.net';
-const nativeJira = key => ({key, project: {id: '10001', key: 'DEMO', self: siteUrl + '/rest/api/2/project/10001'}});
+const nativeJira = key => ({key, project: {id: '10001', key: 'DEMO', self: siteUrl + '/rest/api/2/project/10001'}, issuetype: xrayIssueType});
 const testValue = {issueId: '10003', projectId: '10001', jira: nativeJira('DEMO-2'), lastModified: '2026-10-28T01:02:03.000Z', testType: {name: 'Manual'}, dataset: null,
   steps: [{id: 'step-a', action: 'Buy', data: '', result: 'Order created', attachments: [], customFields: []}], preconditions: {total: 0, results: []}};
 function jiraFixture(provider = 'xray') {
-  const issue = {id: '10003', key: 'DEMO-2', fields: {project: {id: '10001', key: 'DEMO'}, summary: 'Buy', labels: ['team'], updated: '2026-10-28T01:02:03.000Z'}}, properties = new Map();
-  const jira = {configuration: {siteUrl, project: 'DEMO', timeoutMs: 1000, maxResponseBytes: 200000, testManagement: {provider, region: 'eu'}},
+  const issue = {id: '10003', key: 'DEMO-2', fields: {project: {id: '10001', key: 'DEMO'}, issuetype: xrayIssueType, summary: 'Buy', labels: ['team'], updated: '2026-10-28T01:02:03.000Z'}}, properties = new Map();
+  const jira = {configuration: {siteUrl, project: 'DEMO', timeoutMs: 1000, maxResponseBytes: 200000, testManagement: {provider, region: 'eu', ...(provider === 'zephyr-scale' ? {caseFieldSchema: zephyrRiskSchema()} : {})}},
     projectIdentity: async () => ({id: '10001', key: 'DEMO', name: 'Demo'}),
+    list: async route => xrayMetadataList(route),
     issue: async key => key === 'DEMO-100' ? {id: '10100', key, fields: {project: {id: '10001', key: 'DEMO'}}} : structuredClone(issue),
-    read: async route => {if (route.includes('/properties/')) {if (properties.has(route)) return {value: properties.get(route)}; throw Object.assign(new Error('not found'), {status: 404});} throw new Error(`Unexpected read ${route}`);}};
+    read: async route => {if (route.endsWith('/editmeta')) return xrayEditMetadata(); if (route.startsWith('mypermissions?')) return {permissions: {CREATE_ISSUES: {havePermission: true}, EDIT_ISSUES: {havePermission: true}}}; if (route.includes('/properties/')) {if (properties.has(route)) return {value: properties.get(route)}; throw Object.assign(new Error('not found'), {status: 404});} throw new Error(`Unexpected read ${route}`);}};
   return {jira, issue, properties};
 }
 function xrayFixture() {
@@ -24,6 +26,7 @@ function xrayFixture() {
   const transport = {query: async (query) => {
     if (query.includes('getStatuses')) return {getStatuses: [{name: 'PASSED'}, {name: 'FAILED'}], getStepStatuses: [{name: 'PASSED'}, {name: 'FAILED'}]};
     if (query.includes('getTestRun')) return {getTestRun: structuredClone(run)};
+    if (query.includes('getTests(')) return {getTests: {total: 1, start: 0, results: [{issueId: raw.issueId, jira: structuredClone(raw.jira)}]}};
     if (query.includes('getTest(')) return {getTest: structuredClone(raw)};
     throw new Error(`Unexpected query ${query}`);
   }};
@@ -194,11 +197,12 @@ test('Zephyr partial discovery returns only verified results and leaves a missin
 
 test('lost Xray creation response records intent only at actual mutation and never retries', async t => {
   const {roots} = fixture(t), {jira} = jiraFixture(); let creates = 0, delivery;
-  jira.read = async () => ({issueLinkTypes: [{id: '1', outward: 'tests', inward: 'is tested by'}]});
+  jira.read = async route => route.startsWith('mypermissions?') ? {permissions: {CREATE_ISSUES: {havePermission: true}}} : {issueLinkTypes: [{id: '1', outward: 'tests', inward: 'is tested by'}]};
   const adapter = createTestManagement({jira, roots, resolveCredentials: () => ({clientId: '<synthetic>', clientSecret: '<synthetic-secret>'}), fetchImpl: async (url, options) => {
     const events = delivery ? readFileSync(join(roots.projectRoot, delivery.receipt), 'utf8').trim().split('\n').map(JSON.parse) : [];
     if (url.endsWith('/authenticate')) {assert.equal(events.filter(row => row.event === 'dispatching').length, 0); return new Response(JSON.stringify('<synthetic-access>'));}
     if (options.body.includes('getCoverableIssue')) return new Response(JSON.stringify({data: {getCoverableIssue: {issueId: '10100', jira: nativeJira('DEMO-100')}}}));
+    if (options.body.includes('getTests(')) return new Response(JSON.stringify({data: {getTests: {total: 1, start: 0, results: [{issueId: '10003', jira: nativeJira('DEMO-2')}]}}}));
     creates++; assert.equal(events.at(-1).event, 'dispatching'); throw new Error('connection lost after server accepted create');
   }});
   const plan = await adapter.prepareCase({title: 'Buy', steps: [{action: 'Buy', expected: 'Order created'}], storyKey: 'DEMO-100', marker});

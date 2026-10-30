@@ -9,6 +9,11 @@ Use the shared [tracker provider contract](../../../docs/tracker-providers.md) f
 Azure, Jira with Xray or Zephyr Scale, and Jira without a plugin. Keep the same
 workflow and gates; select native adapters and preserve the captured source identity.
 
+Resolve [required native case fields](../../../docs/tracker-providers.md#required-native-case-fields)
+before publication approval. Use `nativeFields` in the same reviewed case proposal;
+Xray discovers Jira metadata, while Zephyr needs the complete reviewed project
+field schema. Never infer missing definitions or silently rely on tenant defaults.
+
 Resolve this linked skill to its real package path. Read [ROOTS.md](../ROOTS.md)
 and the [workflow, formats and example](../../../docs/test-case-design.md).
 The host designs and independently reviews; deterministic commands validate,

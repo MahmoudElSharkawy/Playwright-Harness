@@ -5,13 +5,12 @@ import {jiraTextDocument} from './jira-adf.mjs';
 import {jiraIssueKey} from './jira-config.mjs';
 import {requestFingerprint} from './delivery.mjs';
 import {jiraStoryRevision} from './jira-requirements.mjs';
+import {validateFieldMetadata, validateNativeFields, sameFieldValue as sameValue} from './native-fields.mjs';
 
 const fieldId = value => typeof value === 'string' && /^(?:[a-z][a-zA-Z0-9]*|customfield_[1-9]\d*)$/.test(value);
 const scalarId = value => typeof value === 'string' && /^[A-Za-z0-9_.:-]{1,200}$/.test(value);
 const labels = item => Array.isArray(item.fields?.labels) ? item.fields.labels : [];
 const marker = row => `harness-filing-${row.filingId}`;
-const identity = value => value && typeof value === 'object' && !Array.isArray(value) ? value.id ?? value.accountId ?? value.value ?? value.name : value;
-const sameValue = (actual, expected) => Array.isArray(expected) ? Array.isArray(actual) && actual.length === expected.length && expected.every((value, index) => sameValue(actual[index], value)) : typeof expected === 'object' && expected !== null && identity(expected) !== expected ? identity(actual) === identity(expected) : fingerprint(actual ?? null) === fingerprint(expected ?? null);
 export function matchesJiraBugSource(original, current, row, target) {
   if (original.revision === current.revision) return true;
   const owned = link => row.workItemId && link.issue.key === row.workItemId && link.direction === 'inward' && row.links?.some(entry => entry.target === target && entry.typeId === link.type && ['DISPATCHING', 'VERIFIED'].includes(entry.state));
@@ -31,19 +30,6 @@ export async function reconcileJiraBugStory(client, source, entries) {
   if (fingerprint(current.links.filter(link => !introduced.includes(link))) !== fingerprint(original.links)) return source;
   return {...source, story: {...source.story, version: current}};
 }
-function validValue(field, value) {
-  const type = field.schema?.type;
-  if (field.fieldId === 'description' || field.schema?.custom?.endsWith(':textarea')) return value?.type === 'doc' && value.version === 1 && Array.isArray(value.content);
-  if (type === 'string') return typeof value === 'string';
-  if (type === 'number') return typeof value === 'number' && Number.isFinite(value);
-  if (type === 'integer') return Number.isSafeInteger(value);
-  if (type === 'boolean') return typeof value === 'boolean';
-  if (['date', 'datetime'].includes(type)) return typeof value === 'string' && Number.isFinite(Date.parse(value));
-  if (type === 'array') return Array.isArray(value) && value.length <= 100 && value.every(item => validValue({schema: {type: field.schema.items}}, item));
-  if (['option', 'priority', 'project', 'issuetype', 'component', 'version', 'resolution', 'securitylevel'].includes(type)) return value && typeof value === 'object' && !Array.isArray(value) && scalarId(value.id);
-  if (type === 'user') return value && typeof value === 'object' && scalarId(value.accountId);
-  return false;
-}
 
 /** Jira-native fields, issue links and attachments; delivery state remains shared. */
 export function createJiraBugs(client) {
@@ -60,7 +46,8 @@ export function createJiraBugs(client) {
     const selection = client.configuration.issueTypes?.bug ?? 'Bug', candidates = types.filter(type => type.id === selection || type.name === selection);
     requireThat(candidates.length === 1 && scalarId(candidates[0].id) && candidates[0].subtask !== true, 'Select one available standalone Jira bug issue type.');
     const type = candidates[0], fields = await client.list(`issue/createmeta/${project.key}/issuetypes/${type.id}`, {itemsKey: 'fields', maxItems: 1000});
-    requireThat(fields.length > 0 && new Set(fields.map(field => field.fieldId)).size === fields.length && fields.every(field => fieldId(field.fieldId) && typeof field.name === 'string' && Array.isArray(field.operations) && (field.allowedValues === undefined || Array.isArray(field.allowedValues) && field.allowedValues.length <= 1000)), 'Jira bug field metadata is incomplete or ambiguous.');
+    validateFieldMetadata(fields);
+    requireThat(fields.length > 0 && fields.every(field => fieldId(field.fieldId)), 'Jira bug field metadata is incomplete or ambiguous.');
     const permissions = await client.read(`mypermissions?projectKey=${project.key}&permissions=CREATE_ISSUES,CREATE_ATTACHMENTS,LINK_ISSUES`);
     requireThat(permissions.permissions?.CREATE_ISSUES?.havePermission === true, 'Jira bug creation permission is unavailable.');
     const schema = {project, type: {id: type.id, name: type.name}, fields, permissions: {attachments: permissions.permissions.CREATE_ATTACHMENTS?.havePermission === true, links: permissions.permissions.LINK_ISSUES?.havePermission === true}, limitations: ['Conditional Jira workflow rules are validated by Jira when creating the issue.']};
@@ -75,18 +62,7 @@ export function createJiraBugs(client) {
     if (edited.priority !== undefined) fields.priority = typeof edited.priority === 'object' ? edited.priority : {id: String(edited.priority)};
     for (const name of edited.omitFields ?? []) {requireThat(!['project', 'issuetype', 'summary', 'description', 'labels'].includes(name), 'Cannot omit bug narrative or durable identity fields.'); delete fields[name];}
     data(fields, 256 * 1024);
-    const problems = [], review = metadata.fields.map(field => {
-      const value = fields[field.fieldId], readOnly = !field.operations.includes('set');
-      if (value === undefined && field.required && !field.hasDefaultValue) problems.push({field: field.fieldId, code: 'required'});
-      if (value !== undefined && (readOnly || !validValue(field, value))) problems.push({field: field.fieldId, code: readOnly ? 'read-only' : 'type'});
-      if (value !== undefined && field.allowedValues?.length) {
-        const values = Array.isArray(value) ? value : [value];
-        if (!values.every(value => field.allowedValues.some(allowed => sameValue(allowed, value)))) problems.push({field: field.fieldId, code: 'allowed-value'});
-      }
-      return {field: field.fieldId, label: field.name, required: field.required === true, readOnly, type: field.schema?.type ?? 'unavailable', ...(value === undefined ? {} : {value}), ...(field.allowedValues ? {allowedValues: field.allowedValues} : {})};
-    });
-    for (const name of Object.keys(fields)) if (!['project', 'issuetype'].includes(name) && !metadata.fields.some(field => field.fieldId === name)) problems.push({field: name, code: 'unavailable'});
-    if (problems.length) throw Object.assign(new Error('Jira bug fields need review; supply the required native field values.'), {fieldProblems: problems, fieldReview: review});
+    const review = validateNativeFields(metadata.fields, fields, {implicit: ['project', 'issuetype'], label: 'Jira bug'});
     if (view.reportAttachments?.length || defect.occurrences?.some(row => row.evidenceIds?.length)) requireThat(metadata.permissions.attachments, 'Jira attachment permission is unavailable.');
     const found = (await find(defect.fingerprint)).filter(item => !labels(item).includes(marker(intent)));
     requireThat(found.every(item => item.fields.status?.statusCategory?.key), 'Jira duplicate status metadata is incomplete.');

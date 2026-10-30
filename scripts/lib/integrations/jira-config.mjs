@@ -2,6 +2,8 @@ import {consumerEnvironment} from '../consumer-env.mjs';
 import {keys, identifier} from '../project-config.mjs';
 import {readConsumerJson, requireValue} from './config.mjs';
 import {validateContextPolicy} from './context-policy.mjs';
+import {nativeFieldValues} from './native-fields.mjs';
+import {validateZephyrCaseFieldSchema} from './zephyr-fields.mjs';
 
 const reference = value => typeof value === 'string' && /^[A-Z_][A-Z0-9_]{0,99}$/.test(value);
 const projectKey = value => typeof value === 'string' && /^[A-Z][A-Z0-9_]{1,99}$/.test(value);
@@ -39,10 +41,13 @@ export function validateJiraConfiguration(input) {
   }
   const testManagement = input.testManagement ?? {provider: 'none'};
   requireValue(testManagement && ['none', 'xray', 'zephyr-scale'].includes(testManagement.provider), 'Select none, xray or zephyr-scale test management.');
-  const pluginFields = {none: ['provider'], xray: ['provider', 'clientIdRef', 'clientSecretRef'], 'zephyr-scale': ['provider', 'credentialRef', 'region']};
+  const pluginFields = {none: ['provider'], xray: ['provider', 'clientIdRef', 'clientSecretRef', 'testIssueTypeId', 'caseFields'], 'zephyr-scale': ['provider', 'credentialRef', 'region', 'caseFields', 'caseFieldSchema']};
   keys(testManagement, pluginFields[testManagement.provider], 'Jira test-management configuration');
   if (testManagement.provider === 'xray') requireValue(reference(testManagement.clientIdRef) && reference(testManagement.clientSecretRef), 'Xray requires client ID and secret references.');
   if (testManagement.provider === 'zephyr-scale') requireValue(reference(testManagement.credentialRef) && ['eu', 'us'].includes(testManagement.region), 'Zephyr Scale requires an API-token reference and eu/us region.');
+  if (testManagement.caseFields !== undefined) nativeFieldValues(testManagement.caseFields);
+  if (testManagement.testIssueTypeId !== undefined) requireValue(typeof testManagement.testIssueTypeId === 'string' && /^[1-9]\d{0,19}$/.test(testManagement.testIssueTypeId), 'Xray test issue-type selection must be a native numeric ID.');
+  if (testManagement.caseFieldSchema !== undefined) validateZephyrCaseFieldSchema(testManagement.caseFieldSchema, {...input, siteUrl: site.origin});
   if (input.context !== undefined) {
     keys(input.context, ['sources'], 'Jira context configuration'); keys(input.context.sources, Object.keys(input.context.sources ?? {}), 'Jira context sources');
     requireValue(Object.keys(input.context.sources).length <= 100, 'Too many Jira context sources.');

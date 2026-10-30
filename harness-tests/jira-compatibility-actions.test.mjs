@@ -33,6 +33,23 @@ test('shared Jira tag preview and approved write preserve labels in no-plugin mo
   assert.equal((await runCompatibility('tag-workitem', [...args, '--execute', '--approval', preview.fingerprint], f)).mode, 'resumed'); assert.equal(f.writes.length, 1);
 });
 
+test('shared native edit command accepts field-only changes and binds them to exact approval', async t => {
+  const f = setup(t, 'xray'), captured = [];
+  f.management.readCase = async () => ({id: 'DEMO-2', revision: 'revision-1', title: 'Keep title', steps: [{id: 's1', action: 'Act', expected: 'Result'}]});
+  f.management.prepareCase = async input => {
+    captured.push(input);
+    return {id: input.before.id, requests: [{operation: 'edit-fields', channel: 'jira', route: 'issue/DEMO-2', method: 'PUT', body: {fields: input.nativeFields}}]};
+  };
+  json(f.roots, 'case-edit.json', {version: 1, cases: [{id: 'DEMO-2', revision: 'revision-1', nativeFields: {customfield_12345: {id: '7'}}}]});
+  const args = [...f.args, '--input', 'case-edit.json'], preview = await runCompatibility('edit-cases', args, f);
+  assert.equal(preview.mode, 'dry-run'); assert.equal(f.writes.length, 0);
+  assert.deepEqual(captured[0].nativeFields, {customfield_12345: {id: '7'}});
+  assert.equal(captured[0].title, 'Keep title'); assert.equal(captured[0].steps[0].id, 's1');
+  json(f.roots, 'case-edit.json', {version: 1, cases: [{id: 'DEMO-2', revision: 'revision-1', nativeFields: {customfield_12345: {id: '8'}}}]});
+  await assert.rejects(runCompatibility('edit-cases', [...args, '--execute', '--approval', preview.fingerprint], f), /approval|preview/i);
+  assert.equal(f.writes.length, 0);
+});
+
 test('shared Jira relink replaces only the selected optional parent with a discovered related link', async t => {
   const f = setup(t); f.issue('DEMO-2'); f.issues.get('DEMO-2').fields.parent = {key: 'DEMO-1'};
   f.issues.get('DEMO-2').fields.issuelinks = [{id: 'keep-link', type: {id: '9'}, outwardIssue: {key: 'DEMO-8'}}];

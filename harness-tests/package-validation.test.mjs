@@ -10,6 +10,12 @@ test('integration fixtures and fixed public APIs do not allow arbitrary tenant c
  assert(privacyFindings('guide.md', ['https://', 'private-tenant', '.atlassian.net'].join('')).some(row => row.rule === 'unreviewed-url'));
 });
 
+test('reviewed Zephyr field documentation does not allow unrelated support URLs', () => {
+ const origin = ['https://', 'support.smartbear.com/'].join('');
+ for (const path of ['zephyr-scale-cloud/api-docs/', 'zephyr/docs/en/configuration/advanced-customization-options/custom-fields-for-test-cases,-cycles,-plans,-steps,-and-executions.html']) assert.deepEqual(privacyFindings('guide.md', origin + path), []);
+ assert(privacyFindings('guide.md', origin + 'private-case/123').some(row => row.rule === 'unreviewed-url'));
+});
+
 test('documented Jira cursor and CSRF sentinel do not exempt actual token literals', () => {
  assert.deepEqual(secretFindings('client.mjs', "const page = {nextPageToken: '<cursor>', 'X-Atlassian-Token': 'no-check'};"), []);
  const key = 'X-Atlassian-' + 'Token';
