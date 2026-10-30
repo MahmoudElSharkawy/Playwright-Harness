@@ -4,16 +4,20 @@ import {prepareDesign, saveDesign, assessDesign} from '../../scripts/lib/test-ca
 import {updateInventory} from '../../scripts/lib/requirements/index.mjs';
 import {editStepsXml} from '../../scripts/lib/integrations/ado-step-edit.mjs';
 
-export async function adoDesignFixture(t) {
-  const f = await adoFixture(t), fields = ['System.Title', 'System.Description', 'System.Tags', 'System.History', 'Microsoft.VSTS.TCM.Steps'];
+export async function adoDesignFixture(t, overrides = {}, {existingFields = {}} = {}) {
+  const f = await adoFixture(t, overrides), fields = ['System.Title', 'System.Description', 'System.Tags', 'System.History', 'Microsoft.VSTS.TCM.Steps'];
   const history = new Map(), control = {loseCreate: false, loseUpdate: false, denyField: null, rejectWrite: false, denyTags: false, discussion: [], writes: 0, afterWrite: null, storyUpdates: []};
+  control.fields = fields.map(referenceName => ({referenceName, name: referenceName, type: referenceName === 'System.Description' || referenceName.endsWith('.Steps') ? 'html' : referenceName === 'System.History' ? 'history' : 'string', readOnly: false, alwaysRequired: referenceName === 'System.Title'}));
+  control.fields.push(...['Area', 'Iteration'].flatMap(name => [{referenceName: `System.${name}Id`, name: `${name} ID`, type: 'integer', readOnly: true, alwaysRequired: true}, {referenceName: `System.${name}Path`, name: `${name} Path`, type: 'treePath', readOnly: false, defaultValue: 'demo'}]));
+  control.validations = []; control.normalizations = {}; control.serverDefaults = {}; control.beforeWrite = null; control.validPaths = ['demo', 'demo\\Catalog', 'demo\\Sprint 1'];
   const story = f.state.items.get(200); story.fields = {'System.Title': 'Sign in', 'System.WorkItemType': 'User Story', 'System.TeamProject': 'demo', 'System.Description': '', 'Microsoft.VSTS.Common.AcceptanceCriteria': 'A valid login opens the current user dashboard.'}; story.relations = [];
   const existing = f.state.items.get(101); existing.fields['System.WorkItemType'] = 'Test Case'; existing.fields['System.Description'] = '<p>Keep unrelated content.</p>'; existing.fields['System.Tags'] = 'team-owned; Functional; Positive'; existing.fields['Microsoft.VSTS.TCM.Steps'] = editStepsXml('<steps id="0" last="0"></steps>', {}, [{id: 1, action: {text: 'Open sign-in'}, expected: {text: 'Sign-in is visible.'}}]);
+  Object.assign(existing.fields, existingFields);
   history.set(101, [structuredClone(existing)]); history.set(200, [structuredClone(story)]);
   f.state.fault = ({path, req, res, body, send, url}) => {
     if (path === 'wit/workitemtypecategories/microsoft.testcasecategory') {send({referenceName: 'Microsoft.TestCaseCategory', defaultWorkItemType: {name: 'Test Case'}, workItemTypes: [{name: 'Test Case'}]}); return true;}
-    if (path === 'wit/workitemtypes/test%20case/fields') {send({value: fields.filter(field => field !== control.denyField).map(referenceName => ({referenceName}))}); return true;}
-    if (path === 'wit/fields') {send({value: fields.map(referenceName => ({referenceName, readOnly: referenceName === control.denyField, isLocked: false}))}); return true;}
+    if (path === 'wit/workitemtypes/test%20case/fields') {send({value: control.fields.filter(field => field.referenceName !== control.denyField).map(({readOnly, ...field}) => field)}); return true;}
+    if (path === 'wit/fields') {send({value: control.fields.map(field => ({...field, readOnly: field.readOnly || field.referenceName === control.denyField, isLocked: false}))}); return true;}
     if (path === 'wit/tags') {send({value: [{name: 'team-owned'}, {name: 'Functional'}, {name: 'Positive'}]}, control.denyTags ? 403 : 200); return true;}
     if (path === 'wit/workitems/200/comments') {send({comments: control.discussion, totalCount: control.discussion.length}); return true;}
     if (path === 'wit/workitems/200/updates') {send({value: control.storyUpdates.slice(Number(url.searchParams.get('$skip') ?? 0), Number(url.searchParams.get('$skip') ?? 0) + 100)}); return true;}
@@ -24,10 +28,20 @@ export async function adoDesignFixture(t) {
       const old = update && f.state.items.get(Number(update[1]));
       if (update && (!old || body[0]?.path !== '/rev' || body[0]?.value !== old.rev)) {send({}, 412); return true;}
       if (control.rejectWrite) {send({}, 403); return true;}
+      if (url.searchParams.get('validateOnly') !== 'true') control.beforeWrite?.();
       const item = old ? structuredClone(old) : {id: f.state.nextBug, rev: 0, fields: {'System.WorkItemType': 'Test Case', 'System.TeamProject': 'demo'}, relations: []};
+      if (!old) for (const field of control.fields) if (!field.readOnly && field.defaultValue !== undefined) item.fields[field.referenceName] = field.defaultValue;
+      if (!old) Object.assign(item.fields, control.serverDefaults);
       for (const operation of body) if (operation.path.startsWith('/fields/')) item.fields[operation.path.slice(8)] = operation.value; else if (operation.path === '/relations/-') item.relations.push(operation.value);
+      for (const field of control.fields) {
+        const value = item.fields[field.referenceName];
+        if (!field.readOnly && field.alwaysRequired && (value === undefined || value === null || value === '' && !field.allowedValues?.includes(''))) {send({}, 422); return true;}
+        if (['System.AreaPath', 'System.IterationPath'].includes(field.referenceName) && value !== undefined && !control.validPaths.some(path => path.toLowerCase() === String(value).toLowerCase())) {send({}, 422); return true;}
+        if (value !== undefined && control.normalizations[field.referenceName]) item.fields[field.referenceName] = control.normalizations[field.referenceName](value);
+      }
+      item.fields['System.AreaId'] = 1; item.fields['System.IterationId'] = 2;
       item.rev++;
-      if (url.searchParams.get('validateOnly') === 'true') {send(item); return true;}
+      if (url.searchParams.get('validateOnly') === 'true') {control.validations.push(structuredClone(body)); send(item); return true;}
       if (create) f.state.nextBug++;
       f.state.items.set(item.id, item); history.set(item.id, [...(history.get(item.id) ?? []), structuredClone(item)]); control.writes++;
       if (create) {

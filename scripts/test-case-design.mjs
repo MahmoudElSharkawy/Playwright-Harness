@@ -10,7 +10,8 @@ const usage = `pom-harness test-case-design <prepare|read|review|edit|assess|rej
   assess --id <design> --input <independent-assessment-json> [--notes <review-notes-json>]
   read --id <design> [--notes <review-notes-json>]
   reject|reconcile --id <design>
-  preview|handoff --id <design> [--selected <ID,ID>]
+  preview --id <design> [--selected <ID,ID>] [--fields <publication-fields-json>]
+  handoff --id <design> [--selected <ID,ID>]
   publish --id <design> --approval <exact-preview-fingerprint>
 All state belongs to the consumer. Show rendered.markdown and link the written reviewFile.
 Review notes are optional {gaps?, suggestions?} Markdown strings, never case or approval input.
@@ -19,7 +20,7 @@ Reconcile uncertain operations before resuming. This command never executes test
 try {
   const {roots, args} = projectArgument(), [command, ...rest] = args, options = {};
   if (['help', '--help'].includes(command)) {console.log(usage); process.exit(0);}
-  const allowed = {prepare: ['id', 'input'], review: ['id', 'input', 'notes'], edit: ['id', 'input', 'notes'], assess: ['id', 'input', 'notes'], read: ['id', 'notes'], reject: ['id'], reconcile: ['id'], preview: ['id', 'selected'], publish: ['id', 'approval'], handoff: ['id', 'selected']}[command];
+  const allowed = {prepare: ['id', 'input'], review: ['id', 'input', 'notes'], edit: ['id', 'input', 'notes'], assess: ['id', 'input', 'notes'], read: ['id', 'notes'], reject: ['id'], reconcile: ['id'], preview: ['id', 'selected', 'fields'], publish: ['id', 'approval'], handoff: ['id', 'selected']}[command];
   if (!allowed) throw new Error(usage);
   for (let index = 0; index < rest.length; index += 2) {
     const key = rest[index]?.replace(/^--/, '');
@@ -35,7 +36,7 @@ try {
   else if (command === 'assess') {assessDesign(roots, options.id, input()); result = designView(roots, options.id, undefined, {notes: options.notes});}
   else if (command === 'reject') result = rejectDesign(roots, options.id);
   else if (command === 'read') result = designView(roots, options.id, undefined, {notes: options.notes});
-  else if (command === 'preview') result = await previewDesign(roots, options.id, selection);
+  else if (command === 'preview') result = await previewDesign(roots, options.id, {...selection, ...(options.fields ? {fields: readBounded(consumerPath(roots, options.fields))} : {})});
   else if (command === 'publish') result = await publishDesign(roots, options.id, {approval: options.approval});
   else if (command === 'reconcile') result = await reconcileDesign(roots, options.id);
   else result = await designHandoff(roots, options.id, selection);

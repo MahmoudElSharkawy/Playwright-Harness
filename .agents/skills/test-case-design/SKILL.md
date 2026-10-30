@@ -208,8 +208,27 @@ unapproved cases and gaps.
 
 ## Optional ADO publication
 
+Resolve destination field metadata only when preview/publication is requested;
+missing delivery values never block ordinary design. Support existing standard and
+custom Test Case fields. Use `ado.testCases.fields` as creation defaults and
+`preview --fields <consumer-json>` for reviewed per-case choices; see the
+[publication input](../../../docs/test-case-design.md#preview-approve-publish-and-recover).
+Per-case values override creation defaults. Updates preserve unspecified fields;
+Reuse unchanged with a material field change requires a reviewed Update. Bundle
+unresolved mandatory writable choices into one focused question.
+
+Required read-only/server-managed metadata alone is not a publication blocker.
+Reject attempted assignments to those fields. Use supported AreaPath/IterationPath
+values or verified server defaults and let ADO derive internal IDs. Local metadata
+cannot prove hidden rules, identity or path validity; retain server validate-only
+checks. Explain missing input, local adapter limits and actual server rejection
+distinctly. Populating an existing custom field is supported; creating new field
+definitions or changing the ADO process requires a separate explicit request.
+
 When requested, generate `preview` for selected IDs. Show the complete proposal and
-exact native changes, destination and shared-case effects. Outside the case tables,
+exact native changes, destination and shared-case effects. Show per-case additional
+field values and differences from `fieldPreview`, including verified server defaults,
+outside the case tables, alongside the destination and selected cases. Outside the case tables,
 show each combined Preparation action and its observable readiness expectation;
 these are part of approval, never hidden implementation metadata. Usually one step
 combines the reviewed Prerequisites and Test data. If distinct setup actions each
@@ -219,8 +238,9 @@ decision. Keep secret references; never publish actual external credentials.
 
 Obtain one consolidated approval for this complete unchanged preview. Reuse already
 given authorization when it covers exactly this content, selection, operations and
-destination. Changed content, relevant source/case revisions, destination or missing
-acceptance requires affected revalidation and renewed approval. Use only `publish`
+destination. Changed content, relevant source/case revisions, field values/schema,
+destination or missing acceptance requires affected revalidation and renewed approval.
+Use only `publish`
 with its exact fingerprint; do not bypass it with direct ADO writes.
 
 Native Title receives the title. Description receives the selected-story coverage
@@ -229,8 +249,8 @@ values, preserving unrelated tags. Native steps begin with combined Preparation 
 its readiness check, followed by all reviewed business steps; update reconciles
 existing preparation and preserves stable step IDs. Sequence position is consecutive.
 No duplicate setup in Description or chat steps, separate final result or chat-only
-columns. Required unavailable/read-only fields, tag permissions or custom process
-requirements are explicit publication gaps; never drop fields or create custom ones.
+columns. Resolve missing/invalid writable values and genuine process or permission
+failures before publication; do not silently omit requested fields or invent values.
 New cases link to the approved story atomically. Native History carries the previewed
 operation marker needed for unambiguous recovery.
 
