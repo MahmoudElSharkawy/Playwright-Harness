@@ -4,7 +4,7 @@ import {fingerprint, requireThat} from '../execution-core/data.mjs';
 import {readBounded, writeJson} from '../execute/storage.mjs';
 import {requirementsClient} from '../requirements/sources.mjs';
 import {adoRequestFingerprint} from '../integrations/ado-client.mjs';
-import {workItemLinkId, adoId} from '../integrations/config.mjs';
+import {workItemLinkId, adoId, validateCaseFieldValues} from '../integrations/config.mjs';
 import {prepareCaseOperation, verifyCaseOperation} from '../integrations/ado-case-design.mjs';
 import {readDesign, lockDesign, saveDesignState, designPath, requireReviewed} from './index.mjs';
 import {requireFreshDesign} from './sources.mjs';
@@ -13,6 +13,21 @@ import {coverage, renderDesign, preparationSteps, confirmedOutcomes} from './rev
 
 function planContent(plan) {const {fingerprint: approved, ...content} = plan; requireThat(/^[a-f0-9]{64}$/.test(approved) && fingerprint(content) === approved, 'Saved approval plan changed; inspect the original immutable preview.'); return plan;}
 function readPlan(roots, designId, approval) {requireThat(typeof approval === 'string' && /^[a-f0-9]{64}$/.test(approval), 'Publication requires the exact preview approval fingerprint.'); const plan = planContent(readBounded(designPath(roots, designId, `previews/${approval}.json`))); requireThat(plan.fingerprint === approval, 'Saved preview no longer matches the approved identity.'); return plan;}
+async function currentOperation(client, state, operation) {
+  const current = await prepareCaseOperation(client, state, state.draft.cases.find(row => row.id === operation.caseId), {fields: operation.publicationFields?.overrides ?? {}});
+  // Legacy previews never carried field metadata. Fresh validation still checks their exact native request.
+  if (!Object.hasOwn(operation, 'publicationFields')) delete current.publicationFields;
+  return current;
+}
+function nativeFieldPreview(operation) {
+  const native = new Set(['System.Title', 'System.Description', 'Microsoft.VSTS.TCM.Steps', 'System.Tags', 'System.History']);
+  const fields = Object.entries(operation.fields).filter(([name]) => !native.has(name) && operation.request?.body.some(row => row.path === `/fields/${name}`)).map(([referenceName, value]) => ({
+    referenceName, label: operation.publicationFields?.schema.find(field => field.referenceName === referenceName)?.name ?? referenceName, value,
+    ...(operation.before && Object.hasOwn(operation.before.fields, referenceName) ? {before: operation.before.fields[referenceName]} : {})
+  }));
+  for (const [referenceName, value] of Object.entries(operation.publicationFields?.defaults ?? {})) fields.push({referenceName, label: operation.publicationFields.schema.find(field => field.referenceName === referenceName)?.name ?? referenceName, value, source: 'server-default'});
+  return {caseId: operation.caseId, action: operation.action, fields};
+}
 function result(roots, state, delivery = state.delivery) {
   const outcomes = delivery.outcomes;
   return {mode: outcomes.every(row => ['applied', 'unchanged'].includes(row.status)) ? 'completed' : outcomes.some(row => row.status === 'uncertain') ? 'reconciliation-required' : 'incomplete', approval: delivery.approval, outcomes, coverage: coverage(state, undefined, {confirmed: true, roots}), execution: 'not-run'};
@@ -28,27 +43,38 @@ async function destination(client, plan) {
 }
 async function makePlan(roots, state, options) {
   const selected = requireReviewed(state, options.selected, roots);
+  const fields = new Map(), input = options.fields;
+  if (input !== undefined) {
+    requireThat(input && input.version === 1 && Object.keys(input).every(key => ['version', 'cases'].includes(key)) && Array.isArray(input.cases) && input.cases.length <= selected.length, 'Publication fields need version 1 and selected cases.');
+    for (const row of input.cases) {
+      requireThat(row && Object.keys(row).every(key => ['caseId', 'fields'].includes(key)) && typeof row.caseId === 'string' && selected.includes(row.caseId) && !fields.has(row.caseId), 'Publication field choices must identify unique selected cases.');
+      fields.set(row.caseId, validateCaseFieldValues(row.fields));
+    }
+  }
   requireThat(state.evidence.requirements.origin, 'Local design works without ADO; publication requires a captured originating story and configured access.');
   await requireFreshDesign(roots, state, {...options, selected});
   const client = requirementsClient(roots, options), project = await client.projectIdentity(), origin = state.evidence.requirements.origin;
   requireThat(origin.organizationUrl === client.configuration.organizationUrl && origin.projectId.toLowerCase() === project.id.toLowerCase(), 'Source and configured publication destination differ.');
-  const operations = [], confirmed = [];
+  const operations = [], confirmed = [], fieldProblems = [];
   for (const id of selected) {
     const outcome = confirmedOutcomes(state).find(row => row.caseId === id);
     if (outcome) {
       const approved = readPlan(roots, state.id, outcome.approval); requireBinding(state, approved);
       const operation = approved.operations.find(row => row.caseId === id);
       requireThat(operation && completedOutcome(state, operation), 'Confirmed operation no longer matches its approved intent.');
+      requireThat(!fields.has(id) || fingerprint(fields.get(id)) === fingerprint(operation.publicationFields?.overrides ?? {}), 'Completed field intent changed; refresh and propose an Update using the returned ADO ID.');
       await verifyCaseOperation(client, operation, outcome.adoId, {historical: true});
       operations.push(operation); confirmed.push({caseId: id, adoId: outcome.adoId, status: outcome.status});
     } else {
       requireThat(!state.created[id], 'This temporary ID was already created; refresh and use its returned ADO ID.');
-      operations.push(await prepareCaseOperation(client, state, state.draft.cases.find(row => row.id === id)));
+      try {operations.push(await prepareCaseOperation(client, state, state.draft.cases.find(row => row.id === id), {fields: fields.get(id) ?? {}}));}
+      catch (error) {if (!error.fieldProblems) throw error; fieldProblems.push(`${id}: ${error.fieldProblems.join('; ')}`);}
     }
   }
+  requireThat(!fieldProblems.length, `Test Case publication fields need correction: ${fieldProblems.join(' | ')}.`);
   const plan = {version: 1, consumer: state.consumer, source: state.source, proposal: state.proposal, assessment: state.assessment, approvalGeneration: state.approvalGeneration ?? 0, selected, confirmed,
     destination: {organizationUrl: client.configuration.organizationUrl, projectId: project.id, project: project.name, storyId: origin.storyId}, operations,
-    coverage: coverage(state, selected, {roots}), rendered: renderDesign(state.draft), preparationPreview: selected.map(id => ({caseId: id, steps: preparationSteps(state.draft.cases.find(row => row.id === id), state.draft.preparations.find(row => row.caseId === id))})), note: 'Creation links to the story atomically. Native History records a per-operation recovery marker. Existing unrelated Description, tags and relationships are preserved. Validate-only requests check fields, rules and permissions; they do not publish cases.'};
+    coverage: coverage(state, selected, {roots}), rendered: renderDesign(state.draft), fieldPreview: operations.map(nativeFieldPreview), preparationPreview: selected.map(id => ({caseId: id, steps: preparationSteps(state.draft.cases.find(row => row.id === id), state.draft.preparations.find(row => row.caseId === id))})), note: 'Creation links to the story atomically. Native History records a per-operation recovery marker. Existing unrelated Description, tags and relationships are preserved. Validate-only requests check fields, rules and permissions; they do not publish cases.'};
   return {...plan, fingerprint: fingerprint(plan)};
 }
 export async function previewDesign(roots, designId, options = {}) {
@@ -84,7 +110,7 @@ export async function publishDesign(roots, designId, options = {}) {
       const completed = completedOutcome(state, operation);
       if (completed) {await verifyCaseOperation(client, operation, completed.adoId, {historical: true}); continue;}
       requireThat(!state.created[operation.caseId], 'This temporary ID was already created; refresh and use its returned ADO ID.');
-      const current = await prepareCaseOperation(client, state, state.draft.cases.find(row => row.id === operation.caseId));
+      const current = await currentOperation(client, state, operation);
       requireThat(fingerprint(current) === fingerprint(operation), 'Native request changed; review and approve a new preview.');
     }
     if (state.delivery?.approval !== plan.fingerprint) state = saveDesignState(roots, designId, {...state, deliveryHistory: [...(state.deliveryHistory ?? []), ...(state.delivery ? [state.delivery] : [])], delivery: {approval: plan.fingerprint, selected: plan.selected, outcomes: plan.operations.map(operation => completedOutcome(state, operation) ?? {caseId: operation.caseId, operationId: operation.identity, approval: plan.fingerprint, status: 'pending', adoId: operation.adoId, requestFingerprint: requestFingerprint(operation)})}});
@@ -95,7 +121,7 @@ export async function publishDesign(roots, designId, options = {}) {
         requireReviewed(state, [operation.caseId], roots);
         await requireFreshDesign(roots, state, {...options, selected: [operation.caseId]});
         // Recheck the relevant case revision and permission immediately before dispatch.
-        const current = await prepareCaseOperation(client, state, state.draft.cases.find(row => row.id === operation.caseId));
+        const current = await currentOperation(client, state, operation);
         requireThat(fingerprint(current) === fingerprint(operation), 'Case changed immediately before dispatch.');
         if (!operation.request) {await verifyCaseOperation(client, operation, operation.adoId); saveOutcome(index, {status: 'unchanged', revision: operation.revision}); continue;}
         const delivery = client.delivery('case-design', true, plan.fingerprint);

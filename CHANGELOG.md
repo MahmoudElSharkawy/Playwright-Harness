@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Support existing standard/custom Test Case publication fields with create-only
+  defaults, reviewed per-case choices, managed-field handling and schema-bound
+  previews. Preserve existing update values and delivery recovery; clarify that
+  populating custom fields does not create field definitions. (#139)
+
 ## 4.3.1 — Schema-backed DB query discovery
 
 ### Upgrade actions

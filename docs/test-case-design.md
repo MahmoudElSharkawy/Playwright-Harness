@@ -584,6 +584,43 @@ capabilities require revalidation and renewed approval. Unselected cases and res
 gaps remain saved. Publication can deliver valid selected cases even when unrelated
 requirements remain unresolved.
 
+Additional publication fields stay outside case content and tables. Configure
+optional creation defaults in `ado.testCases.fields` in the consumer's
+`.harness/integrations.json`. Per-case choices override those defaults:
+
+```json
+{
+  "version": 1,
+  "cases": [
+    {
+      "caseId": "NEW-01",
+      "fields": {
+        "System.AreaPath": "Example\\Portal",
+        "Custom.BusinessUnit": "Retail"
+      }
+    }
+  ]
+}
+```
+
+The example field and path must already exist in the destination. Save the choices
+as consumer `delivery-fields.json` and run
+`npx --no pom-harness test-case-design preview --id sign-in --selected NEW-01,5678 --fields delivery-fields.json`.
+Only selected case IDs may appear, once each. Values are bounded strings, finite
+numbers or booleans; use stable field references. Reviewed Title, Description,
+Steps, Tags and History remain controlled by the proposal and publication adapter.
+
+The preview's `fieldPreview` lists each case's additional field references, readable
+labels, values and existing values where applicable, alongside the exact destination,
+case selection and preparation changes. Values supplied by server rules are verified
+through validate-only and shown with `source: "server-default"`, even when metadata
+does not declare the default. Show these details before publication approval.
+The immutable preview retains the choices, observed defaults and relevant schema;
+`publish --approval <preview-fingerprint>` reuses that intent without resupplying
+the input file. Changed material values/defaults/schema require affected revalidation
+and approval. Updates preserve unspecified current values and never apply creation
+defaults; a material field change cannot remain Reuse unchanged.
+
 Native publication maps title to Title; coverage reference to a marked story-specific
 Description block (keeping unrelated existing content); exact test/scenario values
 to separate tags (keeping unrelated tags); and preparation plus business actions/
@@ -598,10 +635,18 @@ existing stable XML IDs and reconcile preparation instead of prepending duplicat
 Shared/parameterized/unsupported XML is an explicit publication gap. It is never
 flattened into a lossy update.
 
-The adapter checks configured project/category, field availability/writability,
-tag visibility and validate-only process/permission results. Validation requests
-do not publish cases. Custom mandatory fields requiring user data are explicit
-gaps, never invented defaults. Creation includes the approved Tested By relation
+The adapter discovers destination field labels, types, required/default/allowed
+values and writability, and checks project/category, tag visibility and server
+validate-only process/permission results. Neither required nor read-only metadata
+alone blocks publication; attempted read-only/server-managed assignments do.
+AreaPath/IterationPath use supported path values or verified server defaults, with
+ADO deriving their internal IDs. Missing/invalid mandatory writable choices are
+reported together without guessing values. Valid false, zero and permitted empty
+values are retained. Conditional rules, identities and paths still need current
+server validation. These publication checks do not run during ordinary design.
+Populating existing custom fields is supported; creating field definitions or
+changing the ADO process needs a separate explicit request. Validation requests
+do not publish cases. Creation includes the approved Tested By relation
 atomically. Updates preserve relationships and native history. A previewed History
 entry records the stable operation marker; it adds no custom fields or extra tags.
 
@@ -613,6 +658,10 @@ fields and story relation, never title matching. Unknown/mismatched results rema
 uncertain. Repeated invocation never recreates confirmed cases or replays uncertain
 writes. After reconciliation, reuse the same approved `publish` command to perform
 only remaining authorized work. Do not bypass failed recovery by editing receipts.
+Existing saved previews and delivery receipts remain immutable and usable when
+their approved request is still valid. Recovery uses their stored intent and field
+specifications, including supported server-normalized values; it does not rewrite
+historical hashes or require current schema discovery to prove a past effect.
 
 ## Handoff and ownership
 

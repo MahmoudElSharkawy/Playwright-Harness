@@ -64,6 +64,12 @@ test('legacy configuration remains supported with explicit plan and custom field
   const f = fixture(t); put(f.roots.projectRoot, 'config/project.json', {azure: {orgUrl: 'https://ado.example.test/collection', project: 'demo', testPlanId: 1, automationField: 'Custom.TestAutomation'}});
   const cfg = loadAdoConfiguration(f.roots, {}, {}); assert.equal(cfg.configuration.planId, 1); assert.equal(cfg.configuration.automationField, 'Custom.TestAutomation'); assert.equal(cfg.resolveCredential(), undefined);
 });
+
+test('Test Case create defaults accept bounded scalar native fields and reject malformed configuration', () => {
+  const base = {organizationUrl: 'https://ado.example.test/collection', project: 'demo', credentialRef: 'ADO_TEST_CREDENTIAL'}, fields = {'Custom.Count': 0, 'Custom.Enabled': false, 'Custom.Empty': '', 'System.AreaPath': 'demo\\Catalog'};
+  assert.deepEqual(validateAdoConfiguration({...base, testCases: {fields}}).testCases.fields, fields);
+  for (const testCases of [{extra: true}, {fields: []}, {fields: {'Custom.Bad': Infinity}}, {fields: {'../fields': 'bad'}}, {fields: {'Custom.Bad': {nested: true}}}, {fields: {'Custom.Bad': 'x'.repeat(32769)}}]) assert.throws(() => validateAdoConfiguration({...base, testCases}));
+});
 for (const change of [config => config.organizationUrl = 'http://ado.example.test', config => config.organizationUrl = 'https://ado.example.test/path?x=1', config => config.organizationUrl = ['https:', '', 'user' + '@ado.example.test'].join('/'), config => config.project = '../other', config => config.credentialRef = 'env:VALUE', config => config.automationField = 'System.Tags', config => config.extra = true, config => config.timeoutMs = 0]) {
   test(`configuration rejects unsafe or unsupported values: ${change}`, () => { const config = {organizationUrl: 'https://ado.example.test/collection', project: 'demo', credentialRef: 'ADO_TEST_CREDENTIAL'}; change(config); assert.throws(() => validateAdoConfiguration(config)); });
 }

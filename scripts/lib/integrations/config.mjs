@@ -38,13 +38,17 @@ export function workItemUrlTemplate(organizationUrl, project) {
 }
 
 export function validateAdoConfiguration(input) {
-  keys(input, ['organizationUrl', 'project', 'credentialRef', 'repository', 'planId', 'automationField', 'timeoutMs', 'maxResponseBytes', 'bugs', 'context'], 'ADO configuration');
+  keys(input, ['organizationUrl', 'project', 'credentialRef', 'repository', 'planId', 'automationField', 'timeoutMs', 'maxResponseBytes', 'bugs', 'testCases', 'context'], 'ADO configuration');
   const organizationUrl = adoCoordinates(input.organizationUrl, input.project);
   if (input.context !== undefined) validateAdoContextConfiguration(input.context);
   requireValue(typeof input.credentialRef === 'string' && /^[A-Z_][A-Z0-9_]{0,99}$/.test(input.credentialRef), 'ADO credentials must use an environment-variable reference.');
   if (input.repository !== undefined) requireValue(typeof input.repository === 'string' && /^[^/\\?#%\x00-\x1f]{1,150}$/.test(input.repository) && !['.', '..'].includes(input.repository), 'Invalid configured repository.');
   if (input.automationField !== undefined) requireValue(/^Custom\.[A-Za-z][A-Za-z0-9_]*$/.test(input.automationField), 'Optional automation field must be a Custom field reference.');
   if (input.planId !== undefined) adoId(input.planId);
+  if (input.testCases !== undefined) {
+    keys(input.testCases, ['fields'], 'ADO Test Case configuration');
+    if (input.testCases.fields !== undefined) validateCaseFieldValues(input.testCases.fields);
+  }
   if (input.bugs !== undefined) {
     keys(input.bugs, ['areaPath', 'iterationPath', 'pathsFrom', 'assignedTo', 'tags', 'storyLink', 'fields', 'maxAttachmentBytes', 'workItemType', 'fieldMap'], 'ADO bug configuration');
     if (input.bugs.workItemType !== undefined) requireValue(typeof input.bugs.workItemType === 'string' && input.bugs.workItemType.trim() && input.bugs.workItemType.length <= 150 && !/[\/\\?#\r\n\0]/.test(input.bugs.workItemType), 'Invalid defect work-item type.');
@@ -63,6 +67,12 @@ export function validateAdoConfiguration(input) {
   requireValue(Number.isInteger(timeoutMs) && timeoutMs >= 10 && timeoutMs <= 60000, 'ADO timeout must be 10–60000 ms.');
   requireValue(Number.isInteger(maxResponseBytes) && maxResponseBytes >= 128 && maxResponseBytes <= 8 * 1024 * 1024, 'Invalid ADO response bound.');
   return Object.freeze({...input, organizationUrl, timeoutMs, maxResponseBytes});
+}
+
+/** Native field choices are bounded scalar inputs; server metadata decides permitted fields. */
+export function validateCaseFieldValues(fields) {
+  requireValue(fields && typeof fields === 'object' && !Array.isArray(fields) && Object.keys(fields).length <= 200 && Object.entries(fields).every(([name, value]) => /^[A-Za-z][A-Za-z0-9_.]{0,199}$/.test(name) && (typeof value === 'string' && value.length <= 32768 && !value.includes('\0') || typeof value === 'number' && Number.isFinite(value) || typeof value === 'boolean')), 'Test Case fields must be bounded scalar field values.');
+  return fields;
 }
 
 /** Opt-in only. Never read this file, credentials or legacy configuration for a local source. */

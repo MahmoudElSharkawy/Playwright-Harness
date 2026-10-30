@@ -2,7 +2,7 @@ import {requireValue} from './config.mjs';
 import {fingerprint} from '../execution-core/data.mjs';
 
 const FIELD_REFERENCE = /^[A-Za-z][A-Za-z0-9_.]{0,199}$/;
-const MANAGED = new Set(['System.Id', 'System.Rev', 'System.WorkItemType', 'System.TeamProject', 'System.CreatedDate', 'System.CreatedBy', 'System.ChangedDate', 'System.ChangedBy', 'System.AuthorizedDate', 'System.AuthorizedAs', 'System.Watermark', 'System.NodeName']);
+const MANAGED = new Set(['System.Id', 'System.Rev', 'System.WorkItemType', 'System.TeamProject', 'System.CreatedDate', 'System.CreatedBy', 'System.ChangedDate', 'System.ChangedBy', 'System.AuthorizedDate', 'System.AuthorizedAs', 'System.Watermark', 'System.NodeName', 'System.AreaId', 'System.IterationId']);
 const TYPES = new Set(['string', 'plaintext', 'html', 'history', 'treepath', 'integer', 'double', 'boolean', 'datetime', 'guid', 'identity', 'pickliststring', 'picklistinteger', 'picklistdouble']);
 const FALLBACKS = {title: 'System.Title', description: 'System.Description', reproSteps: 'Microsoft.VSTS.TCM.ReproSteps'};
 const LIMITATIONS = ['Conditional rules, identities and paths require current server-side validation.'];
@@ -10,7 +10,7 @@ const missing = value => value === undefined || value === null || typeof value =
 const typeOf = spec => String(spec.type ?? '').toLowerCase();
 const identityValues = value => (typeof value === 'string' ? [value] : value && typeof value === 'object' && !Array.isArray(value) ? [value.id, value.uniqueName, value.descriptor, value.displayName].filter(item => typeof item === 'string' && item.trim()) : []).map(item => item.toLowerCase());
 
-function validType(spec, value) {
+export function validFieldType(spec, value) {
   const type = typeOf(spec);
   if (spec.isIdentity || type === 'identity') return identityValues(value).length > 0;
   if (['integer', 'double', 'picklistinteger', 'picklistdouble'].includes(type)) {
@@ -27,6 +27,28 @@ function validType(spec, value) {
   }
   if (type === 'guid') return typeof value === 'string' && /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(value);
   return TYPES.has(type) && typeof value === 'string' && value.length <= 32768 && !value.includes('\0');
+}
+const validType = validFieldType;
+
+/** Normalize type-instance and global metadata without losing global write restrictions. */
+export function workItemField(instance, detail = {}) {
+  const merged = {...detail, ...instance}, referenceName = merged.referenceName;
+  requireValue(typeof referenceName === 'string' && FIELD_REFERENCE.test(referenceName), 'ADO field identity is invalid.');
+  requireValue(TYPES.has(typeOf(merged)), `ADO field ${referenceName} type is unavailable or unsupported.`);
+  requireValue(merged.allowedValues === undefined || Array.isArray(merged.allowedValues) && merged.allowedValues.length <= 1000, 'ADO allowed values exceed their bound.');
+  requireValue(merged.name === undefined || typeof merged.name === 'string' && merged.name.length <= 512, 'ADO field label is invalid.');
+  const field = {referenceName, name: merged.name ?? referenceName, type: merged.type, readOnly: [detail, instance].some(item => item.readOnly === true || item.isReadOnly === true || item.isLocked === true) || MANAGED.has(referenceName), alwaysRequired: merged.alwaysRequired === true, isIdentity: detail.isIdentity === true || instance.isIdentity === true};
+  for (const key of ['defaultValue', 'allowedValues', 'dependentFields']) if (merged[key] !== undefined) field[key] = merged[key];
+  return field;
+}
+
+/** Compare only typed values; native case narrative/steps/history keep their exact checks. */
+export function equivalentFieldValue(spec, expected, actual) {
+  if (!validType(spec, expected) || !validType(spec, actual)) return false;
+  const type = typeOf(spec);
+  if (type === 'datetime') return Date.parse(expected) === Date.parse(actual);
+  if (['guid', 'treepath'].includes(type)) return expected.toLowerCase() === actual.toLowerCase();
+  return allowedFieldValue({...spec, allowedValues: [actual]}, expected);
 }
 
 /** Allowed-value comparison preserves numeric picklists and refuses ambiguous identity labels. */
@@ -64,13 +86,7 @@ export async function loadBugSchema(client, {refresh = false} = {}) {
       detail = await read(`wit/fields/${encodeURIComponent(referenceName)}?api-version=7.1`);
       requireValue(detail.referenceName === referenceName && typeof detail.type === 'string', 'ADO field detail identity is incomplete or mismatched.');
     }
-    const merged = {...detail, ...instance};
-    requireValue(TYPES.has(typeOf(merged)), 'ADO defect field type is unavailable or unsupported.');
-    requireValue(merged.allowedValues === undefined || Array.isArray(merged.allowedValues) && merged.allowedValues.length <= 1000, 'ADO defect allowed values exceed their bound.');
-    requireValue(merged.name === undefined || typeof merged.name === 'string' && merged.name.length <= 512, 'ADO defect field label is invalid.');
-    const field = {referenceName, name: merged.name ?? referenceName, type: merged.type, readOnly: [detail, instance].some(item => item.readOnly === true || item.isReadOnly === true) || MANAGED.has(referenceName), alwaysRequired: merged.alwaysRequired === true, isIdentity: detail.isIdentity === true || instance.isIdentity === true};
-    for (const key of ['defaultValue', 'allowedValues', 'dependentFields']) if (merged[key] !== undefined) field[key] = merged[key];
-    fields.push(field);
+    fields.push(workItemField(instance, detail));
   }
   const mappings = {}, supplied = configured.fieldMap ?? {};
   for (const key of ['title', 'description', 'reproSteps', 'expected', 'actual']) {

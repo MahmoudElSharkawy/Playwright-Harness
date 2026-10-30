@@ -28,6 +28,11 @@ the loader neither changes process environment nor reads package credentials.
 Use privileges for the action, including project-read access for canonical ID/name.
 `automationField` may name a project-owned Custom.* field; standard TCM fields need none.
 Optional `ado.bugs` configures paths, assignment, tags, scalar fields and attachment bounds.
+Optional `ado.testCases.fields` supplies create-only defaults for existing standard
+or custom Test Case fields. For example, `{"System.AreaPath":"YourProject"}` selects
+the existing project root area. Reviewed per-case choices override these defaults;
+updates preserve unspecified existing values. Resolve required choices only when
+publication/preview is requested. See the [Test Case publication input](test-case-design.md#preview-approve-publish-and-recover).
 
 Legacy config/project.json azure settings and AZURE_ORG/AZURE_URL, AZURE_PROJECT,
 AZURE_DEVOPS_EXT_PAT/AZURE_PAT remain supported; EXT_PAT precedes PAT. Legacy fetch
