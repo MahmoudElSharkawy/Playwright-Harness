@@ -1,4 +1,8 @@
-# ADO delivery
+# Azure delivery
+
+This reference describes Azure-specific delivery. Jira Xray/Zephyr native outcomes
+and local/no-plugin history use the same execution workflow; follow the
+[provider guide](../../../../docs/tracker-providers.md) for their destination and status mapping.
 
 Run `file-bugs <exec>` or `publish-results <exec>` to preview. All runs are
 reassessed and source revisions checked only at this boundary. An integrity

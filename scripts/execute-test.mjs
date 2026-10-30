@@ -4,11 +4,13 @@ import {join} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {projectArgument, consumerPath} from './lib/consumer-paths.mjs';
 import {loadEnvironment} from './lib/project-config.mjs';
-import {loadAdoConfiguration, adoId} from './lib/integrations/config.mjs';
-import {createAdoClient} from './lib/integrations/ado-client.mjs';
+import {adoId} from './lib/integrations/config.mjs';
+import {createTrackerClient, trackerProvider, selectedTestManagement} from './lib/integrations/selection.mjs';
+import {captureJiraExecution} from './lib/integrations/jira-source.mjs';
 import {createAdoTestSource} from './lib/integrations/ado-source.mjs';
 import {requireThat, fingerprint} from './lib/execution-core/data.mjs';
-import {prepareSource} from './lib/execute/source.mjs';
+import {prepareSource, prepareNeutralSource} from './lib/execute/source.mjs';
+import {loadLocalSource} from './lib/local-source.mjs';
 import {draftRefinement, freezeExecution, scopedReadiness} from './lib/execute/refinement.mjs';
 import {createExecution, readExecution, readFrozen, readBounded, readOptional, ownedFile, publishExclusive} from './lib/execute/storage.mjs';
 import {startScenario, runHostedScenario, deleteLogin, importLogin} from './lib/execute/host.mjs';
@@ -28,16 +30,30 @@ function options(args, values = [], flags = []) {
   }
   return {positional, opt};
 }
-export async function executeMain(roots, args) {
+export async function executeMain(roots, args, dependencies = {}) {
   const [command, ...rest] = args;
   if (command === '_host') {await runHostedScenario(roots, ...rest); return undefined;}
   if (command === 'prepare') {
-    const {positional, opt} = options(rest, ['plan', 'environment', 'diagnostics'], ['checkpoint']);
-    requireThat(positional.length === 2 && ['suite', 'story'].includes(positional[0]) && ['end', 'per-step', 'off'].includes(opt.diagnostics ?? 'end'), 'prepare suite|story <id> [--plan <id>] [--environment <name>] [--checkpoint] [--diagnostics end|per-step|off]');
-    const configured = loadAdoConfiguration(roots), client = createAdoClient({...configured, roots}), source = createAdoTestSource(client), selected = adoId(positional[1]), environment = loadEnvironment(roots, opt.environment);
-    const planId = positional[0] === 'suite' ? adoId(opt.plan ?? configured.configuration.planId) : undefined;
-    const fetched = positional[0] === 'suite' ? await source.fetchSuite(planId, selected, {tolerant: true}) : await source.fetchStory(selected, ['tested-by'], {tolerant: true});
-    const captured = prepareSource(fetched, positional[0] === 'suite' ? {kind: 'suite', planId, suiteId: selected} : {kind: 'story', storyId: selected});
+    const {positional, opt} = options(rest, ['plan', 'provider', 'environment', 'diagnostics'], ['checkpoint']);
+    requireThat(positional.length === 2 && ['suite', 'story', 'case', 'plan', 'execution', 'folder', 'local'].includes(positional[0]) && ['end', 'per-step', 'off'].includes(opt.diagnostics ?? 'end'), 'prepare suite|story|case|plan|execution|folder <id> or prepare local <source.json> [--provider ado|jira] [--plan <ado-plan>] [--environment <name>] [--checkpoint] [--diagnostics end|per-step|off]');
+    const environment = loadEnvironment(roots, opt.environment);
+    let captured;
+    if (positional[0] === 'local') {
+      requireThat(opt.plan === undefined && opt.provider === undefined, 'Local sources do not select a remote provider or test plan.');
+      const source = loadLocalSource(roots, positional[1]);
+      captured = prepareNeutralSource(source, {...source.source, sourceId: source.id});
+    } else {
+      const client = createTrackerClient(roots, {...dependencies, provider: opt.provider});
+      if (trackerProvider(client) === 'jira') {
+        requireThat(opt.plan === undefined, 'Select a Jira plan directly with prepare plan <key>.');
+        captured = await captureJiraExecution(client, selectedTestManagement(roots, client, dependencies), {kind: positional[0], id: positional[1]});
+      } else {
+        requireThat(['suite', 'story'].includes(positional[0]), 'Azure execution selects a suite or story.');
+        const source = createAdoTestSource(client), selected = adoId(positional[1]), planId = positional[0] === 'suite' ? adoId(opt.plan ?? client.configuration.planId) : undefined;
+        const fetched = positional[0] === 'suite' ? await source.fetchSuite(planId, selected, {tolerant: true}) : await source.fetchStory(selected, ['tested-by'], {tolerant: true});
+        captured = prepareSource(fetched, positional[0] === 'suite' ? {kind: 'suite', planId, suiteId: selected} : {kind: 'story', storyId: selected});
+      }
+    }
     const refinement = draftRefinement(captured, environment), result = createExecution(roots, captured, refinement, {checkpoint: opt.checkpoint, diagnostics: opt.diagnostics});
     return {...result, status: 'PREPARED', refinement: `${result.directory}/refinement.json`, readiness: scopedReadiness(roots, {environment, scenarios: refinement.scenarios})};
   }
@@ -89,8 +105,8 @@ export async function executeMain(roots, args) {
   }
   if (command === 'login-state') {const {positional} = options(rest.slice(1)); requireThat(positional[0] === 'import' && positional.length === 4, 'login-state <exec> import <target> <user> <file>'); return importLogin(roots, executionId, ...positional.slice(1));}
   if (command === 'file-bugs' || command === 'publish-results') {
-    const {opt, positional} = options(rest.slice(1), ['recreate', 'drafts', 'point-map', 'include'], ['execute', 'include-changed', 'new-run']); requireThat(!positional.length, 'Unexpected delivery argument.');
-    const {deliverExecution} = await import('./lib/execute/delivery.mjs'); return deliverExecution(roots, executionId, command, opt);
+    const {opt, positional} = options(rest.slice(1), ['recreate', 'drafts', 'point-map', 'include', 'provider', 'story', 'group', 'statuses', 'step-statuses', 'approval'], ['execute', 'include-changed', 'new-run']); requireThat(!positional.length, 'Unexpected delivery argument.');
+    const {deliverExecution} = await import('./lib/execute/delivery.mjs'); return deliverExecution(roots, executionId, command, opt, dependencies);
   }
   throw new Error('Use execute prepare, freeze, next, do, status, resume, stop, report, login-state, file-bugs or publish-results.');
 }

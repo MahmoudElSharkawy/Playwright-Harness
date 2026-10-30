@@ -78,7 +78,8 @@ It runs `npm ci` when a lockfile existed before; otherwise it removes what the r
 
 Ask only for information that is not secret: the environment names, the application
 URLs, the API base URLs, each database's engine, server, port and name, the optional
-Azure DevOps organization, project and plan, and the CI system.
+tracker choice (Azure, or Jira with Xray, Zephyr Scale or no plugin), its project
+coordinates, and the CI system. Keep existing Azure defaults unless asked to change them.
 
 ### 2.1 Environments: ask the mode question
 
@@ -134,16 +135,18 @@ targets, and change its config modules only when the user asks. Map its folders 
 layer map in [pom-architecture](../../pom-architecture/SKILL.md), and raise mismatches
 as decisions instead of renaming or replacing files.
 
-### 2.3 Azure DevOps (optional)
+### 2.3 Tracker and test management (optional)
 
-Write `.harness/integrations.json` only when the user wants Azure DevOps:
+Use the [shared provider configuration](../../../../docs/tracker-providers.md)
+for provider selection, Jira Cloud classic/scoped tokens and separate lazy plugin
+credentials. Never duplicate the shared skills. The existing Azure configuration remains:
 
 ```json
 {"version": 1, "ado": {"organizationUrl": "https://dev.azure.com/your-org", "project": "Your Project", "credentialRef": "AZURE_PAT", "planId": 123}}
 ```
 
 Here `credentialRef` is a bare variable name. Optional fields: `repository` and
-`automationField` (`Custom.<Field>`). Local sources never need Azure DevOps.
+`automationField` (`Custom.<Field>`). Local sources never need remote credentials.
 
 When report linking is requested, populate existing Allure `links.tms` and
 `links.issue` templates from configured coordinates or explicit destinations. Test
@@ -153,6 +156,9 @@ Use the existing destination formatter, including encoded project names, modern 
 legacy ADO hosts and on-premises collection paths. Preserve unrelated reporter options
 and intentional custom templates. Remove the starter's example-only adjacent warning
 exemption when configuring real links; do not activate placeholder URLs.
+Jira issues and Xray tests use their Jira browse URL; Zephyr cases use their native
+case URL. For mixed sites/plugins, use explicit `allure.link` URLs with source-qualified
+`allure.testCaseId`; one Jira browse template cannot identify Zephyr cases.
 
 Await asynchronous public metadata APIs and pass known IDs directly. The scoped
 verifier reads literal string templates with the existing tokenizer. Dynamic templates
@@ -171,7 +177,7 @@ npx --no pom-harness check --add-env-keys
 ```
 
 This appends empty `NAME=` lines for missing API/database credential references in
-the default environment and the Azure DevOps credential reference. Browser login
+the default environment and configured tracker/plugin credential references. Browser login
 references are not included: add empty keys for the configured users' `usernameRef`
 and `passwordRef` yourself, removing the `env:` prefix. Never read or print secret values.
 Tell the user which keys to fill in `.env`; the file stays git-ignored.

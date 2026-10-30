@@ -2,7 +2,7 @@
 
 ## Local source identity (M13)
 
-For neutral local sources, use `allure.testCaseId(localScenarioId)` instead of inventing a TMS link. For an actual external test case, preserve `allure.tms`. The M13 source binding maps each generated test and validation to its original expectation. The metadata identity must match that binding.
+For neutral local sources, use `allure.testCaseId(localScenarioId)` instead of inventing a TMS link. For native cases, use a matching configured `allure.tms` template or explicit native `allure.link` plus a site-qualified `allure.testCaseId`, following [tracker providers](../../../../docs/tracker-providers.md). Preserve opaque keys. Jira/Xray browse URLs and Zephyr native case URLs are different. The M13 source binding maps each generated test and validation to its original expectation; metadata must match that binding.
 
 Rules for the content of one `test(...)` block. The spec-file skeleton around it
 (imports, `let` state, hooks) belongs to [test-classes](../../test-classes/SKILL.md).
@@ -90,7 +90,8 @@ await allure.tms('12345');
 
 Local sources use `await allure.testCaseId('local-scenario')`. Do not invent external
 IDs or leave issue placeholders. Add epic/story only for a real hierarchy.
-Resolve IDs through existing reporter `links.tms`/`links.issue` templates. Configure
+Resolve IDs through matching reporter `links.tms`/`links.issue` templates; use explicit
+native links and site-qualified IDs when sites/plugins differ. Configure
 actual destinations through [harness-setup](../../harness-setup/SKILL.md), preserving
 customizations and separate destinations. Never create a URL helper solely for links.
 Remove the starter's example-only warning exemption when real linking is configured.
@@ -125,7 +126,7 @@ whichever side is wrong:
   `'Test Case 2:API Create user account'` in `tests/SignupTests.spec.ts`.
 
 **Legacy note:** `tests/User Management/DbUserManagementTests.spec.ts` sets `allure.feature` but no
-`allure.tms` — it is a marked example spec (`test.describe.skip`). New tests await `feature` and either the real `tms` ID or local `testCaseId` (§6 checklist).
+`allure.tms` — it is a marked example spec (`test.describe.skip`). New tests await `feature` and source-matching metadata: matching native `tms`, explicit native links plus site-qualified `testCaseId`, or local `testCaseId` (§6 checklist).
 
 ## 4. The body is business-method calls only
 
@@ -357,7 +358,7 @@ This skill does NOT cover:
 
 - [ ] One behavior per test (or one explicit E2E journey), never bundled scenarios
 - [ ] Title is a descriptive sentence; `Test Case N:` prefix where the catalog applies; no channel/layer markers (`(Ui & Api)`)
-- [ ] `allure.feature(…)` + `allure.tms('<id>')` are the first lines of the body; feature matches the `describe` title; tms id(s) are the test's own — one per test, or one per covered case in an E2E journey; never shared across tests (data rows of one parameterized case share theirs by design)
+- [ ] Await `allure.feature(…)` and source-matching case metadata at the start of the body; feature matches `describe`. Use matching native templates or explicit native links with site-qualified `testCaseId`; local cases use local `testCaseId`. Identities are the test's own — one per test, or one per verified covered case in an E2E journey; data rows of one supported parameterized case share theirs by design.
 - [ ] Body orchestrates business-method calls, owned runtime generation and retention of attempted cleanup identity — no locators, `expect`, loops, `if`, or `try`/`catch`
 - [ ] Direct entry calls the owning `navigate()` with explicit route inputs; no raw `goto` in the spec, and intentional link/menu/redirect journeys and prerequisites remain intact (page-classes practice 3)
 - [ ] Every GUI step of the verified journey is in the test body — hooks prepare only invisible state via API/DB (GUI only when no lower-layer path exists — test-classes playbook practice 7)

@@ -1,5 +1,8 @@
 # Edit existing ADO test cases
 
+See [tracker providers](tracker-providers.md) for shared Azure/Jira selection,
+Xray/Zephyr Scale capabilities, and local cases without a plugin. This page retains the Azure-specific compatibility contract.
+
 `pom-harness edit-cases` changes selected existing cases in the configured ADO
 project. It does not create cases, alter suites, or accept changed requirements.
 The process's `Microsoft.TestCaseCategory` determines eligible types.

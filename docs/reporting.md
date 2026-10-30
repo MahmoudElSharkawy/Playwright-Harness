@@ -443,7 +443,10 @@ ATTACHED/NOT_IN_TEST/FAILED are presentation outcomes, never verdict changes. Pr
 step nesting, titles and attachment names when refactoring.
 
 Await public Allure metadata APIs and use literal real case/bug identities. Local
-cases retain testCaseId; external cases retain tms. Configure links.tms/links.issue
+cases retain testCaseId; native cases use matching tms templates or explicit native
+links with site-qualified testCaseId, following [tracker providers](tracker-providers.md).
+Jira issues/Xray tests use browse URLs; Zephyr cases use their native case URL.
+Configure links.tms/links.issue
 from real coordinates and preserve unrelated options. Link formatting needs no PAT.
 Encoded project names, separate destinations, modern/legacy ADO and on-prem collections
 are supported; the starter has no active placeholder destinations.
@@ -464,6 +467,10 @@ The [plan-tracker skill](../.agents/skills/plan-tracker/SKILL.md) renders consum
 `.harness/state/tracker/plan-<planId>.json` holds branches/suites/cases, consolidation
 k/d/f/t verdicts/notes, manual rulings, bugs and owners; history.jsonl is append-only
 dated progress. Later events win. Correct errors through newer events, not deletion.
+Jira and local registries bind an explicit `source`; opaque plan/case IDs remain
+strings. Use the shared skill's source-bound example. `tracker --json` returns
+`sourceIdentity`; include it in manual history events so another site's identical
+key cannot change this source's progress.
 
 ```sh
 npx --no pom-harness tracker --plan <planId>
@@ -475,9 +482,12 @@ npx --no pom-harness metrics --json
 ```
 
 Run from the consumer or pass project-root. Inspect sync dry-run first. Suite/story
-legacy verification maps passed→done, fixme/blocked→blocked, failed at repair cap→blocked
+verification maps passed→done, fixme/blocked→blocked, failed at repair cap→blocked
 (otherwise doing), pending-confirmation→doing. Conflicts/manual rulings/newer history
 are skipped with warnings. Sync appends events and renders; archive adds a dated copy.
+Native sync requires a matching source-bound manifest and verification fingerprint;
+local sync reads the bound generation receipts. Generation READY still requires
+independent review and two scoped green runs.
 
 Events use ISO at, source, explanatory note and set entries for todo/doing/done/blocked,
 optionally assign registered owners. Done requires two scoped greens. Filed bugs are

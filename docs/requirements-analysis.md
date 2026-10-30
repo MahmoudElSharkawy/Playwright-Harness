@@ -1,6 +1,6 @@
 # Requirements analysis and chat review
 
-Invoke `requirements-analysis` to analyze supplied requirements or an Azure DevOps
+Invoke `requirements-analysis` to analyze supplied requirements or an Azure/Jira
 story. The host AI reads the sources, identifies evidenced gaps and contradictions,
 and reviews them with the user in chat. No external analysis skill, browser server,
 HTML review page or download/import step is required.
@@ -109,11 +109,16 @@ installed package.
 ```
 
 Omit `storyId` for local-only review; local capture never resolves credentials.
-The configured [ADO adapter](azure-devops.md) reads the story and paginated
+The selected [tracker adapter](tracker-providers.md) reads the story and paginated
 discussion, validates project ownership and handles supplied attachments with the
 existing bounded context readers. Unsupported attachments can use host extraction
 receipts bound to the exact bytes, reader and location. Missing/redacted/incomplete
-material stays explicit. Local sources do not acquire a fictional ADO destination.
+material stays explicit. Local sources do not acquire a fictional remote destination.
+For Jira, set `provider: "jira"`, use an opaque issue key in `storyId`, and explicitly
+select numeric `attachmentIds` (default `[]`). Optional `includeHistory` captures
+native changes; discussion is captured by requirements. ADF text and links retain
+source locations, while unsupported content records omissions. Freshness uses actual
+updated timestamps and selected-content fingerprints, not synthetic numeric revisions.
 
 ```sh
 pom-harness requirements prepare --id checkout --request request.json
@@ -222,14 +227,18 @@ analysis count. No draft status silently represents publication approval.
 ## Requested team-member mentions
 
 Only look up and include mentions requested by the user. `mentions` contains exact
-display names, account names/emails or ADO identity GUIDs. Use this read-only command
+display names, account names/emails or native IDs (Azure GUIDs / Jira account IDs). Use this read-only command
 to show candidate names/account identifiers when clarification is needed:
 
 ```sh
 pom-harness requirements members --id checkout
 ```
 
-The existing authenticated transport lists the configured project's teams and their
+For Jira, resolve only active accounts with access to the captured project, generate
+native ADF mentions, and verify the exact body and account IDs on readback. Keep
+ambiguous accounts unresolved. Jira/plugin secrets are resolved only when used.
+
+For Azure, the authenticated transport lists the configured project's teams and their
 paginated members. It never follows identity URLs into another host or scans other
 projects. The documented endpoints require project/team read access (`vso.project`
 or `vso.profile`); posting also needs the existing work-item write permission.

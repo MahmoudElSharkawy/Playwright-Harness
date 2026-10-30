@@ -1,9 +1,13 @@
 ---
 name: pom-architecture
-description: "Use when designing, structuring, extending, or reviewing anything in this Playwright/TypeScript test framework — folder layout, POM layering, naming conventions, business-vs-technical separation, Allure reporting strategy, updating existing ADO test-case content, or deciding where new code belongs. Also use when asked to \"automate\", \"script\", or \"create scripts for\" a test case, test suite, user story, or an Azure DevOps suite/test-case id — that request spans layers and starts here. This is the entry point and router — start here, then follow the specialist skill it routes you to."
+description: "Use when designing, structuring, extending, or reviewing anything in this Playwright/TypeScript test framework — folder layout, POM layering, naming conventions, business-vs-technical separation, Allure reporting strategy, updating existing tracker test-case content, or deciding where new code belongs. Also use when asked to \"automate\", \"script\", or \"create scripts for\" a test case, test suite, user story, or an Azure/Jira native test identity — that request spans layers and starts here. This is the entry point and router — start here, then follow the specialist skill it routes you to."
 ---
 
 # POM Architecture (Entry Point & Router)
+
+Use the shared [tracker provider contract](../../../docs/tracker-providers.md) for
+Azure, Jira with Xray or Zephyr Scale, and Jira without a plugin. Keep the same
+workflow and gates; select native adapters and preserve the captured source identity.
 
 Resolve this skill to its real path before following references. Read the
 [package and consumer boundaries](../ROOTS.md); mutable state belongs to the consumer.
@@ -55,8 +59,9 @@ utils; nothing reaches upward or skips a layer (a spec never calls `page.locator
 | Design or revise source-grounded test cases, review complete coverage in chat and optionally publish approved create/update/reuse proposals | [test-case-design](../test-case-design/SKILL.md) |
 | Draft/review a bug from selected story context, a user description or verified execution evidence, including project-specific fields and approved attachments | [bug-report](../bug-report/SKILL.md) |
 | Identify affected areas and recommend regression scope for a selected story, bug fix or requirement/application/framework change | [impact-analysis](../impact-analysis/SKILL.md) |
-| Automating story-linked cases, an ADO suite or local scenarios into durable POM code | [automate-test](../automate-test/SKILL.md) |
-| Executing ADO manual cases interactively, with reports and optional bug/result delivery | [execute-test](../execute-test/SKILL.md) |
+| Automating story-linked cases, native test groups or local scenarios into durable POM code | [automate-test](../automate-test/SKILL.md) |
+| Executing Azure, Jira plugin or local cases interactively, with reports and optional bug/result delivery | [execute-test](../execute-test/SKILL.md) |
+| Designing or revising Jira plugin/local cases with source review and approval | [test-case-design](../test-case-design/SKILL.md) |
 | Updating existing ADO case titles, actions, expected results or ordinary-step ordering | [Case editing](../../../docs/ado-case-editing.md) |
 | Diagnose only or diagnose and fix failed/flaky/changed/blocked tests, including combined analysis-and-repair requests and requested workflow resumption | [maintain-test](../maintain-test/SKILL.md) |
 | A page class (new page, header/footer/skeleton area, refactor) | [page-classes](../page-classes/SKILL.md) |

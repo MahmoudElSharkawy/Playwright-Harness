@@ -71,7 +71,8 @@ export function loadAdoConfiguration(roots, overrides = {}, shellEnvironment = p
   const modern = readConsumerJson(roots, '.harness/integrations.json', true);
   let input;
   if (modern !== undefined) {
-    keys(modern, ['version', 'ado'], 'integrations'); requireValue(modern.version === 1 && modern.ado, 'Integrations need version 1 and an explicit ado section.');
+    keys(modern, ['version', 'ado', 'jira', 'defaultProvider'], 'integrations'); requireValue(modern.version === 1 && modern.ado, 'Integrations need version 1 and an explicit ado section.');
+    requireValue(modern.defaultProvider === undefined || ['ado', 'jira'].includes(modern.defaultProvider), 'Unknown default integration provider.');
     // Modern configuration is authoritative; legacy flags cannot silently rebind a credential.
     requireValue(Object.values(overrides).every(value => value === undefined), 'Use the configured ADO destination; do not combine it with legacy destination overrides.');
     input = modern.ado;

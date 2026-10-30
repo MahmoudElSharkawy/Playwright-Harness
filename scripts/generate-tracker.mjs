@@ -42,6 +42,8 @@ import { readFileSync, writeFileSync, appendFileSync, mkdirSync, readdirSync, ex
 import { resolve, dirname, join, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {projectArgument,consumerPath} from './lib/consumer-paths.mjs';
+import {identifier} from './lib/project-config.mjs';
+import {fingerprint} from './lib/execution-core/data.mjs';
 
 const {roots,args}=projectArgument();
 const ROOT = roots.projectRoot;
@@ -71,7 +73,7 @@ for (let i = 0; i < args.length; i++) {
   if (a === '--json') { opts.json = true; continue; }
   if (a === '--plan') {
     const v = args[i + 1];
-    if (v === undefined || !/^\d+$/.test(v)) fail(1, 'option --plan needs a numeric plan id — see the header of scripts/generate-tracker.mjs for usage');
+    if (!identifier(v)) fail(1, 'option --plan needs a bounded plan identifier — see the header of scripts/generate-tracker.mjs for usage');
     opts.plan = v;
     i++;
     continue;
@@ -92,7 +94,7 @@ let REGISTRY_PATH;
 if (opts.plan) {
   REGISTRY_PATH = consumerPath(roots,join(DATA_DIR, `plan-${opts.plan}.json`));
 } else {
-  const found = existsSync(DATA_DIR) ? readdirSync(DATA_DIR).filter((f) => /^plan-\d+\.json$/.test(f)).sort() : [];
+  const found = existsSync(DATA_DIR) ? readdirSync(DATA_DIR).filter((f) => /^plan-[A-Za-z0-9][A-Za-z0-9_-]{0,79}\.json$/.test(f)).sort() : [];
   if (found.length === 0) fail(2, `no plan registry in ${DATA_DIR} — create plan-<planId>.json there from registry-template.json (see the plan-tracker SKILL.md)`);
   if (found.length > 1) fail(1, `multiple plan registries in ${DATA_DIR} (${found.join(', ')}) — pick one with --plan <id>`);
   REGISTRY_PATH = consumerPath(roots,join(DATA_DIR, found[0]));
@@ -111,14 +113,30 @@ catch (e) { fail(3, `malformed plan registry: ${e.message}`); }
 if (!Array.isArray(registry?.names) || !Array.isArray(registry?.branches) || !Array.isArray(registry?.suites)) {
   fail(3, 'malformed plan registry: expected top-level names[], branches[], suites[]');
 }
-if (!Number.isInteger(registry?.planId)) fail(3, 'malformed plan registry: expected a numeric top-level planId');
+if (!identifier(String(registry?.planId)) || !registry.source && !Number.isInteger(registry?.planId)) fail(3, 'malformed plan registry: native/local identifiers need an explicit source binding');
+let sourceIdentity;
+if (registry.source) {
+  const source = registry.source;
+  if (!['ado', 'jira', 'local'].includes(source.provider)) fail(3, 'Unknown tracker source provider.');
+  if (source.provider === 'local') {if (!identifier(source.id) || Object.keys(source).some(key => !['provider', 'id'].includes(key))) fail(3, 'Local tracker source needs an explicit source ID.');}
+  else {
+    const url = source.siteUrl ?? source.organizationUrl; let parsed; try {parsed = new URL(url);} catch {fail(3, 'Tracker source needs an HTTPS site/collection URL.');}
+    if (parsed.protocol !== 'https:' || parsed.username || parsed.password || parsed.search || parsed.hash || typeof source.project !== 'string' || !source.project.trim()) fail(3, 'Invalid tracker destination.');
+    if (source.provider === 'jira' && !['xray', 'zephyr-scale', 'none'].includes(source.testManagement)) fail(3, 'Tracker needs the selected Jira test-management mode.');
+  }
+  sourceIdentity = fingerprint(source);
+}
 if (!opts.out) opts.out = consumerPath(roots,`reports/tracker/plan-${registry.planId}-tracker.html`);
 for (const su of registry.suites) {
   if (!Array.isArray(su?.cases)) fail(3, `malformed plan registry: suite ${su && su.id} has no cases array`);
 }
 
-const caseIndex = new Map(); // id -> { branch, suiteId, verdict }
-for (const su of registry.suites) for (const c of su.cases) caseIndex.set(c.id, { branch: su.branch, suiteId: su.id, verdict: c.verdict });
+const validCaseId = value => Number.isSafeInteger(value) && value >= 0 || typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,199}$/.test(value);
+const caseIndex = new Map(); // string identity -> original ID and structural metadata
+for (const su of registry.suites) for (const c of su.cases) {
+  if (!validCaseId(c.id) || !validCaseId(su.id)) fail(3, 'Invalid tracker case or suite identity.');
+  caseIndex.set(String(c.id), {id: c.id, branch: su.branch, suiteId: su.id, verdict: c.verdict});
+}
 
 function parseHistory(text) {
   const events = [];
@@ -133,10 +151,10 @@ function parseHistory(text) {
     if (e.set !== undefined && (typeof e.set !== 'object' || e.set === null || Array.isArray(e.set))) fail(3, `history.jsonl line ${n + 1}: "set" must be a { status: [caseIds] } object`);
     for (const [st, ids] of Object.entries(e.set ?? {})) {
       if (!STATUSES.has(st)) fail(3, `history.jsonl line ${n + 1}: unknown status "${st}" (allowed: ${[...STATUSES].join('/')})`);
-      if (!Array.isArray(ids) || ids.some((id) => !Number.isInteger(id))) fail(3, `history.jsonl line ${n + 1}: "set.${st}" must be an array of numeric case ids`);
+      if (!Array.isArray(ids) || ids.some((id) => !validCaseId(id))) fail(3, `history.jsonl line ${n + 1}: "set.${st}" must be an array of case identities`);
     }
     for (const [name, ids] of Object.entries(e.assign ?? {})) {
-      if (!Array.isArray(ids) || ids.some((id) => !Number.isInteger(id))) fail(3, `history.jsonl line ${n + 1}: "assign.${name}" must be an array of numeric case ids`);
+      if (!Array.isArray(ids) || ids.some((id) => !validCaseId(id))) fail(3, `history.jsonl line ${n + 1}: "assign.${name}" must be an array of case identities`);
     }
     events.push({ line: n + 1, ...e });
   }
@@ -152,8 +170,9 @@ function foldState(events) {
   const unknown = new Set();
   for (const id of caseIndex.keys()) state.set(id, { s: 'todo', a: 0 });
   for (const e of events) {
+    if (sourceIdentity ? e.sourceIdentity !== sourceIdentity : e.sourceIdentity !== undefined) continue;
     for (const [st, ids] of Object.entries(e.set ?? {})) {
-      for (const id of ids) {
+      for (const id of ids.map(String)) {
         if (!state.has(id)) { unknown.add(`${id} (line ${e.line})`); continue; }
         state.get(id).s = st;
         lastEventAt.set(id, e.at.slice(0, 10));
@@ -162,7 +181,7 @@ function foldState(events) {
     for (const [name, ids] of Object.entries(e.assign ?? {})) {
       const idx = registry.names.indexOf(name) + 1;
       if (!idx) { warn(`history line ${e.line}: assignee "${name}" is not in the registry names — ignored`); continue; }
-      for (const id of ids) { if (state.has(id)) state.get(id).a = idx; }
+      for (const id of ids.map(String)) { if (state.has(id)) state.get(id).a = idx; }
     }
   }
   if (unknown.size) warn(`history references case id(s) not in the registry — update ${REGISTRY_PATH}: ${[...unknown].join(', ')}`);
@@ -170,29 +189,44 @@ function foldState(events) {
 }
 let { state, lastEventAt } = foldState(history);
 
-const manualIds = new Set(Object.keys(registry.manual ?? {}).map(Number));
-const bugFiled = new Set(Object.values(registry.bugs ?? {}).flatMap((b) => b.cases ?? []));
+const manualIds = new Set(Object.keys(registry.manual ?? {}));
+const bugFiled = new Set(Object.values(registry.bugs ?? {}).flatMap((b) => b.cases ?? []).map(String));
 const oosBranches = new Set(registry.branches.flatMap((b, i) => (b.inScope ? [] : [i])));
 
 // ---------- --sync: diff live pipeline state into a new event ----------
 
 const localDate = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
-function collectVerifyState() {
+async function collectVerifyState() {
   const found = new Map(); // caseId(number) -> { status, rounds, suite, fileDate }
+  if (registry.source?.provider === 'local') {
+    const directory = consumerPath(roots, `.harness/state/generation/${registry.source.id}`);
+    const captures = existsSync(directory) ? readdirSync(directory).filter(name => /^\d{6}\.json$/.test(name)).sort() : [];
+    if (!captures.length) return found;
+    const {automationReportView} = await import('./lib/generation/report.mjs');
+    const view = await automationReportView(roots, {sourceId: registry.source.id}), fileDate = localDate(statSync(join(directory, captures.at(-1))).mtime);
+    for (const row of view.cases) found.set(row.id, {status: row.status === 'READY' ? 'passed' : ['BLOCKED', 'FAIL'].includes(row.status) ? 'blocked' : 'pending-confirmation', rounds: view.rounds, suite: registry.source.id, fileDate});
+    return found;
+  }
   if (!existsSync(SUITES_DIR)) return found;
   const records = new Map(); // caseId -> one record per folder holding it (a suite and a story folder may share a case)
   // Sorted so the outcome never depends on filesystem enumeration order.
   for (const entry of readdirSync(SUITES_DIR, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
-    if (!entry.isDirectory() || !/^ado-(?:suite|story)-/.test(entry.name)) continue;
+    if (!entry.isDirectory() || !/^(?:ado|jira)-(?:suite|story|plan|case)-/.test(entry.name)) continue;
     const path = join(SUITES_DIR, entry.name, '_verify-state.json');
     if (!existsSync(path)) continue;
     let verify;
     try { verify = JSON.parse(readFileSync(path, 'utf8')); }
     catch (e) { warn(`skipped malformed ${path}: ${e.message}`); continue; }
+    if (sourceIdentity) {
+      let manifest; try {manifest = JSON.parse(readFileSync(join(SUITES_DIR, entry.name, '_suite.json'), 'utf8'));} catch {continue;}
+      const binding = registry.source.provider === 'jira' ? {provider: manifest.provider, siteUrl: manifest.siteUrl, project: manifest.project, testManagement: manifest.testManagement}
+        : registry.source.provider === 'ado' ? {provider: 'ado', organizationUrl: manifest.organizationUrl ?? manifest.orgUrl, project: manifest.project} : null;
+      if (!binding || Object.values(binding).some(value => value === undefined) || fingerprint(binding) !== sourceIdentity || !manifest.sourceFingerprint || verify.sourceFingerprint !== manifest.sourceFingerprint) continue;
+    } else if (!entry.name.startsWith('ado-')) continue;
     const fileDate = localDate(statSync(path).mtime);
     for (const [tc, c] of Object.entries(verify.cases ?? {})) {
-      const id = Number(tc);
+      const id = String(tc);
       if (!records.has(id)) records.set(id, []);
       records.get(id).push({ status: c.status, rounds: Number(c.rounds) || 0, suite: entry.name, fileDate });
     }
@@ -218,7 +252,7 @@ function mapVerify(v) {
 
 let syncEvent = null;
 if (opts.sync) {
-  const live = collectVerifyState();
+  const live = await collectVerifyState();
   const set = {};
   const notInRegistry = [];
   const staleSkipped = [];
@@ -229,17 +263,18 @@ if (opts.sync) {
     if (manualIds.has(id)) continue; // non-automatable by ruling — pipeline state never drives these
     if (state.get(id).s === mapped) continue;
     if ((lastEventAt.get(id) ?? '') > v.fileDate) { staleSkipped.push(`${id} (history ${lastEventAt.get(id)} > ${v.suite} ${v.fileDate})`); continue; }
-    (set[mapped] = set[mapped] || []).push(id);
+    (set[mapped] = set[mapped] || []).push(caseIndex.get(id).id);
   }
   if (notInRegistry.length) warn(`verify-state case(s) not in the registry — update ${REGISTRY_PATH}: ${notInRegistry.join(', ')}`);
   if (staleSkipped.length) warn(`sync skipped case(s) whose history is newer than the verify-state file: ${staleSkipped.join(', ')}`);
-  for (const ids of Object.values(set)) ids.sort((a, b) => a - b);
+  for (const ids of Object.values(set)) ids.sort((a, b) => typeof a === 'number' && typeof b === 'number' ? a - b : String(a).localeCompare(String(b)));
   if (Object.keys(set).length) {
     const counts = Object.entries(set).map(([st, ids]) => `${st} ${ids.length}`).join(' · ');
     syncEvent = {
       at: localDate(new Date()),
       source: 'verify-state sync',
-      note: `Synced from execution-tests/ado-{suite,story}-*/_verify-state.json (passed→done · fixme/blocked→blocked · failed at ${ROUND_CAP}-round cap→blocked · else in-flight→doing): ${counts}.`,
+      ...(sourceIdentity ? {sourceIdentity} : {}),
+      note: `Synced from matching execution-tests verification state (passed→done · fixme/blocked→blocked · failed at ${ROUND_CAP}-round cap→blocked · else in-flight→doing): ${counts}.`,
       set,
     };
     if (opts.dryRun) {
@@ -302,6 +337,7 @@ const stampFile = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDa
 const embed = {
   generatedAt: now.toISOString(),
   planId: registry.planId,
+  ...(sourceIdentity ? {sourceIdentity, source: registry.source} : {}),
   names: registry.names,
   branches: registry.branches,
   suites: registry.suites,
@@ -331,7 +367,7 @@ if (opts.dryRun) {
 }
 
 if (opts.json) {
-  console.log(JSON.stringify({ generatedAt: embed.generatedAt, out: opts.out, historyEvents: history.length + (syncEvent && !opts.dryRun ? 1 : 0), syncEvent, summary }, null, 2));
+  console.log(JSON.stringify({ generatedAt: embed.generatedAt, out: opts.out, ...(sourceIdentity ? {sourceIdentity, source: registry.source} : {}), historyEvents: history.length + (syncEvent && !opts.dryRun ? 1 : 0), syncEvent, summary }, null, 2));
 } else {
   const sc = summary.scope;
   console.log([

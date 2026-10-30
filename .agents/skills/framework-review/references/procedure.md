@@ -12,7 +12,7 @@ expectations. An artifact or closed bug alone proves neither. Refute budget rese
 lost failures, unsupported flake classifications, and `done` based only on unblocking.
 Use the [maintenance contract](../../../../docs/maintenance.md).
 
-For generated automation, review the frozen handoff, candidate file hashes, source-to-observation bindings and candidate step/expectation review mappings described in the [automation workflow](../../../../docs/PIPELINE.md). The legacy ADO traceability table below applies to legacy ADO artifacts. Neutral local cases carry `allure.testCaseId`; external cases retain their real `allure.tms` links. Require the actual assertions to preserve source intent, and review operation definitions and lifecycle dispositions. A reviewer identity field alone is not evidence of independent review. User-authorized branch and delivery choices take precedence over template defaults.
+For generated automation, review the frozen handoff, candidate file hashes, source-to-observation bindings and candidate step/expectation review mappings described in the [automation workflow](../../../../docs/PIPELINE.md). The legacy ADO traceability table below applies to legacy ADO artifacts. Neutral local cases carry `allure.testCaseId`; native cases preserve captured identity using matching link templates or explicit native links with site-qualified `testCaseId` (see [tracker providers](../../../../docs/tracker-providers.md)). Require the actual assertions to preserve source intent, and review operation definitions and lifecycle dispositions. A reviewer identity field alone is not evidence of independent review. User-authorized branch and delivery choices take precedence over template defaults.
 
 Inputs: a diff scope (default: `git diff master...HEAD` plus unstaged changes,
 **plus untracked files from `git status --porcelain`** — at the pipeline's GENERATE
@@ -46,8 +46,9 @@ mapping is in the §6 text itself) and judge by ITS checklist, not memory. Recor
 box: PASS / FAIL / N-A, with `file:line` evidence for every FAIL.
 
 Apply §6, with these review procedures and additional harness checks:
-- Generated tests carry the right `allure.tms` ids (diff vs `_suite.json` when
-  reviewing pipeline output).
+- Generated tests carry identities matching their captured source: Azure `allure.tms`,
+  local `testCaseId`, or matching Jira/plugin links with site-qualified `testCaseId`.
+  Compare native keys and site/project/plugin binding against the source manifest.
 - **Traceability table** (legacy ADO artifacts only, 2026-08-27 ruling): the diff carries
   `execution-tests/ado-suite-<id>/_traceability.md`; it covers every tms id the spec carries,
   every method it names exists on the named class (grep), every API/DB row carries

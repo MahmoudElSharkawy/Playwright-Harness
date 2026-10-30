@@ -2,7 +2,7 @@
 
 # Automation workflow
 
-Turn a local scenario source or Azure DevOps cases into durable Playwright POM
+Turn local scenarios or Azure/Jira plugin cases into durable Playwright POM
 automation. This is the current generation procedure: each phase below describes
 its inputs, outputs, commands and gates. Start with [getting started](getting-started.md)
 and [configuration](configuration.md) before using these command-level interfaces.
@@ -19,15 +19,18 @@ Agents run the pipeline through the
 ```
 
 All three source routes follow the same workflow. Standalone
-[manual execution](manual-execution.md) is a separate ADO-only workflow that
+[manual execution](manual-execution.md) uses the same source modes in a workflow that
 produces reports without generating POM code. Dated native-host proof and limits
 are retained in the [validation archive](archive/milestones/M15-VALIDATION.md).
+Use [tracker providers](tracker-providers.md) for Azure, Xray, Zephyr Scale and
+no-plugin selection. Provider adapters share the scripts and skill library.
 
 To update original ADO case titles, actions or expected results, use the separate
 [case-editing workflow](ado-case-editing.md). Refetch with `--revisions` into a fresh
 output folder and preserve the executed source/history. Revised expectations still
 need accepted requirement evidence and the existing maintenance/revision gates;
-editing the source does not make automation READY.
+editing the source does not make automation READY. Jira plugin/local case revisions
+use shared [test case design](test-case-design.md) with the same source review gates.
 
 An optional accepted [testing plan](test-planning.md#baseline-and-criteria-contract)
 can supply selected scope, risk/criterion links and source/baseline versions. It
@@ -43,7 +46,7 @@ SOURCE → REFINE → EXPLORE → PREPARE → AUTHOR → CANDIDATE → REVIEW �
 
 | Phase | Purpose | Main output | Command or interface | Further reading |
 |---|---|---|---|---|
-| [SOURCE](#1-source) | Load scenarios unchanged | Loader record with source fingerprint | `load-local-source.mjs`, `fetch-ado-suite.mjs`, `fetch-ado-story.mjs` | [Configuration](configuration.md), [Azure DevOps](azure-devops.md) |
+| [SOURCE](#1-source) | Load scenarios unchanged | Loader record with source fingerprint | `load-source`, `fetch-suite`, `fetch-story` | [Configuration](configuration.md), [Tracker providers](tracker-providers.md) |
 | [REFINE](#2-refine) | Make steps executable without changing what they prove | Frozen refinement artifact | Agent work | [Refinement](../.agents/skills/execute-test/references/refinement.md) |
 | [EXPLORE](#3-explore) | Run against the configured application | Run snapshot, observations, evidence | Runtime libraries | [Execution model](reference/execution-model.md) |
 | [PREPARE](#4-prepare) | Bind each source expectation to an observation | Generation history | `generate-tests.mjs prepare` | [Library interfaces](#generation-library-interfaces) |
@@ -52,7 +55,7 @@ SOURCE → REFINE → EXPLORE → PREPARE → AUTHOR → CANDIDATE → REVIEW �
 | [REVIEW](#7-review) | Independent attempt to refute the candidate | Recorded verdict | `generate-tests.mjs review` | [Framework review](../.agents/skills/framework-review/SKILL.md) |
 | [VERIFY](#8-verify) | Two scoped green processes | Verification receipts | `generate-tests.mjs verify` | [Compatibility](#verification-compatibility-and-integrity), [Reporting](reporting.md) |
 | [READY](#9-ready) | Confirm readiness | Status | `generate-tests.mjs status` | [Verification](#8-verify) |
-| [DELIVER](#10-deliver-optional) | Optional, authorized delivery | PR, published outcomes | `ado-pr.mjs`, `publish-ado-results.mjs` | [Azure DevOps](azure-devops.md) |
+| [DELIVER](#10-deliver-optional) | Optional, authorized delivery | PR, published native outcomes or local metadata | `pr` (Azure source control), `publish-results` | [Tracker providers](tracker-providers.md), [Azure DevOps](azure-devops.md) |
 
 ## Before you start
 
@@ -70,8 +73,8 @@ SOURCE → REFINE → EXPLORE → PREPARE → AUTHOR → CANDIDATE → REVIEW �
 - For verification, the consumer needs Playwright Test **1.63.0**. TypeScript consumers
   enable `allowJs: true`, `checkJs: false` and `maxNodeModuleJsDepth: 1` while keeping
   `strict: true` ([automation workflow](PIPELINE.md#8-verify)).
-- ADO is needed only for ADO sources or delivery. Configure it in
-  `.harness/integrations.json` ([Azure DevOps](azure-devops.md)).
+- Remote credentials are needed only for selected remote reads or delivery.
+  Configure `.harness/integrations.json` using [tracker providers](tracker-providers.md).
 - Work on a feature branch, following the branch rule that setup adds to the project's
   `CLAUDE.md` and `AGENTS.md`: for example `automation/<source-id>-<slug>` for
   generated suites, delivered through a pull request.
@@ -85,11 +88,13 @@ file snapshot.
 ## 1. SOURCE
 
 Load the scenarios to automate without changing them. A source is a neutral local JSON
-file, or an ADO plan/suite or user story exported to that format.
+file, or native Azure/Xray/Zephyr cases exported to that format. Jira without a
+plugin uses reviewed local cases and Jira story references.
 
 - **Inputs:** a local source file, for example `.harness/sources/<name>.json` (format in
   [local source format](configuration.md)), or an ADO plan/suite or story ID with
-  ADO configured.
+  ADO configured. Jira uses `fetch-story --story <key> --provider jira` or
+  `fetch-suite --suite <key> --provider jira` (Xray Test Set / Zephyr cycle).
 - **Outputs:** a loader record (`--out`) holding the source's relative path and SHA-256
   fingerprint, with status `LOADED` and `executed: false`. An ADO fetch also writes
   `_suite.json` and one Markdown spec per case under `execution-tests/ado-suite-<suiteId>/` or
@@ -98,7 +103,7 @@ file, or an ADO plan/suite or user story exported to that format.
   external reference. Each scenario needs at least one expectation. Limits are 2 MiB,
   1–500 scenarios and 1–1000 steps per scenario. `LOADED` means the source was read,
   not that anything passed. The loader refuses an existing `--out` destination. ADO
-  fetches never change ADO. Parameterized or incomplete ADO cases fail conversion and
+  fetches never change ADO; Jira fetches are also read-only. Parameterized or incomplete native cases fail conversion and
   must be refined into the neutral format explicitly.
 
 Existing `test/ado-suite-*` and `test/ado-story-*` folders need a one-time manual
@@ -110,7 +115,7 @@ npx --no pom-harness fetch-suite --plan <planId> --suite <suiteId> --source-out 
 npx --no pom-harness fetch-story --story <storyId> --source-out .harness/sources/<name>.json
 ```
 
-Details: [local source format](configuration.md) and
+Details: [local source format](configuration.md), [Jira modes](tracker-providers.md) and
 [ADO suite/story retrieval](azure-devops.md).
 
 ## 2. REFINE
@@ -354,7 +359,9 @@ review references, not a direct-call or lexical-resolution requirement. The
 reviewer checks actual semantic coverage rather than trusting these names.
 
 Await public Allure metadata with literal real identities: `allure.testCaseId`
-for local scenarios and `allure.tms` for externally supplied case IDs. Source
+for local scenarios, matching `allure.tms` templates for native cases, or explicit
+native links with site-qualified `testCaseId` for mixed sites/plugins. Follow
+[tracker providers](tracker-providers.md) for Jira/Xray versus Zephyr URLs. Source
 keys belong to this mapping, not business parameters or tracing-only test data.
 Use ordinary business validations and the existing assertion facades. The old
 `sourceExpectation(test, key, callback)` helper is a deprecated pass-through;
@@ -553,15 +560,18 @@ Details: [verification compatibility and integrity](#verification-compatibility-
 ## 10. DELIVER (optional)
 
 Delivery happens only when the user authorizes it. The generation commands never
-contact ADO, create PRs, publish, push or merge.
+contact trackers, create PRs, publish, push or merge.
 
-- **Inputs:** a READY candidate committed on a pushed feature branch, and ADO
-  configuration for ADO delivery.
+- **Inputs:** a READY candidate committed on a pushed feature branch, and selected
+  provider configuration for remote delivery.
 - **Outputs:** a PR, published test outcomes and work-item updates, each with a durable
   write receipt.
 - **Rules:** remote mutation commands preview by default; repeat with `--execute` after
-  authorization. Outcome publication is suite-scoped, because test points exist only
-  inside a plan/suite. Run `--mark-automated` only after the PR is merged. The harness
+  authorization. Azure outcome publication is suite-scoped because test points exist
+  inside a plan/suite. Jira results target an explicit native execution/cycle with
+  configured status mapping; no-plugin outcomes remain local. Durable automation
+  metadata binds the exact case, test file/title and source revision. Run
+  `--mark-automated` only after the PR is merged. The harness
   never pushes, merges or changes branch policy.
 
 ```text
@@ -569,7 +579,7 @@ npx --no pom-harness pr --source <branch> --title "<title>" --description-file <
 npx --no pom-harness publish-results --suite <suiteId>
 ```
 
-Details: [Azure DevOps](azure-devops.md),
+Details: [tracker providers](tracker-providers.md), [Azure DevOps](azure-devops.md),
 [publication and linking](azure-devops.md).
 
 ## Where state lives

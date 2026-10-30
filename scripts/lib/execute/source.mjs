@@ -4,6 +4,7 @@ import {sourceExpectations} from '../generation/handoff.mjs';
 import {secretFindings} from '../package-validation.mjs';
 import {data, fingerprint, requireThat} from '../execution-core/data.mjs';
 import {EXECUTION_DOCUMENT} from './storage.mjs';
+import {validateLocalSource} from '../local-source.mjs';
 
 const sensitive = name => /password|passwd|pwd|secret|token|credential|authorization|connectionstring|api.?key|cookie/i.test(name);
 /** ADO's bounded DataSet subset. Text values retain whitespace and empty cells. */
@@ -28,6 +29,26 @@ export function substitute(text, bindings) {
   const values = new Map(entries.map(([name, value]) => [name.toLowerCase(), value])), names = entries.map(([name]) => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
   return String(text).replace(new RegExp(`(?<![\\w@.])@(${names})(?!\\w)`, 'gi'), (_, name) => String(values.get(name.toLowerCase())));
 }
+function captureScenario({id, caseId, iteration, title, bindings = {}, needsBinding = [], template, externalReferences}) {
+  requireThat(!template.some(step => secretFindings('action.json', step.action).length), 'credential-in-source');
+  requireThat(!template.some(step => step.expected.some(value => secretFindings('expected.json', value).length)), 'credential-in-expected');
+  const scenario = {id, caseId, iteration, title, bindings, needsBinding,
+    ...(externalReferences ? {externalReferences} : {}),
+    steps: template.map((step, index) => ({position: index + 1, action: substitute(step.action, bindings), expected: step.expected.map(text => substitute(text, bindings)),
+      actionTemplate: step.action, expectedTemplates: step.expected, verificationOnly: !step.action && step.expected.length > 0, empty: !step.action && !step.expected.length,
+      ...(step.fromShared ? {fromShared: step.fromShared} : {})}))};
+  if (!scenario.steps.some(step => step.expected.length)) scenario.steps.at(-1).expected.push('Source expectations are missing; manual review is required.');
+  scenario.expectations = sourceExpectations({scenarios: [scenario]}).map(key => ({...key, synthetic: !template.some(step => step.expected.length), template: template[key.step - 1].expected[key.expected - 1] ?? 'missing-expectation'}));
+  return data(scenario, 2 * 1024 * 1024);
+}
+/** Local and provider-decoded cases enter the same refinement/execution workflow. */
+export function prepareNeutralSource(input, scope) {
+  const source = validateLocalSource({version: input.version, id: input.id, title: input.title, scenarios: input.scenarios});
+  requireThat(scope && ['local', 'jira'].includes(scope.kind), 'Neutral execution needs an explicit local or Jira scope.');
+  const scenarios = source.scenarios.map(tc => captureScenario({id: `${tc.id}-r1`, caseId: tc.id, iteration: 1, title: tc.title, template: tc.steps, externalReferences: tc.externalReferences}));
+  const cases = source.scenarios.map(tc => ({id: tc.id, contentSha256: fingerprint(tc), sharedIds: []}));
+  return data({version: 1, provider: scope.kind, scope, title: source.title, scenarios, cases, sharedSteps: {}, excluded: []}, EXECUTION_DOCUMENT.maximum, EXECUTION_DOCUMENT);
+}
 /** Convert a tolerant read-only ADO snapshot without writing legacy fetch artifacts. */
 export function prepareSource(fetched, scope) {
   const scenarios = [], excluded = [...(fetched.excluded ?? [])], cases = [], sharedSteps = {};
@@ -40,8 +61,6 @@ export function prepareSource(fetched, scope) {
       const rows = parseIterations(tc.dataTableXml);
       requireThat(!names.length || rows.length > 0, 'parameters-without-data');
       requireThat(rows.length <= 100, 'iteration-limit');
-      requireThat(!tc.steps.some(step => secretFindings('expected.json', step.expected ?? '').length), 'credential-in-expected');
-      requireThat(!tc.steps.some(step => secretFindings('action.json', step.action ?? '').length), 'credential-in-source');
       const template = tc.steps.map(step => ({action: step.action, expected: step.expected ? [step.expected] : [], ...(step.fromShared ? {fromShared: step.fromShared} : {})}));
       const generated = (rows.length ? rows : [{}]).map((row, index) => {
         const values = Object.create(null), needsBinding = [];
@@ -52,14 +71,7 @@ export function prepareSource(fetched, scope) {
         }
         for (const name of tc.sharedParameters ?? []) requireThat(Object.keys(row).some(key => key.toLowerCase() === name.toLowerCase()), 'shared-step-parameters-unbound');
         const bindings = values;
-        const scenario = {id: `tc-${tc.id}-r${index + 1}`, caseId: tc.id, iteration: index + 1, title: tc.title, bindings, needsBinding,
-          steps: template.map((step, stepIndex) => ({position: stepIndex + 1, action: substitute(step.action, bindings), expected: step.expected.map(text => substitute(text, bindings)),
-            actionTemplate: step.action, expectedTemplates: step.expected, verificationOnly: !step.action && step.expected.length > 0, empty: !step.action && !step.expected.length,
-            ...(step.fromShared ? {fromShared: step.fromShared} : {})}))};
-        if (!scenario.steps.some(step => step.expected.length)) scenario.steps.at(-1).expected.push('Source expectations are missing; manual review is required.');
-        const keys = sourceExpectations({scenarios: [scenario]});
-        scenario.expectations = keys.map(key => ({...key, synthetic: !template.some(step => step.expected.length), template: template[key.step - 1].expected[key.expected - 1] ?? 'missing-expectation'}));
-        return data(scenario, 2 * 1024 * 1024);
+        return captureScenario({id: `tc-${tc.id}-r${index + 1}`, caseId: tc.id, iteration: index + 1, title: tc.title, bindings, needsBinding, template});
       });
       requireThat(scenarios.length + generated.length <= 500, 'iteration-limit');
       scenarios.push(...generated);

@@ -18,6 +18,7 @@ export function inventory(root) {
     for (const item of readdirSync(directory, { withFileTypes: true })) {
       const absolute = join(directory, item.name);
       const file = relative(root, absolute).replaceAll('\\', '/');
+      if (file === '.git' && item.isFile()) {excluded.push(file); continue;} // Managed worktree metadata, never package content.
       if (item.isSymbolicLink()) { unexpected.push({ file, rule: 'symbolic-link' }); continue; }
       if (item.isDirectory()) {
         if (OMIT_DIRS.has(item.name) || ['execution-tests', 'test', '.harness'].includes(file)) { excluded.push(file); continue; }
@@ -86,7 +87,11 @@ export function secretFindings(file, text) {
     if (/-----BEGIN (?:[A-Z]+ )?PRIVATE KEY-----/.test(line)) categories.add('private-key');
     if (/\beyJ[A-Za-z0-9_-]{15,}\.[A-Za-z0-9_-]{10,}(?:\.[A-Za-z0-9_-]+)?/.test(line)) categories.add('jwt');
     if (/\b(?:gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,}|AKIA[A-Z0-9]{16})\b/.test(line)) categories.add('access-key');
-    for (const match of line.matchAll(assignment)) if (credentialName(match[1]) && !placeholder(match[3])) categories.add('credential-assignment');
+    for (const match of line.matchAll(assignment)) {
+      // Jira's documented CSRF header and pagination cursor are not credentials.
+      const nonCredential = match[1] === 'nextPageToken' || match[1] === 'X-Atlassian-Token' && match[3] === 'no-check';
+      if (!nonCredential && credentialName(match[1]) && !placeholder(match[3])) categories.add('credential-assignment');
+    }
     if (wrappedLiterals.has(index + 1)) categories.add('credential-assignment');
     for (const match of line.matchAll(connection)) if (!expressions.has(offset + match.index) && !placeholder(match[1]) && !/^(?:process\.env|\$\{|@|<|\{)/.test(match[1])) categories.add('connection-credential');
     // Neither a convention suppression nor an unrelated env reference exempts a secret.
@@ -97,12 +102,15 @@ export function secretFindings(file, text) {
 }
 
 const PUBLIC_HOSTS = new Set(['github.com', 'api.github.com', 'raw.githubusercontent.com', 'playwright.dev', 'nodejs.org', 'www.npmjs.com', 'registry.npmjs.org', 'learn.microsoft.com', 'code.claude.com', 'learn.chatgpt.com', 'developers.openai.com', 'json.schemastore.org', 'www.w3.org', 'www.typescriptlang.org', 'allurereport.org', 'mit-license.org', 'opensource.org', 'aka.ms', 'go.microsoft.com', 'node-postgres.com', 'www.postgresql.org']);
-// Reviewed upstream funding links present in the dependency lockfile; no host-wide exception.
-const PUBLIC_METADATA_URLS=new Set(['https://www.patreon.com/feross','https://feross.org/support','https://dotenvx.com/','https://opencollective.com/fastify','https://opencollective.com/express','https://opencollective.com/preact','https://paulmillr.com/funding/']);
+// Reviewed upstream funding and native-field documentation links; no host-wide exception.
+const PUBLIC_METADATA_URLS=new Set(['https://www.patreon.com/feross','https://feross.org/support','https://dotenvx.com/','https://opencollective.com/fastify','https://opencollective.com/express','https://opencollective.com/preact','https://paulmillr.com/funding/', 'https://support.smartbear.com/zephyr-scale-cloud/api-docs/', 'https://support.smartbear.com/zephyr/docs/en/configuration/advanced-customization-options/custom-fields-for-test-cases,-cycles,-plans,-steps,-and-executions.html']);
 // Reviewed Google-managed CI cache and its official documentation; no host-wide exception.
 const PUBLIC_CI_URLS = new Set(['https://mirror.gcr.io', 'https://mirror.gcr.io/', 'https://docs.cloud.google.com/artifact-registry/docs/pull-cached-dockerhub-images']);
 // Official collection format identifier; other Postman coordinates still require review.
 const PUBLIC_SCHEMA_URLS = new Set(['https://schema.getpostman.com/json/collection/v2.1.0/collection.json']);
+// Fixed public Cloud API origins and explicit example tenants used in isolated fixtures.
+// Other tenant hosts still require review; this is not an atlassian.net wildcard.
+const INTEGRATION_HOSTS = new Set(['api.atlassian.com', 'xray.cloud.getxray.app', 'api.zephyrscale.smartbear.com', 'eu.api.zephyrscale.smartbear.com', 'example.atlassian.net', 'example-other.atlassian.net', 'your-site.atlassian.net']);
 export function privacyFindings(file, text) {
   const findings = [];
   const push = (line, rule) => findings.push({ file, line, rule });
@@ -126,7 +134,7 @@ export function privacyFindings(file, text) {
       if (host === 'dev.azure.com') {
         const organization=value.replace(/^https?:\/\/[^/]+\//,'').split('/')[0];
         if (!organization.startsWith('${') && !/^(?:your-org|example-org)$/.test(organization)) push(n, 'organization-url');
-      } else if (!synthetic && !PUBLIC_HOSTS.has(host) && !PUBLIC_METADATA_URLS.has(url.href) && !PUBLIC_CI_URLS.has(value) && !PUBLIC_SCHEMA_URLS.has(value)) push(n, 'unreviewed-url');
+      } else if (!synthetic && !PUBLIC_HOSTS.has(host) && !INTEGRATION_HOSTS.has(host) && !PUBLIC_METADATA_URLS.has(url.href) && !PUBLIC_CI_URLS.has(value) && !PUBLIC_SCHEMA_URLS.has(value)) push(n, 'unreviewed-url');
     }
   });
   if (/\.jsonl$/.test(file) && text.trim()) push(1, 'populated-runtime-history');

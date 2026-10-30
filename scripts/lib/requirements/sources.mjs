@@ -1,14 +1,15 @@
 import {contextParts, readFileContext, extractContextBytes} from '../context/files.mjs';
 import {contextData} from '../context/model.mjs';
 import {fingerprint, digest, requireThat, keys} from '../execution-core/data.mjs';
-import {createAdoClient} from '../integrations/ado-client.mjs';
-import {loadAdoConfiguration, adoId, adoGuid} from '../integrations/config.mjs';
+import {adoId, adoGuid} from '../integrations/config.mjs';
+import {createTrackerClient, trackerProvider} from '../integrations/selection.mjs';
+import {readJiraRequirements, readJiraStoryComments, validateJiraRequirementsAttachments} from '../integrations/jira-requirements.mjs';
 import {decodeEntities} from '../integrations/ado-steps.mjs';
 import {credentialName, secretFindings} from '../package-validation.mjs';
 
 export const consumerIdentity = (roots, project, application) => fingerprint({root: roots.projectRoot, project, application});
 export function requirementsClient(roots, options = {}) {
-  return options.client ?? createAdoClient({...loadAdoConfiguration(roots, {}, options.environment), roots, fetchImpl: options.fetchImpl});
+  return createTrackerClient(roots, options);
 }
 
 /** Strip real markup first; decode each entity alone so nested references stay literal. */
@@ -87,6 +88,7 @@ export function requirementLinks(html, sourceId, revision, location) {
 
 /** Comments have their own response-body pagination, unlike ADO value lists. */
 export async function readStoryComments(client, storyId) {
+  if (trackerProvider(client) === 'jira') return readJiraStoryComments(client, storyId);
   const comments = [], seen = new Set(); let continuation;
   for (let page = 0; page < 100; page++) {
     const query = new URLSearchParams({'api-version': '7.1-preview.4', includeDeleted: 'true', '$top': '200', order: 'asc'});
@@ -111,11 +113,21 @@ export async function captureRequirements(roots, raw, options = {}) {
   // section grouping must not merge those independent acceptance units.
   const readerOptions = {...options, nativeSections: false};
   const request = contextData(raw);
-  keys(request, ['version', 'project', 'application', 'storyId', 'sources', 'attachments', 'attachmentIds', 'includeHistory'], 'requirements request');
+  keys(request, ['version', 'project', 'application', 'provider', 'storyId', 'sources', 'attachments', 'attachmentIds', 'includeHistory'], 'requirements request');
   requireThat(request.version === 1 && ['project', 'application'].every(key => typeof request[key] === 'string' && request[key].trim() && request[key].length <= 200), 'Requirements need project and application identity.');
   requireThat(Array.isArray(request.sources) && request.sources.length <= 100 && new Set(request.sources.map(source => source.id)).size === request.sources.length, 'Select distinct supplied sources.');
-  if (request.attachments !== undefined) requireThat(request.storyId !== undefined && Array.isArray(request.attachments) && request.attachments.length <= 100 && new Set(request.attachments.map(item => item.attachmentId?.toLowerCase())).size === request.attachments.length && request.attachments.every(item => adoGuid(item.attachmentId) && item.extraction && typeof item.extraction === 'object'), 'Attachment reader receipts need distinct ADO attachment identities.');
-  if (request.attachmentIds !== undefined) requireThat(request.storyId !== undefined && Array.isArray(request.attachmentIds) && request.attachmentIds.length <= 100 && request.attachmentIds.every(adoGuid) && new Set(request.attachmentIds.map(value => value.toLowerCase())).size === request.attachmentIds.length, 'Select distinct attachment IDs explicitly for one story.');
+  requireThat(request.provider === undefined || ['ado', 'jira'].includes(request.provider), 'Requirements provider must be ado or jira.');
+  const client = request.storyId === undefined ? undefined : requirementsClient(roots, {...options, ...(request.provider ? {provider: request.provider} : {})});
+  const provider = client ? trackerProvider(client) : request.provider;
+  requireThat(!client || request.provider === undefined || request.provider === provider, 'Requirements provider differs from the selected client.');
+  requireThat(request.storyId !== undefined || request.attachments === undefined && request.attachmentIds === undefined, 'Attachment selection requires an originating story.');
+  if (provider === 'jira') {
+    validateJiraRequirementsAttachments(request);
+    if (client) request.provider = 'jira';
+  } else {
+    if (request.attachments !== undefined) requireThat(Array.isArray(request.attachments) && request.attachments.length <= 100 && new Set(request.attachments.map(item => item.attachmentId?.toLowerCase())).size === request.attachments.length && request.attachments.every(item => adoGuid(item.attachmentId) && item.extraction && typeof item.extraction === 'object'), 'Attachment reader receipts need distinct ADO attachment identities.');
+    if (request.attachmentIds !== undefined) requireThat(Array.isArray(request.attachmentIds) && request.attachmentIds.length <= 100 && request.attachmentIds.every(adoGuid) && new Set(request.attachmentIds.map(value => value.toLowerCase())).size === request.attachmentIds.length, 'Select distinct attachment IDs explicitly for one story.');
+  }
   requireThat(request.includeHistory === undefined || typeof request.includeHistory === 'boolean', 'History selection must be boolean.');
   const parts = [], omissions = [], revisions = [], links = [], sourceKeys = new Set();
   function add(sourceId, revision, values, kind = 'requirement') {
@@ -128,8 +140,23 @@ export async function captureRequirements(roots, raw, options = {}) {
     }
   }
   let origin;
-  if (request.storyId !== undefined) {
-    const client = requirementsClient(roots, options), storyId = adoId(request.storyId), project = await client.projectIdentity();
+  if (request.storyId !== undefined && provider === 'jira') {
+    const remote = await readJiraRequirements(client, request); origin = remote.origin;
+    omissions.push(...remote.omissions); revisions.push(...remote.revisions);
+    for (const section of remote.sections) add(section.sourceId, section.revision, section.values, section.kind);
+    for (const link of remote.links) {
+      const safeText = contextParts(link.text.trim() ? [{location: link.location, text: link.text}] : []).contributions[0]?.text ?? '';
+      links.push({...link, text: safeText, ...requirementDestination(link.destination)});
+    }
+    for (const attachment of remote.attachments) {
+      try {
+        const extracted = await extractContextBytes({id: attachment.sourceId, kind: 'attachment', name: attachment.name, ...(attachment.extraction ? {extraction: attachment.extraction} : {})}, attachment.bytes, readerOptions);
+        add(attachment.sourceId, extracted.hash, extracted.contributions.map(({location, text}) => ({location, text})));
+        if (extracted.coverage !== 'complete' || extracted.redacted) omissions.push({sourceId: attachment.sourceId, reason: extracted.coverage, redacted: extracted.redacted ?? 0});
+      } catch {omissions.push({sourceId: attachment.sourceId, reason: 'inaccessible-attachment'});}
+    }
+  } else if (request.storyId !== undefined) {
+    const storyId = adoId(request.storyId), project = await client.projectIdentity();
     const item = await client.read(`wit/workitems/${storyId}?$expand=relations&api-version=7.1`);
     requireThat(adoId(item.id) === storyId && Number.isSafeInteger(item.rev) && item.rev > 0 && item.fields, 'Story identity/revision is incomplete.');
     await client.requireWorkItemProject(item);
@@ -187,7 +214,7 @@ export async function captureRequirements(roots, raw, options = {}) {
   }
   for (const source of request.sources) {
     keys(source, ['id', 'kind', 'path', 'encoding', 'delimiter', 'extraction'], 'requirements source');
-    requireThat(typeof source.id === 'string' && /^[A-Za-z][A-Za-z0-9_-]{0,79}$/.test(source.id) && !source.id.startsWith('ado-') && !['story', 'discussion'].includes(source.id) || source.id === 'story' && request.storyId === undefined, 'Invalid or reserved requirements source ID.');
+    requireThat(typeof source.id === 'string' && /^[A-Za-z][A-Za-z0-9_-]{0,79}$/.test(source.id) && !/^(ado|jira)-/.test(source.id) && !['story', 'discussion'].includes(source.id) || source.id === 'story' && request.storyId === undefined, 'Invalid or reserved requirements source ID.');
     // Supplied paths are explicit inputs; reuse the existing bounded, sanitizing readers.
     const record = await readFileContext(roots, source, readerOptions), revision = record.hash ?? 'unavailable';
     revisions.push({id: source.id, revision});

@@ -14,7 +14,7 @@ import {createRun} from '../../scripts/lib/execution-core/index.mjs';
 import {runSequentialScenario} from '../../scripts/lib/sequential/index.mjs';
 import {randomUUID} from 'node:crypto';
 
-export async function executionFixture(t, {browser = false, steps, handler, cases, diagnostics = 'off', organizationUrl = 'https://ado.example.test'} = {}) {
+export async function executionFixture(t, {browser = false, steps, handler, cases, source: suppliedSource, diagnostics = 'off', organizationUrl = 'https://ado.example.test'} = {}) {
   const base = realpathSync(tmpdir()), projectRoot = mkdtempSync(join(base, 'harness-execute-')), requests = [];
   const server = createServer(async (req, res) => {requests.push({method: req.method, path: req.url}); if (handler) return handler(req, res); res.writeHead(200, {'content-type': 'application/json'}); res.end(JSON.stringify({value: 1, id: 'created-1'}));});
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve)); const origin = `http://127.0.0.1:${server.address().port}`;
@@ -23,7 +23,7 @@ export async function executionFixture(t, {browser = false, steps, handler, case
   const put = (path, value) => {writeJson(join(projectRoot, path), value);};
   put('.harness/project.json', {version: 1, defaultEnvironment: 'qa', environments: {qa: {environmentMode: 'test', apiTargets: ['api'], databaseTargets: [], browserTargets: browser ? ['ui'] : []}}});
   put('.harness/targets.json', {api: {api: {baseUrl: origin}}, databases: {}, browser: {ui: {origins: [origin], startUrl: origin}}});
-  const source = prepareSource({organizationUrl, project: 'demo', suiteName: 'Synthetic execution', cases: cases ?? [{id: 101, rev: 1, title: 'Synthetic API case', parameters: null, steps: steps ?? [{action: 'Read status', expected: 'Status is 200'}]}]}, {kind: 'suite', planId: 1, suiteId: 2});
+  const source = suppliedSource ?? prepareSource({organizationUrl, project: 'demo', suiteName: 'Synthetic execution', cases: cases ?? [{id: 101, rev: 1, title: 'Synthetic API case', parameters: null, steps: steps ?? [{action: 'Read status', expected: 'Status is 200'}]}]}, {kind: 'suite', planId: 1, suiteId: 2});
   const refinement = draftRefinement(source, loadEnvironment(roots)); refinement.limits = {timeoutMs: 20000, cleanupTimeoutMs: 3000};
   const created = createExecution(roots, source, refinement, {diagnostics}), executionId = created.executionId;
   const save = () => put(`.harness/runs/${executionId}/refinement.json`, refinement);

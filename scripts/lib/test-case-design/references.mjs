@@ -5,6 +5,8 @@ import {contextParts} from '../context/files.mjs';
 import {fingerprint, keys, requireThat} from '../execution-core/data.mjs';
 import {adoId, workItemLinkId} from '../integrations/config.mjs';
 import {ordinaryHtmlText, requirementDestination, requirementLinks, requirementsClient} from '../requirements/sources.mjs';
+import {jiraIssueKey} from '../integrations/jira-config.mjs';
+import {readJiraRequirements} from '../integrations/jira-requirements.mjs';
 
 const fields = ['System.Description', 'Microsoft.VSTS.Common.AcceptanceCriteria'];
 const classifications = ['required', 'supporting', 'incidental', 'unresolved'];
@@ -13,6 +15,12 @@ const safeText = value => typeof value === 'string' && value.trim() && value.len
 const affectedEntries = inventory => inventory.filter(row => ['requirement', 'criterion'].includes(row.kind));
 
 function destination(value, origin) {
+  if (origin?.provider === 'jira') {
+    if (jiraIssueKey(value)) return value.startsWith(origin.project + '-') ? {issueKey: value, destination: `${origin.siteUrl}/browse/${value}`, status: 'candidate'} : {destination: value, status: 'out-of-scope'};
+    const safe = requirementDestination(value); if (safe.status !== 'candidate') return safe;
+    const url = new URL(value), match = /^\/browse\/([A-Z][A-Z0-9_]*-[1-9]\d*)\/?$/.exec(url.pathname);
+    return url.origin === origin.siteUrl && !url.search && !url.hash && match && match[1].startsWith(origin.project + '-') ? {...safe, issueKey: match[1]} : {...safe, status: 'out-of-scope'};
+  }
   const inline = /^#([1-9]\d{0,9})$/.exec(value);
   if (inline && Number(inline[1]) <= 2147483647) return origin ? {workItemId: Number(inline[1]), destination: `${origin.organizationUrl}/${encodeURIComponent(origin.project)}/_workitems/edit/${inline[1]}`, status: 'candidate'} : {destination: value, status: 'unverified'};
   const safe = requirementDestination(value);
@@ -49,12 +57,37 @@ function discover(source, inventory, origin, parent) {
       if (!linked.some(link => {const a = source.origin ? link.textStart : link.start, b = source.origin ? link.textEnd : link.end; return start >= a && start < b;})) append('url', target, target, start, end);
     }
     for (const match of part.text.matchAll(/(?<![\w/#])#([1-9]\d{0,9})(?!\w|\.\d)/g)) {
+      if (origin?.provider === 'jira') continue;
       const start = match.index, end = start + match[0].length;
       if (Number(match[1]) > 2147483647 || urlSpans.some(span => start >= span.start && start < span.end) || linked.some(link => {const a = source.origin ? link.textStart : link.start, b = source.origin ? link.textEnd : link.end; return start >= a && start < b;})) continue;
       append('inline', match[0], match[0], start, end);
     }
+    if (origin?.provider === 'jira') for (const match of part.text.matchAll(/(?<![\w/-])[A-Z][A-Z0-9_]*-[1-9]\d*(?![\w-])/g)) {
+      const start = match.index, end = start + match[0].length;
+      if (!urlSpans.some(span => start >= span.start && start < span.end) && !linked.some(link => start >= link.textStart && start < link.textEnd)) append('inline', match[0], match[0], start, end);
+    }
   }
   return occurrences;
+}
+
+async function readReference(client, identifier, origin) {
+  if (origin.provider !== 'jira') {
+    const item = await client.read(`wit/workitems/${identifier}?$expand=relations&api-version=7.1`);
+    requireThat(adoId(item.id) === identifier && Number.isSafeInteger(item.rev) && item.rev > 0 && item.fields, 'Referenced identity/revision is incomplete.');
+    await client.requireWorkItemProject(item); return sourceEvidence(item);
+  }
+  const remote = await readJiraRequirements(client, {storyId: identifier, includeDiscussion: false, includeHistory: false, attachmentIds: []});
+  const revision = remote.revisions.find(row => row.id === 'jira-story').revision, sourceId = `reference-${identifier}`, parts = [], links = [], omissions = remote.omissions.filter(row => row.reason !== 'absent');
+  for (const section of remote.sections.filter(row => ['requirement', 'criterion'].includes(row.kind))) {
+    const safe = contextParts(section.values); if (safe.redacted) omissions.push({reason: 'redacted'});
+    for (const part of safe.contributions) parts.push({id: fingerprint({sourceId, location: part.location}), sourceId, revision, location: part.location, text: part.text, kind: 'requirement'});
+  }
+  for (const link of remote.links.filter(link => parts.some(part => part.location === link.location))) {
+    const safe = requirementDestination(link.destination), text = contextParts(link.text.trim() ? [{location: link.location, text: link.text}] : []).contributions[0]?.text ?? '';
+    links.push({...link, sourceId, revision, text, ...safe}); if (safe.status === 'redacted') omissions.push({reason: 'redacted-link'});
+  }
+  if (!parts.length) omissions.push({reason: 'missing-rules'});
+  return {issueKey: identifier, revision, parts, links, omissions};
 }
 
 function sourceEvidence(item) {
@@ -90,8 +123,8 @@ function accepted(roots, requirements, reference) {
 export async function captureReferences(roots, source, requirements, story, input, options = {}) {
   const origin = source.origin, records = new Map(), decisions = input.references ?? [], supplemental = input.referenceIds ?? [];
   requireThat(Array.isArray(decisions) && decisions.length <= 200 && unique(decisions.map(row => row.id)).length === decisions.length, 'Reference decisions need distinct bounded identities.');
-  requireThat(Array.isArray(supplemental) && supplemental.length <= 20 && unique(supplemental.map(adoId)).length === supplemental.length, 'Select at most 20 distinct supplemental reference IDs.');
-  requireThat(!supplemental.length || origin, 'Local source design cannot imply an ADO reference destination.');
+  requireThat(Array.isArray(supplemental) && supplemental.length <= 20 && supplemental.every(value => origin?.provider === 'jira' ? jiraIssueKey(value) : adoId(value)) && unique(supplemental.map(value => origin?.provider === 'jira' ? value : adoId(value))).length === supplemental.length, 'Select at most 20 distinct supplemental reference IDs.');
+  requireThat(!supplemental.length || origin, 'Local source design cannot imply a remote reference destination.');
   for (const decision of decisions) {
     keys(decision, ['id', 'classification', 'requirementIds', 'reason', 'rules'], 'reference decision');
     requireThat(typeof decision.id === 'string' && classifications.includes(decision.classification) && safeText(decision.reason), 'Reference classification needs identity and explicit reason.');
@@ -100,7 +133,7 @@ export async function captureReferences(roots, source, requirements, story, inpu
   }
   function add(occurrence, deeper = false) {
     const target = occurrence.linkStatus && occurrence.linkStatus !== 'candidate' ? {destination: occurrence.target, status: occurrence.linkStatus} : destination(occurrence.target, origin);
-    const identity = target.workItemId ? {organizationUrl: origin.organizationUrl.toLowerCase(), projectId: origin.projectId.toLowerCase(), workItemId: target.workItemId} : {destination: target.destination, sourceId: occurrence.sourceId, location: occurrence.location, start: occurrence.start};
+    const identity = target.issueKey ? {siteUrl: origin.siteUrl, projectId: origin.projectId, issueKey: target.issueKey} : target.workItemId ? {organizationUrl: origin.organizationUrl.toLowerCase(), projectId: origin.projectId.toLowerCase(), workItemId: target.workItemId} : {destination: target.destination, sourceId: occurrence.sourceId, location: occurrence.location, start: occurrence.start};
     const id = 'ref-' + fingerprint(identity).slice(0, 24);
     if (!records.has(id)) records.set(id, {id, ...target, classification: occurrence.kind === 'relationship' ? 'incidental' : 'unresolved', requirementIds: [], reason: occurrence.kind === 'relationship' ? 'Relationship alone does not select business rules.' : 'Classify the reference and confirm applicable accepted rules.', occurrences: [], rules: [], acceptedRequirementIds: [], ...(deeper ? {status: target.status === 'candidate' ? 'deeper-unresolved' : target.status} : {})});
     const record = records.get(id), {target: ignored, requirementIds, ...retained} = occurrence;
@@ -114,26 +147,28 @@ export async function captureReferences(roots, source, requirements, story, inpu
     if (!workItemLinkId(relation.url, origin.organizationUrl, {id: origin.projectId, name: origin.project})) continue;
     add({kind: 'relationship', sourceId: 'story', revision: String(story.rev), location: `relation:${index}`, start: index, end: index + 1, text: relation.rel, passage: relation.rel, target: relation.url, requirementIds: []});
   }
-  for (const workItemId of supplemental) add({kind: 'selection', sourceId: 'selection', revision: '', location: `reference:${workItemId}`, start: 0, end: 0, text: `#${workItemId}`, passage: 'Explicit supplemental source selection.', target: `#${workItemId}`, requirementIds: []});
+  if (origin?.provider === 'jira') for (const [index, relation] of (story?.fields?.issuelinks ?? []).entries()) {
+    const key = relation.outwardIssue?.key ?? relation.inwardIssue?.key;
+    if (jiraIssueKey(key) && key.startsWith(origin.project + '-')) add({kind: 'relationship', sourceId: 'jira-story', revision: source.revisions.find(row => row.id === 'jira-story')?.revision ?? '', location: `issuelink:${index}`, start: index, end: index + 1, text: relation.type?.name ?? 'Related issue', passage: 'Selected issue relationship.', target: key, requirementIds: []});
+  }
+  for (const workItemId of supplemental) {const target = origin?.provider === 'jira' ? workItemId : `#${workItemId}`; add({kind: 'selection', sourceId: 'selection', revision: '', location: `reference:${workItemId}`, start: 0, end: 0, text: target, passage: 'Explicit supplemental source selection.', target, requirementIds: []});}
   function apply(record) {
     const decision = decisions.find(row => row.id === record.id); if (!decision) return;
     requireThat(!['required', 'unresolved'].includes(decision.classification) || record.requirementIds.every(id => decision.requirementIds.includes(id)), 'Reference classification must retain every originating affected requirement.');
     Object.assign(record, {classification: decision.classification, requirementIds: decision.requirementIds, reason: decision.reason});
   }
   const initial = [...records.values()]; let reads = 0;
-  const client = origin && requirementsClient(roots, options);
+  const client = origin && requirementsClient(roots, {...options, provider: origin.provider ?? 'ado'});
   for (const record of initial) {
     apply(record);
     if (record.classification === 'incidental') {record.status = 'incidental'; continue;}
     if (record.status !== 'candidate') continue;
-    if (record.workItemId === origin.storyId) {record.status = 'cycle'; continue;}
+    if ((record.issueKey ?? record.workItemId) === origin.storyId) {record.status = 'cycle'; continue;}
     if (reads >= 20) {record.status = 'read-bound'; continue;}
     reads++;
     let captured;
     try {
-      const item = await client.read(`wit/workitems/${record.workItemId}?$expand=relations&api-version=7.1`);
-      requireThat(adoId(item.id) === record.workItemId && Number.isSafeInteger(item.rev) && item.rev > 0 && item.fields, 'Referenced identity/revision is incomplete.');
-      await client.requireWorkItemProject(item); captured = sourceEvidence(item);
+      captured = await readReference(client, record.issueKey ?? record.workItemId, origin);
     } catch {record.status = 'inaccessible'; continue;}
     record.source = captured; record.revision = captured.revision;
     const rules = decisions.find(row => row.id === record.id)?.rules ?? [];
@@ -185,16 +220,14 @@ export async function requireFreshReferences(roots, state, options = {}) {
   const ids = options.selected && state.draft ? unique(state.draft.cases.filter(row => options.selected.includes(row.id)).flatMap(row => row.coverageReferences.map(ref => ref.requirementId))) : affectedEntries(state.requirements.inventory).map(row => row.id);
   const relevant = references.items.filter(row => row.classification !== 'incidental' && row.source && row.requirementIds.some(id => ids.includes(id)));
   if (!relevant.length) return;
-  const client = requirementsClient(roots, options), origin = state.evidence.requirements.origin, project = await client.projectIdentity();
-  requireThat(origin && client.configuration.organizationUrl === origin.organizationUrl && project.id.toLowerCase() === origin.projectId.toLowerCase(), 'Referenced source destination changed; refresh and renew approval.');
+  const origin = state.evidence.requirements.origin, client = requirementsClient(roots, {...options, provider: origin?.provider ?? 'ado'}), project = await client.projectIdentity();
+  requireThat(origin && (origin.provider === 'jira' ? client.configuration.siteUrl === origin.siteUrl && client.configuration.project === origin.project && String(project.id) === origin.projectId : client.configuration.organizationUrl === origin.organizationUrl && project.id.toLowerCase() === origin.projectId.toLowerCase()), 'Referenced source destination changed; refresh and renew approval.');
   for (const reference of relevant) {
     let current;
     try {
-      const item = await client.read(`wit/workitems/${reference.workItemId}?$expand=relations&api-version=7.1`);
-      requireThat(item.id === reference.workItemId && Number.isSafeInteger(item.rev) && item.rev > 0 && item.fields, 'Incomplete reference.');
-      await client.requireWorkItemProject(item); current = sourceEvidence(item);
-    } catch {throw new Error(`Referenced source ${reference.workItemId} is unavailable; revalidate affected cases and renew approval.`);}
-    requireThat(fingerprint(current) === fingerprint(reference.source), `Referenced source ${reference.workItemId} changed; revalidate affected cases and renew approval.`);
+      current = await readReference(client, reference.issueKey ?? reference.workItemId, origin);
+    } catch {throw new Error(`Referenced source ${reference.issueKey ?? reference.workItemId} is unavailable; revalidate affected cases and renew approval.`);}
+    requireThat(fingerprint(current) === fingerprint(reference.source), `Referenced source ${reference.issueKey ?? reference.workItemId} changed; revalidate affected cases and renew approval.`);
     requireThat(reference.classification !== 'required' || reference.requirementIds.filter(id => ids.includes(id)).every(id => accepted(roots, state.requirements, reference).includes(id)), 'Referenced-rule acceptance is missing or changed; revalidate and renew approval.');
   }
 }

@@ -4,6 +4,10 @@
 All convention and workflow skills are maintained in this canonical library.
 Mutable state belongs to the consumer as specified in [ROOTS.md](ROOTS.md).
 
+This is one shared skill library for Azure, Jira with Xray or Zephyr Scale, and
+Jira without a plugin. Follow [tracker providers](../../docs/tracker-providers.md)
+for selected adapters, opaque source identity and local no-plugin behavior.
+
 Convention skills for this repository, structured SHAFT-style: each skill is a thin
 `SKILL.md` router plus a detailed `references/playbook.md`. The entry point is
 **[pom-architecture](pom-architecture/SKILL.md)**; its
@@ -16,7 +20,7 @@ The library preserves conventions and illustrative examples from earlier framewo
 audits. Current package boundaries are described in the [architecture guide](../../docs/architecture.md);
 open convention decisions remain in design-conventions.
 
-For standalone ADO manual runs use [execute-test](execute-test/SKILL.md); automation generation stays with automate-test.
+For standalone local, Azure or Jira plugin manual runs use [execute-test](execute-test/SKILL.md); automation generation stays with automate-test.
 
 Use [project-context](project-context/SKILL.md) to build/update business context from
 selected work items and supplied documents, using exact IDs or saved criteria.
@@ -26,7 +30,7 @@ fetch sources or write files. See the [context contract](../../docs/project-cont
 
 | # | Skill | Playbook | Use when (description) | Key checkpoints |
 |---|-------|----------|--------------------------|-----------------|
-| 1 | [pom-architecture](pom-architecture/SKILL.md) | [design-conventions](pom-architecture/references/design-conventions.md) | Entry point & router — folder layout, POM layering, naming, business-vs-technical split, where new code belongs; also the starting point for "automate / create scripts for" a test case, suite, story, or Azure DevOps id | Code sits in the correct layer, dependencies point downward only; naming table (§2) followed (top-level folders lowercase, `resources/` subfolders camelCase — never `test-data/`); class anatomy order (§3); 12 iron laws (§4) incl. prerequisites seeded through API/DB layers wherever a path exists; Java-era rules never reintroduced (§5); report output contract — path changes land in lockstep (config, lifecycle scripts, README, CI; the allure `outputFolder` key is dead in v3); run-lifecycle scripts = run hygiene only; layers created on first need |
+| 1 | [pom-architecture](pom-architecture/SKILL.md) | [design-conventions](pom-architecture/references/design-conventions.md) | Entry point & router — folder layout, POM layering, naming, business-vs-technical split, where new code belongs; also the starting point for "automate / create scripts for" a test case, suite, story, or a native Azure/Jira test identity | Code sits in the correct layer, dependencies point downward only; naming table (§2) followed (top-level folders lowercase, `resources/` subfolders camelCase — never `test-data/`); class anatomy order (§3); 12 iron laws (§4) incl. prerequisites seeded through API/DB layers wherever a path exists; Java-era rules never reintroduced (§5); report output contract — path changes land in lockstep (config, lifecycle scripts, README, CI; the allure `outputFolder` key is dead in v3); run-lifecycle scripts = run hygiene only; layers created on first need |
 | 2 | [page-classes](page-classes/SKILL.md) | [playbook](page-classes/references/playbook.md) | Creating/refactoring a page class — new page object, skeleton area (header/footer/menu), member order, constructors | One class per HTML page and per skeleton area; **ownership follows the rendering page** — never flow-scoped classes; small confirmation pages get their own class with the FULL anatomy; fixed member order + `///// Actions` / `///// Validations` banners (check contents, not presence; legacy variant zoo folds on touch); `url` field only when a method consumes it; file name = exported class name; no dead members; no base classes; no try/catch/loops |
 | 3 | [element-locators](element-locators/SKILL.md) | [playbook](element-locators/references/playbook.md) | Choosing, naming, or repairing a locator; strict-mode failures; collections; upload inputs | `camelCaseName_typeSuffix` lowercase, `private readonly`, closed §2 vocabulary + legacy-suffix mapping (`_Text`→`txt`, `_CheckBox`→`checkbox`, …); evaluation order `#id` → `[name=…]` → `[data-qa=…]` → handcrafted relative XPath → relative CSS; `id=` engine prefix banned; class selectors match the minimal **semantic** token (never Bootstrap chains); over-indexing covers CSS too (`+ p + p`, `:nth-*`); land on the interactive element; uploads target `input[type="file"]` itself; attribute-value interpolation in dynamic methods is legal, text/structure interpolation is not |
 | 4 | [test-classes](test-classes/SKILL.md) | [playbook](test-classes/references/playbook.md) | Spec file skeleton — naming, describe block, hooks, wiring, disabling tests | One feature per spec; tests first, hooks below; standard Playwright import and built-in isolated page by default; reset optional cleanup candidates before fixture setup, retain attempted identities before creation, and clean through domain methods before disposal; lifecycle checks and partial-setup guards follow design-conventions §4a |
@@ -45,9 +49,9 @@ fetch sources or write files. See the [context contract](../../docs/project-cont
 | [bug-report](bug-report/SKILL.md) | Story-guided editable bug drafts, project-specific fields, evidence review and approved recoverable filing |
 | [requirements-analysis](requirements-analysis/SKILL.md) | Requirement/story analysis, editable chat tables, acceptance inventory and confirmed story comments with requested team mentions |
 | [test-planning](test-planning/SKILL.md) | Cycle objectives, risk-based scope, strategy, feasibility and measurable criteria in a versioned consumer plan; no execution or progress updates |
-| [test-case-design](test-case-design/SKILL.md) | Source-grounded case design, complete chat review, independent coverage assessment and approved ADO create/update/reuse delivery |
-| [automate-test](automate-test/SKILL.md) | Turning story-linked cases, ADO suites or local scenarios into reviewed POM automation with two scoped green runs |
-| [execute-test](execute-test/SKILL.md) | Running ADO manual cases through live UI/API/DB runtimes and producing verified reports without generating POM code |
+| [test-case-design](test-case-design/SKILL.md) | Source-grounded case design, complete chat review, independent coverage assessment and approved Azure/Xray/Zephyr create/update/reuse delivery or local cases |
+| [automate-test](automate-test/SKILL.md) | Turning story-linked cases, native test groups or local scenarios into reviewed POM automation with two scoped green runs |
+| [execute-test](execute-test/SKILL.md) | Running local, Azure or Jira plugin manual cases through live UI/API/DB runtimes and producing verified reports without generating POM code |
 | [maintain-test](maintain-test/SKILL.md) | Diagnose only for findings/next actions, or diagnose and fix failed/flaky/changed/blocked tests with supported repairs and verification; preserve history and budgets |
 | [framework-review](framework-review/SKILL.md) | Reviewing a change against the conventions and producing a verdict |
 | [plan-tracker](plan-tracker/SKILL.md) | Recording a tracked plan's progress and regenerating its report |

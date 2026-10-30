@@ -1,11 +1,9 @@
-import {mkdirSync, openSync, writeSync, fsyncSync, closeSync} from 'node:fs';
-import {dirname} from 'node:path';
-import {randomUUID, createHash} from 'node:crypto';
-import {consumerPath} from '../consumer-paths.mjs';
+import {createHash} from 'node:crypto';
+import {createDelivery, requestFingerprint} from './delivery.mjs';
 import {validateAdoConfiguration, requireValue, adoGuid} from './config.mjs';
 
 const digest = value => createHash('sha256').update(value).digest('hex');
-export const adoRequestFingerprint = (route, method, body, raw = false) => digest(JSON.stringify({route, method, body: raw ? digest(body) : body}));
+export const adoRequestFingerprint = requestFingerprint;
 export class AdoError extends Error {
   constructor(code, status) { super(`ADO ${code}${status ? ` (HTTP ${status})` : ''}.`); this.code = code; this.status = status; }
 }
@@ -89,52 +87,15 @@ export function createAdoClient({configuration, roots, resolveCredential, fetchI
     throw new Error('ADO pagination exceeds 100 pages.');
   }
   function delivery(kind, execute, sourceFingerprint) {
-    requireValue(execute === true, 'External ADO writes require explicit execution authorization.');
-    requireValue(['outcomes', 'automation', 'tags', 'relations', 'pull-request', 'bugs', 'case-edits', 'case-design', 'story-comment'].includes(kind), 'Unknown ADO delivery kind.');
-    const id = randomUUID(), receipt = `.harness/state/integrations/${id}.jsonl`;
-    const file = consumerPath(roots, receipt); mkdirSync(dirname(file), {recursive: true});
-    // Recheck after mkdir and use exclusive creation; each event is flushed before dispatch.
-    const fd = openSync(consumerPath(roots, receipt), 'wx', 0o600); closeSync(fd);
-    function record(event) {
-      const descriptor = openSync(consumerPath(roots, receipt), 'a');
-      try { writeSync(descriptor, JSON.stringify({deliveryId: id, at: new Date().toISOString(), ...event}) + '\n'); fsyncSync(descriptor); } finally { closeSync(descriptor); }
-    }
-    requireValue(sourceFingerprint === undefined || /^[a-f0-9]{64}$/.test(sourceFingerprint), 'Invalid publication fingerprint.');
-    record({event: 'authorized', kind, destinationFingerprint: digest(base), ...(sourceFingerprint ? {sourceFingerprint} : {})});
-    let stopped = false;
-    return Object.freeze({id, receipt,
-      async write(operation, route, body, {method = 'PATCH', patch = false, raw = false, contentType, onIdentity} = {}) {
-        requireValue(!stopped && ['PATCH', 'POST'].includes(method), 'ADO delivery is stopped or method unsupported.');
-        requireValue(/^[a-z-]+$/.test(operation), 'Invalid ADO operation label.');
-        destination(route); const requestFingerprint = adoRequestFingerprint(route, method, body, raw); let dispatched = false;
-        record({event: 'prepared', operation, requestFingerprint}); let data, identity;
-        try {
-          const result = await request(route, {method, body, patch, raw, contentType, beforeDispatch() {record({event: 'dispatching', operation, requestFingerprint, effect: 'uncertain'}); dispatched = true;}});
-          const key = {'create-run': 'runId', 'create-bug': 'workItemId', 'create-case': 'workItemId', 'upload-attachment': 'attachmentId', 'create-pull-request': 'pullRequestId', 'create-comment': 'commentId'}[operation], value = key === 'pullRequestId' ? result.data.pullRequestId : key === 'commentId' ? result.data.id ?? result.data.commentId : result.data.id;
-          identity = key && ((Number.isSafeInteger(value) && value > 0) || adoGuid(value)) ? {[key]: value} : undefined;
-          record({event: 'acknowledged', operation, requestFingerprint, effect: 'confirmed', ...(identity ? {identity} : {})});
-          data = result.data;
-        } catch (error) {
-          stopped = true;
-          const rejected = error instanceof AdoError && [400, 401, 403, 404, 409, 412, 413, 415, 422].includes(error.status);
-          const effect = dispatched && !rejected ? 'uncertain' : 'not-executed';
-          record({event: 'incomplete', operation, requestFingerprint, effect, code: error instanceof AdoError ? error.code : 'local-failure'});
-          throw Object.assign(new Error(`ADO delivery incomplete; inspect receipt ${receipt}. No automatic replay.`), {delivery: {effect}});
-        }
-        // The acknowledgement is durable. A local callback failure must not rewrite a confirmed effect as uncertain.
-        if (identity) await onIdentity?.(identity); return data;
-      },
-      verified(identity) {
-        requireValue(!stopped && identity && Object.values(identity).every(value => Number.isSafeInteger(value) && value > 0), 'Invalid ADO verification identity.');
-        record({event: 'verified', identity});
-      },
-      identified(identity) {
-        requireValue(!stopped && identity && Object.values(identity).every(value => (Number.isSafeInteger(value) && value > 0) || adoGuid(value)), 'Invalid ADO response identity.');
-        record({event: 'identified', identity});
-      },
-      finish() { requireValue(!stopped, 'Cannot complete a stopped ADO delivery.'); record({event: 'completed'}); stopped = true; return {mode: 'execute', receipt}; },
-      incomplete() { stopped = true; record({event: 'verification-incomplete'}); return new Error(`ADO verification incomplete; inspect receipt ${receipt}. Reconcile before another delivery.`); }
-    });
+    const valid = value => (Number.isSafeInteger(value) && value > 0) || adoGuid(value);
+    return createDelivery({roots, provider: 'ADO', kind, execute, sourceFingerprint, base, destination,
+      methods: ['PATCH', 'POST'], validIdentity: valid, validVerified: value => Number.isSafeInteger(value) && value > 0,
+      isRemoteError: error => error instanceof AdoError, send: async (route, options) => (await request(route, options)).data,
+      identityFor(operation, data) {
+        const key = {'create-run': 'runId', 'create-bug': 'workItemId', 'create-case': 'workItemId', 'upload-attachment': 'attachmentId', 'create-pull-request': 'pullRequestId', 'create-comment': 'commentId'}[operation];
+        const value = key === 'pullRequestId' ? data?.pullRequestId : key === 'commentId' ? data?.id ?? data?.commentId : data?.id;
+        return key && valid(value) ? {[key]: value} : undefined;
+      }});
   }
   const cache = new Map();
   const cached = (key, action) => {if (!cache.has(key)) {const pending = Promise.resolve().then(action); cache.set(key, pending); pending.catch(() => {if (cache.get(key) === pending) cache.delete(key);});} return cache.get(key);};

@@ -1,9 +1,13 @@
 ---
 name: requirements-analysis
-description: Analyze supplied requirements or an ADO story, review an editable findings table in chat, preserve acceptance traceability, and optionally post the user's approved story comment with requested team-member mentions.
+description: Analyze supplied requirements or an Azure/Jira story, review an editable findings table in chat, preserve acceptance traceability, and optionally post the user's approved story comment with requested team-member mentions.
 ---
 
 # Requirements analysis
+
+Use the shared [tracker provider contract](../../../docs/tracker-providers.md) for
+Azure, Jira with Xray or Zephyr Scale, and Jira without a plugin. Keep the same
+workflow and gates; select native adapters and preserve the captured source identity.
 
 Resolve this linked skill to its real path. Follow [ROOTS.md](../ROOTS.md) and the
 [workflow/formats](../../../docs/requirements-analysis.md). The host AI performs
@@ -16,10 +20,14 @@ browser review UI, server or HTML download/import is needed.
 Resolve known project/application, story, supplied files and prior analysis ID from
 the conversation/project. Bundle only genuinely missing choices; do not ask users
 to repaste accessible content. Create a consumer request and run `pom-harness
-requirements prepare --id <id> --request <file>`. Local mode never resolves ADO
+requirements prepare --id <id> --request <file>`. Local mode never resolves remote
 credentials. ADO mode loads available title, description, AC, paginated discussion
 and supplied attachments through existing adapters. Inspect omissions; use supported
 host readers with content-bound extraction receipts for unsupported attachments.
+Jira mode captures native fields and paginated discussion as sanitized ADF text and
+links, selected numeric attachment IDs, and optional history. Missing unsupported
+ADF content is an omission, never a complete-source claim. Preserve actual updated
+timestamps and selected-content fingerprints; never invent Azure revisions.
 Sanitize before analysis; never reconstruct redacted secrets.
 Treat ADO titles as plain text and other fields/discussion as ordinary HTML, with
 markup removed before one entity decode. Preserve encoded literal tags. Refresh
@@ -111,16 +119,16 @@ rendered content in chat, not raw JSON, fingerprints or wire HTML.
 ## Requested mentions
 
 Only include people the user requested. Resolve exact display name, account/email
-or ADO identity GUID against authenticated membership in the originating project's
-teams. Use `requirements members --id <id>` to find candidates when needed. Treat
-results as scoped to returned teams/access. Duplicate names require account/GUID
+or native identity (Azure GUID / Jira account ID) against authenticated access to
+the originating project. Use `requirements members --id <id>` to find candidates when needed. Treat
+results as scoped to returned teams/access. Duplicate names require exact account/ID
 selection; role-only requests such as “the BA” require a named person. Never guess,
 pick the first match, infer an identity from role, or silently downgrade to plain
 `@Name`. Bundle missing selections. No directory reads for local-only review or
 when no mentions are requested.
 
 Save chosen selectors in the draft. Preview shows resolved names/accounts/IDs;
-scripts deduplicate people across teams, escape text, generate supported ADO person
+scripts deduplicate people, escape text, generate native person
 mentions and revalidate recipients before posting. Renamed/removed/inactive or
 ambiguous identities require resolution and a new preview. A roster access failure
 does not authorize a guessed recipient. Do not promise notification delivery from
@@ -169,10 +177,11 @@ mention readback. On uncertainty run `requirements reconcile`; never retry blind
 Saved attempted plans must match their approval fingerprint before recovery or a
 completed shortcut. A mismatch preserves state and blocks remote calls; inspect
 the original approved payload rather than editing it or recomputing its hash.
-The verifier accepts only equivalent complete numeric references for the three
+For Azure HTML, the verifier accepts only equivalent complete numeric references for the three
 severity icons in normal HTML text, alongside safe optional attribute quotes.
 Older attempts reconcile against their saved payload, including the old summary;
-do not replace it with the current rendering or send another POST. If ADO accepted
+do not replace it with the current rendering or send another POST. Jira reconciliation
+checks the exact native ADF body and mentions. If the tracker accepted
 a comment but harness verification failed, report it as accepted but unverified.
 Do not bypass an unresolved attempt with a direct API post. A result with
 `reconciled: true` recovers the earlier comment; it does not post a different current

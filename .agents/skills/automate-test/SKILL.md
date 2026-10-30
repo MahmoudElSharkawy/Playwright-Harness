@@ -1,9 +1,13 @@
 ---
 name: automate-test
-description: Automate test cases from a user story, an ADO suite or local scenarios into durable POM code through observed execution, independent review and two scoped green runs.
+description: Automate test cases from an Azure/Jira story, native test group or local scenarios into durable POM code through observed execution, independent review and two scoped green runs.
 ---
 
 # Automate Tests
+
+Use the shared [tracker provider contract](../../../docs/tracker-providers.md) for
+Azure, Jira with Xray or Zephyr Scale, and Jira without a plugin. Keep the same
+workflow and gates; select native adapters and preserve the captured source identity.
 
 Resolve this skill to its real path and read [package and consumer boundaries](../ROOTS.md).
 Mutable state and generated code belong to the consumer; installed skills stay immutable.
@@ -30,12 +34,16 @@ Choose the source explicitly:
 /automate-test local <source.json> on <environment>
 ```
 
-ADO is optional and must be explicitly configured. For a story, use the existing
+Remote providers are optional and must be configured. For Azure stories, use the existing
 `npx --no pom-harness fetch-story --story <id> --revisions --source-out <consumer-path.json>`
 route; no suite or plan is required. Follow Tested By links by default; select other
 link types only when requested. For a suite, use `fetch-suite --suite <id> --revisions
 --plan <id> --source-out <consumer-path.json>`, resolving the plan from the request
 or the configured ADO default. If neither supplies it, ask for the plan ID.
+For Jira, use the same `fetch-story` / `fetch-suite` commands with `--provider jira`
+and `--source-out`; suite means an Xray Test Set or Zephyr cycle. Feed the resulting
+neutral source through this workflow. Without a plugin, use reviewed local cases
+from case-design handoff, retaining Jira story references and local history.
 Preserve fetch/refinement behavior for parameterized or incomplete cases: explicitly
 refine them into neutral input before generation. Pass the neutral source through
 the same workflow below. Local input requires no ADO configuration.
@@ -126,9 +134,10 @@ Prepare editable drafts for supported application defects, grouping related fail
 only with an evidence-backed reason. Present complete drafts and remaining attention
 items for edits, selection or deferral. Keep assertions, verdicts and repair/green
 counts intact. A failed automated assertion alone does not prove an application bug
-or an independent reproduction. Only explicitly approved previews may be filed in ADO.
+or an independent reproduction. Only explicitly approved previews may be filed in the selected tracker.
 
-Use [Azure DevOps](../../../docs/azure-devops.md) for explicitly authorized external delivery.
+Use [tracker providers](../../../docs/tracker-providers.md) for selected source and delivery modes,
+and [Azure DevOps](../../../docs/azure-devops.md) for Azure-specific compatibility.
 Local sources support the complete generation/review/verification path without ADO.
 Legacy ADO artifact layouts remain documented in [the compatibility playbook](references/playbook.md).
 Its historical host, catalog, parallelism and cleanup assumptions do not override the

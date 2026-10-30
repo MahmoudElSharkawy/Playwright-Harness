@@ -1,0 +1,20 @@
+{
+  "$comment": "Synthetic Zephyr Scale registry example. Copy to .harness/state/tracker/plan-DEMO-P1.json and replace coordinates and IDs with captured values. Keep source binding exact. Append progress to history.jsonl with the sourceIdentity returned by tracker --json; publishing cases or metadata alone never marks them done.",
+  "planId": "DEMO-P1",
+  "source": {
+    "provider": "jira",
+    "siteUrl": "https://example.atlassian.net",
+    "project": "DEMO",
+    "testManagement": "zephyr-scale"
+  },
+  "names": ["Example owner"],
+  "branches": [{"name": "Checkout", "inScope": true}],
+  "suites": [{
+    "branch": 0,
+    "id": "DEMO-R1",
+    "name": "Checkout cycle",
+    "cases": [{"id": "DEMO-T25", "title": "Customer completes checkout", "desc": "Reviewed checkout scenario", "verdict": "k", "note": "Replace with the source-backed review decision."}]
+  }],
+  "manual": {},
+  "bugs": {}
+}

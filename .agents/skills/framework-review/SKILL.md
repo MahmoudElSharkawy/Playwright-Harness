@@ -5,6 +5,15 @@ description: "Use to review framework changes against the skill-library conventi
 
 # Framework Review (Conventions Verdict)
 
+Use the shared [tracker provider contract](../../../docs/tracker-providers.md) for
+Azure, Jira with Xray or Zephyr Scale, and Jira without a plugin. Keep the same
+workflow and gates; select native adapters and preserve the captured source identity.
+
+Review Jira/plugin opaque IDs against the captured site/project/plugin binding.
+Accept matching native templates or explicit native links with site-qualified
+`testCaseId`; no-plugin cases keep local identity. Publication or an automation
+status field never substitutes for independent review and two scoped green runs.
+
 Resolve this skill to its real path before following references. Read the
 [package and consumer boundaries](../ROOTS.md); mutable state belongs to the consumer.
 

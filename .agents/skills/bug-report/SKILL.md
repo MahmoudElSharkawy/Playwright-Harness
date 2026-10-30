@@ -5,6 +5,14 @@ description: Draft, refine, review and optionally file a bug from a selected sto
 
 # Bug report
 
+Use the shared [tracker provider contract](../../../docs/tracker-providers.md) for
+Azure, Jira with Xray or Zephyr Scale, and Jira without a plugin. Keep the same
+workflow and gates; select native adapters and preserve the captured source identity.
+
+Keep source provider and bug destination independently explicit. A Jira bug may use
+Azure or local evidence, and vice versa; validate the approved destination's native
+required fields, attachments and story-link capability before filing.
+
 Resolve this linked skill to its real path. Read [ROOTS](../ROOTS.md), the
 [playbook](references/playbook.md) and [workflow](../../../docs/bug-reporting.md).
 The host understands the report, refines its wording and conducts chat review;

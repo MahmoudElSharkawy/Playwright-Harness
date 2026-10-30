@@ -5,6 +5,10 @@ description: "Refresh saved business context using its selected documents, exact
 
 # Refresh business context
 
+Use the shared [tracker provider contract](../../../docs/tracker-providers.md) for
+Azure, Jira with Xray or Zephyr Scale, and Jira without a plugin. Keep the same
+workflow and gates; select native adapters and preserve the captured source identity.
+
 An invocation authorizes the scoped local update. Resolve the consumer and established
 context ID using [ROOTS](../ROOTS.md). Follow the shared
 [selection/capture workflow](../project-context/references/workflow.md).
@@ -13,7 +17,7 @@ Use `context update --id <id>` to refresh the saved selection:
 - Exact IDs stay fixed, even when other work items are created.
 - Criteria rerun against the selected project. New matches enter context; changed
   items update; unchanged content is reused; confirmed departures lose active support.
-- Explicitly selected documents are rehashed. Only selected ADO attachments are
+- Explicitly selected documents are rehashed. Only selected tracker attachments are
   eligible for download, including on later refreshes.
 - An explicit refresh also checks the native Markdown/text reader recipe, so
   unchanged bytes can receive section extraction. Unaffected formats and saved

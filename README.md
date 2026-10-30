@@ -2,14 +2,16 @@
 
 Conventions, skills and tools that help Claude Code and Codex write and maintain
 Playwright/TypeScript Page Object Model test automation in your project. Start
-from local scenarios or Azure DevOps cases, explore the application, then obtain
-reviewed code and two scoped green runs. You can also execute ADO manual cases
+from local scenarios, Azure DevOps, Xray or Zephyr Scale cases, explore the application, then obtain
+reviewed code and two scoped green runs. You can also execute these cases manually
 and produce verified reports without generating automation.
 
 The harness fits teams starting a test project or extending an existing one. It
 preserves your code and customizations, keeps test data outside business classes,
-and organizes UI, API and database testing into clear layers. Azure DevOps is
-optional for local automation. Version: [VERSION](VERSION); changes and upgrade
+and organizes UI, API and database testing into clear layers. Choose Azure or Jira
+with Xray, Zephyr Scale or no plugin using the same scripts and skills. In no-plugin
+mode, Jira handles stories and bugs while cases/results stay local. See
+[tracker providers](docs/tracker-providers.md). Version: [VERSION](VERSION); changes and upgrade
 actions: [CHANGELOG.md](CHANGELOG.md).
 
 [Get started](#get-started) · [Workflow and phases](#harness-workflow-and-phases) ·
@@ -128,7 +130,7 @@ conflict recovery and rollback.
 ## Harness workflow and phases
 
 After installation and configuration, automation follows these phases. Local
-scenarios and configured ADO suites or stories use the same workflow.
+scenarios and configured Azure/Jira cases use the same workflow.
 
 | Phases | What happens |
 |---|---|
@@ -137,7 +139,7 @@ scenarios and configured ADO suites or stories use the same workflow.
 | **PREPARE → AUTHOR** | Connect expectations to observations, then write or reuse POM code and paired test data. |
 | **CANDIDATE → REVIEW** | Map scenarios to tests and obtain an independent review of the candidate. |
 | **VERIFY ×2 → READY** | Pass two separate scoped Playwright runs of the same reviewed candidate. |
-| **DELIVER (optional)** | With explicit authorization, deliver a PR or publish ADO outcomes. |
+| **DELIVER (optional)** | With explicit authorization, deliver a PR or publish selected native outcomes; no-plugin results remain local. |
 
 Review or verification failures return to authoring, with three cumulative repair
 rounds per source batch. See the [automation workflow](docs/PIPELINE.md) for the
@@ -165,7 +167,7 @@ and fix** to continue with supported repairs, review and verification. The
 [maintenance workflow](docs/maintenance.md#choose-the-requested-outcome) preserves
 the same evidence, history and budgets for both outcomes.
 
-Generate durable automation from local scenarios or configured ADO cases:
+Generate durable automation from local scenarios or configured Azure/Jira plugin cases:
 
 ```text
 /automate-test local .harness/sources/<name>.json on qa
@@ -177,7 +179,7 @@ Required cleanup follows scenario intent and ownership. The
 [automation workflow](docs/PIPELINE.md) covers the commands and gates behind
 the phases above.
 
-For live manual execution of ADO cases:
+For live manual execution of local or native cases (Azure examples below):
 
 ```text
 /execute-test suite <id> [plan <id>] [on qa]
@@ -200,7 +202,8 @@ reports for cases that stop before execution or generated tests exist.
 | Configure environments, targets, secrets and knowledge | [Configuration](docs/configuration.md) |
 | Build or refresh business context from selected items, saved criteria and documents | [Project context](docs/project-context.md) |
 | Review requirements in chat and approve a story comment with requested team mentions | [Requirements analysis](docs/requirements-analysis.md) |
-| Design/revise test cases, review source coverage and publish an approved ADO selection | [Test case design](docs/test-case-design.md) |
+| Choose Azure, Jira with Xray/Zephyr Scale, or Jira without a plugin | [Tracker providers](docs/tracker-providers.md) |
+| Design/revise test cases, review source coverage and publish an approved native selection or keep local cases | [Test case design](docs/test-case-design.md) |
 | Explicitly ask business questions with readable citations from saved evidence | [Business context questions](docs/context-qa.md) |
 | Generate automation or execute manual cases | [Automation workflow](docs/PIPELINE.md) · [Manual execution](docs/manual-execution.md) |
 | Connect ADO, retrieve cases or deliver results | [Azure DevOps](docs/azure-devops.md) |

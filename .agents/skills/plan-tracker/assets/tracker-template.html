@@ -348,18 +348,18 @@ button.chip:hover{background:var(--surface2)}
 const EMBED = /*__TRACKER_DATA__*/null;
 const BRANCHES = EMBED.branches.map(b=>b.name);
 const OOS = new Set(EMBED.branches.flatMap((b,i)=>b.inScope?[]:[i]));
-const DATA = EMBED.suites.map(su=>({b:su.branch,id:su.id,name:su.name,cases:su.cases.map(c=>[c.id,c.title,c.desc,c.verdict,c.note])}));
+const DATA = EMBED.suites.map(su=>({b:su.branch,id:String(su.id),name:su.name,cases:su.cases.map(c=>[String(c.id),c.title,c.desc,c.verdict,c.note])}));
 
 const VERD = {d:{cls:"d",lbl:"DROP"},f:{cls:"f",lbl:"FOLD"},t:{cls:"t",lbl:"TRIV"}};
 const STATUSES = ["todo","doing","done","blocked"];
 const STLBL = {todo:"To do",doing:"Doing",done:"Done",blocked:"Blocked"};
 /* Non-automatable by ruling — ids + reasons live in the registry's manual map. */
-const MANUAL = new Set(Object.keys(EMBED.manual).map(Number));
-/* Bugs filed to ADO — registry injected from the plan registry's bugs map. */
+const MANUAL = new Set(Object.keys(EMBED.manual));
+/* Filed bugs — registry injected from the plan registry's bugs map. */
 const BUGS = EMBED.bugs;
 const BUG_OF = {}; Object.entries(BUGS).forEach(([bid,b])=>b.cases.forEach(id=>BUG_OF[id]=bid));
-const BUG_FILED = new Set(Object.keys(BUG_OF).map(Number));
-const LSKEY = "plan-tracker-__PLAN_ID__"; /* per-plan storage — browser clicks are scratch, reset by the next regeneration */
+const BUG_FILED = new Set(Object.keys(BUG_OF));
+const LSKEY = "plan-tracker-__PLAN_ID__" + (EMBED.sourceIdentity ? "-" + EMBED.sourceIdentity : ""); /* per-plan storage — browser clicks are scratch, reset by the next regeneration */
 
 let S = {names:EMBED.names.slice(0,2), cases:{}, open:{}};
 try{ const raw = localStorage.getItem(LSKEY); if(raw){ const p = JSON.parse(raw); if(p && p.cases) S = Object.assign(S,p); } }catch(e){}
@@ -408,7 +408,7 @@ BRANCHES.forEach((bn,bi)=>{
   DATA.filter(s=>s.b===bi).forEach(su=>{
     const el = document.createElement("div"); el.className="suite"; el.dataset.sid = su.id;
     if(S.open[su.id]) el.classList.add("open");
-    const flag = su.id===406803 ? '<span class="suite-flag">empty · misspelled — remove</span>' : '';
+    const flag = '';
     el.innerHTML =
       '<button class="suite-head" aria-expanded="'+(!!S.open[su.id])+'">'+
         '<span class="caret">▶</span>'+
@@ -455,7 +455,7 @@ document.querySelectorAll(".branch").forEach(sec=>{
 
 /* ---------- per-row refresh ---------- */
 function refreshRow(row){
-  const id = +row.dataset.cid, st = cs(id);
+  const id = row.dataset.cid, st = cs(id);
   const manual = MANUAL.has(id), bug = BUG_FILED.has(id);
   const pill = row.querySelector("[data-st]");
   pill.className = "st "+(manual?"manual":bug?"bugfiled":st.s);
@@ -577,7 +577,7 @@ function applyFilters(){
   document.querySelectorAll(".suite").forEach(su=>{
     let vis = 0;
     su.querySelectorAll(".case").forEach(row=>{
-      const id=+row.dataset.cid, st=cs(id), v=row.dataset.v;
+      const id=row.dataset.cid, st=cs(id), v=row.dataset.v;
       let ok = true;
       if(qq && row.dataset.search.indexOf(qq)<0) ok=false;
       if(fs && st.s!==fs) ok=false;
@@ -587,7 +587,7 @@ function applyFilters(){
     });
     const anyFilter = qq||fs||fa!==""||fv;
     if(anyFilter){
-      su.hidden = vis===0 && su.dataset.sid!=="406803" ? true : vis===0;
+      su.hidden = vis===0;
       if(vis>0){ su.classList.add("open"); su.querySelector(".cases").hidden=false; }
     } else {
       su.hidden = false;
@@ -602,18 +602,18 @@ function applyFilters(){
 tree.addEventListener("click",e=>{
   const stPill = e.target.closest("[data-st]");
   if(stPill){ e.stopPropagation();
-    const row = stPill.closest(".case"), id=+row.dataset.cid;
+    const row = stPill.closest(".case"), id=row.dataset.cid;
     const cur = cs(id).s, next = STATUSES[(STATUSES.indexOf(cur)+1)%STATUSES.length];
     setCase(id,{s:next}); refreshRow(row); refreshTotals(); return;
   }
   const asg = e.target.closest("[data-asg]");
   if(asg){ e.stopPropagation();
-    const row = asg.closest(".case"), id=+row.dataset.cid;
+    const row = asg.closest(".case"), id=row.dataset.cid;
     setCase(id,{a:((cs(id).a||0)+1)%3}); refreshRow(row); return;
   }
   const sassign = e.target.closest("[data-sassign]");
   if(sassign){ e.stopPropagation();
-    const suEl = sassign.closest(".suite"), sid=+suEl.dataset.sid;
+    const suEl = sassign.closest(".suite"), sid=suEl.dataset.sid;
     const su = DATA.find(s=>s.id===sid);
     const first = su.cases.length? (cs(su.cases[0][0]).a||0):0;
     const next = (first+1)%3;
@@ -650,7 +650,7 @@ tree.addEventListener("keydown",e=>{
 });
 tree.addEventListener("change",e=>{
   const row = e.target.closest(".case"); if(!row) return;
-  const id = +row.dataset.cid;
+  const id = row.dataset.cid;
   if(e.target.matches("[data-selst]")) setCase(id,{s:e.target.value});
   if(e.target.matches("[data-sela]")) setCase(id,{a:+e.target.value});
   refreshRow(row); refreshTotals();

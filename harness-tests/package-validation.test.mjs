@@ -5,6 +5,23 @@ import {tmpdir} from 'node:os';
 import {join,relative,isAbsolute} from 'node:path';
 import {secretFindings,privacyFindings,inventory,localLinkFindings,publicationFindings} from '../scripts/lib/package-validation.mjs';
 
+test('integration fixtures and fixed public APIs do not allow arbitrary tenant coordinates', () => {
+ for (const host of ['example.atlassian.net', 'example-other.atlassian.net', 'your-site.atlassian.net', 'api.atlassian.com', 'xray.cloud.getxray.app', 'api.zephyrscale.smartbear.com', 'eu.api.zephyrscale.smartbear.com']) assert.deepEqual(privacyFindings('guide.md', `https://${host}/`), []);
+ assert(privacyFindings('guide.md', ['https://', 'private-tenant', '.atlassian.net'].join('')).some(row => row.rule === 'unreviewed-url'));
+});
+
+test('reviewed Zephyr field documentation does not allow unrelated support URLs', () => {
+ const origin = ['https://', 'support.smartbear.com/'].join('');
+ for (const path of ['zephyr-scale-cloud/api-docs/', 'zephyr/docs/en/configuration/advanced-customization-options/custom-fields-for-test-cases,-cycles,-plans,-steps,-and-executions.html']) assert.deepEqual(privacyFindings('guide.md', origin + path), []);
+ assert(privacyFindings('guide.md', origin + 'private-case/123').some(row => row.rule === 'unreviewed-url'));
+});
+
+test('documented Jira cursor and CSRF sentinel do not exempt actual token literals', () => {
+ assert.deepEqual(secretFindings('client.mjs', "const page = {nextPageToken: '<cursor>', 'X-Atlassian-Token': 'no-check'};"), []);
+ const key = 'X-Atlassian-' + 'Token';
+ assert(secretFindings('client.mjs', `const headers = {'${key}': 'synthetic-control'};`).some(row => row.rule === 'credential-assignment'));
+});
+
 function temporary(t) {
  const base=realpathSync(tmpdir()), root=mkdtempSync(join(base,'pom-validation-'));
  t.after(()=>{const rel=relative(base,realpathSync(root));assert(!isAbsolute(rel) && rel.startsWith('pom-validation-'));rmSync(root,{recursive:true});});return root;
@@ -115,6 +132,12 @@ test('links verify existing targets, missing targets, encoding and containment',
  const root=temporary(t);mkdirSync(join(root,'docs'));writeFileSync(join(root,'README.md'),'safe');
  const r=localLinkFindings(root,'docs/guide.md','[ok](../README.md) [missing](no.md) [escape](../../outside.md) [invalid](%zz) [remote](https://example.test)');
  assert.equal(r.links,4);assert.deepEqual(r.findings.map(f=>f.rule),['missing-link-target','link-outside-package','invalid-link-encoding']);
+});
+
+test('worktree Git metadata stays outside publication while unknown dotfiles remain findings', t => {
+ const root = temporary(t); writeFileSync(join(root, 'README.md'), 'safe'); writeFileSync(join(root, '.git'), 'gitdir: <worktree>'); writeFileSync(join(root, '.unknown'), 'unknown');
+ const result = inventory(root); assert.deepEqual(result.files, ['README.md']); assert.deepEqual(result.excluded, ['.git']); assert.deepEqual(result.unexpected, [{file: '.unknown', rule: 'unclassified-file'}]);
+ assert(publicationFindings(result, ['README.md', '.git']).some(row => row.file === '.git' && row.rule === 'unexpected-packed-file'));
 });
 test('fenced examples and comments are not rendered local links',t=>{
  const root=temporary(t);const r=localLinkFindings(root,'README.md','<!-- [comment](missing.md) -->\n```md\n[fenced](missing.md)\n```\n');assert.equal(r.links,0);

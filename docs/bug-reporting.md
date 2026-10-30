@@ -10,6 +10,12 @@ defect found during manual execution. A prior harness run is not required. The
 agent understands the selected context and refines the wording; deterministic
 commands preserve the draft, validate the destination and deliver approved content.
 
+Select the bug destination independently of the source: Azure or Jira can receive
+an approved draft grounded in local, Azure or Jira evidence. The captured source
+keeps its original freshness binding. Follow [tracker providers](tracker-providers.md)
+for `preview/file --provider`, Jira fields/attachments/native links and exact approval.
+Xray, Zephyr and no-plugin modes all use Jira issue operations for Jira bugs.
+
 ## Start and refine a report
 
 Provide the story reference or content, your description and relevant existing
