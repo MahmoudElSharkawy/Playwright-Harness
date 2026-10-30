@@ -151,6 +151,35 @@ test('server rules that materially rewrite a requested field stop the preview be
   assert.equal(f.control.writes, 0);
 });
 
+test('unchanged existing large HTML remains preserved without relaxing bounds for new field input', async t => {
+  const notes = 'x'.repeat(32769), f = await adoDesignFixture(t, {}, {existingFields: {'Custom.Notes': notes}}); extraField(f, 'Custom.Notes', 'html');
+  const preview = await previewDesign(f.roots, 'login', {client: f.client, selected: ['101']});
+  assert.deepEqual(preview.operations[0].publicationFields.preserved, ['Custom.Notes']);
+  assert(!preview.operations[0].request.body.some(row => row.path === '/fields/Custom.Notes'));
+  assert(!JSON.stringify(preview.operations[0].publicationFields).includes(notes));
+  await assert.rejects(previewDesign(f.roots, 'login', {client: f.client, selected: ['101'], fields: fieldChoices('101', {'Custom.Notes': notes})}), /bounded scalar/);
+  assert.equal((await publishDesign(f.roots, 'login', {client: f.client, approval: preview.fingerprint})).mode, 'completed'); assert.equal(f.state.items.get(101).fields['Custom.Notes'], notes);
+});
+
+test('validation cannot silently clear or remove an unrequested existing writable field', async t => {
+  for (const value of [null, undefined]) {
+    const f = await adoDesignFixture(t, {}, {existingFields: {'Custom.Team': 'existing'}}); extraField(f, 'Custom.Team');
+    f.control.normalizations['Custom.Team'] = () => value;
+    await assert.rejects(previewDesign(f.roots, 'login', {client: f.client, selected: ['101']}), /changed preserved field Custom.Team/);
+    assert.equal(f.control.writes, 0);
+  }
+});
+
+test('a dispatch-only rewrite of a preserved field remains uncertain through reconciliation without replay', async t => {
+  const f = await adoDesignFixture(t, {}, {existingFields: {'Custom.Team': 'existing'}}); extraField(f, 'Custom.Team');
+  const preview = await previewDesign(f.roots, 'login', {client: f.client, selected: ['101']});
+  f.control.beforeWrite = () => {f.control.normalizations['Custom.Team'] = () => 'rewritten';};
+  const options = {client: f.client, approval: preview.fingerprint};
+  assert.equal((await publishDesign(f.roots, 'login', options)).mode, 'reconciliation-required');
+  assert.equal((await reconcileDesign(f.roots, 'login', {client: f.client})).mode, 'reconciliation-required');
+  assert.equal((await publishDesign(f.roots, 'login', options)).mode, 'reconciliation-required'); assert.equal(f.control.writes, 1);
+});
+
 test('mixed native publication preserves unrelated content/tags and prepares once with atomic story link', async t => {
   const f = await adoDesignFixture(t), options = {client: f.client};
   const preview = await previewDesign(f.roots, 'login', options); assert.equal(f.control.writes, 0);

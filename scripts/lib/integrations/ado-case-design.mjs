@@ -52,19 +52,24 @@ function validatedDefaults(schema, fields, item, before) {
     const spec = schema.find(field => field.referenceName === name);
     requireThat(FIELDS.includes(name) ? item.fields[name] === value : equivalentFieldValue(spec, value, item.fields[name]), `ADO server validation changed requested field ${name}; review the field choice before publication.`);
   }
-  const defaults = {};
+  const defaults = {}, preserved = [];
   for (const spec of schema) {
     const name = spec.referenceName, value = item.fields[name];
-    if (spec.readOnly || FIELDS.includes(name) || Object.hasOwn(fields, name) || value === undefined || value === null) continue;
+    if (spec.readOnly || FIELDS.includes(name) || Object.hasOwn(fields, name)) continue;
+    if (before && Object.hasOwn(before.fields, name)) {
+      requireThat(Object.hasOwn(item.fields, name) && (before.fields[name] === value || equivalentFieldValue(spec, before.fields[name], value)), `ADO server validation changed preserved field ${name}; request and review an explicit field update.`);
+      preserved.push(name);
+      continue;
+    }
+    if (value === undefined || value === null) continue;
     requireThat(validFieldType(spec, value), `ADO server validation returned an unsupported value for ${name}.`);
-    if (before && before.fields[name] !== undefined && before.fields[name] !== null) {
-      requireThat(equivalentFieldValue(spec, before.fields[name], value), `ADO server validation changed preserved field ${name}; request and review an explicit field update.`);
-    } else defaults[name] = value;
+    defaults[name] = value;
   }
-  return defaults;
+  return {defaults, preserved: preserved.sort()};
 }
 
 function matchesField(operation, name, expected, actual) {
+  if (expected === actual) return true;
   const spec = !FIELDS.includes(name) && operation.publicationFields?.schema.find(field => field.referenceName === name);
   return spec ? equivalentFieldValue(spec, expected, actual) : expected === actual;
 }
@@ -137,8 +142,8 @@ export async function prepareCaseOperation(client, state, row, {validate = true,
       if (extra.missing.length && error.code === 'request-rejected' && [400, 422].includes(error.status)) throw Object.assign(new Error(`ADO server validation rejected required Test Case fields: ${extra.missing.join('; ')}.`), {fieldProblems: extra.missing});
       throw new Error(`ADO server validation rejected Test Case ${row.id}; check field values, identities, paths and conditional rules. ${error.message}`);
     }
-    extra.metadata.defaults = validatedDefaults(capabilities, fields, validated, before);
-    extra.metadata.schema = capabilities.filter(field => field.alwaysRequired || Object.hasOwn(fields, field.referenceName) || Object.hasOwn(extra.metadata.defaults, field.referenceName)).sort((a, b) => a.referenceName.localeCompare(b.referenceName));
+    Object.assign(extra.metadata, validatedDefaults(capabilities, fields, validated, before));
+    extra.metadata.schema = capabilities.filter(field => field.alwaysRequired || Object.hasOwn(fields, field.referenceName) || Object.hasOwn(extra.metadata.defaults, field.referenceName) || extra.metadata.preserved.includes(field.referenceName)).sort((a, b) => a.referenceName.localeCompare(b.referenceName));
   }
   return {caseId: row.id, identity, action: row.proposedAction, adoId: before?.id ?? null, revision: before?.rev ?? null, before, sharedWith, fields, relation, request, changedFields: different, type, publicationFields: extra.metadata};
 }
@@ -155,6 +160,7 @@ export async function verifyCaseOperation(client, operation, id, {historical = f
   requireThat(Object.entries(operation.fields).every(([name, value]) => matchesField(operation, name, value, revision.fields[name])), 'Readback differs from the approved native fields.');
   requireThat(Object.entries(operation.fields).filter(([name]) => name !== 'System.History').every(([name, value]) => matchesField(operation, name, value, item.fields[name])), 'Case changed after the approved operation; revalidate affected coverage.');
   requireThat(Object.entries(operation.publicationFields?.defaults ?? {}).every(([name, value]) => matchesField(operation, name, value, revision.fields[name]) && matchesField(operation, name, value, item.fields[name])), 'Readback differs from the approved server-default fields.');
+  requireThat((operation.publicationFields?.preserved ?? []).every(name => operation.before && Object.hasOwn(operation.before.fields, name) && Object.hasOwn(revision.fields, name) && Object.hasOwn(item.fields, name) && matchesField(operation, name, operation.before.fields[name], revision.fields[name]) && matchesField(operation, name, operation.before.fields[name], item.fields[name])), 'Readback changed an unrequested preserved field; retain uncertainty and review the native change.');
   if (operation.relation) requireThat((item.relations ?? []).some(relation => relation.rel === operation.relation.rel && relation.url.toLowerCase() === operation.relation.url.toLowerCase()), 'Created case lacks the approved story relation.');
   if (operation.before) requireThat(fingerprint(item.relations ?? []) === fingerprint(operation.before.relations ?? []), 'Existing case relationships changed.');
   return item;
