@@ -3,26 +3,41 @@ import { readFileSync, existsSync } from 'node:fs';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
-import { inventory, readSource, secretFindings, privacyFindings, localLinkFindings, publicationFindings } from './lib/package-validation.mjs';
+import { inventory, readSource, secretFindings, privacyFindings, localLinkFindings, publicationFindings, RUNTIME_BUNDLE_RECORD, runtimeBundleFiles, validateRuntimeBundle } from './lib/package-validation.mjs';
+import {archiveFiles, inspectArchive} from './ci/archive.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const command = process.argv[2];
 const kinds = ['syntax', 'json', 'links', 'privacy', 'secrets', 'provenance', 'publication'];
 function run() {
-  if (!kinds.includes(command) || process.argv.length !== 3) throw new Error('usage: node scripts/validate-package.mjs '+kinds.join('|'));
+  const prepared = command === 'publication' && process.argv.length === 7 && process.argv[3] === '--archive' && process.argv[5] === '--sha256';
+  if (!kinds.includes(command) || process.argv.length !== 3 && !prepared) throw new Error('usage: node scripts/validate-package.mjs '+kinds.join('|'));
   const scope = inventory(root);
   if (!scope.files.length) throw new Error('zero publication candidates');
   const findings = [];
   let files = 0, records = 0, links = 0, packedFiles, dependencyRecords;
   if (command === 'publication') {
+    files=scope.files.length;
+    if (prepared) {
+      const metadata=inspectArchive(resolve(process.argv[4]),root,process.argv[6]);
+      packedFiles=metadata.files;
+      const archive=archiveFiles(resolve(process.argv[4])), lock=JSON.parse(archive.get('npm-shrinkwrap.json').toString('utf8'));
+      const runtime=validateRuntimeBundle(new Map([...archive].filter(([path])=>path.startsWith('node_modules/'))),lock,JSON.parse(archive.get(RUNTIME_BUNDLE_RECORD).toString('utf8')));
+      findings.push(...publicationFindings({...scope,files:[...scope.files,RUNTIME_BUNDLE_RECORD]},[...archive.keys()],runtime));
+    } else if (!existsSync(join(root,RUNTIME_BUNDLE_RECORD))) {
+      findings.push({file:RUNTIME_BUNDLE_RECORD,rule:'runtime-bundle-preparation-required'});
+    } else {
+    const lock=JSON.parse(readFileSync(join(root,'npm-shrinkwrap.json'),'utf8'));
+    const runtime=validateRuntimeBundle(runtimeBundleFiles(root),lock,JSON.parse(readFileSync(join(root,RUNTIME_BUNDLE_RECORD),'utf8')));
     const npm=process.env.npm_execpath || join(dirname(process.execPath),'node_modules/npm/bin/npm-cli.js');
     if (!existsSync(npm)) throw new Error('run using npm run check:publication');
     const result=spawnSync(process.execPath,[npm,'pack','--dry-run','--json','--ignore-scripts','--cache',process.env.npm_config_cache ?? join(root,'.validation/npm-cache')],{cwd:root,encoding:'utf8',timeout:60000,maxBuffer:8*1024*1024});
     if (result.error || result.status!==0) throw new Error('npm package inspection failed');
     const packed=JSON.parse(result.stdout);
     if (!Array.isArray(packed) || packed.length!==1 || !Array.isArray(packed[0].files)) throw new Error('invalid npm output');
-    files=scope.files.length;packedFiles=packed[0].files.length;
-    findings.push(...publicationFindings(scope,packed[0].files.map(f=>f.path)));
+    packedFiles=packed[0].files.length;
+    findings.push(...publicationFindings(scope,packed[0].files.map(f=>f.path),runtime));
+    }
   }
   else if (command === 'provenance') {
     const status=JSON.parse(readFileSync(join(root,'scripts/provenance.json'),'utf8'));

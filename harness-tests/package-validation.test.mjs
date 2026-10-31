@@ -119,7 +119,7 @@ test('links verify existing targets, missing targets, encoding and containment',
 test('fenced examples and comments are not rendered local links',t=>{
  const root=temporary(t);const r=localLinkFindings(root,'README.md','<!-- [comment](missing.md) -->\n```md\n[fenced](missing.md)\n```\n');assert.equal(r.links,0);
 });
-test('package inspection rejects bundled dependencies, recovery material and missing public files',()=>{
+test('package inspection rejects unverified bundles, recovery material and missing public files',()=>{
  const scope={files:['README.md','package.json','package-lock.json'],unexpected:[]};
  assert.deepEqual(publicationFindings(scope,['README.md','package.json']),[]);
  assert.equal(publicationFindings(scope,['package.json','examples/node_modules/dependency.js','.m1-private/recovery.dpapi']).length,3);

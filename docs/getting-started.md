@@ -60,7 +60,6 @@ in the same project if you have not already. Setup includes this reminder in its
 | Item | Purpose |
 |---|---|
 | Exact development dependency and `.harness/vendor/` archive | Reproducible project installation |
-| Harness-scoped npm overrides in `package.json` | Retain the harness's validated transitive versions through install and `npm ci` |
 | Per-skill links under `.agents/skills/` and `.claude/skills/` | One canonical library for both hosts |
 | `.harness/links.json` and a guarded `postinstall` | Restore managed links after `npm ci` |
 | Managed blocks in `AGENTS.md` and `CLAUDE.md` | Routing, ownership and branch rules |
@@ -78,10 +77,11 @@ exact development dependencies. It creates no demo pages or tests. The starter's
 Existing code, instructions, host settings and imported team libraries are preserved.
 Optional host hooks are not enabled by setup.
 
-Dependency constraints apply only under `playwright-pom-harness`; your project's
-own dependencies and unrelated overrides remain independent. Setup updates its
-previous constraints on upgrade and reports conflicting custom harness overrides
-before writing changes. Commit the resulting manifest and lockfile with the archive.
+The release archive carries the harness's validated runtime dependencies. Setup
+first records the archive and dependency lock without running install scripts,
+then performs a frozen installation before configuring the project. Install scripts
+run in that final phase. Your project's dependency declarations and overrides remain
+independent. Commit the resulting manifest and lockfile with the archive.
 
 ### Windows junction readability
 

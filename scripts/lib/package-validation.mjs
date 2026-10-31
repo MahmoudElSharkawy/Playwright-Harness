@@ -1,6 +1,8 @@
 import { readdirSync, readFileSync, lstatSync, existsSync, realpathSync } from 'node:fs';
 import { join, relative, resolve, isAbsolute } from 'node:path';
 import { codeTokens } from './convention-source.mjs';
+import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
 
 const OMIT_DIRS = new Set(['.git', 'node_modules', '.m1-private', '.validation', 'test-results', 'playwright-report', 'blob-report', 'allure-results', 'allure-report', 'reports', 'ctrf', 'executions', '.playwright-cli']);
 const ROOT_FILES = new Set(['README.md', 'AGENTS.md', 'CHANGELOG.md', 'VERSION', '.env.example', '.gitignore', '.npmignore', 'package.json', 'package-lock.json', 'npm-shrinkwrap.json', 'SECURITY.md', 'LICENSE', 'THIRD_PARTY_NOTICES.md']);
@@ -11,7 +13,7 @@ const SOURCE_ONLY_PREFIXES = ['.claude/skills/'];
 const PUBLIC_PREFIXES = ['scripts/', 'harness-tests/', 'docs/', 'examples/', '.agents/skills/'];
 const EXTRA_FILES = new Set(['.claude-plugin/plugin.json', '.github/workflows/validation.yml', '.github/workflows/release.yml', 'resources/Queries/README.md', 'resources/apisCollections/README.md']);
 
-export function inventory(root) {
+export function inventory(root, {publicOnly = false} = {}) {
   root = realpathSync(root);
   const files = [], excluded = [], unexpected = [];
   function walk(directory) {
@@ -21,6 +23,7 @@ export function inventory(root) {
       if (item.isSymbolicLink()) { unexpected.push({ file, rule: 'symbolic-link' }); continue; }
       if (item.isDirectory()) {
         if (OMIT_DIRS.has(item.name) || ['execution-tests', 'test', '.harness'].includes(file)) { excluded.push(file); continue; }
+        if (publicOnly && !PUBLIC_PREFIXES.some(prefix => prefix.startsWith(`${file}/`) || `${file}/`.startsWith(prefix)) && ![...EXTRA_FILES].some(path => path.startsWith(`${file}/`))) {excluded.push(file); continue;}
         walk(absolute); continue;
       }
       if (!item.isFile()) continue;
@@ -162,8 +165,56 @@ export function readSource(root, file) {
   return readFileSync(absolute, 'utf8');
 }
 
-export function publicationFindings(scope, paths) {
-  const allowed=new Set(scope.files);
+export const RUNTIME_BUNDLE_RECORD = 'scripts/runtime-bundle-integrity.json';
+const digest = bytes => createHash('sha256').update(bytes).digest('hex');
+
+/** Read runtime files without following dependency links or including npm's generated bin links. */
+export function runtimeBundleFiles(root) {
+  const files = new Map();
+  function walk(directory, path) {
+    for (const item of readdirSync(directory, {withFileTypes: true})) {
+      const file = `${path}/${item.name}`, absolute = join(directory, item.name);
+      if (path.endsWith('node_modules') && item.name === '.bin' || file === 'node_modules/.package-lock.json') continue;
+      assert(!item.isSymbolicLink(), 'Runtime bundle contains a symbolic link.');
+      if (item.isDirectory()) walk(absolute, file);
+      else {assert(item.isFile(), 'Runtime bundle contains a non-file entry.'); files.set(file, readFileSync(absolute));}
+    }
+  }
+  if (existsSync(join(root, 'node_modules'))) walk(join(root, 'node_modules'), 'node_modules');
+  return files;
+}
+
+/** A build record is created only after a clean integrity-checked npm ci, never from consumer state. */
+export function runtimeBundleIntegrity(files, lock) {
+  const entries = Object.entries(lock.packages).filter(([path]) => path).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0);
+  assert(entries.length > 0, 'Runtime bundle dependency lock is empty.');
+  const groups = new Map(entries.map(([path, item]) => {
+    assert(/^node_modules\/(?:@[^/]+\/)?[^/]+(?:\/node_modules\/(?:@[^/]+\/)?[^/]+)*$/.test(path), 'Runtime bundle has an invalid dependency path.');
+    assert(item.version && item.resolved?.startsWith('https://registry.npmjs.org/') && item.integrity?.startsWith('sha512-'), 'Runtime bundle lacks cleared registry provenance.');
+    return [path, []];
+  }));
+  const owners = [...groups.keys()].sort((a, b) => b.length - a.length);
+  for (const [file, bytes] of files) {
+    const owner = owners.find(path => file.startsWith(`${path}/`) && !file.slice(path.length + 1).includes('/node_modules/') && !file.slice(path.length + 1).startsWith('node_modules/'));
+    assert(owner && !file.includes('\\') && !file.split('/').some(part => part === '.' || part === '..'), 'Runtime bundle contains an unexpected file.');
+    groups.get(owner).push([file.slice(owner.length + 1), digest(bytes)]);
+  }
+  return {schemaVersion: 1, packages: Object.fromEntries(entries.map(([path, item]) => {
+    const bytes = files.get(`${path}/package.json`); assert(bytes, 'Runtime bundle is missing a cleared package.');
+    const manifest = JSON.parse(bytes.toString('utf8'));
+    assert.equal(`${manifest.name}@${manifest.version}`, `${path.split('node_modules/').at(-1)}@${item.version}`, 'Runtime bundle package metadata differs.');
+    const list = groups.get(path).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0);
+    return [path, {version: item.version, resolved: item.resolved, integrity: item.integrity, filesSha256: digest(JSON.stringify(list))}];
+  }))};
+}
+
+export function validateRuntimeBundle(files, lock, record) {
+  assert.deepEqual(runtimeBundleIntegrity(files, lock), record, 'Runtime bundle bytes or provenance differ from the verified build record.');
+  return [...files.keys()].sort();
+}
+
+export function publicationFindings(scope, paths, runtime = []) {
+  const allowed=new Set([...scope.files, ...runtime]);
   const packed=new Set(paths);
   const findings=[...scope.unexpected];
   if (!paths.length || packed.size!==paths.length) findings.push({file:'package.json',rule:'invalid-packed-scope'});

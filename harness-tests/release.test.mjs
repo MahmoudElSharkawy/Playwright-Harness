@@ -8,6 +8,7 @@ import {packageRoot} from '../scripts/lib/consumer-paths.mjs';
 import {within} from '../scripts/lib/skill-roots.mjs';
 import {sha256} from '../scripts/lib/archive.mjs';
 import {inspectArchive, archiveFiles} from '../scripts/ci/archive.mjs';
+import {RUNTIME_BUNDLE_RECORD, runtimeBundleIntegrity} from '../scripts/lib/package-validation.mjs';
 import {command} from '../scripts/ci/process.mjs';
 import {requiredChecks, requiredConsumerFlows} from '../scripts/ci/results.mjs';
 import {requiredBrowserChecks} from '../scripts/probes/browser-checks.mjs';
@@ -54,8 +55,14 @@ function tar(entries) {
   return gzipSync(Buffer.concat([...blocks, Buffer.alloc(1024)]));
 }
 function tinyArchive(t, change = entries => entries) {
-  const root = temporary(t), source = contractRoot(t), name = `playwright-pom-harness-${version}.tgz`;
+  const root = temporary(t), source = temporary(t), name = `playwright-pom-harness-${version}.tgz`;
+  const item = {version: '1.0.0', resolved: 'https://registry.npmjs.org/synthetic/-/synthetic-1.0.0.tgz', integrity: 'sha512-synthetic'};
+  const lock = {version, packages: {'': {version}, 'node_modules/synthetic': item}};
+  const runtime = new Map([['node_modules/synthetic/package.json', Buffer.from('{"name":"synthetic","version":"1.0.0"}')], ['node_modules/synthetic/LICENSE', Buffer.from('Synthetic license fixture\n')]]);
+  save(join(source, 'package.json'), {name: 'playwright-pom-harness', version, private: true, bundleDependencies: true});
+  save(join(source, 'npm-shrinkwrap.json'), lock); save(join(source, '.claude-plugin/plugin.json'), {version}); writeFileSync(join(source, 'VERSION'), version);
   const entries = ['package.json', 'npm-shrinkwrap.json', '.claude-plugin/plugin.json', 'VERSION'].map(file => ({name: `package/${file}`, body: readFileSync(join(source, file))}));
+  entries.push({name: `package/${RUNTIME_BUNDLE_RECORD}`, body: JSON.stringify(runtimeBundleIntegrity(runtime, lock))}, ...[...runtime].map(([path, body]) => ({name: `package/${path}`, body})));
   const file = join(root, name); writeFileSync(file, tar(change(entries))); return {source, file};
 }
 
@@ -74,14 +81,49 @@ test('supplied archive inspection accepts real npm 11 bytes with consistent iden
   assert(archiveFiles(join(directory, candidate.archive.name)).has('.github/workflows/release.yml'));
   assert.deepEqual(readCandidate(packageRoot, directory, context), candidate);
 });
-test('release helper starts and verifies its candidate with no node_modules on a fresh runner', t => {
+test('release helper verifies the bundled runtime and its candidate on a fresh runner', t => {
   const root = temporary(t);
   for (const [name, bytes] of archiveFiles(join(directory, candidate.archive.name))) {
     const file = join(root, name); mkdirSync(dirname(file), {recursive: true}); writeFileSync(file, bytes);
   }
-  assert.equal(existsSync(join(root, 'node_modules')), false);
+  const record = JSON.parse(readFileSync(join(root, RUNTIME_BUNDLE_RECORD), 'utf8'));
+  assert.equal(Object.keys(record.packages).length, 99);
+  for (const path of Object.keys(record.packages)) assert(existsSync(join(root, path, 'package.json')));
   const result = command([join(root, 'scripts/ci/release.mjs'), 'verify', directory], {cwd: root, env: {GITHUB_EVENT_NAME: 'workflow_dispatch', GITHUB_REF: 'refs/heads/main', GITHUB_SHA: context.commit, GITHUB_REPOSITORY: context.repository, GITHUB_RUN_ID: context.runId}});
   assert.equal(result.status, 'PASS', result.output); assert.deepEqual(JSON.parse(result.stdout), candidate);
+  const before = [...archiveFiles(join(directory, candidate.archive.name))].map(([file, bytes]) => [file, bytes.toString('base64')]);
+  const publication = command([join(root, 'scripts/validate-package.mjs'), 'publication'], {cwd: root, env: {npm_config_cache: join(temporary(t), 'cache')}});
+  assert.equal(publication.status, 'PASS', publication.output); assert.equal(JSON.parse(publication.stdout).status, 'PASS');
+  for (const [file, bytes] of before) assert.equal(readFileSync(join(root, file)).toString('base64'), bytes, `Publication changed ${file}.`);
+});
+
+test('source publication validates the prepared archive checksum without creating a build record in source', t => {
+  const root = temporary(t);
+  for (const [file, bytes] of archiveFiles(join(directory, candidate.archive.name))) {
+    if (file.startsWith('node_modules/') || file === RUNTIME_BUNDLE_RECORD) continue;
+    mkdirSync(dirname(join(root, file)), {recursive: true}); writeFileSync(join(root, file), bytes);
+  }
+  const result = command(['scripts/validate-package.mjs', 'publication', '--archive', join(directory, candidate.archive.name), '--sha256', candidate.archive.sha256], {cwd: root});
+  assert.equal(result.status, 'PASS', result.output);
+  const report = JSON.parse(result.stdout); assert.equal(report.status, 'PASS');
+  assert.equal(report.packedFiles, candidate.archive.files);
+  assert.equal(existsSync(join(root, RUNTIME_BUNDLE_RECORD)), false);
+  const missing = command(['scripts/validate-package.mjs', 'publication'], {cwd: root});
+  assert.equal(missing.status, 'FAIL'); assert(JSON.parse(missing.stdout).findings.some(item => item.rule === 'runtime-bundle-preparation-required'));
+  const changed = command(['scripts/validate-package.mjs', 'publication', '--archive', join(directory, candidate.archive.name), '--sha256', '0'.repeat(64)], {cwd: root});
+  assert.equal(changed.status, 'FAIL');
+});
+
+test('archive inspection rejects missing, extra and modified runtime files and private output', t => {
+  for (const change of [
+    entries => entries.filter(entry => !entry.name.endsWith('/LICENSE')),
+    entries => entries.map(entry => entry.name.endsWith('/LICENSE') ? {...entry, body: 'modified'} : entry),
+    entries => [...entries, {name: 'package/node_modules/synthetic/private.env', body: 'extra'}],
+    entries => [...entries, {name: 'package/examples/node_modules/extra/index.js', body: 'extra'}],
+    entries => [...entries, {name: 'package/.m1-private/recovery.dpapi', body: 'private'}]
+  ]) {
+    const fixture = tinyArchive(t, change); assert.throws(() => inspectArchive(fixture.file, fixture.source), /bundle|publication/i);
+  }
 });
 test('supplied archives fail before installation on digest, identity, version or lock drift', t => {
   const valid = tinyArchive(t); assert(inspectArchive(valid.file, valid.source));

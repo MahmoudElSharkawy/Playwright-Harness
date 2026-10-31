@@ -1,6 +1,6 @@
 {
   "source": "npm-shrinkwrap.json",
-  "distribution": "Runtime dependencies are installed separately; upstream implementations and notices are not bundled or relicensed.",
+  "distribution": "Release archives bundle the locked runtime dependencies with their upstream LICENSE, NOTICE and applicable README license texts. Their implementations remain under their upstream licenses and are not relicensed as harness code.",
   "packages": [
     {
       "path": "node_modules/@azure-rest/core-client",

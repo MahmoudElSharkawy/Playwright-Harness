@@ -172,10 +172,7 @@ jobs:
       # Releases are packed with npm 11; this job checks that consumers on npm 12 can use them.
       - name: Pack the archive with the bundled npm 11
         if: inputs.archive_artifact == ''
-        run: |
-          mkdir -p "$RUNNER_TEMP/harness-archive"
-          npm --version
-          npm pack --ignore-scripts --pack-destination "$RUNNER_TEMP/harness-archive"
+        run: node scripts/ci/archive.mjs "$RUNNER_TEMP/harness-archive"
       - name: Download the release candidate
         if: inputs.archive_artifact != ''
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
