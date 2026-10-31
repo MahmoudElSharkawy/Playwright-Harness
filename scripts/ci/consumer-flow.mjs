@@ -14,6 +14,7 @@ import {packageRoot} from '../lib/consumer-paths.mjs';
 import {within, realFuture} from '../lib/skill-roots.mjs';
 import {snapshotInstalledPackage} from '../lib/host-proof-files.mjs';
 import {archiveManifest} from '../lib/archive.mjs';
+import {packRuntimeArchive} from './archive.mjs';
 import {legacyAutomationFiles} from '../../harness-tests/fixtures/legacy-automate-suite.mjs';
 
 const args = process.argv.slice(2), option = name => {const index = args.indexOf(name); return index < 0 ? undefined : args[index + 1];};
@@ -31,14 +32,8 @@ const run = (argv, cwd) => command(argv, {cwd, env, timeout: 900000, log: join(w
 const npmVersion = run([npm, '--version'], workspace).stdout.trim();
 if (option('--npm-major')) assert.equal(npmVersion.split('.')[0], option('--npm-major'), `Expected npm ${option('--npm-major')}, found ${npmVersion}.`);
 
-// Archives are packed like releases, with the npm bundled with Node: npm 12 leaves npm-shrinkwrap.json out.
-// npm names an unscoped package's archive <name>-<version>.tgz; the shape of `npm pack --json` differs between npm 11 and 12.
 function pack(source, destination) {
-  const {version} = JSON.parse(readFileSync(join(source, 'package.json'), 'utf8')), file = join(destination, `playwright-pom-harness-${version}.tgz`);
-  assert.equal(run([npmPath(), 'pack', '--ignore-scripts', '--pack-destination', destination], source).status, 'PASS', 'npm pack failed; inspect its log.');
-  assert(existsSync(file), `npm pack did not write ${basename(file)}.`);
-  assert([...entries(file)].some(entry => entry.path === 'package/npm-shrinkwrap.json'), 'The packed archive has no npm-shrinkwrap.json; pack releases with npm 11.');
-  return file;
+  return packRuntimeArchive(source, destination, {run}).file;
 }
 // The archive under test: given (a file, or the folder installed validation packed into), or packed here.
 let archive = option('--archive') && resolve(option('--archive'));
@@ -294,7 +289,10 @@ flow('C8', 'An empty folder under a parent package.json needs an explicit projec
 
 flow('C10', 'Consumer dependencies retain their own versions through setup and npm ci', () => {
   const root = project('c10-independent', {'package.json': manifestText('independent-app', {dependencies: {'@azure/identity': '4.13.3'},
-    devDependencies: {'@playwright/test': '1.63.0'}}), 'playwright.config.ts': 'export default {testDir: "./tests"};\n'});
+    devDependencies: {'@playwright/test': '1.63.0'}, scripts: {postinstall: 'node consumer-hook.cjs'}}),
+    'consumer-hook.cjs': 'require("node:fs").appendFileSync("consumer-hook.log", "postinstall\\n");\n',
+    'playwright.config.ts': 'export default {testDir: "./tests"};\n'});
+  const hookRuns = () => readFileSync(join(root, 'consumer-hook.log'), 'utf8').trim().split('\n').length;
   const dependency = (parent, name) => {
     let directory = dirname(createRequire(join(parent, 'package.json')).resolve(name));
     for (;;) {
@@ -305,9 +303,11 @@ flow('C10', 'Consumer dependencies retain their own versions through setup and n
   };
   const versions = parent => {
     const identity = dependency(parent, '@azure/identity'), open = dependency(identity.directory, 'open'), wsl = dependency(open.directory, 'wsl-utils');
-    return {'@azure/identity': identity.version, open: open.version, 'wsl-utils': wsl.version};
+    const core = dependency(identity.directory, '@azure/core-client'), tslib = dependency(core.directory, 'tslib');
+    return {'@azure/identity': identity.version, open: open.version, 'wsl-utils': wsl.version, '@azure/core-client': core.version, tslib: tslib.version};
   };
   assert.equal(run([npm, 'install'], root).status, 'PASS', 'Installing the independent consumer failed.');
+  assert.equal(hookRuns(), 1, 'The independent consumer postinstall hook must run once.');
   const before = versions(root); assert.equal(before['@azure/identity'], '4.13.3');
   const cleared = JSON.parse(readFileSync(join(packageRoot, 'npm-shrinkwrap.json'), 'utf8')).packages;
   const expected = Object.fromEntries(Object.keys(before).map(name => [name, cleared[`node_modules/${name}`].version]));
@@ -318,9 +318,11 @@ flow('C10', 'Consumer dependencies retain their own versions through setup and n
     assert.equal(run([npm, 'ls', '--all'], root).status, 'PASS', 'npm reports an invalid dependency tree.');
     const report = check(root); assert.equal(report.exit, 0, report.errors.join(' ')); noDrift(report);
   };
-  const result = setup(root, download(root)); assert.equal(result.status, 'DONE', stops(result)); verify();
-  assert.equal(run([npm, 'ci'], root).status, 'PASS', 'npm ci failed.'); verify();
-  return {consumer: before, harness: expected};
+  const result = setup(root, download(root)); assert.equal(result.status, 'DONE', stops(result));
+  assert.equal(hookRuns(), 2, 'Setup must run the consumer postinstall hook exactly once.'); verify();
+  assert.equal(run([npm, 'ci'], root).status, 'PASS', 'npm ci failed.');
+  assert.equal(hookRuns(), 3, 'The following npm ci must run the consumer postinstall hook once.'); verify();
+  return {consumer: before, harness: expected, consumerHookRuns: hookRuns()};
 });
 
 const expected = requiredConsumerFlows;

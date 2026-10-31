@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, realpathSync, symlinkSync} from 'node:fs';
+import {mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, realpathSync, symlinkSync, existsSync, readdirSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join, dirname} from 'node:path';
-import {validateInstalledGraph, clearedOverrides} from '../scripts/ci/distribution.mjs';
+import {validateInstalledGraph} from '../scripts/ci/distribution.mjs';
 import {checkContracts} from '../scripts/ci/contracts.mjs';
 import {testCounts, completeTests, completeChecks, requiredChecks, completeNativeProof, browserDiagnostics, executeDiagnostics, testFailureLocations, testFailureDiagnostics, nativeSummaryFields} from '../scripts/ci/results.mjs';
 import {parallelDiagnostic, parallelFailureDiagnostic, parallelLogDiagnostic} from '../scripts/probes/parallel-diagnostics.mjs';
@@ -57,6 +57,7 @@ import {nativeProcess} from '../scripts/ci/native-process.mjs';
 import {recoverNativeProof} from '../scripts/ci/recovery.mjs';
 import {hostDatabases} from './fixtures/host-databases.mjs';
 import {runChecks} from '../scripts/ci/checks.mjs';
+import {inspectArchive} from '../scripts/ci/archive.mjs';
 
 const save = (path, value) => {mkdirSync(dirname(path), {recursive: true}); writeFileSync(path, JSON.stringify(value));};
 function temporary(t) {
@@ -73,22 +74,6 @@ function graph(t, {duplicate = false} = {}) {
 }
 test('installed graph allows npm relocation and duplicates without permitting dependency drift', t => {
   const {root, expected} = graph(t, {duplicate: true}); assert.deepEqual(validateInstalledGraph(root, expected), {dependencyIdentities: 1, installedNodes: 2});
-});
-test('validation consumer constraints retain cleared versions for scoped and relocated dependencies', t => {
-  const {expected} = graph(t);
-  expected.packages['node_modules/parent/node_modules/synthetic'] = {...expected.packages['node_modules/synthetic']};
-  expected.packages['node_modules/@synthetic/types'] = {version: '2.0.0'};
-  assert.deepEqual(clearedOverrides(expected), {synthetic: '1.0.0', '@synthetic/types': '2.0.0'});
-  assert.equal(expected.packages['node_modules/synthetic'].version, '1.0.0');
-});
-test('validation consumer refuses ambiguous or missing cleared versions instead of collapsing the graph', t => {
-  const {expected} = graph(t);
-  assert.throws(() => clearedOverrides({packages: {'': {}}}), /Empty/);
-  expected.packages['node_modules/parent/node_modules/synthetic'] = {version: '2.0.0'};
-  assert.throws(() => clearedOverrides(expected), /Multiple cleared versions/);
-  delete expected.packages['node_modules/parent/node_modules/synthetic'];
-  delete expected.packages['node_modules/synthetic'].version;
-  assert.throws(() => clearedOverrides(expected), /Missing cleared dependency version/);
 });
 for (const field of ['version', 'resolved', 'integrity']) test(`installed graph rejects changed ${field}`, t => {
   const {root, expected, actual, paths} = graph(t); actual.packages[paths[0]][field] = 'changed'; save(join(root, 'package-lock.json'), actual);
@@ -284,4 +269,29 @@ test('local proof fixtures reject arbitrary database routing before provisioning
 
 test('CI rejects an in-package audit before beginning checks or writing fixtures', () => {
   const root = resolvePackage(); assert.throws(() => runChecks(root, join(root, '.validation/invalid-ci-audit')), /external audit directory/);
+});
+
+test('source CI prepares the locked publication archive externally and passes its exact checksum to the gate', t => {
+  const root = temporary(t), audit = join(temporary(t), 'audit');
+  const original = JSON.parse(readFileSync(join(resolvePackage(), 'npm-shrinkwrap.json'), 'utf8'));
+  const name = 'playwright-pom-harness', version = '1.0.0';
+  save(join(root, 'package.json'), {name, version, private: true, bundleDependencies: true, files: ['scripts', 'harness-tests', '.claude-plugin/plugin.json', 'VERSION', 'npm-shrinkwrap.json'], dependencies: {tslib: original.packages['node_modules/tslib'].version}});
+  save(join(root, 'npm-shrinkwrap.json'), {name, version, lockfileVersion: 3, requires: true, packages: {'': {name, version, dependencies: {tslib: original.packages['node_modules/tslib'].version}}, 'node_modules/tslib': original.packages['node_modules/tslib']}});
+  save(join(root, '.claude-plugin/plugin.json'), {version}); writeFileSync(join(root, 'VERSION'), version);
+  const stub = 'console.log(JSON.stringify({status:"PASS"}));\n';
+  for (const file of ['scripts/ci/contracts.mjs', 'scripts/ci/types.mjs', 'scripts/check-conventions.mjs', 'scripts/fetch-ado-suite.mjs']) {mkdirSync(dirname(join(root, file)), {recursive: true}); writeFileSync(join(root, file), stub);}
+  writeFileSync(join(root, 'scripts/validate-package.mjs'), 'console.log(JSON.stringify({arguments:process.argv.slice(2)}));\n');
+  mkdirSync(join(root, 'harness-tests')); writeFileSync(join(root, 'harness-tests/synthetic.test.mjs'), 'import test from "node:test"; test("substantive fixture",()=>{});\n');
+  save(join(root, 'node_modules/untrusted/package.json'), {name: 'untrusted', version: '99.0.0'});
+  const source = readFileSync(join(root, 'package.json')), lock = readFileSync(join(root, 'npm-shrinkwrap.json'));
+  const context = process.env.NODE_TEST_CONTEXT; let result;
+  try {delete process.env.NODE_TEST_CONTEXT; result = runChecks(root, audit);}
+  finally {if (context !== undefined) process.env.NODE_TEST_CONTEXT = context;}
+  assert.equal(result.status, 'PASS');
+  const args = JSON.parse(readFileSync(join(audit, 'publication.log'), 'utf8')).arguments;
+  assert.deepEqual(args.slice(0, 2), ['publication', '--archive']); assert.equal(args[3], '--sha256');
+  assert.equal(inspectArchive(args[2], root, args[4]).sha256, args[4]);
+  assert.deepEqual(readFileSync(join(root, 'package.json')), source); assert.deepEqual(readFileSync(join(root, 'npm-shrinkwrap.json')), lock);
+  assert.equal(existsSync(join(root, 'scripts/runtime-bundle-integrity.json')), false);
+  assert.deepEqual(readdirSync(join(root, 'node_modules')), ['untrusted']);
 });

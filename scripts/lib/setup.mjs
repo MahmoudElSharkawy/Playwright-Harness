@@ -110,23 +110,34 @@ export function setupFromArchive({projectRoot, archive, environment, mode, skipB
   const vendored = `.harness/vendor/playwright-pom-harness-${VERSION}.tgz`, vendorPath = join(projectRoot, vendored);
   if (existsSync(vendorPath) && sha256(vendorPath) !== sha256(file)) return {status: 'STOPPED', warnings, stops: [`${vendored} already exists with different bytes; remove it only if you are sure, then rerun.`]};
   // Preflight with no writes: the new version plans its whole adoption first.
-  let plan;
-  try {plan = adoptProject({projectRoot, installedRoot: packageRoot, environment, mode, dryRun: true});}
+  let plan, previousVersion;
+  const manifestPath = join(projectRoot, 'package.json'), lockPath = join(projectRoot, 'package-lock.json');
+  try {
+    if (existsSync(manifestPath)) readJsonFile(manifestPath);
+    const consumerLock = existsSync(lockPath) ? readJsonFile(lockPath) : undefined;
+    previousVersion = consumerLock?.packages?.['node_modules/playwright-pom-harness']?.version;
+    plan = adoptProject({projectRoot, installedRoot: packageRoot, environment, mode, dryRun: true});
+  }
   catch (error) {return {status: 'STOPPED', warnings, stops: error instanceof AdoptionConflict ? error.conflicts : [error.message]};}
   if (dryRun) return {status: 'PLANNED', version: VERSION, archive: file, checksum, warnings, changes: plan.changes.map(change => change.file), links: summarizeLinks(plan.links), reports: plan.reports, starter: !hasPlaywrightFramework(projectRoot)};
-  const roots = consumerRoots(projectRoot, packageRoot), lockPath = join(projectRoot, 'package-lock.json');
-  const previousVersion = existsSync(lockPath) ? readJsonFile(lockPath).packages?.['node_modules/playwright-pom-harness']?.version : undefined;
+  const roots = consumerRoots(projectRoot, packageRoot);
   const starter = !hasPlaywrightFramework(projectRoot), dependencies = starter ? starterDependencies(packageRoot, projectRoot) : {install: [], kept: []};
   const journal = startJournal(roots, {previousVersion: previousVersion ?? null, newVersion: VERSION, starter});
   for (const path of ['package.json', 'package-lock.json']) journal.file(path, existsSync(join(projectRoot, path)) ? readFileSync(join(projectRoot, path)) : null);
   journal.modules(existsSync(join(projectRoot, 'node_modules')));
-  if (!existsSync(join(projectRoot, 'package.json'))) writeFileSync(join(projectRoot, 'package.json'), JSON.stringify({name: npmName(projectRoot), version: '1.0.0', private: true, type: 'commonjs', engines: {node: '>=24 <25'}, scripts: {test: 'playwright test'}}, null, 2) + '\n');
+  if (!existsSync(manifestPath)) writeFileSync(manifestPath, JSON.stringify({name: npmName(projectRoot), version: '1.0.0', private: true, type: 'commonjs', engines: {node: '>=24 <25'}, scripts: {test: 'playwright test'}}, null, 2) + '\n');
   if (resolve(file) !== resolve(vendorPath)) {journal.file(vendored, existsSync(vendorPath) ? readFileSync(vendorPath) : null); mkdirSync(dirname(vendorPath), {recursive: true}); copyFileSync(file, vendorPath);}
-  const installed = npm(['install', '--save-dev', '--save-exact', '--no-audit', '--no-fund', '--install-strategy=nested', `file:${vendored}`, ...dependencies.install]);
-  if (installed.status !== 0) {
-    const restore = restoreJournal(roots, journal, {npm, modules: false});
-    return {status: 'FAILED', warnings, stops: ['npm install did not complete; its last output is shown below.'], output: installed.output.trim().split('\n').slice(-12).join('\n'),
-      restored: restore.restored, notes: ['package.json, the lockfile and the copied archive were restored. node_modules and anything the project\'s own install scripts did may have changed; run npm ci (or npm install when there was no lockfile).']};
+  // The first pass records the bundle in the consumer lock; npm ci restores its frozen graph before scripts run.
+  for (const args of [
+    ['install', '--save-dev', '--save-exact', '--no-audit', '--no-fund', '--install-strategy=nested', '--ignore-scripts', `file:${vendored}`, ...dependencies.install],
+    ['ci', '--no-audit', '--no-fund', '--ignore-scripts=false'],
+  ]) {
+    const installed = npm(args);
+    if (installed.status !== 0) {
+      const restore = restoreJournal(roots, journal, {npm, modules: false});
+      return {status: 'FAILED', warnings, stops: [`npm ${args[0]} did not complete; its last output is shown below.`], output: installed.output.trim().split('\n').slice(-12).join('\n'),
+        restored: restore.restored, notes: ['package.json, the lockfile and the copied archive were restored. node_modules and anything the project\'s own install scripts did may have changed; run npm ci (or npm install when there was no lockfile).']};
+    }
   }
   const download = relative(projectRoot, file);
   return handoff({projectRoot, run: journal.run, environment, mode, skipBrowsers, starter, checksum, warnings, kept: dependencies.kept,

@@ -7,6 +7,7 @@ import {tmpdir} from 'node:os';
 import {join, dirname, relative, isAbsolute} from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {packageRoot, consumerRoots} from '../scripts/lib/consumer-paths.mjs';
+import {archiveManifest, integrity} from '../scripts/lib/archive.mjs';
 import {adoptProject} from '../scripts/lib/adoption.mjs';
 import {discoveryEntry, createSkillLink} from '../scripts/lib/skill-roots.mjs';
 import {openJournal} from '../scripts/lib/setup-journal.mjs';
@@ -19,18 +20,91 @@ function project(t) {
  t.after(()=>{const rel=relative(base,realpathSync(root));assert(!isAbsolute(rel)&&rel.startsWith('pom-setup-'));rmSync(root,{recursive:true,force:true});});return root;
 }
 function put(root,path,text){const file=join(root,path);mkdirSync(dirname(file),{recursive:true});writeFileSync(file,text);}
-/** A minimal npm archive: one package/package.json entry in a gzipped ustar stream. */
-function archive(file,manifest={name:'playwright-pom-harness',version:VERSION}) {
- const body=Buffer.from(JSON.stringify(manifest)),header=Buffer.alloc(512);
- header.write('package/package.json',0);header.write('0000644\0',100);header.write(`${body.length.toString(8).padStart(11,'0')}\0`,124);header.write('ustar\0',257);
- writeFileSync(file,gzipSync(Buffer.concat([header,body,Buffer.alloc((512-body.length%512)%512),Buffer.alloc(1024)])));return file;
+/** Minimal npm JSON entries in a gzipped ustar stream; no files are extracted. */
+function archive(file,manifest={name:'playwright-pom-harness',version:VERSION},files={}) {
+ const entries=Object.entries({'package.json':manifest,...files}).flatMap(([name,value])=>{
+  const body=Buffer.from(JSON.stringify(value)),header=Buffer.alloc(512);
+  header.write(`package/${name}`,0);header.write('0000644\0',100);header.write(`${body.length.toString(8).padStart(11,'0')}\0`,124);header.write('ustar\0',257);
+  return [header,body,Buffer.alloc((512-body.length%512)%512)];
+ });
+ mkdirSync(dirname(file),{recursive:true});writeFileSync(file,gzipSync(Buffer.concat([...entries,Buffer.alloc(1024)])));return file;
 }
 const archiveName=`playwright-pom-harness-${VERSION}.tgz`;
 // A 3.0.x redirect that legacy projects kept in .claude/skills; its digest is a recognized released file.
 const legacyRedirect='---\nname: test-data\ndescription: Compatibility entrypoint for test-data; use the canonical skill.\n---\n\n# test-data — compatibility reference\n\nRead [the canonical content](../../../.agents/skills/test-data/SKILL.md) and its linked references.\nNo separate rules or mutable project state are maintained here.\n';
-const npmStub=(status=0)=>{const calls=[],npm=args=>{calls.push(args);return {status,output:status?'npm ERR! synthetic failure':''};};npm.calls=calls;return npm;};
+const npmStub=(root,status=0)=>{
+ const calls=[],scriptRuns=[],npm=args=>{
+  calls.push(args);const exit=Array.isArray(status)?status[calls.length-1]??0:status;
+  if(exit)return {status:exit,output:'npm ERR! synthetic failure'};
+  const manifest=JSON.parse(readFileSync(join(root,'package.json'),'utf8'));
+  if(args[0]==='install'){
+   const spec=args.find(value=>value.startsWith('file:'));assert(spec,'The offline install needs an archive.');
+   const packaged=archiveManifest(join(root,spec.slice(5)));
+   manifest.devDependencies={...manifest.devDependencies,[packaged.name]:spec};
+   for(const item of args.slice(args.indexOf(spec)+1)){const at=item.lastIndexOf('@');assert(at>0);manifest.devDependencies[item.slice(0,at)]=item.slice(at+1);}
+   const lock=existsSync(join(root,'package-lock.json'))?JSON.parse(readFileSync(join(root,'package-lock.json'),'utf8')):{};
+   lock.lockfileVersion=3;lock.packages={...lock.packages,'':{...lock.packages?.[''],name:manifest.name,devDependencies:manifest.devDependencies},
+    'node_modules/playwright-pom-harness':{version:packaged.version,resolved:spec,integrity:integrity(join(root,spec.slice(5)))}};
+   put(root,'package.json',JSON.stringify(manifest,null,2)+'\n');put(root,'package-lock.json',JSON.stringify(lock,null,2)+'\n');
+  }else if(args[0]==='ci'){
+   assert(existsSync(join(root,'package-lock.json')),'npm ci requires a lockfile.');
+   const lock=JSON.parse(readFileSync(join(root,'package-lock.json'),'utf8')),entry=lock.packages?.['node_modules/playwright-pom-harness'];
+   if(entry){
+    assert.equal(manifest.devDependencies?.['playwright-pom-harness'],entry.resolved);
+    const file=join(root,entry.resolved.slice(5)),packaged=archiveManifest(file);
+    assert.equal(packaged.version,entry.version);assert.equal(integrity(file),entry.integrity);
+    put(root,'node_modules/playwright-pom-harness/package.json',JSON.stringify(packaged));
+   }
+  }
+  if(!args.includes('--ignore-scripts'))scriptRuns.push({command:args[0],scripts:manifest.scripts});
+  return {status:0,output:''};
+ };npm.calls=calls;npm.scriptRuns=scriptRuns;return npm;
+};
 const handoff=({projectRoot,run,starter,download,checksum,warnings,kept})=>configureInstalled({projectRoot,run,skipBrowsers:true,starter,download,carried:{checksum,warnings,kept},packageRoot});
-const setup=(root,options={})=>setupFromArchive({projectRoot:root,npm:npmStub(),handoff,packageRoot,...options});
+const setup=(root,options={})=>setupFromArchive({projectRoot:root,npm:npmStub(root),handoff,packageRoot,...options});
+
+test('setup freezes the archive before handoff and runs consumer install hooks once',t=>{
+ const root=project(t),manifest={name:'app',dependencies:{tslib:'2.9.1','@azure/identity':'4.13.3'},devDependencies:{'@playwright/test':'1.63.0'},
+  overrides:{tslib:'$tslib',unrelated:{nested:'1.0.0'},'playwright-pom-harness':{'consumer-rule':'1.0.0'}},scripts:{postinstall:'node native-build.js'}};
+ const original=JSON.stringify(manifest);put(root,'package.json',original);const file=archive(join(root,archiveName)),stub=npmStub(root);let initial=true;
+ const npm=args=>{if(initial){assert.equal(readFileSync(join(root,'package.json'),'utf8'),original);initial=false;}return stub(args);};
+ const result=setup(root,{npm,handoff:()=>{
+  assert.equal(stub.calls.length,2);assert.equal(stub.calls[1][0],'ci');
+  const lock=JSON.parse(readFileSync(join(root,'package-lock.json'),'utf8')),entry=lock.packages['node_modules/playwright-pom-harness'];
+  assert.deepEqual(entry,{version:VERSION,resolved:`file:.harness/vendor/${archiveName}`,integrity:integrity(file)});
+  assert.equal(JSON.parse(readFileSync(join(root,'node_modules/playwright-pom-harness/package.json'),'utf8')).version,VERSION);
+  return {status:'DONE'};
+ }});
+ assert.equal(result.status,'DONE');assert.equal(stub.calls[0][0],'install');assert(stub.calls[0].includes('--ignore-scripts'));
+ assert.deepEqual(stub.calls[1],['ci','--no-audit','--no-fund','--ignore-scripts=false']);assert.deepEqual(stub.scriptRuns,[{command:'ci',scripts:manifest.scripts}]);
+ const installed=JSON.parse(readFileSync(join(root,'package.json'),'utf8'));
+ assert.deepEqual(installed.dependencies,manifest.dependencies);assert.equal(installed.devDependencies['@playwright/test'],manifest.devDependencies['@playwright/test']);
+ assert.deepEqual(installed.overrides,manifest.overrides);assert.deepEqual(installed.scripts,manifest.scripts);
+});
+
+test('a dry run preserves the consumer manifest and records no npm phase',t=>{
+ const root=project(t),manifest='{\r\n\t"name":"app",\r\n\t"devDependencies":{"@playwright/test":"1.63.0"},\r\n\t"overrides":{"tslib":"$tslib"}\r\n}\r\n',npm=npmStub(root);
+ put(root,'package.json',manifest);archive(join(root,archiveName));const preview=setup(root,{npm,dryRun:true});
+ assert.equal(preview.status,'PLANNED');assert.deepEqual(npm.calls,[]);assert.equal(readFileSync(join(root,'package.json'),'utf8'),manifest);
+ assert(!existsSync(join(root,'.harness')));assert(!existsSync(join(root,'package-lock.json')));assert(!existsSync(join(root,'node_modules')));
+});
+
+for(const modules of [false,true])test(`an update freezes the new archive before handoff with ${modules?'an installed':'a clean-checkout'} consumer graph`,t=>{
+ const root=project(t),oldVersion='4.0.0',oldSpec=`file:.harness/vendor/playwright-pom-harness-${oldVersion}.tgz`,manifest={name:'app',dependencies:{tslib:'2.9.1'},
+  devDependencies:{'@playwright/test':'1.63.0','playwright-pom-harness':oldSpec},overrides:{tslib:'$tslib','playwright-pom-harness':{'consumer-rule':'1.0.0'}}};
+ const oldArchive=archive(join(root,oldSpec.slice(5)),{name:'playwright-pom-harness',version:oldVersion}),original=JSON.stringify(manifest);
+ put(root,'package.json',original);put(root,'package-lock.json',JSON.stringify({lockfileVersion:3,packages:{'node_modules/playwright-pom-harness':{version:oldVersion,resolved:oldSpec,integrity:integrity(oldArchive)}}}));
+ if(modules)put(root,'node_modules/playwright-pom-harness/package.json',JSON.stringify({name:'playwright-pom-harness',version:oldVersion}));
+ archive(join(root,archiveName));const stub=npmStub(root);let seen=false;
+ const result=setup(root,{npm:args=>{if(!seen){assert.equal(readFileSync(join(root,'package.json'),'utf8'),original);seen=true;}return stub(args);},handoff:({run})=>{
+  const lock=JSON.parse(readFileSync(join(root,'package-lock.json'),'utf8')),installed=JSON.parse(readFileSync(join(root,'node_modules/playwright-pom-harness/package.json'),'utf8'));
+  assert.equal(lock.packages['node_modules/playwright-pom-harness'].version,VERSION);assert.equal(installed.version,VERSION);
+  assert.equal(openJournal(consumerRoots(root,packageRoot),run).record.previousVersion,oldVersion);assert.equal(stub.calls.at(-1)[0],'ci');return {status:'DONE'};
+ }});
+ assert.equal(result.status,'DONE');const after=JSON.parse(readFileSync(join(root,'package.json'),'utf8'));
+ assert.deepEqual(after.overrides,manifest.overrides);assert.deepEqual(after.dependencies,manifest.dependencies);assert.equal(after.devDependencies['@playwright/test'],'1.63.0');
+ assert.equal(after.devDependencies['playwright-pom-harness'],`file:.harness/vendor/${archiveName}`);
+});
 
 test('the archive is found by version; missing, wrong, ambiguous and explicit-wrong archives stop',t=>{
  const root=project(t);assert.match(setup(root,{dryRun:true}).stops[0],/Cannot find the playwright-pom-harness/);
@@ -69,18 +143,31 @@ test('the starter is planned only where no Playwright framework exists',t=>{
  assert.equal(plan({'package.json':'{"name":"app","devDependencies":{"@playwright/test":"1.63.0"}}'}),false);
  assert.equal(plan({'playwright.config.ts':'export default {};'}),false);
 });
-test('a failed install restores package.json, the lockfile and the archive copy byte for byte',t=>{
- const root=project(t),manifest='{\n  "name": "app",\n  "version": "1.0.0",\n  "dependencies": {"local-change": "1.0.0"}\n}\n',lock='{"lockfileVersion":3,"packages":{}}\n';
+for(const phase of ['install','ci'])test(`a failed npm ${phase} restores package.json, the lockfile and the archive copy byte for byte`,t=>{
+ const root=project(t),manifest='{\n  "name": "app",\n  "version": "1.0.0",\n  "dependencies": {"local-change": "1.0.0"},\n  "overrides": {"consumer-rule": "1.0.0"}\n}\n',lock='{"lockfileVersion":3,"packages":{}}\n';
  put(root,'package.json',manifest);put(root,'package-lock.json',lock);archive(join(root,archiveName));
- const result=setup(root,{npm:npmStub(1)});
- assert.equal(result.status,'FAILED');assert.match(result.output,/synthetic failure/);
+ const stub=npmStub(root,phase==='install'?[1]:[0,1]);let handedOff=false;
+ const result=setup(root,{npm:args=>{
+  const runs=join(root,'.harness/state/setup'),run=readdirSync(runs)[0],journal=openJournal(consumerRoots(root,packageRoot),run);
+  for(const [path,bytes] of [['package.json',manifest],['package-lock.json',lock]]){
+   const entry=journal.record.entries.find(item=>item.kind==='file'&&item.path===path);assert(entry?.existed);
+   assert.equal(readFileSync(join(runs,run,'blobs',entry.blob),'utf8'),bytes);
+  }
+  assert(journal.record.entries.some(item=>item.kind==='file'&&item.path===`.harness/vendor/${archiveName}`));
+  const installed=stub(args);
+  if(args[0]===phase){put(root,'package.json','partially written manifest');put(root,'package-lock.json','partially written lock');}
+  return installed;
+ },handoff:()=>{handedOff=true;return {status:'DONE'};}});
+ assert.equal(result.status,'FAILED');assert.match(result.stops[0],new RegExp(`npm ${phase} did not complete`));assert.match(result.output,/synthetic failure/);
+ assert.equal(handedOff,false);assert.equal(stub.calls.at(-1)[0],phase);assert.equal(stub.scriptRuns.length,0,'Recovery must not rerun install hooks.');
  assert.equal(readFileSync(join(root,'package.json'),'utf8'),manifest);assert.equal(readFileSync(join(root,'package-lock.json'),'utf8'),lock);
  assert(!existsSync(join(root,`.harness/vendor/${archiveName}`)));assert(!existsSync(join(root,'.harness/links.json')));
- const fresh=project(t);archive(join(fresh,archiveName));assert.equal(setup(fresh,{npm:npmStub(1)}).status,'FAILED');assert(!existsSync(join(fresh,'package.json')));
+ const fresh=project(t);archive(join(fresh,archiveName));assert.equal(setup(fresh,{npm:npmStub(fresh,phase==='install'?[1]:[0,1])}).status,'FAILED');
+ assert(!existsSync(join(fresh,'package.json')));assert(!existsSync(join(fresh,'package-lock.json')));assert(!existsSync(join(fresh,`.harness/vendor/${archiveName}`)));
 });
 test('setup adopts, vendors the archive, chains an existing postinstall and reruns without changes',t=>{
  const root=project(t);put(root,'package.json','{\n  "name": "app",\n  "scripts": {"postinstall": "node prepare.js"},\n  "devDependencies": {"@playwright/test": "1.63.0"}\n}\n');archive(join(root,archiveName));
- const npm=npmStub(),result=setup(root,{npm});
+ const npm=npmStub(root),result=setup(root,{npm});
  assert.equal(result.status,'DONE',JSON.stringify(result.stops));assert.deepEqual(npm.calls[0].slice(0,2),['install','--save-dev']);assert(npm.calls[0].includes(`file:.harness/vendor/${archiveName}`));
  assert(existsSync(join(root,`.harness/vendor/${archiveName}`)));assert(!existsSync(join(root,archiveName)),'The downloaded copy moves into the journal.');
  assert.equal(JSON.parse(readFileSync(join(root,'package.json'),'utf8')).scripts.postinstall,`${POSTINSTALL} && node prepare.js`);
@@ -114,7 +201,7 @@ test('restore returns a project with a lockfile to its exact pre-setup bytes, un
  const root=project(t),manifest='{\n  "name": "app",\n  "devDependencies": {"@playwright/test": "1.63.0", "uncommitted-change": "1.0.0"}\n}\n',lock='{"lockfileVersion":3,"packages":{}}\n';
  put(root,'package.json',manifest);put(root,'package-lock.json',lock);put(root,'AGENTS.md','Team rules\n');archive(join(root,archiveName));
  assert.equal(setup(root).status,'DONE');assert(existsSync(join(root,'.claude/skills/test-data/SKILL.md')));
- const npm=npmStub(),restored=restoreLastRun(root,{npm,packageRoot});
+ const npm=npmStub(root),restored=restoreLastRun(root,{npm,packageRoot});
  assert.equal(restored.status,'RESTORED');assert.deepEqual(npm.calls,[['ci','--no-audit','--no-fund']]);
  assert.equal(readFileSync(join(root,'package.json'),'utf8'),manifest);assert.equal(readFileSync(join(root,'package-lock.json'),'utf8'),lock);
  assert.equal(readFileSync(join(root,'AGENTS.md'),'utf8'),'Team rules\n');assert(existsSync(join(root,archiveName)),'The downloaded archive comes back.');
@@ -128,9 +215,9 @@ test('restore after a crashed stage 2 brings back a replaced legacy folder and t
  put(legacy,'SKILL.md',legacyRedirect);put(root,'package.json',manifest);archive(join(root,archiveName));
  // The installed copy dies right after adoption, before the rest of stage 2.
  const crashed=({projectRoot,run})=>{adoptProject({projectRoot,installedRoot:packageRoot,journal:openJournal(consumerRoots(projectRoot,packageRoot),run)});return {status:'FAILED',stops:['crashed']};};
- assert.equal(setupFromArchive({projectRoot:root,npm:npmStub(),handoff:crashed,packageRoot}).status,'FAILED');
+ assert.equal(setupFromArchive({projectRoot:root,npm:npmStub(root),handoff:crashed,packageRoot}).status,'FAILED');
  assert.equal(discoveryEntry(legacy).kind,'link');assert.equal(realpathSync(relinked),realpathSync(join(packageRoot,'.agents/skills/test-classes')));
- assert.equal(restoreLastRun(root,{npm:npmStub(),packageRoot}).status,'RESTORED');
+ assert.equal(restoreLastRun(root,{npm:npmStub(root),packageRoot}).status,'RESTORED');
  assert.equal(discoveryEntry(legacy).kind,'directory');
  assert.deepEqual(readdirSync(legacy),['SKILL.md']);assert.equal(readFileSync(join(legacy,'SKILL.md'),'utf8'),legacyRedirect);
  assert.equal(realpathSync(relinked),realpathSync(join(old,'.agents/skills/test-classes')));
@@ -144,7 +231,7 @@ test('restore on a fresh project removes what setup created instead of running n
  const config = readFileSync(join(root,'playwright.config.ts'),'utf8');
  assert.equal((config.match(/\.\/src\/utils\/AllureReport\.ts/g) ?? []).length, 1);
  assert(!config.includes("['allure-playwright'"));
- const npm=npmStub();assert.equal(restoreLastRun(root,{npm,packageRoot}).status,'RESTORED');
+ const npm=npmStub(root);assert.equal(restoreLastRun(root,{npm,packageRoot}).status,'RESTORED');
  assert.deepEqual(npm.calls,[]);assert.deepEqual(readdirSync(root),[archiveName]);
 });
 
@@ -158,7 +245,7 @@ test('automate-test rename rollback restores the old folder, link target and pre
  assert.equal(setup(root).status,'DONE');
  for(const dir of ['.agents/skills','.claude/skills']) {assert.equal(discoveryEntry(join(root,dir,'automate-suite')).kind,'missing');assert.equal(discoveryEntry(join(root,dir,'automate-test')).kind,'link');}
  assert.equal(readFileSync(join(root,'.harness/knowledge/prerequisites.md'),'utf8'),knowledge);
- assert.equal(restoreLastRun(root,{npm:npmStub(),packageRoot}).status,'RESTORED');
+ assert.equal(restoreLastRun(root,{npm:npmStub(root),packageRoot}).status,'RESTORED');
  assert.equal(discoveryEntry(join(root,legacy)).kind,'directory');assert.equal(realpathSync(join(root,linked)),realpathSync(join(old,'.agents/skills/automate-suite')));
  for(const[file,content]of Object.entries(legacyAutomationFiles))assert.equal(readFileSync(join(root,file),'utf8'),content);
  assert.equal(readFileSync(join(root,legacy,'references/prerequisite-dictionary.md'),'utf8'),knowledge);
@@ -201,7 +288,7 @@ test('upgrade actions are collected for every version after the previous one; a 
 test('an interrupted stage 2 is reported with its recovery and completes on a rerun',t=>{
  const root=project(t);archive(join(root,archiveName));
  const interrupted=({projectRoot,run})=>{put(projectRoot,'.claude/skills/ROOTS.md','Appeared after the preflight\n');return configureInstalled({projectRoot,run,skipBrowsers:true,starter:true,packageRoot});};
- const result=setupFromArchive({projectRoot:root,npm:npmStub(),handoff:interrupted,packageRoot});
+ const result=setupFromArchive({projectRoot:root,npm:npmStub(root),handoff:interrupted,packageRoot});
  assert.equal(result.status,'FAILED');assert.match(result.stops.join('\n'),/Review \.claude\/skills\/ROOTS\.md/);assert.match(result.recovery.join('\n'),/setup --restore/);
  rmSync(join(root,'.claude/skills/ROOTS.md'));
  assert.equal(configureInstalled({projectRoot:root,skipBrowsers:true,starter:true,packageRoot}).status,'DONE');

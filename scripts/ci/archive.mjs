@@ -1,9 +1,13 @@
 // Inspect a supplied release archive before npm installs it. No extraction or lifecycle scripts.
 import assert from 'node:assert/strict';
-import {readFileSync} from 'node:fs';
-import {basename, join} from 'node:path';
+import {readFileSync, copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync} from 'node:fs';
+import {basename, dirname, join, resolve} from 'node:path';
+import {tmpdir} from 'node:os';
 import {gunzipSync} from 'node:zlib';
 import {sha256, integrity} from '../lib/archive.mjs';
+import {inventory, publicationFindings, RUNTIME_BUNDLE_RECORD, runtimeBundleFiles, runtimeBundleIntegrity, validateRuntimeBundle} from '../lib/package-validation.mjs';
+import {within, realFuture} from '../lib/skill-roots.mjs';
+import {command, npmPath} from './process.mjs';
 
 function paxFields(body) {
   const fields = {};
@@ -53,5 +57,45 @@ export function inspectArchive(file, root, expectedDigest) {
   assert.equal(files.get('VERSION')?.toString('utf8').trim(), source.version, 'The distributed VERSION differs.');
   assert.equal(plugin.version, source.version, 'The distributed plugin version differs.');
   assert.deepEqual(lock, JSON.parse(readFileSync(join(root, 'npm-shrinkwrap.json'), 'utf8')), 'The distributed dependency lock differs.');
+  assert.equal(manifest.bundleDependencies, true, 'The archive must bundle its cleared runtime dependencies.');
+  const runtime = new Map([...files].filter(([path]) => path.startsWith('node_modules/')));
+  const paths = validateRuntimeBundle(runtime, lock, json(RUNTIME_BUNDLE_RECORD));
+  const scope = inventory(root, {publicOnly: true}); scope.files = [...new Set([...scope.files, RUNTIME_BUNDLE_RECORD])];
+  // Local maintainer files are outside the publication allow-list and are never copied into a build.
+  assert.deepEqual(publicationFindings({...scope, unexpected: []}, [...files.keys()], paths), [], 'The archive publication scope differs.');
   return {name: basename(file), sha256: digest, integrity: integrity(file), files: files.size};
+}
+
+/** Build from public source and a fresh integrity-checked lock install, never local node_modules. */
+export function packRuntimeArchive(root, destination, {run = (args, cwd) => command(args, {cwd, timeout: 600000})} = {}) {
+  root = resolve(root); destination = resolve(destination);
+  assert(!within(realFuture(root), realFuture(destination)), 'Keep packed archives outside the source package.');
+  const npm = npmPath(), version = run([npm, '--version'], root);
+  assert(version.status === 'PASS' && version.stdout.trim().split('.')[0] === '11', 'Pack release archives with npm 11.');
+  const stage = mkdtempSync(join(tmpdir(), 'harness-runtime-build-'));
+  try {
+    for (const file of inventory(root, {publicOnly: true}).files) {
+      if (file === RUNTIME_BUNDLE_RECORD) continue;
+      mkdirSync(dirname(join(stage, file)), {recursive: true}); copyFileSync(join(root, file), join(stage, file));
+    }
+    const lock = JSON.parse(readFileSync(join(stage, 'npm-shrinkwrap.json'), 'utf8'));
+    const installed = run([npm, 'ci', '--ignore-scripts', '--no-audit', '--no-fund'], stage);
+    assert.equal(installed.status, 'PASS', 'Preparing the locked runtime bundle failed; inspect the build log.');
+    assert.deepEqual(JSON.parse(readFileSync(join(stage, 'npm-shrinkwrap.json'), 'utf8')), lock, 'Runtime preparation changed the cleared lock.');
+    const record = runtimeBundleIntegrity(runtimeBundleFiles(stage), lock);
+    writeFileSync(join(stage, RUNTIME_BUNDLE_RECORD), JSON.stringify(record, null, 2) + '\n', {flag: 'wx'});
+    mkdirSync(destination, {recursive: true});
+    const packed = run([npm, 'pack', '--json', '--ignore-scripts', '--pack-destination', destination], stage);
+    assert.equal(packed.status, 'PASS', 'Packing the runtime bundle failed; inspect the build log.');
+    const items = JSON.parse(packed.stdout); assert.equal(items.length, 1);
+    const file = join(destination, items[0].filename), files = archiveFiles(file);
+    assert.deepEqual(JSON.parse(files.get(RUNTIME_BUNDLE_RECORD)?.toString('utf8')), record, 'The packed build record differs.');
+    validateRuntimeBundle(new Map([...files].filter(([path]) => path.startsWith('node_modules/'))), lock, record);
+    return {file, ...inspectArchive(file, root)};
+  } finally {rmSync(stage, {recursive: true, force: true});}
+}
+
+if (process.argv[1] && resolve(process.argv[1]) === resolve(import.meta.filename)) {
+  assert(process.argv.length === 3, 'Use archive.mjs <external archive directory>.');
+  console.log(JSON.stringify(packRuntimeArchive(resolve(import.meta.dirname, '../..'), process.argv[2])));
 }

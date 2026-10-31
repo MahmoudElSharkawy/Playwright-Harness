@@ -1,5 +1,16 @@
 # Provenance and release status
 
+Current release archives include the locked runtime dependency closure. The packer
+prepares that closure with an integrity-checked `npm ci` in an isolated stage,
+records each package's complete file-tree digest, and verifies the packed bytes
+before returning the candidate checksum. Later verification binds that checksum
+and checks the bundled identities, file digests and upstream notices. The generated
+record is build evidence inside the archive, not a substitute for the trusted
+candidate checksum. Example/spike installations, browser binaries and container
+images remain outside this runtime bundle. Dependency versions and licenses are
+unchanged; see [third-party notices](../THIRD_PARTY_NOTICES.md). The milestone notes
+below retain the history of earlier source-only distributions.
+
 Issue #62's requirements-analysis skill, chat drafts, source/acceptance inventory
 and delivery adapters are project-authored. Official Microsoft project-team,
 membership, person-mention and comment documentation informed the new request and
@@ -118,8 +129,8 @@ the archive supplies the browser runtime: `@playwright/cli` 0.1.22 with Playwrig
 Playwright Core 1.64.0-alpha-1790635538000, all Apache-2.0. It also pins the already
 recorded `@js-joda/core` 6.1.0 (BSD-3-Clause), `tedious` 20.0.0 (MIT) and
 `@azure/msal-browser` 5.23.0 (MIT), which npm otherwise re-resolved on a plain install.
-npm installs these packages from the registry; no implementation is
-copied or bundled. The [runtime inventory](../scripts/runtime-dependency-licenses.json)
+M18 installed these packages from the registry. Current releases bundle their
+validated runtime files and preserve upstream notices. The [runtime inventory](../scripts/runtime-dependency-licenses.json)
 gains the three CLI records, with the same integrity values as the spike inventory, and
 now covers 90 records. The spike keeps its own lock and inventory for its development tests.
 
@@ -141,9 +152,9 @@ surviving dependency version. It reviewed Python-2.0 and the Apache-2.0 alternat
 of DOMPurify's dual license, and recorded missing bundled notices and README license
 texts in [third-party notices](../THIRD_PARTY_NOTICES.md). New funding URLs are exact
 reviewed upstream metadata, not broad privacy-scanner exemptions.
-No dependency implementation is bundled in
-the source package. Preserve upstream LICENSE and NOTICE files when redistributing
-dependencies; that would require a distribution-specific audit.
+Example and report-tool implementations remain outside the runtime bundle.
+Preserve upstream LICENSE and NOTICE files when redistributing additional
+dependencies, and audit that additional distribution separately.
 
 The dependency security refresh records Handlebars 4.7.10 and Tedious 20.3.8,
 both MIT, from their published npm distributions. The root and example graphs

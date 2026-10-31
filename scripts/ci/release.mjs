@@ -7,9 +7,9 @@ import {spawnSync} from 'node:child_process';
 import {packageRoot} from '../lib/consumer-paths.mjs';
 import {within, realFuture} from '../lib/skill-roots.mjs';
 import {sha256} from '../lib/archive.mjs';
-import {inspectArchive} from './archive.mjs';
+import {inspectArchive, packRuntimeArchive} from './archive.mjs';
 import {checkVersionContracts} from './version.mjs';
-import {command, npmPath, hash} from './process.mjs';
+import {hash} from './process.mjs';
 import {completeChecks, requiredConsumerFlows} from './results.mjs';
 import {completeBrowserChecks} from '../probes/browser-checks.mjs';
 import {completeExecuteChecks} from '../probes/execute-checks.mjs';
@@ -86,14 +86,9 @@ export function preflightRelease(root, version, context, client = githubClient) 
 
 export function prepareCandidate(root, directory, version, context) {
   releaseVersion(root, version); assert(!within(realFuture(root), realFuture(directory)), 'Keep the release candidate outside the package.');
-  const npm = npmPath(), major = command([npm, '--version'], {cwd: root});
-  assert(major.status === 'PASS' && major.stdout.trim().split('.')[0] === '11', 'Pack release archives with npm 11.');
   mkdirSync(directory, {mode: 0o700});
-  const packed = command([npm, 'pack', '--json', '--ignore-scripts', '--pack-destination', directory], {cwd: root});
-  assert.equal(packed.status, 'PASS', 'Packing the release candidate failed.');
-  const items = JSON.parse(packed.stdout); assert.equal(items.length, 1);
-  const name = `playwright-pom-harness-${version}.tgz`; assert.equal(items[0].filename, name);
-  const archive = inspectArchive(join(directory, name), root);
+  const {file, ...archive} = packRuntimeArchive(root, directory);
+  const name = `playwright-pom-harness-${version}.tgz`; assert.equal(archive.name, name);
   const candidate = {schemaVersion: 1, version, ...context, archive};
   writeFileSync(join(directory, `${name}.sha256`), `${archive.sha256}  ${name}\n`, {flag: 'wx'});
   writeFileSync(join(directory, 'candidate.json'), JSON.stringify(candidate, null, 2) + '\n', {flag: 'wx'});

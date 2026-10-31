@@ -1,5 +1,14 @@
 # Third-party notices and references
 
+Current release archives bundle the runtime dependencies listed in
+[scripts/runtime-dependency-licenses.json](scripts/runtime-dependency-licenses.json)
+at their locked versions. Their upstream LICENSE, NOTICE, ThirdPartyNotices and
+applicable README license texts remain with the packages. They retain their
+upstream licenses and copyright ownership; harness MIT licensing does not replace
+them. Example and spike dependencies, browser binaries and container images remain
+separate distributions. The milestone notes below describe how dependencies were
+introduced, including earlier releases that installed runtime packages separately.
+
 The requirements-analysis workflow is project-authored and has no external analysis
 integration or new npm dependency. The prerelease GapCue integration was removed
 before release; no GapCue implementation is copied or bundled. AgenTeX and SHAFT
@@ -27,7 +36,7 @@ Release 3.6.0 updates `@azure/identity` to 4.14.0, `open` to 11.0.4 and
 `wsl-utils` to 1.0.1, and adds `is-in-ssh` 1.0.0 and `powershell-utils` 0.2.1.
 These distributions declare MIT and include full license files. Preserve those
 files with redistributed dependencies. The runtime inventory now has 100 records;
-the source package does not bundle their implementations or replace their notices.
+that release installed their implementations separately and retained their notices.
 
 M17 preserves the root dependency graph in the publishable `npm-shrinkwrap.json`.
 M18 adds the three native CLI packages described below, for 90 package identities;
@@ -85,8 +94,8 @@ No dependency source or copyright is relicensed as harness MIT material.
 
 M4 installed `@playwright/cli` 0.1.22 and its exact Playwright/Playwright Core
 1.64.0-alpha-1790635538000 dependencies for a development spike. M18 makes the same
-three Apache-2.0 packages exact runtime dependencies of the harness: npm installs them
-from the registry together with the package, and they are not bundled. Their registry
+three Apache-2.0 packages exact runtime dependencies of the harness. Current archives
+bundle them with their upstream notices. Their registry
 integrity values are recorded in [the runtime inventory](scripts/runtime-dependency-licenses.json);
 the spike keeps [its own CLI dependency inventory](scripts/cli-dependency-licenses.json).
 Both are checked by `check:provenance`. Each installed package includes LICENSE; both Playwright
@@ -107,7 +116,7 @@ are recorded in [the runtime inventory](scripts/runtime-dependency-licenses.json
 and checked against the root lockfile. Their declarations are MIT, Apache-2.0,
 BSD-3-Clause, ISC and 0BSD. Every installed package includes a top-level license or
 notice file; preserve those files when redistributing installed dependencies. No
-upstream implementation is copied into the harness or relicensed.
+upstream implementation is relicensed as harness code.
 
 The real database probe uses Microsoft's SQL Server 2022 Developer container for
 development/testing under Microsoft's terms, with explicit EULA acceptance. It is
@@ -126,7 +135,7 @@ packages were inspected for complete notices. Twelve include license files;
 `pg-types` includes its MIT notice in README.md (Brian M. Carlson, 2014), and
 `pgpass` includes its MIT notice in README.md (Hannes Hoerl, 2013-2016). Preserve
 those README license sections when redistributing installed dependencies. This
-source package copies no dependency implementation or license ownership.
+distribution preserves those notices and does not transfer license ownership.
 
 The local M10 proof uses a pinned official PostgreSQL 16 container. PostgreSQL uses
 [the PostgreSQL License](https://www.postgresql.org/about/licence/); its container

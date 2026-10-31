@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Bundle the validated runtime graph in release archives and finish setup with a
+  frozen installation. Preserve consumer dependency versions, install hooks and
+  rollback without generated npm overrides; verify resolved dependencies before
+  and after `npm ci` on npm 11 and npm 12.
 - Support existing standard/custom Test Case publication fields with create-only
   defaults, reviewed per-case choices, managed-field handling and schema-bound
   previews. Preserve existing update values and delivery recovery; clarify that

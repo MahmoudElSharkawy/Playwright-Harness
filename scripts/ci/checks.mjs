@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import {mkdirSync, readdirSync, writeFileSync} from 'node:fs';
+import {mkdirSync, readdirSync, writeFileSync, readFileSync, existsSync} from 'node:fs';
 import {resolve, join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {randomUUID} from 'node:crypto';
@@ -8,6 +8,8 @@ import {command, npmPath} from './process.mjs';
 import {packageRoot} from '../lib/consumer-paths.mjs';
 import {testCounts, completeTests, completeChecks, testFailureLocations, testFailureDiagnostics} from './results.mjs';
 import {realFuture, within} from '../lib/skill-roots.mjs';
+import {packRuntimeArchive} from './archive.mjs';
+import {RUNTIME_BUNDLE_RECORD} from '../lib/package-validation.mjs';
 
 /** One fixed package check list. Missing, failed, skipped and empty tests do not pass. */
 export function runChecks(root, audit) {
@@ -19,8 +21,15 @@ export function runChecks(root, audit) {
   // unrelated fixtures do not consume each other's short lifecycle budgets;
   // parallel-runtime tests still exercise their explicit concurrent scenarios.
   const testConcurrency = process.platform === 'win32' ? 1 : undefined;
+  const env = {npm_execpath: npmPath(), npm_config_cache: join(audit, 'npm-cache')};
+  let publication = [];
+  if (existsSync(join(root, 'package.json')) && JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).bundleDependencies === true && !existsSync(join(root, RUNTIME_BUNDLE_RECORD))) {
+    let sequence = 0;
+    const archive = packRuntimeArchive(root, join(audit, 'publication-archive'), {run: (args, cwd) => command(args, {cwd, env, timeout: 600000, log: join(audit, `publication-build-${++sequence}.log`)})});
+    publication = ['--archive', archive.file, '--sha256', archive.sha256];
+  }
   const definitions = [
-    ...['syntax', 'json', 'links', 'privacy', 'secrets', 'provenance', 'publication'].map(name => [name, ['scripts/validate-package.mjs', name]]),
+    ...['syntax', 'json', 'links', 'privacy', 'secrets', 'provenance', 'publication'].map(name => [name, ['scripts/validate-package.mjs', name, ...(name === 'publication' ? publication : [])]]),
     ['contracts', ['scripts/ci/contracts.mjs']],
     ['conventions', ['scripts/check-conventions.mjs', '--root', 'examples', '--fail-on-warn']],
     ['generation-conventions', ['scripts/check-conventions.mjs', '--root', 'harness-tests/fixtures/generation-consumer', '--fail-on-warn']],
@@ -29,7 +38,6 @@ export function runChecks(root, audit) {
     ['fetch', ['scripts/fetch-ado-suite.mjs', '--self-test']],
     ['tests', ['--test', '--test-reporter=tap', ...(testConcurrency ? [`--test-concurrency=${testConcurrency}`] : []), ...tests.map(file => `harness-tests/${file}`)]]
   ];
-  const env = {npm_execpath: npmPath(), npm_config_cache: join(audit, 'npm-cache')};
   const checks = definitions.map(([id, args]) => {
     const result = command(args, {cwd: root, env, log: join(audit, `${id}.log`), ...(id === 'tests' ? {timeout: 900000} : {})});
     const counts = id === 'tests' ? testCounts(result.output) : undefined;
