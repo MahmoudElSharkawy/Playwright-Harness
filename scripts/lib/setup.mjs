@@ -4,8 +4,8 @@ import {spawnSync} from 'node:child_process';
 import {packageRoot as runningPackage, consumerRoots, consumerPath} from './consumer-paths.mjs';
 import {adoptProject, AdoptionConflict, LINKS_FILE, DISCOVERY_DIRS, isPointer, rootsPointer} from './adoption.mjs';
 import {discoveryEntry, harnessSkillTarget, createSkillLink, removeSkillLink} from './skill-roots.mjs';
-import {archiveManifest, sha256} from './archive.mjs';
-import {npmPath} from './npm.mjs';
+import {archiveManifest, archiveJson, sha256, integrity} from './archive.mjs';
+import {npmPath, clearedOverrides} from './npm.mjs';
 import {startJournal, openJournal, latestJournal, restoreJournal} from './setup-journal.mjs';
 import {nativeCliInstallation} from './browser/native-cli.mjs';
 import {runCheck} from './check.mjs';
@@ -100,6 +100,40 @@ function starterDependencies(packageRoot, projectRoot) {
 }
 const npmName = folder => basename(folder).toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/^[._-]+|[-.]+$/g, '').slice(0, 214) || 'playwright-tests';
 
+/** Persist constraints under the harness only; consumer packages keep their own graph. */
+function harnessOverrides(projectRoot, packageRoot, overrides, consumerLock) {
+  const name = 'playwright-pom-harness', object = value => value && typeof value === 'object' && !Array.isArray(value);
+  const previousEntry = consumerLock?.packages?.[`node_modules/${name}`], previousVersion = previousEntry?.version;
+  if (overrides !== undefined && !object(overrides)) throw new Error('package.json overrides must be an object before setup can preserve them.');
+  for (const key of Object.keys(overrides ?? {})) if (key.startsWith(`${name}@`)) throw new Error(`package.json overrides["${key}"] is unsupported; review it before setup adds the harness dependency constraints.`);
+  const current = Object.hasOwn(overrides ?? {}, name) ? overrides[name] : {}, expected = clearedOverrides(readJsonFile(join(packageRoot, 'npm-shrinkwrap.json')));
+  if (!object(current)) throw new Error(`package.json overrides["${name}"] must be an object of flat dependency constraints.`);
+  let previous = {};
+  const installed = join(projectRoot, 'node_modules', name), previousLock = join(installed, 'npm-shrinkwrap.json');
+  if (previousVersion && existsSync(previousLock)) {
+    const manifest = readJsonFile(join(installed, 'package.json')), lock = readJsonFile(previousLock);
+    if (manifest.name === name && manifest.version === previousVersion && lock.name === name && lock.version === previousVersion && lock.packages?.['']?.version === previousVersion) previous = clearedOverrides(lock);
+  } else if (previousVersion && Object.keys(current).length) {
+    // The consumer lock records custom resolutions too; only the released archive establishes prior cleared pins.
+    if (typeof previousVersion !== 'string' || !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(previousVersion)) throw new Error('Cannot verify the prior harness archive: invalid locked version.');
+    const vendored = `.harness/vendor/${name}-${previousVersion}.tgz`, archived = consumerPath(consumerRoots(projectRoot, packageRoot), vendored);
+    if (existsSync(archived)) {
+      if (previousEntry.resolved !== undefined && previousEntry.resolved !== `file:${vendored}`) throw new Error('The prior harness archive source differs from package-lock.json.');
+      if (previousEntry.integrity !== undefined && previousEntry.integrity !== integrity(archived)) throw new Error('The prior harness archive integrity differs from package-lock.json.');
+      const manifest = archiveManifest(archived), lock = archiveJson(archived, 'npm-shrinkwrap.json');
+      if (manifest.name !== name || manifest.version !== previousVersion || lock.name !== name || lock.version !== previousVersion || lock.packages?.['']?.version !== previousVersion) throw new Error('The prior harness archive manifest or shrinkwrap differs from its locked identity.');
+      previous = clearedOverrides(lock);
+    }
+  }
+  const scope = {...current};
+  for (const [dependency, value] of Object.entries(scope)) {
+    if (dependency === '.' || !/^(?:@[a-z0-9._-]+\/)?[a-z0-9._-]+$/i.test(dependency) || typeof value !== 'string' || !value.length) throw new Error(`package.json overrides["${name}"]["${dependency}"] is unsupported; setup requires flat dependency constraints.`);
+    if (Object.hasOwn(expected, dependency) && value !== expected[dependency] && value !== previous[dependency]) throw new Error(`package.json overrides["${name}"]["${dependency}"] conflicts with the cleared version ${expected[dependency]}; review the consumer rule before setup.`);
+    if (!Object.hasOwn(expected, dependency) && value === previous[dependency]) delete scope[dependency];
+  }
+  return {...overrides, [name]: {...scope, ...expected}};
+}
+
 /** Stage 1, started from the archive by npx: check everything, then install, then hand over. */
 export function setupFromArchive({projectRoot, archive, environment, mode, skipBrowsers = false, explicitRoot = false, dryRun = false, npm = defaultNpm(projectRoot), handoff = defaultHandoff, packageRoot = runningPackage}) {
   projectRoot = resolve(projectRoot);
@@ -110,17 +144,28 @@ export function setupFromArchive({projectRoot, archive, environment, mode, skipB
   const vendored = `.harness/vendor/playwright-pom-harness-${VERSION}.tgz`, vendorPath = join(projectRoot, vendored);
   if (existsSync(vendorPath) && sha256(vendorPath) !== sha256(file)) return {status: 'STOPPED', warnings, stops: [`${vendored} already exists with different bytes; remove it only if you are sure, then rerun.`]};
   // Preflight with no writes: the new version plans its whole adoption first.
-  let plan;
-  try {plan = adoptProject({projectRoot, installedRoot: packageRoot, environment, mode, dryRun: true});}
+  let plan, manifest, manifestText, previousVersion, writeManifest;
+  const manifestPath = join(projectRoot, 'package.json'), lockPath = join(projectRoot, 'package-lock.json');
+  try {
+    manifestText = existsSync(manifestPath) ? readFileSync(manifestPath, 'utf8') : undefined;
+    manifest = manifestText === undefined ? {name: npmName(projectRoot), version: '1.0.0', private: true, type: 'commonjs', engines: {node: '>=24 <25'}, scripts: {test: 'playwright test'}} : JSON.parse(manifestText);
+    const consumerLock = existsSync(lockPath) ? readJsonFile(lockPath) : undefined;
+    previousVersion = consumerLock?.packages?.['node_modules/playwright-pom-harness']?.version;
+    const overrides = harnessOverrides(projectRoot, packageRoot, manifest.overrides, consumerLock);
+    writeManifest = JSON.stringify(manifest.overrides) !== JSON.stringify(overrides); manifest.overrides = overrides;
+    plan = adoptProject({projectRoot, installedRoot: packageRoot, environment, mode, dryRun: true});
+  }
   catch (error) {return {status: 'STOPPED', warnings, stops: error instanceof AdoptionConflict ? error.conflicts : [error.message]};}
-  if (dryRun) return {status: 'PLANNED', version: VERSION, archive: file, checksum, warnings, changes: plan.changes.map(change => change.file), links: summarizeLinks(plan.links), reports: plan.reports, starter: !hasPlaywrightFramework(projectRoot)};
-  const roots = consumerRoots(projectRoot, packageRoot), lockPath = join(projectRoot, 'package-lock.json');
-  const previousVersion = existsSync(lockPath) ? readJsonFile(lockPath).packages?.['node_modules/playwright-pom-harness']?.version : undefined;
+  if (dryRun) return {status: 'PLANNED', version: VERSION, archive: file, checksum, warnings, changes: [...new Set([...plan.changes.map(change => change.file), ...(writeManifest ? ['package.json'] : [])])], links: summarizeLinks(plan.links), reports: plan.reports, starter: !hasPlaywrightFramework(projectRoot)};
+  const roots = consumerRoots(projectRoot, packageRoot);
   const starter = !hasPlaywrightFramework(projectRoot), dependencies = starter ? starterDependencies(packageRoot, projectRoot) : {install: [], kept: []};
   const journal = startJournal(roots, {previousVersion: previousVersion ?? null, newVersion: VERSION, starter});
   for (const path of ['package.json', 'package-lock.json']) journal.file(path, existsSync(join(projectRoot, path)) ? readFileSync(join(projectRoot, path)) : null);
   journal.modules(existsSync(join(projectRoot, 'node_modules')));
-  if (!existsSync(join(projectRoot, 'package.json'))) writeFileSync(join(projectRoot, 'package.json'), JSON.stringify({name: npmName(projectRoot), version: '1.0.0', private: true, type: 'commonjs', engines: {node: '>=24 <25'}, scripts: {test: 'playwright test'}}, null, 2) + '\n');
+  if (writeManifest) {
+    const indent = manifestText?.match(/^\{\r?\n([ \t]+)"/)?.[1] ?? '  ', eol = manifestText?.includes('\r\n') ? '\r\n' : '\n';
+    writeFileSync(manifestPath, (JSON.stringify(manifest, null, indent) + '\n').replaceAll('\n', eol));
+  }
   if (resolve(file) !== resolve(vendorPath)) {journal.file(vendored, existsSync(vendorPath) ? readFileSync(vendorPath) : null); mkdirSync(dirname(vendorPath), {recursive: true}); copyFileSync(file, vendorPath);}
   const installed = npm(['install', '--save-dev', '--save-exact', '--no-audit', '--no-fund', '--install-strategy=nested', `file:${vendored}`, ...dependencies.install]);
   if (installed.status !== 0) {

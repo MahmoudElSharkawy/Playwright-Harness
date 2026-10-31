@@ -19,11 +19,14 @@ function project(t) {
  t.after(()=>{const rel=relative(base,realpathSync(root));assert(!isAbsolute(rel)&&rel.startsWith('pom-setup-'));rmSync(root,{recursive:true,force:true});});return root;
 }
 function put(root,path,text){const file=join(root,path);mkdirSync(dirname(file),{recursive:true});writeFileSync(file,text);}
-/** A minimal npm archive: one package/package.json entry in a gzipped ustar stream. */
-function archive(file,manifest={name:'playwright-pom-harness',version:VERSION}) {
- const body=Buffer.from(JSON.stringify(manifest)),header=Buffer.alloc(512);
- header.write('package/package.json',0);header.write('0000644\0',100);header.write(`${body.length.toString(8).padStart(11,'0')}\0`,124);header.write('ustar\0',257);
- writeFileSync(file,gzipSync(Buffer.concat([header,body,Buffer.alloc((512-body.length%512)%512),Buffer.alloc(1024)])));return file;
+/** Minimal npm JSON entries in a gzipped ustar stream; no files are extracted. */
+function archive(file,manifest={name:'playwright-pom-harness',version:VERSION},files={}) {
+ const entries=Object.entries({'package.json':manifest,...files}).flatMap(([name,value])=>{
+  const body=Buffer.from(JSON.stringify(value)),header=Buffer.alloc(512);
+  header.write(`package/${name}`,0);header.write('0000644\0',100);header.write(`${body.length.toString(8).padStart(11,'0')}\0`,124);header.write('ustar\0',257);
+  return [header,body,Buffer.alloc((512-body.length%512)%512)];
+ });
+ mkdirSync(dirname(file),{recursive:true});writeFileSync(file,gzipSync(Buffer.concat([...entries,Buffer.alloc(1024)])));return file;
 }
 const archiveName=`playwright-pom-harness-${VERSION}.tgz`;
 // A 3.0.x redirect that legacy projects kept in .claude/skills; its digest is a recognized released file.
@@ -31,6 +34,102 @@ const legacyRedirect='---\nname: test-data\ndescription: Compatibility entrypoin
 const npmStub=(status=0)=>{const calls=[],npm=args=>{calls.push(args);return {status,output:status?'npm ERR! synthetic failure':''};};npm.calls=calls;return npm;};
 const handoff=({projectRoot,run,starter,download,checksum,warnings,kept})=>configureInstalled({projectRoot,run,skipBrowsers:true,starter,download,carried:{checksum,warnings,kept},packageRoot});
 const setup=(root,options={})=>setupFromArchive({projectRoot:root,npm:npmStub(),handoff,packageRoot,...options});
+const clearedLock=JSON.parse(readFileSync(join(packageRoot,'npm-shrinkwrap.json'),'utf8'));
+const clearedGraph=Object.fromEntries(Object.entries(clearedLock.packages).filter(([path])=>path).map(([path,item])=>[path.split('node_modules/').at(-1),item.version]));
+
+test('setup constrains the harness graph before npm while preserving consumer dependencies and overrides',t=>{
+ const root=project(t),manifest={name:'app',dependencies:{tslib:'2.9.1','@azure/identity':'4.13.0'},devDependencies:{'@playwright/test':'1.63.0'},
+  overrides:{tslib:'$tslib',unrelated:{nested:'1.0.0'},'playwright-pom-harness':{tslib:clearedGraph.tslib,'consumer-rule':'1.0.0'}}};
+ put(root,'package.json',JSON.stringify(manifest));archive(join(root,archiveName));let atInstall;
+ const preview=setup(root,{dryRun:true});assert.equal(preview.status,'PLANNED');assert(preview.changes.includes('package.json'));
+ assert.equal(readFileSync(join(root,'package.json'),'utf8'),JSON.stringify(manifest));assert(!existsSync(join(root,'.harness')));
+ const result=setup(root,{npm:()=>{atInstall=JSON.parse(readFileSync(join(root,'package.json'),'utf8'));return {status:0};},handoff:()=>({status:'DONE'})});
+ assert.equal(result.status,'DONE',JSON.stringify(result.stops));assert.deepEqual(atInstall.dependencies,manifest.dependencies);assert.deepEqual(atInstall.devDependencies,manifest.devDependencies);
+ assert.deepEqual(atInstall.overrides,{...manifest.overrides,'playwright-pom-harness':{...clearedGraph,'consumer-rule':'1.0.0'}});
+ assert.equal(atInstall.overrides['playwright-pom-harness'].tslib,'2.8.1');assert.equal(atInstall.overrides['playwright-pom-harness']['@azure/identity'],clearedGraph['@azure/identity']);
+ assert.deepEqual(JSON.parse(readFileSync(join(root,'package.json'),'utf8')),atInstall);
+});
+for(const overrides of [
+ {'playwright-pom-harness':{tslib:'2.9.1'}},
+ {'playwright-pom-harness':'4.3.1'},
+ {'playwright-pom-harness':null},
+ {'playwright-pom-harness':[]},
+ {'playwright-pom-harness':{tslib:{'.':clearedGraph.tslib}}},
+ {'playwright-pom-harness':{'tslib@*':clearedGraph.tslib}},
+ {'playwright-pom-harness':{'.':'$playwright-pom-harness'}},
+ {'playwright-pom-harness@*':{tslib:'2.9.1'}},
+ 'unsupported',null,[]
+])test(`conflicting or unsupported harness overrides stop before any setup writes: ${JSON.stringify(overrides)}`,t=>{
+ const root=project(t),manifest=JSON.stringify({name:'app',overrides}),npm=npmStub();put(root,'package.json',manifest);archive(join(root,archiveName));
+ for(const dryRun of [true,false]){
+  const result=setup(root,{npm,dryRun});assert.equal(result.status,'STOPPED');assert.match(result.stops.join(' '),/overrides/i);
+  assert.deepEqual(npm.calls,[]);assert.equal(readFileSync(join(root,'package.json'),'utf8'),manifest);assert.deepEqual(readdirSync(root).sort(),['package.json',archiveName].sort());
+ }
+});
+function previousGraph(root,version='4.0.0',{modules=true}={}){
+ const installed=join(root,'node_modules/playwright-pom-harness'),previousLock={name:'playwright-pom-harness',version,packages:{'':{version},'node_modules/tslib':{version:'2.7.0'},'node_modules/old-only':{version:'1.0.0'}}};
+ if(modules){
+  put(installed,'package.json',JSON.stringify({name:'playwright-pom-harness',version}));
+  put(installed,'npm-shrinkwrap.json',JSON.stringify(previousLock));
+ }
+ const vendored=`.harness/vendor/playwright-pom-harness-${version}.tgz`;
+ if(!modules)archive(join(root,vendored),{name:'playwright-pom-harness',version},{'npm-shrinkwrap.json':previousLock});
+ const lock={lockfileVersion:3,packages:{'node_modules/playwright-pom-harness':{version,...(!modules?{resolved:`file:${vendored}`,integrity:`sha512-${createHash('sha512').update(readFileSync(join(root,vendored))).digest('base64')}`}:{})},
+  'node_modules/playwright-pom-harness/node_modules/tslib':{version:'2.7.0'},'node_modules/playwright-pom-harness/node_modules/old-only':{version:'1.0.0'},'node_modules/tslib':{version:'2.9.1'}}};
+ put(root,'package-lock.json',JSON.stringify(lock));return {archive:join(root,vendored),lock,previousLock};
+}
+test('an update replaces only prior cleared harness constraints and removes its retired pins',t=>{
+ const root=project(t),scope={tslib:'2.7.0','old-only':'1.0.0','consumer-rule':'1.0.0'};previousGraph(root);
+ put(root,'package.json',JSON.stringify({name:'app',devDependencies:{'@playwright/test':'1.63.0'},overrides:{unrelated:'1.0.0','playwright-pom-harness':scope}}));archive(join(root,archiveName));let atInstall;
+ const result=setup(root,{npm:()=>{atInstall=JSON.parse(readFileSync(join(root,'package.json'),'utf8'));return {status:0};},handoff:()=>({status:'DONE'})});
+ assert.equal(result.status,'DONE',JSON.stringify(result.stops));assert.deepEqual(atInstall.overrides,{'unrelated':'1.0.0','playwright-pom-harness':{...clearedGraph,'consumer-rule':'1.0.0'}});
+});
+test('an update refuses a consumer edit to a previously cleared harness pin',t=>{
+ const root=project(t);previousGraph(root);const manifest=JSON.stringify({name:'app',overrides:{'playwright-pom-harness':{tslib:'2.9.1'}}});
+ put(root,'package.json',manifest);archive(join(root,archiveName));const npm=npmStub(),result=setup(root,{npm});
+ assert.equal(result.status,'STOPPED');assert.match(result.stops.join(' '),/overrides.*tslib/i);assert.deepEqual(npm.calls,[]);
+ assert.equal(readFileSync(join(root,'package.json'),'utf8'),manifest);assert(!existsSync(join(root,'.harness')));
+});
+test('a clean-checkout update replaces changed and retired harness pins using its prior cleared archive',t=>{
+ const root=project(t),manifest={name:'app',dependencies:{tslib:'2.9.1'},devDependencies:{'@playwright/test':'1.63.0'},
+  overrides:{tslib:'$tslib','playwright-pom-harness':{tslib:'2.7.0','old-only':'1.0.0','consumer-rule':'1.0.0'}}};
+ previousGraph(root,'4.0.0',{modules:false});put(root,'package.json',JSON.stringify(manifest));archive(join(root,archiveName));let atInstall;
+ const result=setup(root,{npm:()=>{atInstall=JSON.parse(readFileSync(join(root,'package.json'),'utf8'));return {status:0};},handoff:()=>({status:'DONE'})});
+ assert.equal(result.status,'DONE',JSON.stringify(result.stops));assert(!existsSync(join(root,'node_modules')));
+ assert.deepEqual(atInstall.dependencies,manifest.dependencies);assert.deepEqual(atInstall.overrides,{tslib:'$tslib','playwright-pom-harness':{...clearedGraph,'consumer-rule':'1.0.0'}});
+});
+test('a clean-checkout update refuses an edited harness pin even when consumer lock dependencies match it',t=>{
+ const root=project(t),{lock}=previousGraph(root,'4.0.0',{modules:false});const manifest=JSON.stringify({name:'app',overrides:{'playwright-pom-harness':{tslib:'2.9.1'}}});
+ lock.packages['node_modules/playwright-pom-harness/node_modules/tslib'].version='2.9.1';put(root,'package-lock.json',JSON.stringify(lock));
+ put(root,'package.json',manifest);archive(join(root,archiveName));const npm=npmStub(),result=setup(root,{npm});
+ assert.equal(result.status,'STOPPED');assert.match(result.stops.join(' '),/overrides.*tslib/i);assert.deepEqual(npm.calls,[]);
+ assert.equal(readFileSync(join(root,'package.json'),'utf8'),manifest);assert(!existsSync(join(root,'.harness/state')));assert(!existsSync(join(root,'node_modules')));
+});
+for(const defect of ['integrity','manifest-version','shrinkwrap-version','missing-shrinkwrap','invalid-archive','outside-source'])test(`a clean-checkout update stops before writes when its prior archive has ${defect}`,t=>{
+ const root=project(t),prior=previousGraph(root,'4.0.0',{modules:false}),entry=prior.lock.packages['node_modules/playwright-pom-harness'];
+ if(defect==='manifest-version')archive(prior.archive,{name:'playwright-pom-harness',version:'4.1.0'},{'npm-shrinkwrap.json':prior.previousLock});
+ if(defect==='shrinkwrap-version')archive(prior.archive,{name:'playwright-pom-harness',version:'4.0.0'},{'npm-shrinkwrap.json':{...prior.previousLock,version:'4.1.0'}});
+ if(defect==='missing-shrinkwrap')archive(prior.archive,{name:'playwright-pom-harness',version:'4.0.0'});
+ if(defect==='invalid-archive')writeFileSync(prior.archive,'not an archive');
+ entry.integrity=defect==='integrity'?'sha512-mismatch':`sha512-${createHash('sha512').update(readFileSync(prior.archive)).digest('base64')}`;
+ if(defect==='outside-source')entry.resolved='file:../private-prior.tgz';
+ const manifest=JSON.stringify({name:'app',overrides:{'playwright-pom-harness':{tslib:'2.7.0'}}}),lock=JSON.stringify(prior.lock),bytes=readFileSync(prior.archive);
+ put(root,'package.json',manifest);put(root,'package-lock.json',lock);archive(join(root,archiveName));const npm=npmStub(),result=setup(root,{npm});
+ assert.equal(result.status,'STOPPED');assert.deepEqual(npm.calls,[]);assert.equal(readFileSync(join(root,'package.json'),'utf8'),manifest);assert.equal(readFileSync(join(root,'package-lock.json'),'utf8'),lock);
+ assert.deepEqual(readFileSync(prior.archive),bytes);assert(!existsSync(join(root,'.harness/state')));assert(!existsSync(join(root,`.harness/vendor/${archiveName}`)));
+});
+test('an update does not treat an installed graph from another version as its own prior constraints',t=>{
+ const root=project(t);previousGraph(root);put(root,'node_modules/playwright-pom-harness/package.json',JSON.stringify({name:'playwright-pom-harness',version:'4.1.0'}));
+ const manifest=JSON.stringify({name:'app',overrides:{'playwright-pom-harness':{tslib:'2.7.0'}}});put(root,'package.json',manifest);archive(join(root,archiveName));
+ const npm=npmStub(),result=setup(root,{npm});assert.equal(result.status,'STOPPED');assert.match(result.stops.join(' '),/overrides.*tslib/i);
+ assert.deepEqual(npm.calls,[]);assert.equal(readFileSync(join(root,'package.json'),'utf8'),manifest);assert(!existsSync(join(root,'.harness')));
+});
+test('same-version archive setup preserves an already constrained manifest byte for byte',t=>{
+ const root=project(t);archive(join(root,archiveName));put(root,'package.json','{\r\n\t"name": "app",\r\n\t"devDependencies": {"@playwright/test":"1.63.0"}\r\n}\r\n');
+ const options={handoff:()=>({status:'DONE'})};assert.equal(setup(root,options).status,'DONE');const manifest=readFileSync(join(root,'package.json'),'utf8');
+ assert.deepEqual(JSON.parse(manifest).overrides,{'playwright-pom-harness':clearedGraph});assert(manifest.includes('\r\n\t"name"'));
+ assert.equal(setup(root,options).status,'DONE');assert.equal(readFileSync(join(root,'package.json'),'utf8'),manifest);
+});
 
 test('the archive is found by version; missing, wrong, ambiguous and explicit-wrong archives stop',t=>{
  const root=project(t);assert.match(setup(root,{dryRun:true}).stops[0],/Cannot find the playwright-pom-harness/);
@@ -70,9 +169,9 @@ test('the starter is planned only where no Playwright framework exists',t=>{
  assert.equal(plan({'playwright.config.ts':'export default {};'}),false);
 });
 test('a failed install restores package.json, the lockfile and the archive copy byte for byte',t=>{
- const root=project(t),manifest='{\n  "name": "app",\n  "version": "1.0.0",\n  "dependencies": {"local-change": "1.0.0"}\n}\n',lock='{"lockfileVersion":3,"packages":{}}\n';
+ const root=project(t),manifest='{\n  "name": "app",\n  "version": "1.0.0",\n  "dependencies": {"local-change": "1.0.0"},\n  "overrides": {"consumer-rule": "1.0.0"}\n}\n',lock='{"lockfileVersion":3,"packages":{}}\n';
  put(root,'package.json',manifest);put(root,'package-lock.json',lock);archive(join(root,archiveName));
- const result=setup(root,{npm:npmStub(1)});
+ const result=setup(root,{npm:()=>{assert.deepEqual(JSON.parse(readFileSync(join(root,'package.json'),'utf8')).overrides,{'consumer-rule':'1.0.0','playwright-pom-harness':clearedGraph});return {status:1,output:'npm ERR! synthetic failure'};}});
  assert.equal(result.status,'FAILED');assert.match(result.output,/synthetic failure/);
  assert.equal(readFileSync(join(root,'package.json'),'utf8'),manifest);assert.equal(readFileSync(join(root,'package-lock.json'),'utf8'),lock);
  assert(!existsSync(join(root,`.harness/vendor/${archiveName}`)));assert(!existsSync(join(root,'.harness/links.json')));

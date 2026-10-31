@@ -305,7 +305,8 @@ flow('C10', 'Consumer dependencies retain their own versions through setup and n
   };
   const versions = parent => {
     const identity = dependency(parent, '@azure/identity'), open = dependency(identity.directory, 'open'), wsl = dependency(open.directory, 'wsl-utils');
-    return {'@azure/identity': identity.version, open: open.version, 'wsl-utils': wsl.version};
+    const core = dependency(identity.directory, '@azure/core-client'), tslib = dependency(core.directory, 'tslib');
+    return {'@azure/identity': identity.version, open: open.version, 'wsl-utils': wsl.version, tslib: tslib.version};
   };
   assert.equal(run([npm, 'install'], root).status, 'PASS', 'Installing the independent consumer failed.');
   const before = versions(root); assert.equal(before['@azure/identity'], '4.13.3');

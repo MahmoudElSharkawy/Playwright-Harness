@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Keep archive-installed harness dependencies on the validated graph using scoped
+  npm constraints. Preserve consumer dependency versions, unrelated overrides and
+  setup rollback; check resolved Azure dependencies again after `npm ci`.
 - Streamline test-case design with summary chat, separate main/optional count tables,
   readable references and one current `review.md`. Persist first-pass optional drafts
   and independent feedback, support accepted-source promotion, and add opt-in compact
