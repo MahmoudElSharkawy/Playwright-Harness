@@ -26,7 +26,20 @@
       },
       "engines": {
         "node": ">=24 <25"
-      }
+      },
+      "bundleDependencies": [
+        "@azure/identity",
+        "@azure/msal-browser",
+        "@js-joda/core",
+        "@playwright/cli",
+        "mssql",
+        "mysql2",
+        "open",
+        "pg",
+        "readable-stream",
+        "tedious",
+        "wsl-utils"
+      ]
     },
     "node_modules/@azure-rest/core-client": {
       "version": "2.9.0",

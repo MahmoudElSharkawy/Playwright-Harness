@@ -15,7 +15,7 @@ export function archiveManifest(path) {
     if ((prefix ? `${prefix}/${name}` : name) === 'package/package.json') return JSON.parse(tar.subarray(offset + 512, offset + 512 + size).toString('utf8'));
     offset += 512 + Math.ceil(size / 512) * 512;
   }
-  throw new Error('Not an npm package archive.');
+  throw new Error('Not an npm package archive containing package/package.json.');
 }
 export const sha256 = path => createHash('sha256').update(readFileSync(path)).digest('hex');
 /** The integrity value npm records in a lockfile for a tarball. */

@@ -9,14 +9,14 @@ import {command, npmPath} from './process.mjs';
 import {packageRoot} from '../lib/consumer-paths.mjs';
 import {within, realFuture} from '../lib/skill-roots.mjs';
 import {snapshotInstalledPackage} from '../lib/host-proof-files.mjs';
-import {validateInstalledGraph, clearedOverrides} from './distribution.mjs';
-import {inspectArchive} from './archive.mjs';
+import {validateInstalledGraph} from './distribution.mjs';
+import {inspectArchive, packRuntimeArchive} from './archive.mjs';
 
 const {positionals, values} = parseArgs({allowPositionals: true, options: {archive: {type: 'string'}, sha256: {type: 'string'}}});
 assert(positionals.length === 1 && Boolean(values.archive) === Boolean(values.sha256), 'Use <new external workspace> [--archive <file> --sha256 <digest>].');
 const workspace = join(realpathSync.native(dirname(resolve(positionals[0]))), basename(positionals[0])); assert(!within(realpathSync.native(packageRoot), realFuture(workspace)), 'Keep installed validation outside the source package.');
 const supplied = values.archive ? inspectArchive(resolve(values.archive), packageRoot, values.sha256) : undefined;
-const expectedLock = JSON.parse(readFileSync(join(packageRoot, 'npm-shrinkwrap.json'), 'utf8')), overrides = clearedOverrides(expectedLock);
+const expectedLock = JSON.parse(readFileSync(join(packageRoot, 'npm-shrinkwrap.json'), 'utf8'));
 mkdirSync(workspace, {mode: 0o700});
 const env = {npm_config_cache: join(workspace, 'cache')}, npm = npmPath(); let sequence = 0;
 function run(args, cwd) {
@@ -27,18 +27,17 @@ let archive;
 if (supplied) {
   archive = join(workspace, supplied.name); copyFileSync(resolve(values.archive), archive, constants.COPYFILE_EXCL);
 } else {
-  const packed = JSON.parse(run([npm, 'pack', '--json', '--ignore-scripts', '--pack-destination', workspace], packageRoot));
-  assert.equal(packed.length, 1); archive = join(workspace, packed[0].filename);
+  archive = packRuntimeArchive(packageRoot, workspace, {run: (args, cwd) => ({status: 'PASS', stdout: run(args, cwd)})}).file;
 }
 const archiveMetadata = inspectArchive(archive, packageRoot, supplied?.sha256), install = join(workspace, 'installation'); mkdirSync(install);
-writeFileSync(join(install, 'package.json'), JSON.stringify({name: 'harness-installed-validation', version: '1.0.0', private: true, overrides}), {flag: 'wx'});
+writeFileSync(join(install, 'package.json'), JSON.stringify({name: 'harness-installed-validation', version: '1.0.0', private: true}), {flag: 'wx'});
 run([npm, 'install', '--ignore-scripts', '--no-audit', '--no-fund', '--install-strategy=nested', archive], install);
 const installedRoot = realpathSync.native(join(install, 'node_modules/playwright-pom-harness'));
 // The runtime resolves the native CLI as a normal dependency; the spike's own install serves only its tests.
 for (const prefix of ['examples', 'scripts/spikes/playwright-cli']) run([npm, 'ci', '--ignore-scripts', '--no-audit', '--no-fund', '--prefix', join(installedRoot, prefix)], install);
 const lock = JSON.parse(readFileSync(join(installedRoot, 'npm-shrinkwrap.json'), 'utf8'));
 assert.deepEqual(lock, expectedLock, 'Distributed dependency lock differs from the packed source.');
-const dependencies = validateInstalledGraph(install, lock);
+const dependencies = validateInstalledGraph(install, lock, archive);
 // POM browser regressions use the example runner's browser, independently of the native CLI pin.
 run([join(installedRoot, 'examples/node_modules/playwright/cli.js'), 'install', '--with-deps', 'chromium'], install);
 const before = snapshotInstalledPackage(install);

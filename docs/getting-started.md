@@ -77,6 +77,12 @@ exact development dependencies. It creates no demo pages or tests. The starter's
 Existing code, instructions, host settings and imported team libraries are preserved.
 Optional host hooks are not enabled by setup.
 
+The release archive carries the harness's validated runtime dependencies. Setup
+first records the archive and dependency lock without running install scripts,
+then performs a frozen installation before configuring the project. Install scripts
+run in that final phase. Your project's dependency declarations and overrides remain
+independent. Commit the resulting manifest and lockfile with the archive.
+
 ### Windows junction readability
 
 Setup, readiness checks, restore and unlink require a filesystem location where

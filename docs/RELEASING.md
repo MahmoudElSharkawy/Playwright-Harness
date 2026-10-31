@@ -28,6 +28,14 @@ green validation alone is not publication authorization ([contributing](contribu
 - Regular development PRs do not need a version bump.
 - Pack with npm 11, the npm bundled with Node 24. npm 12 leaves `npm-shrinkwrap.json` out of
   the archive, and the release needs it. CI packs the release archive with npm 11.
+- Release and validation packers prepare the runtime with locked `npm ci --ignore-scripts`
+  before bundling it. For a manual candidate, run
+  `node scripts/ci/archive.mjs <new-external-output-folder>` with Node 24's npm 11.
+  The helper stages the publication files, prepares the locked runtime and generates
+  its integrity record outside the source checkout. Bundles contain only
+  the declared runtime closure, including its upstream notices; example/spike
+  installations and local recovery output remain excluded. Archive validation checks
+  the bundled identities and contents against the validated graph.
 
 ## 2. Validate and merge
 
@@ -96,7 +104,9 @@ From [provenance](PROVENANCE.md):
 
 - Recheck any new third-party source.
 - Retain the required notices.
-- Inspect the archive: `npm pack --dry-run`.
+- Inspect the verified candidate and its generated runtime integrity record. A raw
+  source `npm pack --dry-run` does not prepare a bundle and reports the missing
+  preparation instead of inventing provenance for locally installed files.
 - Resolve outstanding security remediation.
 - Obtain the owner's explicit publication authorization.
 
