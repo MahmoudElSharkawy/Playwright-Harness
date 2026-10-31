@@ -18,9 +18,10 @@ function verifiedOutput(roots, state, assessment) {
   const artifact = reviewArtifact(roots, evidence.output.path);
   requireThat(artifact.sha256 === evidence.output.sha256, 'Retained review output changed; independent re-review is required.');
   const output = contextData(readBounded(consumerPath(roots, artifact.path), 256 * 1024), 256 * 1024);
-  keys(output, ['version', 'host', 'runId', 'source', 'proposal', 'reviewer', 'cases', 'requirements', 'duplicates', 'clarityQuestion'], 'actual reviewer output');
+  keys(output, ['version', 'host', 'runId', 'source', 'proposal', 'reviewer', 'cases', 'requirements', 'duplicates', 'clarityQuestion', 'optionalDrafts'], 'actual reviewer output');
   const expected = {version: 1, host: evidence.host, runId: evidence.runId, source: state.source, proposal: state.proposal, reviewer: assessment.reviewer,
-    cases: assessment.cases, requirements: assessment.requirements, duplicates: assessment.duplicates, clarityQuestion: CLARITY_QUESTION};
+    cases: assessment.cases, requirements: assessment.requirements, duplicates: assessment.duplicates, clarityQuestion: CLARITY_QUESTION,
+    ...(assessment.optionalDrafts !== undefined ? {optionalDrafts: assessment.optionalDrafts} : {})};
   requireThat(fingerprint(output) === fingerprint(expected), 'Retained reviewer output bindings or findings differ from this assessment.');
   return artifact;
 }

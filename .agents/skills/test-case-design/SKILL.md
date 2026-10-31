@@ -21,8 +21,12 @@ inventory where available; otherwise capture the accepted sources through
 inventory` to partition compound source statements, preserving IDs across reordering,
 and record actual acceptance evidence. Never invent an owner decision merely to
 make publication possible. Captured headings and setup introductions can remain
-unknown structural context; distinguish them from unresolved business decisions in
-assessment reasons instead of inventing an owner ruling.
+unknown structural context; the independent assessment can classify non-obligation
+slices as `context` without inventing an owner ruling or a coverage gap. Preserve
+actual description obligations and unresolved business decisions. Use shared capture
+and acceptance only for case design; do not invoke requirements analysis or produce
+a general gap audit unless requested. Ask only for missing/conflicting setup, inputs,
+expectations or verification needed by affected cases, and continue supported work.
 After inventory acceptance or partition edits, run design `prepare` again with the
 same analysis ID and selected context/case scope to bind the current acceptance head,
 then save the proposal using the newly returned source fingerprint.
@@ -37,8 +41,9 @@ linked cases. New stories may have no linked cases. Captured history identifies
 superseded statements; it does not revive them. Retrieve related business evidence
 narrowly within authorized scope, using direct links as leads. Consider applicable
 rules, terminology, realistic setup/data and reusable cases from the selected
-captured project context. Missing/stale context permits useful supported design;
-disclose the gap. Do not invoke context-qa, refresh/build context, download unselected
+captured project context. Missing optional context, conventions or existing cases
+alone is no blocker; mention only material limitations. Do not invoke context-qa,
+refresh/build context, download unselected
 attachments or expand neighboring regression scope. Captures with older broad
 attachment ingestion need explicit reselection.
 
@@ -59,9 +64,10 @@ Accepted requirements and current authorized choices override defaults. Missing,
 stale or conflicting profiles permit supported design. Conventions cannot invent
 credentials, fixtures, expectations or locale coverage; preserve case/run ownership.
 
-Only accepted selected-story description/criteria authorize expected outcomes.
-Comments, conventions and neighboring stories can clarify or expose gaps; they do
-not automatically accept rules. Resolve contradictions, missing decisions and
+Accepted selected-story description/criteria and explicitly selected supplemental
+requirements accepted through a real owner decision authorize main-case outcomes.
+Comments, conventions and neighboring stories can clarify or support optional
+drafts; they do not automatically accept rules. Resolve contradictions, missing decisions and
 unaccepted assumptions before delivering affected cases. Empty values, spaces and
 special characters do not automatically imply rejection.
 
@@ -84,34 +90,34 @@ Distinguish explicit requirements, applicable documented standards/design system
 agreed targets, quality risks and assumptions; a retrieved reference alone accepts
 no new behavior and requests no cases.
 
-When useful, place a short optional suggestions section outside the case tables.
-Put material concerns first, consolidate overlaps and explain selection once in a
-short footer. Each suggestion identifies the affected behavior/risk, proposed check
-and any missing scope, rule, standard or observable expected-result decision.
-Omit clearly irrelevant areas; flag material uncertainty instead of guessing.
-Zero suggestions is valid. Suggestions have no case IDs, case counts or accepted
-coverage credit, and never enter publication or execution/automation handoffs.
+Draft a small relevant set of optional cases on the first pass, without waiting for
+a separate request to design suggestions. Save ordinary case content, actual source
+basis and specific unresolved questions in `optionalDrafts`; see the documented
+schema. Use supported inputs and observable expectations. Where an outcome, target
+or environment is missing, retain the proposed check and specific decision needed;
+never invent an executable expectation. Consolidate overlap; zero drafts is valid.
+Optional IDs and counts stay separate from main cases. They earn no accepted
+coverage and cannot enter publication or execution/automation handoffs.
 
 ### FR-4: Promote only requested, supported suggestions
 
-Create suggestion-derived cases only when the user explicitly requests the selected
-cases **and** their scope and observable expected results are agreed, documented and
-supported through the existing accepted-source workflow. Neither condition alone
-is enough. Reviewing suggestions, confirming relevance, supplying targets or
-approving the original proposal does not request extra cases. A clear selection
-such as “Create cases for responsiveness and accessibility” is sufficient as the
-request; keep it across turns and resolve only remaining essential decisions,
-reusing agreed context without repeated confirmation. One message may satisfy both
-conditions. Generic approval cannot settle an unspecified business rule or target.
+Promote optional drafts into main scope only when the user selects them and their
+scope and observable expectations are supported through the accepted-source workflow.
+Selection can also confirm the clearly presented expectations in one message. Keep
+that choice across turns and resolve only remaining essential decisions; do not
+request another design turn or redundant confirmation. Approving the main proposal
+does not select optional drafts or settle unspecified rules or targets.
 
 Before saving an affected case, capture any agreed addition through the existing
 authorized source-update/inventory acceptance process and prepare again against
 that accepted source. Bind normal mappings to actual inventory identities, steps,
 data and expectations; never invent IDs, messages, rejection behavior, thresholds,
 environments or compliance obligations, or automatically edit remote story fields.
-Add only requested, supported cases to the ordinary proposal and independent review;
-leave unselected or unresolved suggestions advisory. Refresh normal counts and full
-rendering. Existing publication and execution authorizations remain separate.
+Follow the [promotion recipe](../../../docs/test-case-design.md#user-controlled-promotion)
+to reuse saved draft content after preparing the accepted addition. Move only selected,
+supported drafts into main cases with genuine mappings and preparation; retain all
+unselected drafts. Refresh counts, the current file and affected independent review.
+Publication and execution authorizations remain separate.
 
 ## Design and independently evaluate
 
@@ -144,10 +150,12 @@ not the final business outcome. The overview derives its final result from the l
 mapped verification, so map business verification rather than cleanup as coverage.
 
 After saving the complete proposal, dispatch a fresh independent reviewer with the
-raw selected sources, inventory, context, existing cases and proposal. Ask it to
+raw selected sources, inventory, context, existing cases and complete main/optional
+draft content, source basis and questions, not only the chat summary. Ask it to
 refute source grounding, every rule/condition/branch/outcome, independence, meaningful
 expectations and completeness. Save its actual per-case and per-requirement evidence
-with `assess`; an author-filled reviewer name, schema pass or matching reference is
+with `assess`; include a separate verdict/reason for every optional draft. Optional
+review does not accept additional scope. An author-filled reviewer name, schema pass or matching reference is
 not evidence of independent review. Fix findings and revalidate edited content.
 Record residual gaps after edits, selection and delivery. Never equate publication,
 approval or valid unchanged cases with passing execution.
@@ -167,32 +175,38 @@ without both conditions in FR-4.
 
 ## Show the agreed chat review
 
-Every complete `review`, `edit`, `assess` or `read` returns `rendered.markdown`
-and a derived Markdown copy under the consumer's `.harness/runs/test-case-design/`.
-Display that full Markdown in chat and provide one link to the current
-`reviewFile.path` through the host's existing local-file/attachment facility, only
-when `reviewFile.status` is `written` and the host can deliver it. Use the new
-returned path after revisions; never substitute an earlier copy.
+Use `--format compact` for routine commands. Default JSON remains available for
+complete source/case reads and independent review. Reuse returned state/bindings;
+use `assess --notes <review-notes-json> --format compact` for a final assessment
+with notes, without a routine second `read --notes`. Batch independent reads, reuse
+unchanged instructions and avoid repeated polling or model-driven formatting.
 
-When adding user-facing gaps or optional suggestions, put the same Markdown in a
-consumer JSON file with optional `gaps` and `suggestions` strings and run
-`read --id <design> --notes <review-notes-json>` for the final view. The notes stay
-outside the unchanged case tables and never become cases, acceptance or coverage
-credit. Omit unused sections. Reuse this notes file explicitly on subsequent
-reviews when still relevant; it is not part of saved proposal state.
+Display the returned chat summary: test-type counts, then Positive/Negative counts,
+then the main-case overview with exactly **Case | Action | Title | Prerequisites |
+Final expected results | Coverage reference | Test type | Scenario type**.
+Both count tables have separate Main cases and Optional drafts columns and zero
+rows; the test-type table includes all eight types and separate totals. These are
+two classifications of the same cases, not additive totals. Zero is not itself a gap.
+Follow with optional titles/counts, material decisions/limitations and one current
+file link. Do not repeat detailed step tables in chat unless explicitly requested.
 
-The copy identifies the design/story, existing proposal/state revision and actual
-recorded review/delivery status. It does not approve or publish cases or establish
-execution readiness. If file creation or host delivery fails, still display the
-full chat review and explain the file-specific limitation; provide no success link
-or download claim. See the [Markdown copy workflow](../../../docs/test-case-design.md#markdown-review-copy).
+The complete review is `.harness/runs/test-case-design/<design-id>/review.md`,
+refreshed atomically after review, edits, assessment and reads. Link `reviewFile.path`
+only when status is `written` and the host can deliver it. Explain that it shows the
+current version. Failed generation/delivery gets a concise limitation, no stale link
+or automatic full-chat dump; detailed reads remain available on request. Preserve
+legacy files and immutable technical history internally. See the
+[Markdown copy workflow](../../../docs/test-case-design.md#markdown-review-copy).
 
-Display the renderer's summary first: distinct-case total, all eight test-type
-counts including zeros, and both scenario counts. Then the overview containing
-every case with exactly ID, Proposed action, Title, Prerequisites, Final expected
-results, Coverage reference, Test type and Scenario type.
+Use readable criterion descriptions or source labels/excerpts in both views.
+Keep real story/case IDs and stable temporary selection IDs, with internal mappings,
+revision/approval hashes and recovery evidence out of the human review. Do not
+replace arbitrary IDs in literal source text or test data. Optional content, source
+basis and review feedback persist with the design; `--notes` is only supplemental
+advisory prose, never the storage for drafts or acceptance.
 
-Display every case completely in one table with three bold section dividers:
+In the Markdown file, display every main and optional case completely in one table
+with three bold section banners:
 case details (ID, Title, Coverage reference, Test type, Scenario type); setup
 (Prerequisites and Test data); complete numbered steps (action and expected result).
 Continue long tables. Never replace steps with summaries, split a case into adjacent
@@ -225,8 +239,9 @@ checks. Explain missing input, local adapter limits and actual server rejection
 distinctly. Populating an existing custom field is supported; creating new field
 definitions or changing the ADO process requires a separate explicit request.
 
-When requested, generate `preview` for selected IDs. Show the complete proposal and
-exact native changes, destination and shared-case effects. Show per-case additional
+When requested, generate `preview --format compact` for selected main-case IDs.
+Show the summary and full current Markdown link, exact native changes, destination
+and shared-case effects. Show per-case additional
 field values and differences from `fieldPreview`, including verified server defaults,
 outside the case tables, alongside the destination and selected cases. Outside the case tables,
 show each combined Preparation action and its observable readiness expectation;

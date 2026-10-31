@@ -8,7 +8,7 @@ import {validateLocalSource} from '../local-source.mjs';
 import {readRequirements} from '../requirements/index.mjs';
 import {consumerIdentity} from '../requirements/sources.mjs';
 import {captureDesign, requireFreshDesign} from './sources.mjs';
-import {validateDesign, validateAssessment, renderDesign, coverage, selectedIds, proposalFingerprint, preparationSteps, confirmedOutcomes, exactDuplicates, duplicateGaps} from './review.mjs';
+import {validateDesign, validateAssessment, renderDesign, coverage, selectedIds, proposalFingerprint, preparationSteps, confirmedOutcomes, exactDuplicates, duplicateGaps, readableReference} from './review.mjs';
 import {retainReviewEvidence, reviewEvidenceStatus} from './review-evidence.mjs';
 import {dependencyGaps} from './references.mjs';
 import {withReviewCopy} from './review-copy.mjs';
@@ -56,7 +56,7 @@ export function saveDesign(roots, designId, input) {
     requireThat(!state.draft || input.head === state.head, 'Design edit needs the current head.');
     requireThat(!state.delivery || state.delivery.outcomes.every(row => ['applied', 'unchanged', 'failed'].includes(row.status)), 'Reconcile pending or uncertain writes before changing content.');
     const requirements = readRequirements(roots, state.analysisId); requireThat(requirements?.head === state.requirements.head, 'Acceptance/source changed; prepare and revalidate the design.');
-    const draft = validateDesign(input, state, requirements), proposal = proposalFingerprint(state.source, draft, requirements);
+    const draft = validateDesign(input, state, requirements, {roots}), proposal = proposalFingerprint(state.source, draft, requirements);
     if (proposal === state.proposal) return state;
     return saveDesignState(roots, designId, {...state, draft, proposal, review: null, assessment: null, approvalGeneration: (state.approvalGeneration ?? 0) + 1, delivery: null, deliveryHistory: [],
       history: [...state.history, ...(state.proposal ? [{head: state.head, source: state.source, proposal: state.proposal, reason: 'proposal-edit'}] : [])]});
@@ -79,8 +79,46 @@ export function rejectDesign(roots, designId) {
 }
 export function designView(roots, designId, selected, options = {}) {
   const state = readDesign(roots, designId); requireThat(state, 'Design is not prepared.');
+  return stateToDesignView(roots, state, selected, options);
+}
+/** Reuse the just-saved immutable state; the copy writer still checks the current head under lock. */
+export function stateToDesignView(roots, state, selected, options = {}) {
   if (!state.draft) return state;
-  return withReviewCopy(roots, {...state, rendered: renderDesign(state.draft), coverage: coverage(state, selected, {roots}), duplicates: exactDuplicates(state), ...(state.delivery || state.deliveryHistory?.length ? {confirmedCoverage: coverage(state, selected, {confirmed: true, roots})} : {})}, options);
+  return withReviewCopy(roots, {...state, rendered: renderDesign(state.draft, state), coverage: coverage(state, selected, {roots}), duplicates: exactDuplicates(state), ...(state.delivery || state.deliveryHistory?.length ? {confirmedCoverage: coverage(state, selected, {confirmed: true, roots})} : {})}, options);
+}
+/** Readable diagnostics from already-loaded state; presentation never changes immutable coverage records. */
+export function compactCoverage(value, state) {
+  const reference = requirementId => readableReference(state, requirementId);
+  const caseIds = row => [...new Set([...(row.caseIds ?? []), ...(state?.draft?.mappings ?? []).filter(mapping => mapping.requirementId === row.requirementId || row.requirementIds?.includes(mapping.requirementId)).map(mapping => mapping.caseId)])];
+  const dependency = row => {
+    const captured = state?.evidence?.references?.items.find(item => item.id === row.referenceId), excerpt = captured?.source?.parts[0]?.text;
+    return {reference: captured?.workItemId ? `Referenced work item #${captured.workItemId}${excerpt ? ' — ' + (excerpt.length > 240 ? excerpt.slice(0, 237) + '...' : excerpt) : ''}` : 'Required reference evidence',
+      requirements: (row.requirementIds ?? []).map(reference), caseIds: caseIds(row), status: row.status, reason: row.reason};
+  };
+  return {complete: value.complete, basis: value.basis,
+    gaps: (value.gaps ?? []).map(row => ({reference: reference(row.requirementId), caseIds: caseIds(row), status: row.status, reason: row.reason})),
+    dependencies: (value.dependencies ?? []).map(dependency)};
+}
+/** Opt-in CLI projection. Full state and all detailed renderings remain available through default JSON. */
+export function compactDesignResult(result) {
+  const presentation = result.presentation ?? result;
+  const assessedCoverage = result.coverage && (result.presentation?.coverage ?? compactCoverage(result.coverage, result.requirements && result.evidence ? result : undefined));
+  const rejected = !result.review && result.history?.at(-1)?.reason === 'rejected';
+  const status = result.mode ?? (rejected ? 'rejected' : result.review ? 'assessed' : result.draft ? 'draft' : result.operations ? 'publication-preview' : result.path ? 'handoff' : 'prepared');
+  const coverageNote = assessedCoverage ? assessedCoverage.complete ? ' Accepted coverage is complete.' : ' Accepted coverage is incomplete; resolve the affected case and source decisions below.' : '';
+  const summary = result.mode === 'completed' ? `Publication delivery is confirmed for ${result.outcomes.length} cases.${coverageNote} Execution has not run.`
+    : result.mode === 'reconciliation-required' ? `Publication needs reconciliation. Reconcile uncertain outcomes before further delivery.${coverageNote} Execution has not run.`
+    : result.mode === 'incomplete' ? `Publication delivery is incomplete. Review the failed or pending case outcomes before continuing.${coverageNote} Execution has not run.`
+    : rejected ? 'Proposal rejected. Edit the proposal and obtain fresh independent review before handoff or publication.'
+    : result.path ? `Reviewed main cases ${(result.selected ?? []).join(', ')} saved for handoff.${coverageNote} Execution has not run.`
+    : result.draft ? 'Proposal saved. Independent assessment is required before handoff or publication.'
+    : 'Selected sources prepared. Save a source-grounded proposal, then obtain independent assessment.';
+  const bindings = Object.fromEntries(['head', 'source', 'sourceFingerprint', 'proposal', 'assessment', 'approval', 'fingerprint', 'approvalGeneration'].filter(key => typeof result[key] === 'string' || typeof result[key] === 'number').map(key => [key, result[key]]));
+  return { ...(result.id ? {id: result.id} : {}), status,
+    summary: presentation.rendered?.chatSummary ? (rejected ? summary + '\n\n' : '') + presentation.rendered.chatSummary : result.note ?? summary,
+    ...(presentation.rendered?.summary ? {counts: presentation.rendered.summary} : {}), ...(presentation.reviewFile ? {reviewFile: presentation.reviewFile} : {}), ...(presentation.nativePreview ? {nativePreview: presentation.nativePreview} : {}), bindings,
+    ...(assessedCoverage ? {coverage: assessedCoverage} : {}),
+    ...Object.fromEntries(['destination', 'selected', 'fieldPreview', 'preparationPreview', 'confirmed', 'outcomes', 'execution', 'path', 'note'].filter(key => result[key] !== undefined).map(key => [key, result[key]]))};
 }
 export function requireReviewed(state, selected, roots) {
   requireThat(state?.draft && state.review, 'Independent source-grounding and semantic coverage assessment is required.');
@@ -90,7 +128,7 @@ export function requireReviewed(state, selected, roots) {
     const row = state.draft.cases.find(row => row.id === id);
     requireThat(state.review.cases.find(row => row.id === id)?.verdict === 'pass', 'Affected case needs independent review corrections.');
     const gaps = dependencyGaps(state, row.coverageReferences.map(ref => ref.requirementId));
-    requireThat(!gaps.length, `Resolve required reference evidence before delivering case ${id}: ${gaps.map(row => `${row.referenceId} (${row.status})`).join(', ')}.`);
+    requireThat(!gaps.length, `Resolve required reference evidence before delivering case ${id}: ${gaps.map(row => `${row.requirementIds.map(requirementId => readableReference(state, requirementId)).join('; ')} (${row.status})`).join(', ')}.`);
     requireThat(!duplicateGaps(state, [id]).length, 'Affected exact-content duplicate needs an independent retain or revise decision.');
     for (const ref of row.coverageReferences) requireThat(state.requirements.inventory.find(row => row.id === ref.requirementId)?.disposition === 'accepted', 'Resolve required business decisions before accepting or publishing the affected case.');
   }
@@ -118,6 +156,6 @@ export async function designHandoff(roots, designId, options = {}) {
     if (!existsSync(file)) writeJson(file, value, {exclusive: true});
     else requireThat(fingerprint(readBounded(file)) === fingerprint(value), 'Saved handoff artifact differs from its content-bound identity.');
   }
-  return result;
+  return {...result, presentation: {coverage: compactCoverage(result.coverage, state)}};
   } finally {release();}
 }
