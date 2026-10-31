@@ -3,7 +3,8 @@
 Use the discoverable `test-case-design` skill to design cases from a selected story
 or supplied requirements, review them in chat and optionally publish an explicitly
 approved selection to Azure DevOps. Local design requires no ADO credentials.
-The agent performs design and semantic review; scripts own schemas, rendering,
+Chat shows counts, the eight-column case overview, optional titles and material
+decisions, with one link to the complete current Markdown. The agent performs design and semantic review; scripts own schemas, rendering,
 snapshots, approval binding and durable delivery. No external design engine runs.
 
 ## Prepare the selected evidence
@@ -11,7 +12,9 @@ snapshots, approval binding and durable delivery. No external design engine runs
 Run commands from the consumer with `npx --no pom-harness test-case-design ...`.
 Canonical scripts also accept `--project-root <consumer>` when invoked directly.
 Use the existing [requirements inventory](requirements-analysis.md), including its
-acceptance evidence and stable IDs. A design selection has this shape:
+acceptance evidence and stable IDs, only as needed for selected cases. This does not
+invoke a requirements-analysis skill or general gap audit. Ask only for decisions
+needed to specify setup, data, expected behavior or verification. A design selection has this shape:
 
 ```json
 {
@@ -36,11 +39,12 @@ requirements omit `storyId` and use selected file sources, for example
 adds explicitly selected existing cases to the story's Tested By cases; no linked
 cases is valid. `context` is optional; it selects a narrow read of captured business
 context, with optional `sourceId` or `workItemId`. It never builds or refreshes context.
-Missing or incompatible context remains an explicit gap. Related story links are
+Missing optional context, conventions or existing cases alone is not a blocker;
+report only material limitations. Related story links are
 returned as leads, not automatically fetched or added to scope.
 
 ```sh
-npx --no pom-harness test-case-design prepare --id sign-in --input design-source.json
+npx --no pom-harness test-case-design prepare --id sign-in --input design-source.json --format compact
 npx --no pom-harness requirements read --id sign-in
 ```
 
@@ -127,8 +131,10 @@ consumer/snapshot/requirement/content/disposition/actor/statement bindings. Reco
 only a real decision; use the returned reference fingerprint after selecting relevant
 rules. Submit that decision through `requirements inventory`, then prepare again with
 the same reference selection. A current matching decision is reused without another
-confirmation. The selected story remains coverage authority; referenced rules are
-supporting evidence mapped to its inventory, not new primary requirements.
+confirmation. Referenced rules support the selected story's inventory; fetching a
+reference never adds a primary requirement. An explicitly selected supplemental
+source accepted through an actual owner decision can extend scope using the
+[promotion recipe](#user-controlled-promotion).
 
 Required or unresolved delegated evidence keeps affected requirements incomplete and
 blocks affected cases. Supported unrelated cases can still be reviewed and published.
@@ -169,8 +175,9 @@ or create locale cases merely because languages are listed. Mark stale/conflicti
 agreements `stale` or `conflicting`; do not silently merge contradictory prose.
 Absent, malformed, foreign or stale profiles are advisory diagnostics and permit useful
 supported design. No mandatory setup or extra approval is introduced. Bound profile
-changes require affected revalidation. Optional suggestions still need both the explicit
-creation request and accepted expectations described in FR-4.
+changes require affected revalidation. Applicable documented conventions can support
+first-pass optional drafts; selecting them into main scope still requires accepted
+expectations under FR-4.
 
 ## Quality considerations
 
@@ -200,10 +207,11 @@ uncertainty; do not treat absence from acceptance criteria as evidence of irrele
 Keep accepted required coverage authoritative, reference adequate reusable cases in
 scope and leave additional concerns advisory. Do not assume empty or special-character
 inputs must be rejected, infer thresholds, or expand into neighboring workflows.
-Show only useful suggestions outside the existing tables; no routine 22-area or N/A
+Draft useful optional cases on the first pass, retaining supported details and exact
+questions where expectations are missing. Zero drafts is valid. No routine 22-area or N/A
 matrix. An explicitly requested applicability assessment can explain feature-specific
 exclusions. The checkout example below demonstrates selection and promotion without
-changing the case schema or requiring reference-resolution capabilities from #128.
+adding a second workflow or bypassing source acceptance.
 
 ## Proposal and independent assessment
 
@@ -236,6 +244,26 @@ case fields are rejected. Exactly one of the eight test types and one of Positiv
 Negative is required. A zero-case proposal is valid but does not imply complete
 coverage.
 
+The proposal may also contain `optionalDrafts`. Each uses the ordinary case fields
+above, a unique stable `NEW-...` ID and `proposedAction: "Create"`, but has
+`coverageReferences: []`, plus:
+
+```json
+{
+  "sourceBasis": [{"kind": "source", "id": "<captured part ID>", "label": "Description — country selector", "excerpt": "<exact captured passage>"}],
+  "questions": ["Which keyboard focus order is expected for the country selector?"]
+}
+```
+
+Use actual captured `source` part IDs, selected `context` passage IDs, `reference`
+IDs or the usable `convention` profile path. Excerpts must match that evidence;
+labels remain readable. Use `questions: []` when no decision is missing. A proposed
+step may omit `expected` only with a specific question; never supply a guessed
+executable outcome. Optional drafts have no main mappings or preparation approvals.
+Their content and basis persist with the proposal, independently of `--notes`, and
+are excluded from main coverage, publication selection and handoffs. Absence of
+`optionalDrafts` means none, preserving existing saved proposals.
+
 Each internal mapping has `caseId`, `requirementId` and nonempty `checks`, where
 each check carries the 1-based business `step`, its exact `expected` text and the
 case's exact `data` text. Every coverage reference needs a mapping. Actual semantic
@@ -248,22 +276,40 @@ and `steps` (2–20 action/expected pairs) instead of `expected`; the native fir
 step retains the labeled reviewed setup and later preparation steps follow in order.
 
 ```sh
-npx --no pom-harness test-case-design review --id sign-in --input proposal.json
-npx --no pom-harness test-case-design edit --id sign-in --input revised-proposal.json
-npx --no pom-harness test-case-design assess --id sign-in --input assessment.json
+npx --no pom-harness test-case-design review --id sign-in --input proposal.json --format compact
+npx --no pom-harness test-case-design edit --id sign-in --input revised-proposal.json --format compact
+npx --no pom-harness test-case-design assess --id sign-in --input assessment.json --notes review-notes.json --format compact
 npx --no pom-harness test-case-design read --id sign-in
 ```
 
-The independent reviewer receives the raw selected evidence, full case content
-and mappings, not an intended verdict. Its version-1 assessment binds `proposal`
+Use the returned compact view directly; do not follow `assess --notes` with a routine
+second read. Omit notes when unnecessary. Default output (or `--format json`) remains
+the complete JSON for source inspection, independent review and debugging. Compact
+output returns summary, counts, status, actionable diagnostics, paths and necessary
+command bindings without full state or duplicate case renderings. Save and assess
+reuse their returned state for rendering; current-state checks remain enforced.
+
+The independent reviewer receives the raw selected evidence, full main/optional case
+content, source basis, questions and mappings, not an intended verdict or only a chat
+summary. Its version-1 assessment binds `proposal`
 to the saved proposal fingerprint and names `reviewer`. Its `cases` contains every
 case's `id`, `verdict` (pass or revise) and evidence-backed `reason`. Its
 `requirements` contains every description/criterion inventory entry's `id`,
-`verdict` (covered, gap or unresolved), `reason` and supporting `caseIds`. A covered
+`verdict` (covered, gap, unresolved or context), `reason` and supporting `caseIds`. A covered
 entry must be accepted, have actual mapped verifying checks and pass independent
 case review. List all cases needed collectively for that requirement; selection
 that removes a required branch exposes a gap. The host must conduct actual fresh
 independent review; different actor names and JSON hashes cannot prove independence.
+
+Use `context` only for an unknown, unmapped slice without a testable obligation,
+owner evidence or unresolved business questions, with an independent reason and
+empty `caseIds`. It cannot discard accepted requirements or unresolved business
+decisions. Partition mixed narrative/obligations first. Narrative alone
+does not require owner acceptance or make required coverage incomplete. When the
+proposal has optional drafts, assessment must include every one in `optionalDrafts`
+as `{id, verdict: "supported" | "needs-decision" | "revise", reason}`. The same array
+must appear in retained reviewer output. A supported optional draft needs complete
+expectations and no unresolved questions; its review never accepts it into scope.
 
 The reviewer must ask: “Can another agent identify the actor, starting state, target,
 inputs, action, observable outcome and necessary cleanup without inventing business
@@ -302,40 +348,56 @@ are not a duplicate test.
 Review all accepted conditions, branches, boundaries and outcomes, including
 requirements stated only in the description. Keep assumptions and missing targets
 unresolved. Captured headings and setup introductions may be unknown structural
-context; explain that distinction in assessment reasons instead of presenting them
+context; record that distinction with the `context` verdict instead of presenting them
 as missing business decisions or inventing owner acceptance.
 Reject weak wrong-user/wrong-record/no-op expectations, filler cases and
 unsupported nonfunctional targets. There is no mandatory user-facing coverage matrix
 or extra per-case metadata. `coverage.complete` is limited to assessed current
-source evidence; it never describes execution. Missing or inaccessible evidence
-prevents a completeness claim.
+source evidence; it never describes execution. Missing evidence needed to verify an
+actual obligation prevents a completeness claim; absent optional context alone does not.
 
 ## Agreed chat rendering
 
-Show `rendered.markdown` in chat. It starts with the distinct-case total, counts
-for both scenario types and all eight test types, including zeros. The overview
-contains every case. The final expected result is derived from the last mapped
-business verification; it is not a separately maintained case field or cleanup result.
-The complete output also includes review identity/status, current gaps and supplied
-advisory notes outside these tables. Deliver its [Markdown copy](#markdown-review-copy)
-alongside the full chat review.
+Show the compact result's `summary` (or detailed result's `rendered.chatSummary`).
+It starts with separate main/optional totals, the eight-type count table, then the
+Positive/Negative table, including zero rows, before the exact eight-column main-case
+overview. The tables classify the same cases; their totals are not additive and a
+zero does not itself indicate a gap. Final expected results come from the last
+mapped business verification, never cleanup or a separately invented field. Follow
+with optional draft titles/counts, material decisions/limitations, recorded status
+and one [current Markdown](#markdown-review-copy) link. Do not repeat detailed step
+tables in chat unless requested. Real story/case IDs and temporary selection IDs
+remain visible; structured references use established labels with descriptions or
+source labels/excerpts. Internal IDs and revision/approval hashes stay in state and
+command bindings. Literal source/test data is never globally rewritten.
 
-**Total cases: 1 · Positive: 1 · Negative: 0**
+**1 main case · 0 optional drafts**
 
-| Test type | Total |
-|---|---:|
-| Functional | 1 |
-| Accessibility | 0 |
-| Compatibility | 0 |
-| UIUX | 0 |
-| Security | 0 |
-| Performance | 0 |
-| Responsiveness | 0 |
-| Localization | 0 |
+| Test type | Main cases | Optional drafts |
+|---|---:|---:|
+| Functional | 1 | 0 |
+| Accessibility | 0 | 0 |
+| Compatibility | 0 | 0 |
+| UIUX | 0 | 0 |
+| Security | 0 | 0 |
+| Performance | 0 | 0 |
+| Responsiveness | 0 | 0 |
+| Localization | 0 | 0 |
+| **Total** | **1** | **0** |
 
-| ID | Proposed action | Title | Prerequisites | Final expected results | Coverage reference | Test type | Scenario type |
+| Scenario type | Main cases | Optional drafts |
+|---|---:|---:|
+| Positive | 1 | 0 |
+| Negative | 0 | 0 |
+
+| Case | Action | Title | Prerequisites | Final expected results | Coverage reference | Test type | Scenario type |
 |---|---|---|---|---|---|---|---|
 | NEW-01 | Create | Sign in with valid credentials | Active dedicated account; signed out | The current user dashboard opens and displays the correct account identity | AC-1: Successful sign-in | Functional | Positive |
+
+**Full details:** Current Markdown review (a working file link in a real run).
+
+The Markdown contains complete main and optional cases in this format; chat includes
+them only when explicitly requested:
 
 | **1. CASE DETAILS** | | | | |
 |---|---|---|---|---|
@@ -348,7 +410,7 @@ alongside the full chat review.
 | **1** | Open the sign-in page | The sign-in form is displayed | | |
 | **2** | Enter valid credentials and select Sign in | The current user dashboard opens and displays the correct account identity | | |
 
-Display every full case with this single-table structure, continuing long cases.
+Display every full case in Markdown with this single-table structure, continuing long cases.
 No extra final-result row, review status, priority, execution layer, technique,
 counterexample, risk block, nested tables or step-summary substitution is supported.
 
@@ -356,17 +418,18 @@ counterexample, risk block, nested tables or step-summary substitution is suppor
 
 `review`, `edit`, `assess` and `read` automatically write the exact returned
 `rendered.markdown` bytes to the consumer-owned
-`.harness/runs/test-case-design/<design-id>/<state-head>.md`. The existing renderer
+`.harness/runs/test-case-design/<design-id>/review.md`. The existing renderer
 still owns the summary, overview and every complete case table. Review identity,
-recorded independent-review verdict counts, retained-evidence status, coverage gaps,
+recorded independent-review verdict counts, retained-evidence status, material case decisions,
 duplicate decisions and recorded delivery outcomes appear separately after the
 tables. A local design does not need an ADO story ID.
 
-The filename uses the existing state head; the content also identifies the existing
-proposal revision. Case edits and assessments return their current file paths.
-Repeated reads atomically replace that revision's derived copy so changed advisory
-notes or unavailable retained review evidence cannot leave stale displayed status.
-Older state revisions retain their separate copies. Neither writing nor sharing a
+The file identifies the story/design and readable review/delivery status, without
+technical revision hashes. It always shows the current version. Edits, assessment
+and reads atomically refresh the same path; a stale state cannot overwrite a newer
+current review. Legacy hash-named Markdown files remain untouched; no new hash
+copies are generated. Immutable internal records, mappings, evidence, approval
+bindings and recovery receipts remain unchanged. Neither writing nor sharing a
 copy accepts requirements, approves cases, publishes them or establishes execution
 readiness. Approval fingerprints and execution/automation handoffs are unchanged.
 
@@ -377,27 +440,31 @@ optional consumer JSON file (maximum 64 KiB):
 ```json
 {
   "gaps": "The fixture owner still needs confirmation; supported cases remain available.",
-  "suggestions": "- Consider keyboard focus for the custom selector after the team agrees the expected focus order. No additional case has been requested."
+  "suggestions": "- Keyboard focus is an optional draft; its expected focus order still needs a decision."
 }
 ```
 
 ```bash
-npx --no pom-harness test-case-design read --id sign-in --notes review-notes.json
+npx --no pom-harness test-case-design assess --id sign-in --input assessment.json --notes review-notes.json --format compact
 ```
 
 `--notes` also works with `review`, `edit` and `assess`. Omit unused keys or the
 entire option. These notes are advisory output, not proposal fields or saved
-acceptance; pass them explicitly on later reviews only while still relevant.
+acceptance; pass them explicitly on later reviews only while still relevant. Use
+readable descriptions, never internal IDs or revision hashes in this prose. Saved
+optional drafts and their independent feedback survive plain reads and restarts
+without these notes. Keep only case-relevant clarification in `gaps` (the legacy
+input key); do not turn it into a general requirements audit.
 Secret references remain references; credential-like literals are rejected.
 
-Show the returned `rendered.markdown` in full, then one **Markdown review** link
+Show the summary, then one **Markdown review** link
 using the host's existing local-file/attachment facility and the absolute
 `reviewFile.path`. Only `reviewFile.status: "written"` reports a created copy.
 If the host cannot expose that file, report the delivery limitation rather than
 claiming a successful download. File or notes failures return
-`reviewFile.status: "unavailable"` and a reason without a path; the complete chat
-tables remain available and the command succeeds. Display those tables and the
-file-specific limitation. Do not reuse a previous link as the current review.
+`reviewFile.status: "unavailable"` and a reason without a path. Report the limitation
+without a success/stale link or automatic full-chat dump; saved details remain
+available via an explicitly requested detailed read/chat fallback.
 
 ### Checkout example
 
@@ -419,27 +486,40 @@ Each case uses its own disposable cart. Accepted synthetic fixtures:
 - **Original address:** 12 Oak Road, London, SW1A 1AA, United Kingdom.
 - **Replacement address:** 24 Rue des Fleurs, Paris, 75001, France.
 
-#### Main proposal — existing format
+#### Main proposal — summary
 
-**Total cases: 4 · Positive: 2 · Negative: 2**
+**4 main cases · 1 optional draft**
 
-| Test type | Total |
-|---|---:|
-| Functional | 3 |
-| Accessibility | 0 |
-| Compatibility | 0 |
-| UIUX | 0 |
-| Security | 1 |
-| Performance | 0 |
-| Responsiveness | 0 |
-| Localization | 0 |
+| Test type | Main cases | Optional drafts |
+|---|---:|---:|
+| Functional | 3 | 0 |
+| Accessibility | 0 | 0 |
+| Compatibility | 0 | 0 |
+| UIUX | 0 | 0 |
+| Security | 1 | 0 |
+| Performance | 0 | 0 |
+| Responsiveness | 0 | 1 |
+| Localization | 0 | 0 |
+| **Total** | **4** | **1** |
 
-| ID | Proposed action | Title | Prerequisites | Final expected results | Coverage reference | Test type | Scenario type |
+| Scenario type | Main cases | Optional drafts |
+|---|---:|---:|
+| Positive | 2 | 1 |
+| Negative | 2 | 0 |
+
+| Case | Action | Title | Prerequisites | Final expected results | Coverage reference | Test type | Scenario type |
 |---|---|---|---|---|---|---|---|
 | NEW-01 | Create | Save the delivery address | Signed-in shopper with an editable cart | Replacement address appears in checkout after reload | AC-1 | Functional | Positive |
 | NEW-02 | Create | Prevent saving without a postcode | Cart has an existing address | Required-field error appears; existing address remains saved | AC-2 | Functional | Negative |
 | NEW-03 | Create | Cancel address changes | Cart has an existing address | Editor closes; existing address remains saved | AC-3 | Functional | Positive |
 | NEW-04 | Create | Deny changes to another shopper's cart | Two shoppers with separate carts | Update is denied; target cart's address remains unchanged | Description: BR-1 | Security | Negative |
+
+**Optional:** NEW-05 — Use the address form at supported viewport sizes
+(Responsiveness / Positive); viewport and layout expectations need agreement.
+
+**Full details:** Current Markdown review (a working link in a real run).
+
+The complete Markdown contains the following case tables; chat omits them by default.
 
 | **1. CASE DETAILS** | | | | |
 |---|---|---|---|---|
@@ -488,48 +568,64 @@ Each case uses its own disposable cart. Accepted synthetic fixtures:
 | **1** | Using A's session, submit an address update targeting B's cart through the cart-update interface | The update is denied | | |
 | **2** | In B's isolated session, open B's checkout | B's cart still displays the original address | | |
 
-#### Optional quality suggestions
+#### First-pass optional draft
 
-| Area | Suggested check | Decision or context needed |
-|---|---|---|
-| **Save recovery and unsaved work** | Check recovery after a lost save response or retry, and what happens when navigating away with unsaved edits. Cancel is already covered by AC-3. | Expected saved-state confirmation, retry behavior and treatment of unsaved edits. |
-| **Lookup integration and feedback** | Check delayed, empty, failed or unexpected lookup responses and the user's next available action. | Loading/error behavior, fallback options and any response-time target. |
-| **Privacy** | Check which address fields reach the lookup provider and whether personal data appears in diagnostics. | Applicable data-sharing, logging and retention policies. |
-| **Accessibility** | Check keyboard operation, focus, labels and validation announcements for the custom controls. | Applicable accessibility target and supported assistive technologies. |
-| **Layout and browser/input compatibility** | Check the form, selector and validation messages across supported viewports, zoom levels, browsers and input methods. | Supported combinations, design expectations and existing shared coverage. |
+This bounded example adds one optional draft for the changed layout and custom
+selector. Other material concerns may be appropriate in a real project; no quota
+or full applicability matrix is required. Save the draft immediately, with the
+captured description as its source basis and the questions below. Main coverage
+remains four cases. The optional draft is not executable until its decisions settle.
 
-> Selected for the changed layout, custom control, external lookup and personal data; overlapping concerns are grouped. These suggestions add no cases: the proposal remains at four. Request selected additions under [FR-4](../.agents/skills/test-case-design/SKILL.md#fr-4-promote-only-requested-supported-suggestions).
+| **1. CASE DETAILS** | | | | |
+|---|---|---|---|---|
+| **ID** | **Title** | **Coverage reference** | **Test type** | **Scenario type** |
+| NEW-05 | Use the address form at supported viewport sizes | Optional basis: Description — changed address layout and country selector | Responsiveness | Positive |
+| **2. SETUP** | | | | |
+| **Prerequisites** | Signed-in shopper with an editable cart containing the original address | | | |
+| **Test data** | Original and replacement addresses above; viewport configurations need agreement | | | |
+| **3. STEPS** | **Step action** | **Step expected result** | | |
+| **1** | Open the address editor at each agreed viewport | Decision needed: expected layout and supported configurations | | |
+| **2** | Expand the country selector, then select the replacement country | Decision needed: expanded-state layout | | |
+| **3** | Clear the postcode and select Save | AC-2 supplies the required message; validation-state layout needs agreement | | |
 
-For this example's delivered review, save that same suggestions section and footer
-as the `suggestions` string in a consumer notes JSON file, then run `read --notes`
-as above. Show the full four-case review plus those notes and link its returned
-Markdown copy. After an edit, repeat with the current revision and current notes;
-the file and chat must agree. If the copy is unavailable, keep these full tables
-and suggestions in chat and report the file limitation instead of a link.
+**Decisions:** Which viewports and zoom levels apply? Should the initial form,
+expanded selector and validation state avoid clipping, unintended overlap and
+horizontal scrolling, with controls reachable using vertical scrolling? These are
+proposed expectations, not accepted rules. In JSON, omit unsupported `expected`
+values and put the specific decisions in `questions`.
 
 #### User-controlled promotion
 
 This exchange illustrates [FR-4](../.agents/skills/test-case-design/SKILL.md#fr-4-promote-only-requested-supported-suggestions);
 it is not evidence of a completed evaluation, execution or publication.
 
-1. **Context without a creation request.** The user says, “Approve the four cases.
-   Supported viewports are 390×844, 768×1024 and 1440×900.” Keep the four cases,
-   IDs, mappings and counts. Reuse those sizes if responsive coverage is requested;
-   approval of the original proposal selects no suggestions and triggers no delivery.
-2. **Request with unresolved expectations.** The user says, “Create responsive cases
-   only; leave the other suggestions pending.” Retain that request and ask only the
-   remaining layout decision: “Should controls avoid clipping and unintended overlap,
-   with no horizontal page scrolling, and remain reachable and operable using vertical
-   scrolling where necessary, for the initial form, expanded selector and postcode
-   validation state at 100% zoom?” These are proposed expectations, not accepted rules;
-   the proposal still has four cases.
-3. **Request plus captured agreement.** The user accepts those expectations for all
-   three states and sizes at 100% zoom and asks to record the accepted addition.
-   Update the selected local source or capture the authorized owner decision through
-   the existing requirements workflow, retain acceptance evidence, and prepare again
-   before saving the new case. Do not invent an inventory ID or automatically edit
-   a remote story. The earlier creation request remains valid; no repeated request
-   or confirmation is needed. Only responsive coverage is selected.
+1. **Selection and agreement.** The user says, “Include NEW-05 with those layout
+   expectations for 390×844, 768×1024 and 1440×900 at 100% zoom.” This both selects
+   the draft and settles its clearly presented questions. Do not ask for another
+   request to design it. Approving only the original four would leave it optional.
+2. **Capture the real addition.** Retain the current complete proposal input or
+   detailed read before source preparation. Write the agreed expectation to an
+   explicitly authorized local source, for example `requirements/address-layout.md`.
+   Add `{ "id": "layout", "kind": "file", "path": "requirements/address-layout.md" }`
+   to the existing capture request's `sources`, preserving the story and all other
+   selected evidence. Capture with `requirements prepare --id <analysis> --request
+   <request-json>`. A changed capture resets inventory acceptance. Inspect the current
+   entries and reapply still-valid source evidence or retained actual owner decisions
+   for unchanged main requirements using the new snapshot/content bindings; old
+   evidence cannot simply be copied as current. Accept the supplemental entry through
+   its real owner decision under the [existing acceptance contract](requirements-analysis.md#capture-and-acceptance-inventory).
+   Reuse existing authorization where expectations and authority are unchanged;
+   resolve changed decisions without inventing acceptance or asking again about
+   unchanged rules. Never substitute an unrelated story ID or silently edit the remote story.
+3. **Prepare and reuse.** Run `test-case-design prepare` with the same analysis,
+   context and selected-case scope to bind current acceptance. A changed source clears
+   the current draft while immutable history retains it. Reuse the saved content,
+   fill only the agreed decisions, move NEW-05 from `optionalDrafts` to `cases`, remove
+   its optional `sourceBasis`/`questions`, and add actual supplemental requirement
+   references, verifying-step mappings and preparation. Keep unselected drafts intact.
+   Save against the returned source with `review` (or `edit` when a current draft
+   exists), then obtain affected independent assessment and refresh the summary/current
+   Markdown. Historical approval cannot cover changed content or selection.
 
 The following additional case uses **R-1** as a readable sample label for the
 accepted addition; actual mappings use the captured inventory identity. AC-2 still
@@ -550,31 +646,31 @@ not only the initial form, in each configured viewport.
 
 The refreshed ordinary proposal has **5 cases · Positive: 3 · Negative: 2**:
 Functional 3, Security 1, Responsiveness 1, and zero for the other five test types.
-Render the full summary, five-row overview and all five complete case tables again,
-including the unchanged original four; this illustrative delta is not a replacement
-for the normal review. The overview's final result comes from the last mapped
+Refresh both count tables and the five-row overview in chat, and all five complete
+cases in the current Markdown. NEW-05 moves from optional to main without double
+counting; optional totals become zero. The overview's final result comes from the last mapped
 verification. Review NEW-05 independently; approval of the original four does not
-approve the addition. Unselected suggestions remain advisory. Partial approval keeps
+approve the addition. Unselected drafts remain optional. Partial approval keeps
 unapproved cases and required gaps visible, with existing publication safeguards.
 
 If an accepted criterion instead requires an unavailable referenced rule, retain an
 affected requirement gap while supported cases proceed through existing gates. If
 only an optional suggestion lacks a design reference, keep that missing context
-advisory. Supplied targets or languages alone add no suggestion-derived cases.
+advisory. Supplied targets or languages alone do not select optional drafts into scope.
 Already accepted accessibility requirements belong in the main proposal; adequate
 shared coverage is proposed for reuse without cloning, merging or deleting cases.
-When no material additional concern remains, omit the suggestions section entirely.
+When no material additional concern remains, zero optional drafts is valid.
 
 ## Preview, approve, publish and recover
 
 ```sh
-npx --no pom-harness test-case-design preview --id sign-in --selected NEW-01,5678
+npx --no pom-harness test-case-design preview --id sign-in --selected NEW-01,5678 --format compact
 npx --no pom-harness test-case-design publish --id sign-in --approval <preview-fingerprint>
 npx --no pom-harness test-case-design reject --id sign-in
 npx --no pom-harness test-case-design reconcile --id sign-in
 ```
 
-Omit `--selected` to preview all cases. The saved preview binds full reviewed
+Omit `--selected` to preview all main cases; optional drafts are ineligible. The saved preview binds full reviewed
 content, selected IDs, native operations, accepted source revisions, independent
 assessment and configured destination. Show the exact native differences, shared
 case impacts and preparation readiness outside the agreed tables, then obtain one
@@ -583,6 +679,16 @@ approval. Edits, requirement decisions, destination/source/case changes or missi
 capabilities require revalidation and renewed approval. Unselected cases and residual
 gaps remain saved. Publication can deliver valid selected cases even when unrelated
 requirements remain unresolved.
+
+Compact preview retains the exact destination, selected IDs, native changes,
+`fieldPreview` (including per-case differences and verified server defaults), and
+`preparationPreview` outside case tables. Full per-case material details accompany
+the complete cases in the same current Markdown. A concise chat summary cannot hide
+approval-relevant values. The immutable preview remains the approval authority.
+Detailed/default JSON preserves the stored plan fields and adds a separate
+`presentation` containing `rendered`, `reviewFile` and `nativePreview`. Compact output
+uses that presentation. File paths or write failures never change the saved plan's
+approval fingerprint; regenerate a preview when its actual approved payload changes.
 
 Additional publication fields stay outside case content and tables. Configure
 optional creation defaults in `ado.testCases.fields` in the consumer's

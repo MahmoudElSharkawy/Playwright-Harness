@@ -12,10 +12,10 @@ test('local design keeps acceptance authority, renders exact full tables and der
   assert.equal(saved.requirements.head, f.requirements.head);
   assert.equal(rendered.summary.total, 3); assert.deepEqual(rendered.summary.scenarioTypes, {Positive: 2, Negative: 1});
   assert.equal(Object.keys(rendered.summary.testTypes).length, 8); assert.equal(rendered.summary.testTypes.Accessibility, 0);
-  assert.equal(rendered.overview.split('\n')[0], '| ID | Proposed action | Title | Prerequisites | Final expected results | Coverage reference | Test type | Scenario type |');
+  assert.equal(rendered.overview.split('\n')[0], '| Case | Action | Title | Prerequisites | Final expected results | Coverage reference | Test type | Scenario type |');
   assert.equal(rendered.details.length, 3);
   for (const table of rendered.details) {assert.equal(table.split('\n').filter(line => line.startsWith('|---')).length, 1); assert(table.includes('**1. CASE DETAILS**')); assert(table.includes('**2. SETUP**')); assert(table.includes('**3. STEPS**')); assert(!table.includes('Final expected results'));}
-  assert(rendered.markdown.indexOf('Total cases') < rendered.markdown.indexOf('| ID |'));
+  assert(rendered.markdown.indexOf('Total cases') < rendered.markdown.indexOf('| Case |'));
   assert.equal(coverage(saved, undefined, {roots: f.roots}).complete, false, 'Author mappings alone must not establish semantic coverage.');
   const assessed = assessDesign(f.roots, 'login', retainAssessment(f.roots, saved, assessmentFor(saved)));
   assert.equal(coverage(assessed, undefined, {roots: f.roots}).complete, true); assert.equal(coverage(assessed, ['NEW-01'], {roots: f.roots}).gaps.length, 2);

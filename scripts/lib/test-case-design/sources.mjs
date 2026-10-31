@@ -6,7 +6,7 @@ import {readContextOverview, searchContext} from '../context/search.mjs';
 import {contextData} from '../context/model.mjs';
 import {keys, fingerprint, requireThat} from '../execution-core/data.mjs';
 import {confirmedOutcomes} from './review.mjs';
-import {captureReferences, requireFreshReferences} from './references.mjs';
+import {captureReferences, requireFreshReferences, acceptedSupplemental} from './references.mjs';
 import {captureConventions} from './conventions.mjs';
 
 export async function captureDesign(roots, raw, options = {}) {
@@ -61,6 +61,10 @@ export async function requireFreshDesign(roots, state, options = {}) {
   const requirements = readRequirements(roots, state.analysisId);
   requireThat(requirements?.head === state.requirements.head, 'Requirement acceptance or source changed; revalidate and renew approval.');
   const before = state.evidence.requirements, request = {...before.request, ...(before.origin ? {attachmentIds: before.request.attachmentIds ?? []} : {})};
+  if (before.origin && state.draft) for (const row of state.draft.cases.filter(row => !options.selected || options.selected.includes(row.id))) for (const ref of row.coverageReferences) {
+    const entry = requirements.inventory.find(entry => entry.id === ref.requirementId), part = entry && before.parts.find(part => part.id === entry.partId);
+    requireThat(part && (part.sourceId === 'story' || acceptedSupplemental(roots, state, entry, part)), 'Supplemental requirement owner decision is missing or changed; revalidate affected cases and renew approval.');
+  }
   let current = await captureRequirements(roots, request, options);
   const signature = value => fingerprint({consumer: value.consumer, parts: value.parts, revisions: value.revisions, omissions: value.omissions.filter(row => row.reason !== 'not-selected'), origin: value.origin ?? null, ...(before.linksVersion === 1 ? {linksVersion: value.linksVersion, links: value.links} : {})});
   if (signature(current) !== signature(before) && before.origin && confirmedOutcomes(state).some(row => row.caseId.startsWith('NEW-') && row.status === 'applied')) current = await accountForCreatedLinks(roots, state, current, options);

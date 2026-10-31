@@ -14,8 +14,8 @@ function delivered(view) {
   assert.equal(view.reviewFile.status, 'written');
   assert(isAbsolute(view.reviewFile.path));
   assert.equal(readFileSync(view.reviewFile.path, 'utf8'), view.rendered.markdown);
-  assert(view.rendered.markdown.startsWith(renderDesign(view.draft).markdown));
-  assert(view.reviewFile.path.endsWith(`${view.head}.md`));
+  assert(view.rendered.markdown.startsWith(renderDesign(view.draft, view).markdown));
+  assert(view.reviewFile.path.endsWith('review.md'));
   return view.rendered.markdown;
 }
 
@@ -23,8 +23,8 @@ test('initial local review delivers exact complete tables, long Unicode content 
   const f = await designFixture();
   f.proposal.cases[0].steps.push(...Array.from({length: 80}, (_, i) => ({action: `Observe ${i} | <b>العربية</b> *literal* [value]`, expected: 'Literal | < > & text remains visible.'})));
   const saved = saveDesign(f.roots, 'login', f.proposal), view = designView(f.roots, 'login'), markdown = delivered(view);
-  assert.match(markdown, /Local design: login/); assert(markdown.includes(saved.head)); assert(markdown.includes(saved.proposal));
-  assert.match(markdown, /Independent review: not recorded/); assert.match(markdown, /## Gaps/);
+  assert.match(markdown, /Local design: login/); assert(!markdown.includes(saved.head)); assert(!markdown.includes(saved.proposal));
+  assert.match(markdown, /Independent review: not recorded/); assert.match(markdown, /## Case decisions and limitations/);
   assert.equal(view.rendered.details.length, 3); assert(markdown.includes('env:TEST\\_PASSWORD'));
   assert(markdown.includes('**82**')); assert(markdown.includes('العربية'));
   assert.deepEqual(readDesign(f.roots, 'login'), saved);
@@ -39,10 +39,11 @@ test('review and proposal revisions produce current copies and preserve older re
   changed.cases[0].title = 'Sign in and verify the correct account';
   saveDesign(f.roots, 'login', changed);
   const revised = designView(f.roots, 'login'), markdown = delivered(revised);
-  assert.notEqual(revised.reviewFile.path, reviewed.reviewFile.path);
+  assert.equal(revised.reviewFile.path, reviewed.reviewFile.path);
   assert.match(markdown, /Independent review: not recorded/); assert(markdown.includes(changed.cases[0].title));
-  assert.equal(readFileSync(initial.reviewFile.path, 'utf8'), initial.rendered.markdown);
-  assert.equal(readFileSync(reviewed.reviewFile.path, 'utf8'), reviewedText);
+  assert.equal(readFileSync(initial.reviewFile.path, 'utf8'), markdown);
+  assert.equal(readFileSync(reviewed.reviewFile.path, 'utf8'), markdown);
+  assert.notEqual(markdown, reviewedText);
 });
 
 test('advisory notes remain separate and same-state copies refresh notes and missing review evidence', async () => {
@@ -67,12 +68,12 @@ test('unavailable artifact directory or notes preserves full chat output and ret
   const f = await designFixture(), saved = saveDesign(f.roots, 'login', f.proposal);
   const first = designView(f.roots, 'login', undefined, {notes: 'missing.json'});
   assert.equal(first.reviewFile.status, 'unavailable'); assert.equal(first.reviewFile.path, undefined);
-  assert(first.rendered.markdown.startsWith(renderDesign(saved.draft).markdown)); assert.match(first.reviewFile.reason, /notes|ENOENT/i);
+  assert(first.rendered.markdown.startsWith(renderDesign(saved.draft, saved).markdown)); assert.match(first.reviewFile.reason, /notes|ENOENT/i);
   const directory = join(f.roots.projectRoot, '.harness/runs/test-case-design'); mkdirSync(directory, {recursive: true});
   writeFileSync(join(directory, 'login'), 'Artifact directory is unavailable.');
   const view = designView(f.roots, 'login');
   assert.equal(view.reviewFile.status, 'unavailable'); assert.equal(view.reviewFile.path, undefined);
-  assert(view.rendered.markdown.startsWith(renderDesign(saved.draft).markdown)); assert.match(view.reviewFile.reason, /Markdown copy/);
+  assert(view.rendered.markdown.startsWith(renderDesign(saved.draft, saved).markdown)); assert.match(view.reviewFile.reason, /Markdown copy/);
   assert.deepEqual(readDesign(f.roots, 'login'), saved);
 });
 
@@ -83,7 +84,7 @@ test('malformed notes never expose rejected source text in the file limitation',
   const view = designView(f.roots, 'login', undefined, {notes: 'notes.json'});
   assert.equal(view.reviewFile.status, 'unavailable'); assert.equal(view.reviewFile.path, undefined);
   assert(!JSON.stringify(view).includes(sensitive));
-  assert(view.rendered.markdown.startsWith(renderDesign(view.draft).markdown));
+  assert(view.rendered.markdown.startsWith(renderDesign(view.draft, view).markdown));
 });
 
 test('ADO copies identify the story and preserve recorded partial delivery without additional approval or writes', async t => {
@@ -92,7 +93,7 @@ test('ADO copies identify the story and preserve recorded partial delivery witho
   await publishDesign(f.roots, 'login', {...options, approval: preview.fingerprint});
   const before = readDesign(f.roots, 'login'), writes = f.control.writes;
   const view = designView(f.roots, 'login'), markdown = delivered(view);
-  assert.match(markdown, /Story: 200/); assert(markdown.includes(preview.fingerprint));
+  assert.match(markdown, /Story: 200/); assert(!markdown.includes(preview.fingerprint));
   assert.match(markdown, /NEW-01: applied/); assert(!markdown.includes('101: applied'));
   assert.equal(view.rendered.summary.total, 2); assert.equal(f.control.writes, writes);
   assert.deepEqual(readDesign(f.roots, 'login'), before);

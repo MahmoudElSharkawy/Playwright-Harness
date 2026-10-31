@@ -12,6 +12,18 @@ const unique = values => [...new Set(values)];
 const safeText = value => typeof value === 'string' && value.trim() && value.length <= 65536;
 const affectedEntries = inventory => inventory.filter(row => ['requirement', 'criterion'].includes(row.kind));
 
+/** Supplemental scope must be selected explicitly and accepted by a current owner decision. */
+export function acceptedSupplemental(roots, state, entry, part) {
+  if (!roots || entry.disposition !== 'accepted' || !state.evidence.requirements.request.sources.some(source => source.id === part.sourceId && source.kind === 'file')) return false;
+  return entry.evidence.some(evidence => {
+    if (evidence.kind !== 'decision') return false;
+    try {
+      const decision = contextData(readBounded(consumerPath(roots, evidence.path)));
+      return fingerprint(decision) === evidence.fingerprint && decision.version === 1 && decision.authority === 'owner' && safeText(decision.actor) && safeText(decision.statement) && decision.consumer === state.requirements.consumer && decision.snapshot === state.requirements.snapshot && decision.requirementId === entry.id && decision.content === entry.content && decision.disposition === 'accepted';
+    } catch {return false;}
+  });
+}
+
 function destination(value, origin) {
   const inline = /^#([1-9]\d{0,9})$/.exec(value);
   if (inline && Number(inline[1]) <= 2147483647) return origin ? {workItemId: Number(inline[1]), destination: `${origin.organizationUrl}/${encodeURIComponent(origin.project)}/_workitems/edit/${inline[1]}`, status: 'candidate'} : {destination: value, status: 'unverified'};

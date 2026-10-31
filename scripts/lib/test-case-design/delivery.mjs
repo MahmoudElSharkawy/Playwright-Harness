@@ -6,7 +6,7 @@ import {requirementsClient} from '../requirements/sources.mjs';
 import {adoRequestFingerprint} from '../integrations/ado-client.mjs';
 import {workItemLinkId, adoId, validateCaseFieldValues} from '../integrations/config.mjs';
 import {prepareCaseOperation, verifyCaseOperation} from '../integrations/ado-case-design.mjs';
-import {readDesign, lockDesign, saveDesignState, designPath, requireReviewed} from './index.mjs';
+import {readDesign, lockDesign, saveDesignState, designPath, requireReviewed, stateToDesignView, compactCoverage} from './index.mjs';
 import {requireFreshDesign} from './sources.mjs';
 import {requireFreshReferences} from './references.mjs';
 import {coverage, renderDesign, preparationSteps, confirmedOutcomes} from './review.mjs';
@@ -29,8 +29,8 @@ function nativeFieldPreview(operation) {
   return {caseId: operation.caseId, action: operation.action, fields};
 }
 function result(roots, state, delivery = state.delivery) {
-  const outcomes = delivery.outcomes;
-  return {mode: outcomes.every(row => ['applied', 'unchanged'].includes(row.status)) ? 'completed' : outcomes.some(row => row.status === 'uncertain') ? 'reconciliation-required' : 'incomplete', approval: delivery.approval, outcomes, coverage: coverage(state, undefined, {confirmed: true, roots}), execution: 'not-run'};
+  const outcomes = delivery.outcomes, assessedCoverage = coverage(state, undefined, {confirmed: true, roots});
+  return {mode: outcomes.every(row => ['applied', 'unchanged'].includes(row.status)) ? 'completed' : outcomes.some(row => row.status === 'uncertain') ? 'reconciliation-required' : 'incomplete', approval: delivery.approval, outcomes, coverage: assessedCoverage, execution: 'not-run', presentation: {coverage: compactCoverage(assessedCoverage, state)}};
 }
 function requireBinding(state, plan) {
   requireThat(state.proposal === plan.proposal && state.source === plan.source && state.assessment === plan.assessment && state.consumer === plan.consumer && (state.approvalGeneration ?? 0) === (plan.approvalGeneration ?? 0), 'Proposal, source, assessment, approval generation or consumer changed; obtain renewed approval.');
@@ -74,7 +74,7 @@ async function makePlan(roots, state, options) {
   requireThat(!fieldProblems.length, `Test Case publication fields need correction: ${fieldProblems.join(' | ')}.`);
   const plan = {version: 1, consumer: state.consumer, source: state.source, proposal: state.proposal, assessment: state.assessment, approvalGeneration: state.approvalGeneration ?? 0, selected, confirmed,
     destination: {organizationUrl: client.configuration.organizationUrl, projectId: project.id, project: project.name, storyId: origin.storyId}, operations,
-    coverage: coverage(state, selected, {roots}), rendered: renderDesign(state.draft), fieldPreview: operations.map(nativeFieldPreview), preparationPreview: selected.map(id => ({caseId: id, steps: preparationSteps(state.draft.cases.find(row => row.id === id), state.draft.preparations.find(row => row.caseId === id))})), note: 'Creation links to the story atomically. Native History records a per-operation recovery marker. Existing unrelated Description, tags and relationships are preserved. Validate-only requests check fields, rules and permissions; they do not publish cases.'};
+    coverage: coverage(state, selected, {roots}), rendered: renderDesign(state.draft, state), fieldPreview: operations.map(nativeFieldPreview), preparationPreview: selected.map(id => ({caseId: id, steps: preparationSteps(state.draft.cases.find(row => row.id === id), state.draft.preparations.find(row => row.caseId === id))})), note: 'Creation links to the story atomically. Native History records a per-operation recovery marker. Existing unrelated Description, tags and relationships are preserved. Validate-only requests check fields, rules and permissions; they do not publish cases.'};
   return {...plan, fingerprint: fingerprint(plan)};
 }
 export async function previewDesign(roots, designId, options = {}) {
@@ -82,7 +82,9 @@ export async function previewDesign(roots, designId, options = {}) {
   try {
     const state = readDesign(roots, designId); requireThat(!state?.delivery || state.delivery.outcomes.every(row => ['applied', 'unchanged', 'failed'].includes(row.status)), 'Reconcile unfinished delivery before another preview.');
     const plan = await makePlan(roots, state, options), path = designPath(roots, designId, `previews/${plan.fingerprint}.json`);
-    if (!existsSync(path)) writeJson(path, plan, {exclusive: true, maxNodes: 500000}); return plan;
+    if (!existsSync(path)) writeJson(path, plan, {exclusive: true, maxNodes: 500000});
+    const view = stateToDesignView(roots, state, plan.selected, {lockHeld: true, publication: plan});
+    return {...plan, presentation: {rendered: view.rendered, reviewFile: view.reviewFile, nativePreview: view.nativePreview, coverage: compactCoverage(plan.coverage, state)}};
   } finally {release();}
 }
 
