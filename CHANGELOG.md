@@ -2,12 +2,23 @@
 
 ## Unreleased
 
+## 4.3.2 — Reliable ADO validation and portable updates
+
+### Upgrade actions
+
+- Download the 4.3.2 archive and checksum from the same release, verify SHA-256,
+  and re-run setup in each consumer project. Review customized managed instructions,
+  then reload skills or restart the host.
+- Existing execution histories and legacy review files need no migration. Refresh
+  affected publication previews when effective field metadata or payloads change;
+  required/custom fields and permission failures remain blocking until resolved.
+
+### Changes
+
 - Recover unavailable Area/Iteration level metadata and optional null defaults in
   shared ADO bug filing and Test Case publication. Preserve required/custom-field
   validation, tags, approvals and recovery; report safe ADO error codes and tag
   permission guidance without weakening server validation. (#143)
-  Upgrade through the normal verified release archive and re-run setup. No state
-  migration is needed; re-preview plans whose effective schema/payload changes.
 - Bundle the validated runtime graph in release archives and finish setup with a
   frozen installation. Preserve consumer dependency versions, install hooks and
   rollback without generated npm overrides; verify resolved dependencies before
@@ -16,8 +27,7 @@
   readable references and one current `review.md`. Persist first-pass optional drafts
   and independent feedback, support accepted-source promotion, and add opt-in compact
   CLI output while preserving default JSON, approval gates and internal history. (#138)
-  Reload updated skills after adoption; existing state and legacy review files need
-  no migration. Full case details remain in the current Markdown and detailed reads.
+  Full case details remain in the current Markdown and detailed reads.
 - Support existing standard/custom Test Case publication fields with create-only
   defaults, reviewed per-case choices, managed-field handling and schema-bound
   previews. Preserve existing update values and delivery recovery; clarify that
