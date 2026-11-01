@@ -132,7 +132,7 @@ export async function publishDesign(roots, designId, options = {}) {
         try {
           item = await delivery.write(operation.adoId ? 'edit-case' : 'create-case', operation.request.route, operation.request.body, {method: operation.request.method, patch: true,
             onIdentity(identity) {saveOutcome(index, {adoId: identity.workItemId});}});
-        } catch (error) {saveOutcome(index, {status: error.delivery?.effect === 'not-executed' ? 'failed' : 'uncertain', reason: 'Dispatch was not verified. Reconcile the durable receipt before continuing.'}); return result(roots, state);}
+        } catch (error) {saveOutcome(index, {status: error.delivery?.effect === 'not-executed' ? 'failed' : 'uncertain', reason: `Dispatch was not verified. Reconcile the durable receipt before continuing.${error.delivery?.diagnostic ? ` ${error.delivery.diagnostic}` : ''}`}); return result(roots, state);}
         const remoteId = adoId(item.id); saveOutcome(index, {adoId: remoteId, status: 'uncertain'});
         const verified = await verifyCaseOperation(client, operation, remoteId);
         delivery.verified({workItemId: remoteId, revision: verified.rev}); delivery.finish();

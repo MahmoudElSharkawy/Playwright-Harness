@@ -163,6 +163,20 @@ test('case permission revocation blocks approved create and update without strip
   }
 });
 
+test('dispatch-time case rejection retains sanitized permission guidance and a non-executed receipt', async t => {
+  const f = await adoDesignFixture(t), fault = f.state.fault;
+  const preview = await previewDesign(f.roots, 'login', {client: f.client, selected: ['NEW-01']});
+  f.state.fault = context => {
+    if (context.path === 'wit/workitems/$test%20case' && context.url.searchParams.get('validateOnly') !== 'true') {context.send(deniedTags, 403); return true;}
+    return fault(context);
+  };
+  const result = await publishDesign(f.roots, 'login', {client: f.client, approval: preview.fingerprint});
+  assert.equal(result.outcomes[0].status, 'failed');
+  assert.match(result.outcomes[0].reason, /TF401289.*Create tag definition/);
+  assert.equal(f.control.writes, 0);
+  assert(f.receipts().flat().some(event => event.event === 'incomplete' && event.effect === 'not-executed'));
+});
+
 test('bug report permission revocation remains actionable and blocked before creation or evidence uploads', async t => {
   const f = await adoFixture(t), dependencies = {client: f.client, inventory: async () => [{pid: process.pid, identity: '1'}]};
   prepareBugReport(f.roots, 'permission', {version: 1, description: 'Synthetic failure', source: {content: 'The operation must succeed.', expected: 'Success'}, draft: {title: 'Synthetic operation fails', prerequisites: ['A record exists'], steps: ['Run the operation'], expected: 'Success', actual: 'Failure', fields: {}}, confirmation: {user: 'confirmed', agent: 'not-run'}, evidence: []});

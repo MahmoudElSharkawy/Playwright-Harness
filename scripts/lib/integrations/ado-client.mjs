@@ -146,7 +146,8 @@ export function createAdoClient({configuration, roots, resolveCredential, fetchI
           const rejected = error instanceof AdoError && [400, 401, 403, 404, 409, 412, 413, 415, 422].includes(error.status);
           const effect = dispatched && !rejected ? 'uncertain' : 'not-executed';
           record({event: 'incomplete', operation, requestFingerprint, effect, code: error instanceof AdoError ? error.code : 'local-failure'});
-          throw Object.assign(new Error(`ADO delivery incomplete; inspect receipt ${receipt}. No automatic replay.${error instanceof AdoError ? ` ${error.message}` : ''}`), {delivery: {effect}});
+          const diagnostic = error instanceof AdoError ? error.message : '';
+          throw Object.assign(new Error(`ADO delivery incomplete; inspect receipt ${receipt}. No automatic replay.${diagnostic ? ` ${diagnostic}` : ''}`), {delivery: {effect, ...(diagnostic ? {diagnostic} : {})}});
         }
         // The acknowledgement is durable. A local callback failure must not rewrite a confirmed effect as uncertain.
         if (identity) await onIdentity?.(identity); return data;
