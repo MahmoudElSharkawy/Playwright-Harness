@@ -7,7 +7,34 @@ import {validateAdoConfiguration, requireValue, adoGuid} from './config.mjs';
 const digest = value => createHash('sha256').update(value).digest('hex');
 export const adoRequestFingerprint = (route, method, body, raw = false) => digest(JSON.stringify({route, method, body: raw ? digest(body) : body}));
 export class AdoError extends Error {
-  constructor(code, status) { super(`ADO ${code}${status ? ` (HTTP ${status})` : ''}.`); this.code = code; this.status = status; }
+  constructor(code, status, {adoCode, fieldReference} = {}) {
+    const hint = adoCode === 'TF401289' ? 'Creating tags requires Create tag definition permission and a supported access level; private-project Stakeholders cannot create tags. Delivery remains blocked until access is corrected.'
+      : adoCode === 'TF51535' ? 'Field metadata is unavailable; check the field reference and selected work-item type.'
+      : status === 403 ? 'Check operation permissions and access level.' : [400, 422].includes(status) ? 'Check required fields, values, identities, paths and process rules.' : '';
+    super(`ADO ${code}${status ? ` (HTTP ${status})` : ''}.${adoCode ? ` ${adoCode}:` : ''}${hint ? ` ${hint}` : ''}`);
+    this.code = code; this.status = status;
+    if (adoCode) this.adoCode = adoCode;
+    if (fieldReference) this.fieldReference = fieldReference;
+  }
+}
+
+/** Error text is untrusted. Keep only bounded codes and a strict field identity, never raw server messages. */
+async function responseError(response, code, bound, route) {
+  let adoCode, fieldReference;
+  try {
+    const limit = Math.min(bound, 8192), chunks = []; let length = 0;
+    if (Number(response.headers.get('content-length')) > limit) throw new Error('Bounded diagnostic');
+    for await (const chunk of response.body ?? []) {
+      length += chunk.length; if (length > limit) throw new Error('Bounded diagnostic'); chunks.push(chunk);
+    }
+    const {message} = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+    if (typeof message === 'string') {
+      adoCode = /^(TF\d{5,7}):/.exec(message)?.[1];
+      const requestedField = /^wit\/fields\/([A-Za-z][A-Za-z0-9_.]{0,199})\?api-version=7\.1$/.exec(route)?.[1];
+      if (requestedField && message === `TF51535: Cannot find field ${requestedField}.`) fieldReference = requestedField;
+    }
+  } catch { /* Diagnostic failure must preserve the received status and delivery certainty. */ }
+  return new AdoError(code, response.status, {adoCode, fieldReference});
 }
 
 /** ADO transport only; no application executor or host dependency. No write retries. */
@@ -39,9 +66,9 @@ export function createAdoClient({configuration, roots, resolveCredential, fetchI
       beforeDispatch?.();
       response = await fetchImpl(url, {method, redirect: 'manual', signal: controller.signal,
         headers: {Authorization: `Basic ${Buffer.from(`:${credential}`).toString('base64')}`, Accept: binary ? 'application/octet-stream' : 'application/json', 'Content-Type': raw ? contentType : patch ? 'application/json-patch+json' : 'application/json'}, body: serialized});
-      if (response.status === 203 || [401, 403].includes(response.status)) throw new AdoError('authentication-rejected', response.status);
+      if (response.status === 203 || [401, 403].includes(response.status)) throw await responseError(response, 'authentication-rejected', config.maxResponseBytes, route);
       if (response.status >= 300 && response.status < 400) throw new AdoError('redirect-refused', response.status);
-      if (!response.ok) throw new AdoError('request-rejected', response.status);
+      if (!response.ok) throw await responseError(response, 'request-rejected', config.maxResponseBytes, route);
       if (Number(response.headers.get('content-length')) > config.maxResponseBytes) throw new AdoError('response-too-large');
       const chunks = []; let length = 0;
       for await (const chunk of response.body ?? []) {
@@ -76,6 +103,7 @@ export function createAdoClient({configuration, roots, resolveCredential, fetchI
       const extra = pagination === 'offset' ? `&$skip=${skip}&$top=100` : continuation ? `&continuationToken=${encodeURIComponent(continuation)}` : '';
       const result = await request(`${route}${extra}`, {teamLookup}), rows = result.data.value ?? (Array.isArray(result.data) ? result.data : undefined);
       requireValue(Array.isArray(rows), 'ADO list response is incomplete.');
+      requireValue(result.data.count === undefined || result.data.count === rows.length, 'ADO list page count is incomplete or mismatched.');
       if (teamLookup) requireValue(rows.length <= 100 && (result.data.count === undefined || result.data.count === rows.length), 'ADO team page is incomplete or exceeds its bound.');
       values.push(...rows); requireValue(values.length <= 10000, 'ADO list exceeds bounded scope.');
       if (pagination === 'offset') {
@@ -119,7 +147,8 @@ export function createAdoClient({configuration, roots, resolveCredential, fetchI
           const rejected = error instanceof AdoError && [400, 401, 403, 404, 409, 412, 413, 415, 422].includes(error.status);
           const effect = dispatched && !rejected ? 'uncertain' : 'not-executed';
           record({event: 'incomplete', operation, requestFingerprint, effect, code: error instanceof AdoError ? error.code : 'local-failure'});
-          throw Object.assign(new Error(`ADO delivery incomplete; inspect receipt ${receipt}. No automatic replay.`), {delivery: {effect}});
+          const diagnostic = error instanceof AdoError ? error.message : '';
+          throw Object.assign(new Error(`ADO delivery incomplete; inspect receipt ${receipt}. No automatic replay.${diagnostic ? ` ${diagnostic}` : ''}`), {delivery: {effect, ...(diagnostic ? {diagnostic} : {})}});
         }
         // The acknowledgement is durable. A local callback failure must not rewrite a confirmed effect as uncertain.
         if (identity) await onIdentity?.(identity); return data;

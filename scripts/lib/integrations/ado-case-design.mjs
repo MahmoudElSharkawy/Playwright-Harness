@@ -1,6 +1,6 @@
 import {fingerprint, requireThat} from '../execution-core/data.mjs';
 import {adoId, workItemLinkId, validateCaseFieldValues} from './config.mjs';
-import {workItemField, validFieldType, allowedFieldValue, equivalentFieldValue} from './bug-fields.mjs';
+import {workItemField, validFieldType, allowedFieldValue, equivalentFieldValue, derivedClassificationField} from './bug-fields.mjs';
 import {editableSteps, editStepsXml} from './ado-step-edit.mjs';
 import {parameterizedText, parseStepsXml, htmlToText} from './ado-steps.mjs';
 import {escapeHtml} from '../requirements/review.mjs';
@@ -12,9 +12,11 @@ export const operationMarker = identity => `[pom-harness:test-case-design:${iden
 export async function caseCapabilities(client, type, {write = true} = {}) {
   const fields = await client.list(`wit/workitemtypes/${encodeURIComponent(type)}/fields?$expand=all&api-version=7.1`), global = await client.list('wit/fields?api-version=7.1');
   requireThat(fields.length > 0 && fields.length <= 1000 && new Set(fields.map(field => field.referenceName)).size === fields.length, 'Test Case field metadata is incomplete or duplicated.');
+  requireThat(global.length > 0 && new Set(global.map(field => field.referenceName)).size === global.length, 'Global field metadata is incomplete or duplicated.');
   const schema = fields.map(instance => {
     const detail = global.find(field => field.referenceName === instance.referenceName);
-    requireThat(detail && detail.readOnly !== undefined, `Test Case field ${instance.referenceName} global writability is unavailable.`);
+    if (!detail && derivedClassificationField(instance.referenceName)) return workItemField(instance, {}, {unavailable: true});
+    requireThat(detail && typeof detail.readOnly === 'boolean', `Test Case field ${instance.referenceName} global writability is unavailable.`);
     return workItemField(instance, detail);
   });
   if (write) for (const name of FIELDS) requireThat(schema.some(field => field.referenceName === name && !field.readOnly), `Test Case field ${name} is unavailable, locked or not writable.`);
@@ -55,6 +57,7 @@ function validatedDefaults(schema, fields, item, before) {
   const defaults = {}, preserved = [];
   for (const spec of schema) {
     const name = spec.referenceName, value = item.fields[name];
+    if (spec.alwaysRequired && !spec.readOnly) requireThat(value !== undefined && value !== null && (typeof value !== 'string' || value.trim() || allowedFieldValue(spec, value)), `ADO server validation did not resolve required field ${name}.`);
     if (spec.readOnly || FIELDS.includes(name) || Object.hasOwn(fields, name)) continue;
     if (before && Object.hasOwn(before.fields, name)) {
       requireThat(Object.hasOwn(item.fields, name) && (before.fields[name] === value || equivalentFieldValue(spec, before.fields[name], value)), `ADO server validation changed preserved field ${name}; request and review an explicit field update.`);

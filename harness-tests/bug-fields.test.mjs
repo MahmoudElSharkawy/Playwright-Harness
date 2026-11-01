@@ -66,7 +66,7 @@ test('missing field type is read from detail without overwriting instance requir
 test('global read-only and identity restrictions cannot be relaxed by instance metadata', async () => {
   const client = clientFixture({fields: [title, {referenceName: 'Custom.Generated', name: 'Generated', readOnly: false, isIdentity: false}]});
   const read = client.read;
-  client.cachedRead = async route => route.startsWith('wit/fields/') ? {referenceName: 'Custom.Generated', type: 'string', readOnly: true, isIdentity: true} : read(route);
+  client.cachedRead = async route => route.startsWith('wit/fields/Custom.Generated?') ? {referenceName: 'Custom.Generated', type: 'string', readOnly: true, isIdentity: true} : read(route);
   const schema = await loadBugSchema(client), field = schema.fields.find(item => item.referenceName === 'Custom.Generated');
   assert.equal(field.readOnly, true); assert.equal(field.isIdentity, true);
   assert.equal(inspectBugFields(schema, {'System.Title': 'Synthetic defect', 'Custom.Generated': 'Alex'}).ready, false);

@@ -18,7 +18,10 @@ export async function adoFixture(t, overrides = {}) {
     const raw = Buffer.concat(chunks), binary = req.headers['content-type'] === 'application/octet-stream', body = chunks.length ? binary ? {bytes: raw.length} : JSON.parse(raw) : undefined;
     const url = new URL(req.url, 'http://localhost'), path = url.pathname.replace(projectPrefix, '').replace('/collection/_apis/', '').toLowerCase();
     requests.push({method: req.method, path, query: url.search, body});
-    const send = (data, status = 200, headers = {}) => { res.writeHead(status, {'content-type': 'application/json', ...headers}); res.end(JSON.stringify(data)); };
+    const send = (data, status = 200, headers = {}) => {
+      if (path === 'wit/workitemtypes/bug/fields' && status === 200) state.fieldDefinitions = data.value;
+      res.writeHead(status, {'content-type': 'application/json', ...headers}); res.end(JSON.stringify(data));
+    };
     if (req.headers.authorization !== `Basic ${Buffer.from(`:${credential}`).toString('base64')}`) return send({}, 401);
     if (state.fault && await state.fault({req, res, path, body, url, send})) return;
     if (path.startsWith('projects/')) return send(state.project);
@@ -30,7 +33,10 @@ export async function adoFixture(t, overrides = {}) {
     if (path === 'wit/workitemsbatch') {if (body.ids.length > 200) return send({}, 400); return send({value: body.ids.flatMap(id => items.has(id) ? [{...items.get(id), fields: Object.fromEntries(Object.entries(items.get(id).fields).filter(([name]) => body.fields.includes(name)))}] : [])});}
     if (path === 'wit/workitemtypecategories/microsoft.bugcategory') return send({referenceName: 'Microsoft.BugCategory', defaultWorkItemType: {name: 'Bug'}, workItemTypes: [{name: 'Bug'}]});
     if (path === 'wit/workitemtypes/bug/fields') return send({value: ['System.Title', 'System.Tags', 'System.AreaPath', 'System.IterationPath', 'System.AssignedTo', 'Microsoft.VSTS.TCM.ReproSteps', 'Microsoft.VSTS.Common.Priority', 'Microsoft.VSTS.Common.Severity'].map(referenceName => ({referenceName, type: referenceName.endsWith('Priority') ? 'integer' : referenceName.endsWith('ReproSteps') ? 'html' : referenceName.endsWith('AssignedTo') ? 'identity' : 'string', ...(referenceName.endsWith('Priority') ? {allowedValues: ['1', '2', '3', '4']} : {})}))});
-    if (path === 'wit/fields/microsoft.vsts.common.priority') return send({referenceName: 'Microsoft.VSTS.Common.Priority', type: 'integer'});
+    if (path.startsWith('wit/fields/')) {
+      const field = state.fieldDefinitions?.find(field => field.referenceName.toLowerCase() === path.slice('wit/fields/'.length));
+      return field ? send({readOnly: false, ...field}) : send({}, 404);
+    }
     if (path === 'wit/workitemtypes/bug/states') return send({value: [{name: 'New', category: 'Proposed'}, {name: 'Active', category: 'InProgress'}, {name: 'Closed', category: 'Completed'}]});
     if (path.startsWith('wit/classificationnodes/')) return send({path: `\\demo\\${path.split('/')[2] === 'areas' ? 'Area' : 'Iteration'}` + path.split('/').slice(3).map(part => `\\${decodeURIComponent(part)}`).join('')});
     if (path === 'wit/wiql') {const tag = body.query.match(/\[System.Tags\] CONTAINS '([^']+)'/)?.[1]; return send({workItems: [...items.values()].filter(item => String(item.fields['System.Tags'] ?? '').split(';').map(tag => tag.trim()).includes(tag)).map(item => ({id: item.id}))});}

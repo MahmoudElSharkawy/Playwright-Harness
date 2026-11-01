@@ -7,6 +7,32 @@ are separate. Start with [configuration](configuration.md) and [automation](PIPE
 
 ## Configure the connection
 
+Bug filing and Test Case publication validate the full intended work item with
+`validateOnly=true` before delivery. A `TF401289` rejection means the account cannot
+create a new tag: check **Create tag definition** permission and the account's access
+level. Private-project Stakeholders cannot create tags. Filing stays blocked until
+an administrator corrects access and fresh validation succeeds. The harness never
+drops correlation/classification tags or bypasses rules to continue. See the
+[ADO permissions reference](https://learn.microsoft.com/en-us/azure/devops/organizations/security/permissions?view=azure-devops#work-item-tags).
+
+Discovery tolerates unavailable `System.AreaLevel1`–`System.AreaLevel14` and
+`System.IterationLevel1`–`System.IterationLevel14` metadata only for those derived
+classification fields. A detail lookup must return HTTP 404 with `TF51535` naming
+the exact field; case discovery may also observe its absence from a complete global
+field list. The retained field is marked `metadataUnavailable`, without an invented
+type, and cannot be assigned. Required/custom fields and unrelated failures remain
+blocking. Optional null defaults mean no default; required writable values still
+need valid input or a supported, validated server default. Area/Iteration IDs come
+from validated paths, not caller-supplied numeric IDs.
+
+Errors retain HTTP status and bounded ADO codes with safe guidance; arbitrary server
+messages are not logged. If diagnostics are unavailable, the original rejection or
+uncertain delivery outcome remains authoritative. Validate-only checks do not prove
+attachment permissions or authorize publication. For investigation, use scoped reads
+and validate-only requests; do not create temporary work items or upload attachments.
+Upgrade with the normal checksum-verified release archive and `pom-harness setup`.
+Existing histories need no migration; changed schema/payload previews require review.
+
 Create consumer `.harness/integrations.json`:
 
 ```json
