@@ -19,7 +19,7 @@ export class AdoError extends Error {
 }
 
 /** Error text is untrusted. Keep only bounded codes and a strict field identity, never raw server messages. */
-async function responseError(response, code, bound) {
+async function responseError(response, code, bound, route) {
   let adoCode, fieldReference;
   try {
     const limit = Math.min(bound, 8192), chunks = []; let length = 0;
@@ -30,7 +30,8 @@ async function responseError(response, code, bound) {
     const {message} = JSON.parse(Buffer.concat(chunks).toString('utf8'));
     if (typeof message === 'string') {
       adoCode = /^(TF\d{5,7}):/.exec(message)?.[1];
-      fieldReference = /^TF51535: Cannot find field ([A-Za-z][A-Za-z0-9_.]{0,199})\.$/.exec(message)?.[1];
+      const requestedField = /^wit\/fields\/([A-Za-z][A-Za-z0-9_.]{0,199})\?api-version=7\.1$/.exec(route)?.[1];
+      if (requestedField && message === `TF51535: Cannot find field ${requestedField}.`) fieldReference = requestedField;
     }
   } catch { /* Diagnostic failure must preserve the received status and delivery certainty. */ }
   return new AdoError(code, response.status, {adoCode, fieldReference});
@@ -65,9 +66,9 @@ export function createAdoClient({configuration, roots, resolveCredential, fetchI
       beforeDispatch?.();
       response = await fetchImpl(url, {method, redirect: 'manual', signal: controller.signal,
         headers: {Authorization: `Basic ${Buffer.from(`:${credential}`).toString('base64')}`, Accept: binary ? 'application/octet-stream' : 'application/json', 'Content-Type': raw ? contentType : patch ? 'application/json-patch+json' : 'application/json'}, body: serialized});
-      if (response.status === 203 || [401, 403].includes(response.status)) throw await responseError(response, 'authentication-rejected', config.maxResponseBytes);
+      if (response.status === 203 || [401, 403].includes(response.status)) throw await responseError(response, 'authentication-rejected', config.maxResponseBytes, route);
       if (response.status >= 300 && response.status < 400) throw new AdoError('redirect-refused', response.status);
-      if (!response.ok) throw await responseError(response, 'request-rejected', config.maxResponseBytes);
+      if (!response.ok) throw await responseError(response, 'request-rejected', config.maxResponseBytes, route);
       if (Number(response.headers.get('content-length')) > config.maxResponseBytes) throw new AdoError('response-too-large');
       const chunks = []; let length = 0;
       for await (const chunk of response.body ?? []) {

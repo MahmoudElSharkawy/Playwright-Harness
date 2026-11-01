@@ -59,6 +59,15 @@ test('missing custom/unknown metadata and unrelated failures never use the deriv
   }
 });
 
+test('serialized metadata errors never retain an unrelated secret reflected as a field name', async () => {
+  const credential = 'F' + randomUUID().replaceAll('-', '');
+  const client = createAdoClient({configuration, resolveCredential: () => credential, fetchImpl: async () => response(missingField(credential), 404)});
+  await assert.rejects(client.read('wit/fields/System.IterationLevel7?api-version=7.1'), error => {
+    assert.equal(error.adoCode, 'TF51535'); assert.equal(error.fieldReference, undefined);
+    assert(!error.message.includes(credential)); assert(!JSON.stringify(error).includes(credential)); return true;
+  });
+});
+
 test('typed bug fields still honor global restrictions and optional null defaults are absent', async () => {
   const {client} = metadataClient([title, {referenceName: 'Acme.Optional', type: 'integer', defaultValue: null}, {referenceName: 'Acme.Generated', type: 'string', readOnly: false}], {details: {'Acme.Generated': {readOnly: true}}});
   const schema = await loadBugSchema(client);
