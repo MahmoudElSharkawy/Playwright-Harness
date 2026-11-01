@@ -1,8 +1,11 @@
 import {requireValue} from './config.mjs';
 import {fingerprint} from '../execution-core/data.mjs';
+import {AdoError} from './ado-client.mjs';
 
 const FIELD_REFERENCE = /^[A-Za-z][A-Za-z0-9_.]{0,199}$/;
 const MANAGED = new Set(['System.Id', 'System.Rev', 'System.WorkItemType', 'System.TeamProject', 'System.CreatedDate', 'System.CreatedBy', 'System.ChangedDate', 'System.ChangedBy', 'System.AuthorizedDate', 'System.AuthorizedAs', 'System.Watermark', 'System.NodeName', 'System.AreaId', 'System.IterationId']);
+// Classification levels are server-derived query fields, not writable path inputs.
+export const derivedClassificationField = name => /^System\.(?:Area|Iteration)Level(?:[1-9]|1[0-4])$/.test(name);
 const TYPES = new Set(['string', 'plaintext', 'html', 'history', 'treepath', 'integer', 'double', 'boolean', 'datetime', 'guid', 'identity', 'pickliststring', 'picklistinteger', 'picklistdouble']);
 const FALLBACKS = {title: 'System.Title', description: 'System.Description', reproSteps: 'Microsoft.VSTS.TCM.ReproSteps'};
 const LIMITATIONS = ['Conditional rules, identities and paths require current server-side validation.'];
@@ -31,13 +34,14 @@ export function validFieldType(spec, value) {
 const validType = validFieldType;
 
 /** Normalize type-instance and global metadata without losing global write restrictions. */
-export function workItemField(instance, detail = {}) {
+export function workItemField(instance, detail = {}, {unavailable = false} = {}) {
   const merged = {...detail, ...instance}, referenceName = merged.referenceName;
   requireValue(typeof referenceName === 'string' && FIELD_REFERENCE.test(referenceName), 'ADO field identity is invalid.');
-  requireValue(TYPES.has(typeOf(merged)), `ADO field ${referenceName} type is unavailable or unsupported.`);
+  requireValue(TYPES.has(typeOf(merged)) || unavailable && derivedClassificationField(referenceName) && merged.type === undefined, `ADO field ${referenceName} type is unavailable or unsupported.`);
   requireValue(merged.allowedValues === undefined || Array.isArray(merged.allowedValues) && merged.allowedValues.length <= 1000, 'ADO allowed values exceed their bound.');
   requireValue(merged.name === undefined || typeof merged.name === 'string' && merged.name.length <= 512, 'ADO field label is invalid.');
-  const field = {referenceName, name: merged.name ?? referenceName, type: merged.type, readOnly: [detail, instance].some(item => item.readOnly === true || item.isReadOnly === true || item.isLocked === true) || MANAGED.has(referenceName), alwaysRequired: merged.alwaysRequired === true, isIdentity: detail.isIdentity === true || instance.isIdentity === true};
+  const field = {referenceName, name: merged.name ?? referenceName, ...(merged.type === undefined ? {} : {type: merged.type}), readOnly: [detail, instance].some(item => item.readOnly === true || item.isReadOnly === true || item.isLocked === true) || MANAGED.has(referenceName) || derivedClassificationField(referenceName), alwaysRequired: merged.alwaysRequired === true, isIdentity: detail.isIdentity === true || instance.isIdentity === true};
+  if (unavailable) field.metadataUnavailable = true;
   for (const key of ['defaultValue', 'allowedValues', 'dependentFields']) if (merged[key] !== undefined) field[key] = merged[key];
   return field;
 }
@@ -81,12 +85,15 @@ export async function loadBugSchema(client, {refresh = false} = {}) {
   for (const instance of fieldResult.value) {
     const referenceName = instance?.referenceName;
     requireValue(typeof referenceName === 'string' && FIELD_REFERENCE.test(referenceName) && !seen.has(referenceName), 'ADO defect field identity is invalid or duplicated.'); seen.add(referenceName);
-    let detail = {};
-    if (!instance.type) {
+    let detail = {}, unavailable = false;
+    try {
       detail = await read(`wit/fields/${encodeURIComponent(referenceName)}?api-version=7.1`);
-      requireValue(detail.referenceName === referenceName && typeof detail.type === 'string', 'ADO field detail identity is incomplete or mismatched.');
+      requireValue(detail.referenceName === referenceName && typeof detail.type === 'string' && typeof detail.readOnly === 'boolean', 'ADO field detail identity or writability is incomplete or mismatched.');
+    } catch (error) {
+      if (!(derivedClassificationField(referenceName) && error instanceof AdoError && error.status === 404 && error.adoCode === 'TF51535' && error.fieldReference === referenceName)) throw error;
+      unavailable = true;
     }
-    fields.push(workItemField(instance, detail));
+    fields.push(workItemField(instance, detail, {unavailable}));
   }
   const mappings = {}, supplied = configured.fieldMap ?? {};
   for (const key of ['title', 'description', 'reproSteps', 'expected', 'actual']) {
@@ -118,9 +125,9 @@ export function inspectBugFields(schema, values) {
   const review = schema.fields.map(spec => {
     const field = spec.referenceName, readOnly = spec.readOnly === true || MANAGED.has(field), required = spec.alwaysRequired === true && !readOnly;
     const present = Object.hasOwn(values, field), supplied = present ? values[field] : spec.defaultValue;
-    if (required && missing(supplied)) problems.push({field, code: 'required'});
-    else if (!present && spec.defaultValue !== undefined && !readOnly && (!validType(spec, spec.defaultValue) || spec.allowedValues?.length && !allowedFieldValue(spec, spec.defaultValue))) problems.push({field, code: 'default-invalid'});
-    const row = {field, label: spec.name ?? field, required, readOnly, type: spec.type};
+    if (required && missing(supplied) && !allowedFieldValue(spec, supplied)) problems.push({field, code: 'required'});
+    else if (!present && spec.defaultValue !== undefined && spec.defaultValue !== null && !readOnly && (!validType(spec, spec.defaultValue) || spec.allowedValues?.length && !allowedFieldValue(spec, spec.defaultValue))) problems.push({field, code: 'default-invalid'});
+    const row = {field, label: spec.name ?? field, required, readOnly, ...(spec.type === undefined ? {} : {type: spec.type}), ...(spec.metadataUnavailable ? {metadataUnavailable: true} : {})};
     if (present) row.value = values[field];
     for (const key of ['defaultValue', 'allowedValues']) if (spec[key] !== undefined) row[key] = spec[key];
     return row;

@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Recover unavailable Area/Iteration level metadata and optional null defaults in
+  shared ADO bug filing and Test Case publication. Preserve required/custom-field
+  validation, tags, approvals and recovery; report safe ADO error codes and tag
+  permission guidance without weakening server validation. (#143)
+  Upgrade through the normal verified release archive and re-run setup. No state
+  migration is needed; re-preview plans whose effective schema/payload changes.
 - Bundle the validated runtime graph in release archives and finish setup with a
   frozen installation. Preserve consumer dependency versions, install hooks and
   rollback without generated npm overrides; verify resolved dependencies before
