@@ -89,12 +89,13 @@ export async function executeMain(roots, args) {
   }
   if (command === 'login-state') {const {positional} = options(rest.slice(1)); requireThat(positional[0] === 'import' && positional.length === 4, 'login-state <exec> import <target> <user> <file>'); return importLogin(roots, executionId, ...positional.slice(1));}
   if (command === 'file-bugs' || command === 'publish-results') {
-    const {opt, positional} = options(rest.slice(1), ['recreate', 'drafts', 'point-map', 'include'], ['execute', 'include-changed', 'new-run']); requireThat(!positional.length, 'Unexpected delivery argument.');
+    const {opt, positional} = options(rest.slice(1), ['recreate', 'drafts', 'point-map', 'include', ...(command === 'file-bugs' ? ['confirmation'] : [])], ['execute', 'include-changed', 'new-run', ...(command === 'file-bugs' ? ['reconcile'] : [])]); requireThat(!positional.length, 'Unexpected delivery argument.');
+    if (opt.confirmation) opt.confirmation = readBounded(consumerPath(roots, opt.confirmation));
     const {deliverExecution} = await import('./lib/execute/delivery.mjs'); return deliverExecution(roots, executionId, command, opt);
   }
   throw new Error('Use execute prepare, freeze, next, do, status, resume, stop, report, login-state, file-bugs or publish-results.');
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  try {const {roots, args} = projectArgument(); const result = await executeMain(roots, args); if (result) console.log(JSON.stringify(result, null, 2)); if (args[0] === 'report' && result?.status === 'FAILED') process.exitCode = 1;}
+  try {const {roots, args} = projectArgument(); const result = await executeMain(roots, args); if (result) console.log(JSON.stringify(result, null, 2)); if (args[0] === 'report' && result?.status === 'FAILED' || args[0] === 'file-bugs' && result?.bugs?.some(row => ['UNCERTAIN', 'ATTACHMENTS_PENDING', 'DISPATCHING'].includes(row.state))) process.exitCode = 1;}
   catch (error) {console.error(JSON.stringify({status: 'ERROR', reason: String(error.message).slice(0, 4000), ...(error.requestId ? {requestId: error.requestId, seq: error.seq ?? null} : {})})); process.exitCode = 1;}
 }

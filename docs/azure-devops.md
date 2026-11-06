@@ -10,9 +10,10 @@ are separate. Start with [configuration](configuration.md) and [automation](PIPE
 Bug filing and Test Case publication validate the full intended work item with
 `validateOnly=true` before delivery. A `TF401289` rejection means the account cannot
 create a new tag: check **Create tag definition** permission and the account's access
-level. Private-project Stakeholders cannot create tags. Filing stays blocked until
-an administrator corrects access and fresh validation succeeds. The harness never
-drops correlation/classification tags or bypasses rules to continue. See the
+level. Private-project Stakeholders cannot create tags. Supported bug and case
+publication does not require harness-generated tags. Rejected business fields
+stay blocked until the proposed payload or permissions are corrected and fresh
+validation succeeds. See the
 [ADO permissions reference](https://learn.microsoft.com/en-us/azure/devops/organizations/security/permissions?view=azure-devops#work-item-tags).
 
 Discovery tolerates unavailable `System.AreaLevel1`–`System.AreaLevel14` and
@@ -183,10 +184,10 @@ failure blocks bugs/results. Changed cases are excluded unless include-changed.
 
 Bug preview validates process/category/fields/paths and validateOnly creation. Reliable
 matching FAILs are default; `--include needs-review,diagnostics` widens scope and drafts
-can select `file: false`. Stable defect tags group iterations/reruns without timestamps,
-run IDs, environments or actual values. Open duplicates are skipped; closed duplicates
-receive Related links. Browser defect attachment provenance follows current assertion
-evidence rules; old evidence cannot be upgraded through delivery.
+can select `file: false`. Stable local defect fingerprints group iterations and
+reruns. Use the [bug review](bug-reporting.md#commands-and-final-approval) to discover
+candidate duplicates and decide what to file. Browser defect attachment provenance
+follows current assertion evidence rules.
 
 Suite outcome aggregation is FAIL > NEEDS_REVIEW > BLOCKED > all-SKIPPED > PASS.
 Omissions are listed. Runs are manual (`automated: false`); bounded ASCII comments
@@ -195,9 +196,10 @@ publish suite outcomes. Resume retains saved selection/comments/identity after r
 
 One delivery owns an execution; concurrent calls return BUSY. Create intents flush
 before dispatch and acknowledgements persist identities in the same fsynced record.
-Bugs reconcile by filing tag; runs use plan-scoped paged List Runs and exact names.
-Missing matches remain UNCERTAIN, requiring explicit recreation/new-run authorization.
-Uncertain attachments repeat only with explicit fingerprint/hash recreation.
+Bugs reconcile against local requests and retained IDs. A lost bug ID requires a
+user-confirmed mapping and readback; search results never trigger recreation.
+Runs use plan-scoped paged List Runs and exact names; a new run requires explicit
+authorization. Uncertain attachments repeat only with explicit fingerprint/hash recreation.
 See the [delivery procedure](../.agents/skills/execute-test/references/delivery.md).
 
 ## Receipts and references

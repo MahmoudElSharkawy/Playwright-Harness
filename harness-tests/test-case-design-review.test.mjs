@@ -86,7 +86,7 @@ test('legacy assessments stay readable and recover uncertain writes without clai
   const f = await adoDesignFixture(t), options = {client: f.client, selected: ['NEW-01']}, preview = await previewDesign(f.roots, 'login', options);
   f.control.loseCreate = true; await publishDesign(f.roots, 'login', {...options, approval: preview.fingerprint});
   const state = readDesign(f.roots, 'login'); unlinkSync(join(f.roots.projectRoot, state.review.evidence.output.path));
-  const recovered = await reconcileDesign(f.roots, 'login', options);
+  const recovered = await reconcileDesign(f.roots, 'login', {...options, confirmation: {approval: preview.fingerprint, caseId: 'NEW-01', adoId: 800}});
   assert.equal(recovered.outcomes[0].status, 'applied'); assert.equal(recovered.coverage.complete, false); assert.equal(f.control.writes, 1);
   const legacy = readDesign(f.roots, 'login'); delete legacy.review.evidence; legacy.assessment = fingerprint(legacy.review); saveDesignState(f.roots, 'login', legacy);
   assert.equal(designView(f.roots, 'login').coverage.reviewEvidence.valid, false);

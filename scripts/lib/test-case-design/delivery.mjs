@@ -1,11 +1,12 @@
 import {existsSync, readFileSync} from 'node:fs';
 import {consumerPath} from '../consumer-paths.mjs';
-import {fingerprint, requireThat} from '../execution-core/data.mjs';
+import {fingerprint, keys, requireThat} from '../execution-core/data.mjs';
 import {readBounded, writeJson} from '../execute/storage.mjs';
 import {requirementsClient} from '../requirements/sources.mjs';
 import {adoRequestFingerprint} from '../integrations/ado-client.mjs';
 import {workItemLinkId, adoId, validateCaseFieldValues} from '../integrations/config.mjs';
 import {prepareCaseOperation, verifyCaseOperation} from '../integrations/ado-case-design.mjs';
+import {discoverWorkItems} from '../integrations/ado-discovery.mjs';
 import {readDesign, lockDesign, saveDesignState, designPath, requireReviewed, stateToDesignView, compactCoverage} from './index.mjs';
 import {requireFreshDesign} from './sources.mjs';
 import {requireFreshReferences} from './references.mjs';
@@ -28,9 +29,10 @@ function nativeFieldPreview(operation) {
   for (const [referenceName, value] of Object.entries(operation.publicationFields?.defaults ?? {})) fields.push({referenceName, label: operation.publicationFields.schema.find(field => field.referenceName === referenceName)?.name ?? referenceName, value, source: 'server-default'});
   return {caseId: operation.caseId, action: operation.action, fields};
 }
-function result(roots, state, delivery = state.delivery) {
-  const outcomes = delivery.outcomes, assessedCoverage = coverage(state, undefined, {confirmed: true, roots});
-  return {mode: outcomes.every(row => ['applied', 'unchanged'].includes(row.status)) ? 'completed' : outcomes.some(row => row.status === 'uncertain') ? 'reconciliation-required' : 'incomplete', approval: delivery.approval, outcomes, coverage: assessedCoverage, execution: 'not-run', presentation: {coverage: compactCoverage(assessedCoverage, state)}};
+function result(roots, state, plan, delivery = state.delivery) {
+  const actions = new Map(plan.operations.map(operation => [operation.caseId, operation.action]));
+  const outcomes = delivery.outcomes.map(row => ({...row, action: actions.get(row.caseId)})), assessedCoverage = coverage(state, undefined, {confirmed: true, roots});
+  return {mode: outcomes.every(row => ['applied', 'unchanged'].includes(row.status)) ? 'completed' : outcomes.some(row => ['uncertain', 'dispatching'].includes(row.status)) ? 'reconciliation-required' : 'incomplete', approval: delivery.approval, outcomes, coverage: assessedCoverage, execution: 'not-run', presentation: {coverage: compactCoverage(assessedCoverage, state)}};
 }
 function requireBinding(state, plan) {
   requireThat(state.proposal === plan.proposal && state.source === plan.source && state.assessment === plan.assessment && state.consumer === plan.consumer && (state.approvalGeneration ?? 0) === (plan.approvalGeneration ?? 0), 'Proposal, source, assessment, approval generation or consumer changed; obtain renewed approval.');
@@ -74,17 +76,17 @@ async function makePlan(roots, state, options) {
   requireThat(!fieldProblems.length, `Test Case publication fields need correction: ${fieldProblems.join(' | ')}.`);
   const plan = {version: 1, consumer: state.consumer, source: state.source, proposal: state.proposal, assessment: state.assessment, approvalGeneration: state.approvalGeneration ?? 0, selected, confirmed,
     destination: {organizationUrl: client.configuration.organizationUrl, projectId: project.id, project: project.name, storyId: origin.storyId}, operations,
-    coverage: coverage(state, selected, {roots}), rendered: renderDesign(state.draft, state), fieldPreview: operations.map(nativeFieldPreview), preparationPreview: selected.map(id => ({caseId: id, steps: preparationSteps(state.draft.cases.find(row => row.id === id), state.draft.preparations.find(row => row.caseId === id))})), note: 'Creation links to the story atomically. Native History records a per-operation recovery marker. Existing unrelated Description, tags and relationships are preserved. Validate-only requests check fields, rules and permissions; they do not publish cases.'};
+    coverage: coverage(state, selected, {roots}), rendered: renderDesign(state.draft, state), fieldPreview: operations.map(nativeFieldPreview), preparationPreview: selected.map(id => ({caseId: id, steps: preparationSteps(state.draft.cases.find(row => row.id === id), state.draft.preparations.find(row => row.caseId === id))})), note: 'Creation links to the story atomically. Local receipts retain delivery identities. Existing unrelated Description, tags and relationships are preserved. Validate-only requests check fields, rules and permissions; they do not publish cases.'};
   return {...plan, fingerprint: fingerprint(plan)};
 }
 export async function previewDesign(roots, designId, options = {}) {
   const release = lockDesign(roots, designId);
   try {
-    const state = readDesign(roots, designId); requireThat(!state?.delivery || state.delivery.outcomes.every(row => ['applied', 'unchanged', 'failed'].includes(row.status)), 'Reconcile unfinished delivery before another preview.');
+    const state = readDesign(roots, designId); requireThat(!state?.delivery || state.delivery.outcomes.every(row => ['applied', 'unchanged', 'failed', 'pending'].includes(row.status)), 'Reconcile unfinished delivery before another preview.');
     const plan = await makePlan(roots, state, options), path = designPath(roots, designId, `previews/${plan.fingerprint}.json`);
     if (!existsSync(path)) writeJson(path, plan, {exclusive: true, maxNodes: 500000});
     const view = stateToDesignView(roots, state, plan.selected, {lockHeld: true, publication: plan});
-    return {...plan, presentation: {rendered: view.rendered, reviewFile: view.reviewFile, nativePreview: view.nativePreview, coverage: compactCoverage(plan.coverage, state)}};
+    return {...plan, presentation: {rendered: view.rendered, reviewFile: view.reviewFile, previewFile: path, nativePreview: view.nativePreview, coverage: compactCoverage(plan.coverage, state)}};
   } finally {release();}
 }
 
@@ -94,12 +96,12 @@ export async function publishDesign(roots, designId, options = {}) {
     let state = readDesign(roots, designId); const plan = readPlan(roots, designId, options.approval); requireBinding(state, plan);
     const client = requirementsClient(roots, options); await destination(client, plan);
     const archived = state.deliveryHistory?.find(delivery => delivery.approval === plan.fingerprint);
-    if (archived) return result(roots, state, archived);
+    if (archived) return result(roots, state, plan, archived);
     if (state.delivery) {
-      if (state.delivery.approval !== plan.fingerprint) requireThat(state.delivery.outcomes.every(row => ['applied', 'unchanged', 'failed'].includes(row.status)), 'Reconcile the previous approved delivery before using another preview.');
+      if (state.delivery.approval !== plan.fingerprint) requireThat(state.delivery.outcomes.every(row => ['applied', 'unchanged', 'failed', 'pending'].includes(row.status)), 'Reconcile the previous approved delivery before using another preview.');
       else {
-        if (state.delivery.outcomes.some(row => ['uncertain', 'dispatching'].includes(row.status))) return {...result(roots, state), mode: 'reconciliation-required'};
-        if (state.delivery.outcomes.every(row => ['applied', 'unchanged'].includes(row.status))) return result(roots, state);
+        if (state.delivery.outcomes.some(row => ['uncertain', 'dispatching'].includes(row.status))) return {...result(roots, state, plan), mode: 'reconciliation-required'};
+        if (state.delivery.outcomes.every(row => ['applied', 'unchanged'].includes(row.status))) return result(roots, state, plan);
       }
     }
     const selected = plan.selected.filter(id => !completedOutcome(state, plan.operations.find(row => row.caseId === id)));
@@ -132,28 +134,32 @@ export async function publishDesign(roots, designId, options = {}) {
         try {
           item = await delivery.write(operation.adoId ? 'edit-case' : 'create-case', operation.request.route, operation.request.body, {method: operation.request.method, patch: true,
             onIdentity(identity) {saveOutcome(index, {adoId: identity.workItemId});}});
-        } catch (error) {saveOutcome(index, {status: error.delivery?.effect === 'not-executed' ? 'failed' : 'uncertain', reason: `Dispatch was not verified. Reconcile the durable receipt before continuing.${error.delivery?.diagnostic ? ` ${error.delivery.diagnostic}` : ''}`}); return result(roots, state);}
+        } catch (error) {saveOutcome(index, {status: error.delivery?.effect === 'not-executed' ? 'failed' : 'uncertain', reason: `Dispatch was not verified. Reconcile the durable receipt before continuing.${error.delivery?.diagnostic ? ` ${error.delivery.diagnostic}` : ''}`}); return result(roots, state, plan);}
         const remoteId = adoId(item.id); saveOutcome(index, {adoId: remoteId, status: 'uncertain'});
         const verified = await verifyCaseOperation(client, operation, remoteId);
         delivery.verified({workItemId: remoteId, revision: verified.rev}); delivery.finish();
         saveOutcome(index, {status: 'applied', revision: verified.rev, url: `${plan.destination.organizationUrl}/${encodeURIComponent(plan.destination.project)}/_workitems/edit/${remoteId}`});
       } catch (error) {
         const status = ['dispatching', 'uncertain'].includes(state.delivery.outcomes[index].status) ? 'uncertain' : 'failed';
-        saveOutcome(index, {status, reason: error.delivery ? 'Unverified delivery; inspect receipt.' : error.code ? 'Local receipt or IO failed.' : error.message}); return result(roots, state);
+        saveOutcome(index, {status, reason: error.delivery ? 'Unverified delivery; inspect receipt.' : error.code ? 'Local receipt or IO failed.' : error.message}); return result(roots, state, plan);
       }
     }
-    return result(roots, state);
+    return result(roots, state, plan);
   } finally {release();}
 }
 
 function receiptIdentity(roots, outcome, operation, approval) {
   if (!outcome.receipt) return null;
+  requireThat(/^\.harness\/state\/integrations\/[a-f\d-]{36}\.jsonl$/i.test(outcome.receipt), 'Invalid delivery receipt location.');
   const bytes = readFileSync(consumerPath(roots, outcome.receipt), 'utf8'); requireThat(Buffer.byteLength(bytes) <= 2 * 1024 * 1024, 'Receipt exceeds bound.');
-  const events = bytes.trim().split('\n').map(line => JSON.parse(line));
+  const lines = bytes.trimEnd().split('\n'), events = [];
+  for (const [index, line] of lines.entries()) {
+    try {events.push(JSON.parse(line));} catch {requireThat(index === lines.length - 1 && !bytes.endsWith('\n'), 'Delivery receipt is corrupt.');}
+  }
   requireThat(events[0]?.event === 'authorized' && events[0].sourceFingerprint === approval && events[0].kind === 'case-design', 'Receipt does not match this approved delivery.');
   const expected = adoRequestFingerprint(operation.request.route, operation.request.method, operation.request.body);
   requireThat(events.some(event => event.event === 'prepared' && event.requestFingerprint === expected) && events.filter(event => event.requestFingerprint).every(event => event.requestFingerprint === expected), 'Receipt request fingerprint differs from approved intent.');
-  return events.find(event => event.event === 'acknowledged')?.identity?.workItemId ?? outcome.adoId;
+  return events.find(event => event.event === 'acknowledged' && event.operation === (operation.adoId ? 'edit-case' : 'create-case'))?.identity?.workItemId;
 }
 export async function reconcileDesign(roots, designId, options = {}) {
   const release = lockDesign(roots, designId);
@@ -161,23 +167,35 @@ export async function reconcileDesign(roots, designId, options = {}) {
     let state = readDesign(roots, designId); requireThat(state?.delivery, 'No design delivery to reconcile.');
     const plan = readPlan(roots, designId, state.delivery.approval); requireBinding(state, plan);
     const client = requirementsClient(roots, options), project = await destination(client, plan);
+    const confirmation = options.confirmation;
+    if (confirmation !== undefined) {
+      keys(confirmation, ['approval', 'caseId', 'adoId'], 'case recovery confirmation');
+      const operation = plan.operations.find(row => row.caseId === confirmation.caseId), outcome = state.delivery.outcomes.find(row => row.caseId === confirmation.caseId);
+      requireThat(confirmation.approval === plan.fingerprint && operation?.request?.method === 'POST' && outcome && !outcome.adoId && ['uncertain', 'dispatching'].includes(outcome.status), 'Confirm an unresolved creation for this exact approval.');
+      const confirmedId = adoId(confirmation.adoId);
+      requireThat(!Object.values(state.created).includes(confirmedId) && !state.delivery.outcomes.some(row => row.adoId === confirmedId), 'The confirmed ADO ID is already bound to another case.');
+    }
+    let candidateSearch;
     for (const [index, operation] of plan.operations.entries()) {
       const outcome = state.delivery.outcomes[index];
       if (['pending', 'failed'].includes(outcome.status)) continue;
       try {
-        let candidates = outcome.adoId ? [outcome.adoId] : [];
-        if (operation.request && outcome.receipt) {const found = receiptIdentity(roots, outcome, operation, outcome.approval ?? plan.fingerprint); if (found) candidates = [found];}
-        if (!candidates.length) {
-          const story = await client.read(`wit/workitems/${plan.destination.storyId}?$expand=relations&api-version=7.1`); await client.requireWorkItemProject(story);
-          candidates = [...new Set((story.relations ?? []).filter(relation => relation.rel === 'Microsoft.VSTS.Common.TestedBy-Forward').map(relation => workItemLinkId(relation.url, client.configuration.organizationUrl, project)).filter(Boolean))];
-          requireThat(candidates.length <= 500, 'Recovery candidates exceed selected-story bounds.');
+        const acknowledged = operation.request ? receiptIdentity(roots, outcome, operation, outcome.approval ?? plan.fingerprint) : undefined;
+        const selected = confirmation?.caseId === operation.caseId ? adoId(confirmation.adoId) : undefined;
+        requireThat(!acknowledged || [outcome.adoId, selected].every(value => !value || value === acknowledged), 'The selected or saved ADO ID conflicts with the acknowledged ID.');
+        const known = outcome.adoId || acknowledged || operation.adoId;
+        if (!known && !selected && !candidateSearch) {
+          let related = [];
+          try {
+            const story = await client.read(`wit/workitems/${plan.destination.storyId}?$expand=relations&api-version=7.1`); await client.requireWorkItemProject(story);
+            related = (story.relations ?? []).filter(row => row.rel === 'Microsoft.VSTS.Common.TestedBy-Forward').map(row => workItemLinkId(row.url, client.configuration.organizationUrl, project)).filter(Boolean).reverse();
+          } catch { /* The title lookup still supplies advisory candidates. */ }
+          candidateSearch = {caseId: operation.caseId, ...await discoverWorkItems(client, {queries: [[operation.fields['System.Title'].replace(/[\x00-\x1f]/g, ' ').slice(0, 100)]]}, {types: [operation.type], fields: {}, related})};
         }
-        const matched = [];
-        for (const candidate of candidates) {
-          try {matched.push(await verifyCaseOperation(client, operation, candidate, {historical: true}));} catch { /* An unproven candidate cannot establish an operation identity. */ }
-        }
-        requireThat(matched.length === 1, 'No unique exact operation/history/payload match. Preserve uncertainty; never recreate by title.');
-        const item = matched[0]; state.delivery.outcomes[index] = {...outcome, status: operation.request ? 'applied' : 'unchanged', adoId: item.id, revision: item.rev, url: `${plan.destination.organizationUrl}/${encodeURIComponent(plan.destination.project)}/_workitems/edit/${item.id}`, reconciled: true};
+        requireThat(known || selected, 'Creation ID is unknown. Confirm the ADO ID for this case and approval before resuming.');
+        const item = await verifyCaseOperation(client, operation, adoId(known || selected), {historical: true});
+        state.delivery.outcomes[index] = {...outcome, status: operation.request ? 'applied' : 'unchanged', adoId: item.id, revision: item.rev, url: `${plan.destination.organizationUrl}/${encodeURIComponent(plan.destination.project)}/_workitems/edit/${item.id}`, reconciled: true, ...(!known && selected ? {confirmation: {source: 'user', adoId: item.id}} : {})};
+        delete state.delivery.outcomes[index].reason;
         if (operation.request && outcome.caseId.startsWith('NEW-')) state.created[outcome.caseId] = item.id;
       } catch (error) {state.delivery.outcomes[index] = {...outcome, status: 'uncertain', reason: error.code ? 'Recovery read failed.' : error.message};}
       state = saveDesignState(roots, designId, state);
@@ -190,6 +208,6 @@ export async function reconcileDesign(roots, designId, options = {}) {
       catch (error) {referenceFreshness.push({referenceId: reference.id, requirementIds: reference.requirementIds, caseIds: state.draft.cases.filter(row => row.coverageReferences.some(ref => reference.requirementIds.includes(ref.requirementId))).map(row => row.id), status: 'stale-or-unavailable', reason: error.code ? 'Referenced evidence is unavailable; refresh and revalidate.' : error.message});}
     }
     state = saveDesignState(roots, designId, {...state, referenceFreshness});
-    return result(roots, state);
+    return {...result(roots, state, plan), ...(candidateSearch ? {candidateSearch} : {})};
   } finally {release();}
 }

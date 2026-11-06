@@ -259,8 +259,9 @@ See [reporting](reporting.md).
 
 An explicit valid rerun can replace an integrity-invalid attempt for delivery while
 retaining history. Earlier valid FAILs still dominate; unrepaired integrity failures
-block delivery. Bug preview validates process metadata/fields/paths/duplicates and
-validateOnly requests; result preview validates suite points:
+block delivery. Bug preview checks process metadata, fields and paths through
+validate-only requests. Use the [bug review](bug-reporting.md) to search for existing
+bugs. Result preview validates suite points:
 
 ```sh
 npx --no pom-harness execute file-bugs <exec>

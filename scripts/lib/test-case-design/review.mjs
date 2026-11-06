@@ -230,7 +230,7 @@ export function renderPublication(plan, state) {
     return {caseId: operation.caseId, action: operation.action, changedFields: changes.filter(name => name !== 'System.History').map(name => labels[name] ?? operation.publicationFields?.schema.find(field => field.referenceName === name)?.name ?? name),
       title: {before: before['System.Title'] ?? null, value: after['System.Title']},
       steps: {before: stepRows(before['Microsoft.VSTS.TCM.Steps']).length, value: stepRows(after['Microsoft.VSTS.TCM.Steps']).length, changed: changes.includes('Microsoft.VSTS.TCM.Steps')},
-      descriptionChanged: changes.includes('System.Description'), tags: {before: before['System.Tags'] ?? null, value: after['System.Tags']},
+      descriptionChanged: changes.includes('System.Description'), ...(changes.includes('System.Tags') ? {tags: {before: before['System.Tags'] ?? null, value: after['System.Tags']}} : {}),
       linkedStoryId: operation.relation ? plan.destination.storyId : null, sharedWith: operation.sharedWith};
   });
   const sections = ['## Publication preview', `**Destination:** ${cell(plan.destination.organizationUrl)} · ${cell(plan.destination.project)} · Story ${plan.destination.storyId}`, `**Selected cases:** ${plan.selected.map(cell).join(', ')}`];
@@ -249,7 +249,7 @@ export function renderPublication(plan, state) {
     sections.push(operation.relation ? `Creation links this case to Story ${plan.destination.storyId}.` : 'Existing relationships are preserved.');
     if (operation.sharedWith.length) sections.push(`Also linked to stories: ${operation.sharedWith.join(', ')}.`);
   }
-  sections.push('The exact immutable preview JSON retains native markup, request values and recovery markers. This current Markdown file presents those changes and does not authorize publication.');
+  sections.push('The exact immutable preview JSON retains native markup and request values. Review the changes in this Markdown file before approving that preview.');
   return {nativePreview, markdown: sections.join('\n\n')};
 }
 

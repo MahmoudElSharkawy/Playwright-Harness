@@ -7,10 +7,12 @@ import {pathToFileURL} from 'node:url';
 import {fingerprint} from '../scripts/lib/execution-core/data.mjs';
 import {adoDesignFixture} from './fixtures/test-case-design.mjs';
 import {previewDesign, publishDesign, reconcileDesign} from '../scripts/lib/test-case-design/delivery.mjs';
-import {readDesign, prepareDesign, saveDesign, assessDesign} from '../scripts/lib/test-case-design/index.mjs';
+import {readDesign, prepareDesign, saveDesign, assessDesign, compactDesignResult} from '../scripts/lib/test-case-design/index.mjs';
+import {discoverDesignCases} from '../scripts/lib/test-case-design/sources.mjs';
 import {parseStepsXml} from '../scripts/lib/integrations/ado-steps.mjs';
 
 const fieldChoices = (caseId, fields) => ({version: 1, cases: [{caseId, fields}]});
+const confirmation = (approval, adoId = 800) => ({approval, caseId: 'NEW-01', adoId});
 const extraField = (f, referenceName, type = 'string', options = {}) => f.control.fields.push({referenceName, name: referenceName, type, readOnly: false, ...options});
 
 test('required managed metadata reaches validate-only and existing custom fields retain false zero and allowed empty', async t => {
@@ -56,11 +58,11 @@ test('changed custom schema invalidates pending approval while normalized lost c
   await assert.rejects(publishDesign(f.roots, 'login', {client: f.client, approval: preview.fingerprint})); assert.equal(f.control.writes, 0);
   delete spec.allowedValues; f.control.loseCreate = true;
   const lost = await publishDesign(f.roots, 'login', {client: f.client, approval: preview.fingerprint}); assert.equal(lost.outcomes[0].status, 'uncertain');
-  const recovered = await reconcileDesign(f.roots, 'login', {client: f.client}); assert.equal(recovered.mode, 'completed'); assert.equal(f.control.writes, 1);
+  const recovered = await reconcileDesign(f.roots, 'login', {client: f.client, confirmation: confirmation(preview.fingerprint)}); assert.equal(recovered.mode, 'completed'); assert.equal(f.control.writes, 1);
   assert.equal((await publishDesign(f.roots, 'login', {client: f.client, approval: preview.fingerprint})).mode, 'completed'); assert.equal(f.control.writes, 1);
 });
 
-test('pre-upgrade preview publishes and reconciles without rewriting its historical binding', async t => {
+test('a marker-free preview without newer field metadata still reconciles with its original approval', async t => {
   const f = await adoDesignFixture(t), preview = await previewDesign(f.roots, 'login', {client: f.client, selected: ['NEW-01']});
   const {fingerprint: current, fieldPreview, ...legacy} = structuredClone(preview);
   for (const operation of legacy.operations) delete operation.publicationFields;
@@ -69,8 +71,20 @@ test('pre-upgrade preview publishes and reconciles without rewriting its histori
   f.control.loseCreate = true;
   assert.equal((await publishDesign(f.roots, 'login', {client: f.client, approval: legacy.fingerprint})).mode, 'reconciliation-required');
   f.control.denyField = 'System.Description';
-  assert.equal((await reconcileDesign(f.roots, 'login', {client: f.client})).mode, 'completed');
+  assert.equal((await reconcileDesign(f.roots, 'login', {client: f.client, confirmation: confirmation(legacy.fingerprint)})).mode, 'completed');
   assert.equal(readFileSync(path, 'utf8'), bytes); assert.equal(f.control.writes, 1);
+});
+
+test('pending legacy marker writes require a fresh preview without rewriting the old plan', async t => {
+  const f = await adoDesignFixture(t), options = {client: f.client, selected: ['NEW-01']}, current = await previewDesign(f.roots, 'login', options);
+  const {fingerprint: previous, presentation, ...legacy} = structuredClone(current), operation = legacy.operations[0];
+  operation.fields['System.History'] = `[pom-harness:test-case-design:${operation.identity}]`;
+  operation.request.body.push({op: 'add', path: '/fields/System.History', value: operation.fields['System.History']});
+  legacy.fingerprint = fingerprint(legacy);
+  const path = join(f.roots.projectRoot, '.harness/state/test-case-design/login/previews', `${legacy.fingerprint}.json`), bytes = JSON.stringify(legacy); writeFileSync(path, bytes);
+  await assert.rejects(publishDesign(f.roots, 'login', {...options, approval: legacy.fingerprint}), /approve a new preview/);
+  assert.equal(f.control.writes, 0); assert.equal(readFileSync(path, 'utf8'), bytes);
+  assert.equal((await publishDesign(f.roots, 'login', {...options, approval: current.fingerprint})).mode, 'completed');
 });
 
 test('mandatory choices are bundled across cases and server-only path rejection is identified separately', async t => {
@@ -136,7 +150,7 @@ test('server defaults reconcile from stored approval and divergent default readb
   assert.equal(preview.fieldPreview[0].fields.find(field => field.referenceName === 'Custom.Count').value, 2);
   f.control.loseCreate = true; assert.equal((await publishDesign(f.roots, 'login', {client: f.client, approval: preview.fingerprint})).mode, 'reconciliation-required');
   f.control.serverDefaults['Custom.Count'] = 3; f.control.denyField = 'System.Description';
-  assert.equal((await reconcileDesign(f.roots, 'login', {client: f.client})).mode, 'completed'); assert.equal(f.control.writes, 1);
+  assert.equal((await reconcileDesign(f.roots, 'login', {client: f.client, confirmation: confirmation(preview.fingerprint)})).mode, 'completed'); assert.equal(f.control.writes, 1);
   const changed = await adoDesignFixture(t); extraField(changed, 'Custom.Channel', 'string'); changed.control.serverDefaults['Custom.Channel'] = 'Web';
   const approved = await previewDesign(changed.roots, 'login', {client: changed.client, selected: ['NEW-01']});
   changed.control.beforeWrite = () => {changed.control.serverDefaults['Custom.Channel'] = 'Mobile';};
@@ -154,7 +168,7 @@ test('server rules that materially rewrite a requested field stop the preview be
 test('unchanged existing large HTML remains preserved without relaxing bounds for new field input', async t => {
   const notes = 'x'.repeat(32769), f = await adoDesignFixture(t, {}, {existingFields: {'Custom.Notes': notes}}); extraField(f, 'Custom.Notes', 'html');
   const preview = await previewDesign(f.roots, 'login', {client: f.client, selected: ['101']});
-  assert.deepEqual(preview.operations[0].publicationFields.preserved, ['Custom.Notes']);
+  assert.deepEqual(preview.operations[0].publicationFields.preserved, ['Custom.Notes', 'System.Tags']);
   assert(!preview.operations[0].request.body.some(row => row.path === '/fields/Custom.Notes'));
   assert(!JSON.stringify(preview.operations[0].publicationFields).includes(notes));
   await assert.rejects(previewDesign(f.roots, 'login', {client: f.client, selected: ['101'], fields: fieldChoices('101', {'Custom.Notes': notes})}), /bounded scalar/);
@@ -182,8 +196,10 @@ test('a dispatch-only rewrite of a preserved field remains uncertain through rec
 
 test('mixed native publication preserves unrelated content/tags and prepares once with atomic story link', async t => {
   const f = await adoDesignFixture(t), options = {client: f.client};
+  f.control.denyTags = true;
   const preview = await previewDesign(f.roots, 'login', options); assert.equal(f.control.writes, 0);
   assert.equal(preview.operations.length, 2);
+  assert(preview.operations.every(operation => !operation.request.body.some(row => ['/fields/System.Tags', '/fields/System.History'].includes(row.path))));
   await assert.rejects(publishDesign(f.roots, 'login', {...options, approval: 'yes'}), /approval/);
   const result = await publishDesign(f.roots, 'login', {...options, approval: preview.fingerprint});
   assert.equal(result.mode, 'completed'); assert.equal(f.control.writes, 2);
@@ -192,31 +208,62 @@ test('mixed native publication preserves unrelated content/tags and prepares onc
     assert.equal(steps.length, 2); assert(steps[0].action.includes('Preparation')); assert(steps[0].action.includes('Prerequisites:')); assert(steps[0].action.includes('Test data:'));
     assert.equal(steps[1].expected, f.proposal.cases[0].steps[0].expected);
     assert(item.fields['System.Description'].includes('Story 200')); assert(!item.fields['System.Description'].includes('TEST_PASSWORD'));
-    assert(item.fields['System.Tags'].includes('Functional')); assert(item.fields['System.Tags'].includes('Positive'));
+    assert.equal(item.fields['System.History'], undefined);
   }
-  assert(f.state.items.get(101).fields['System.Description'].startsWith('<p>Keep unrelated content.</p>')); assert(f.state.items.get(101).fields['System.Tags'].includes('team-owned'));
+  assert(f.state.items.get(101).fields['System.Description'].startsWith('<p>Keep unrelated content.</p>'));
+  assert.equal(f.state.items.get(800).fields['System.Tags'], undefined);
+  assert.equal(f.state.items.get(101).fields['System.Tags'], 'team-owned; Functional; Positive');
+  assert(!f.state.requests.some(request => request.path === 'wit/tags'));
   const created = f.state.items.get(result.outcomes[0].adoId); assert.equal(created.relations[0].rel, 'Microsoft.VSTS.Common.TestedBy-Reverse');
   assert.equal((await publishDesign(f.roots, 'login', {...options, approval: preview.fingerprint})).mode, 'completed'); assert.equal(f.control.writes, 2);
 });
 
-test('lost creation acknowledgement reconciles operation history and never duplicates creation', async t => {
+test('lost case ID needs a user mapping even with one linked candidate and never duplicates creation', async t => {
   const f = await adoDesignFixture(t), options = {client: f.client, selected: ['NEW-01']}, preview = await previewDesign(f.roots, 'login', options); f.control.loseCreate = true;
   const uncertain = await publishDesign(f.roots, 'login', {...options, approval: preview.fingerprint}); assert.equal(uncertain.outcomes[0].status, 'uncertain'); assert.equal(f.control.writes, 1);
   assert.equal((await publishDesign(f.roots, 'login', {...options, approval: preview.fingerprint})).mode, 'reconciliation-required'); assert.equal(f.control.writes, 1);
-  const recovered = await reconcileDesign(f.roots, 'login', {client: f.client}); assert.equal(recovered.outcomes[0].status, 'applied'); assert.equal(recovered.outcomes[0].adoId, 800); assert.equal(f.control.writes, 1);
+  const candidates = await reconcileDesign(f.roots, 'login', options);
+  assert.equal(candidates.outcomes[0].status, 'uncertain'); assert.equal(candidates.outcomes[0].adoId, null);
+  assert.deepEqual(candidates.candidateSearch.candidates.map(row => row.id), [800]);
+  const compact = compactDesignResult(candidates).outcomes[0];
+  assert.equal(compact.action, 'Create'); assert.equal(compact.status, 'uncertain'); assert.equal(compact.receipt, undefined);
+  const wrong = await reconcileDesign(f.roots, 'login', {...options, confirmation: confirmation(preview.fingerprint, 200)});
+  assert.equal(wrong.outcomes[0].status, 'uncertain'); assert.equal(wrong.outcomes[0].adoId, null);
+  const recovered = await reconcileDesign(f.roots, 'login', {...options, confirmation: confirmation(preview.fingerprint)}); assert.equal(recovered.outcomes[0].status, 'applied'); assert.equal(recovered.outcomes[0].adoId, 800); assert.equal(f.control.writes, 1);
+  assert.deepEqual(recovered.outcomes[0].confirmation, {source: 'user', adoId: 800});
   assert.equal(readDesign(f.roots, 'login').delivery.outcomes[0].adoId, 800);
 });
 
-test('changed sources, cases, fields and tag capability block affected publication before writes', async t => {
-  for (const kind of ['story', 'case', 'field', 'tags', 'discussion']) {
+test('changed sources, cases, fields and discussion block affected publication before writes', async t => {
+  for (const kind of ['story', 'case', 'field', 'discussion']) {
     const f = await adoDesignFixture(t), options = {client: f.client}, preview = await previewDesign(f.roots, 'login', options);
     if (kind === 'story') f.state.items.get(200).rev++;
     if (kind === 'case') f.state.items.get(101).rev++;
     if (kind === 'field') f.control.denyField = 'System.Description';
-    if (kind === 'tags') f.control.denyTags = true;
     if (kind === 'discussion') f.control.discussion.push({id: 1, version: 1, text: 'Changed expectation.'});
     await assert.rejects(publishDesign(f.roots, 'login', {...options, approval: preview.fingerprint})); assert.equal(f.control.writes, 0, kind);
   }
+});
+
+test('design discovery reuses captured cases and fetches full steps only for chosen unlinked IDs', async t => {
+  const f = await adoDesignFixture(t), fault = f.state.fault, manual = structuredClone(f.state.items.get(101));
+  manual.id = 701; manual.fields['System.Title'] = 'A customer enters the portal'; delete manual.fields['System.Tags'];
+  f.state.items.set(701, manual);
+  f.state.fault = context => {
+    if (context.path === 'wit/wiql') {
+      assert.match(context.body.query, /\[Microsoft\.VSTS\.TCM\.Steps\] CONTAINS WORDS '(?:sign-in|dashboard)'/);
+      context.send({workItems: [{id: 701}]}); return true;
+    }
+    return fault(context);
+  };
+  const list = await discoverDesignCases(f.roots, f.design, {queries: [['sign-in'], ['dashboard']]}, {client: f.client});
+  assert.deepEqual(list.candidates.map(row => row.id), [101, 701]);
+  assert.equal(f.state.requests.filter(request => request.path === 'wit/wiql').length, 2);
+  const batch = f.state.requests.findLast(request => request.path === 'wit/workitemsbatch');
+  assert.deepEqual(batch.body.ids, [701]); assert(!batch.body.fields.includes('Microsoft.VSTS.TCM.Steps'));
+  const selected = await discoverDesignCases(f.roots, f.design, {ids: [701]}, {client: f.client});
+  assert.match(selected.candidates[0].content['Microsoft.VSTS.TCM.Steps'], /Open sign-in\nExpected: Sign-in is visible\./);
+  assert.equal(f.control.writes, 0);
 });
 
 test('partial acknowledgement keeps completed operation and resumes only remaining authorized work', async t => {

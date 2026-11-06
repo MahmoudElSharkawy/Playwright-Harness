@@ -1,15 +1,18 @@
 #!/usr/bin/env node
 import {projectArgument, consumerPath} from './lib/consumer-paths.mjs';
 import {readBounded} from './lib/execute/storage.mjs';
-import {prepareDesign, saveDesign, assessDesign, rejectDesign, designView, stateToDesignView, compactDesignResult, designHandoff} from './lib/test-case-design/index.mjs';
+import {prepareDesign, saveDesign, assessDesign, rejectDesign, readDesign, designView, stateToDesignView, compactDesignResult, designHandoff} from './lib/test-case-design/index.mjs';
 import {previewDesign, publishDesign, reconcileDesign} from './lib/test-case-design/delivery.mjs';
+import {discoverDesignCases} from './lib/test-case-design/sources.mjs';
 
-const usage = `pom-harness test-case-design <prepare|read|review|edit|assess|reject|preview|publish|reconcile|handoff>
+const usage = `pom-harness test-case-design <prepare|read|review|edit|assess|reject|discover|preview|publish|reconcile|handoff>
   prepare --id <design> --input <consumer-source-selection-json>
   review|edit --id <design> --input <complete-proposal-json> [--notes <review-notes-json>]
   assess --id <design> --input <independent-assessment-json> [--notes <review-notes-json>]
   read --id <design> [--notes <review-notes-json>]
-  reject|reconcile --id <design>
+  reject --id <design>
+  discover --id <design> --input <query-groups-or-selected-ids-json>
+  reconcile --id <design> [--input <user-confirmed-id-json>]
   preview --id <design> [--selected <ID,ID>] [--fields <publication-fields-json>]
   handoff --id <design> [--selected <ID,ID>]
   publish --id <design> --approval <exact-preview-fingerprint>
@@ -22,7 +25,7 @@ Reconcile uncertain operations before resuming. This command never executes test
 try {
   const {roots, args} = projectArgument(), [command, ...rest] = args, options = {};
   if (['help', '--help'].includes(command)) {console.log(usage); process.exit(0);}
-  const allowed = {prepare: ['id', 'input'], review: ['id', 'input', 'notes'], edit: ['id', 'input', 'notes'], assess: ['id', 'input', 'notes'], read: ['id', 'notes'], reject: ['id'], reconcile: ['id'], preview: ['id', 'selected', 'fields'], publish: ['id', 'approval'], handoff: ['id', 'selected']}[command];
+  const allowed = {prepare: ['id', 'input'], review: ['id', 'input', 'notes'], edit: ['id', 'input', 'notes'], assess: ['id', 'input', 'notes'], read: ['id', 'notes'], reject: ['id'], discover: ['id', 'input'], reconcile: ['id', 'input'], preview: ['id', 'selected', 'fields'], publish: ['id', 'approval'], handoff: ['id', 'selected']}[command];
   if (!allowed) throw new Error(usage);
   for (let index = 0; index < rest.length; index += 2) {
     const key = rest[index]?.replace(/^--/, '');
@@ -39,10 +42,11 @@ try {
   else if (command === 'assess') result = stateToDesignView(roots, assessDesign(roots, options.id, input()), undefined, {notes: options.notes});
   else if (command === 'reject') result = rejectDesign(roots, options.id);
   else if (command === 'read') result = designView(roots, options.id, undefined, {notes: options.notes});
+  else if (command === 'discover') result = await discoverDesignCases(roots, readDesign(roots, options.id), input());
   else if (command === 'preview') result = await previewDesign(roots, options.id, {...selection, ...(options.fields ? {fields: readBounded(consumerPath(roots, options.fields))} : {})});
   else if (command === 'publish') result = await publishDesign(roots, options.id, {approval: options.approval});
-  else if (command === 'reconcile') result = await reconcileDesign(roots, options.id);
+  else if (command === 'reconcile') result = await reconcileDesign(roots, options.id, options.input ? {confirmation: input()} : {});
   else result = await designHandoff(roots, options.id, selection);
-  console.log(JSON.stringify(options.format === 'compact' ? compactDesignResult(result) : result, null, 2));
+  console.log(JSON.stringify(options.format === 'compact' && command !== 'discover' ? compactDesignResult(result) : result, null, 2));
   if (['incomplete', 'reconciliation-required'].includes(result?.mode)) process.exitCode = 1;
 } catch (error) {console.error('test-case-design: ' + error.message); process.exitCode = 1;}

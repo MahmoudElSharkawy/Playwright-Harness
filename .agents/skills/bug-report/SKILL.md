@@ -63,6 +63,14 @@ and captured observations. A conflicting expected result remains a proposed
 requirement decision, not an accepted rule. Preserve original execution/source
 records, assertions, verdicts and raw evidence; draft wording cannot rewrite them.
 
+Before proposing a new ADO bug, run `bug-report discover` with one or two short
+title/content query groups. Pick distinctive terms from the feature, symptom or
+error code. Use project vocabulary or alternate wording for the second group.
+Review the IDs, titles and states first. Request details only for plausible
+candidates. Show relevant similarities, differences and search limitations in
+this review. An existing bug is a reference only after
+the user selects its ID. Keep the exact action in the approved preview.
+
 ## Confirm and prepare evidence
 
 Reuse sufficient current comparable evidence without demanding another run. If
@@ -90,7 +98,7 @@ Use the existing non-creating server validation where supported. Metadata does n
 prove every conditional rule was discovered; disclose unavailable checks and
 resolve material readiness gaps before claiming the draft can be filed.
 
-Generate one final preview of the complete validated table, destination/type,
+Generate one final compact preview of the complete validated table, destination/type,
 story/source bindings, confirmation limits, exact attachment set and ordered
 writes. Reuse explicit authorization only when it covers this unchanged plan.
 Freeze and file its exact approved fingerprint through the shared delivery path.
@@ -98,7 +106,8 @@ Changes to content, sources, related annotations, evidence or material destinati
 rules require affected validation, preview and approval. Unrelated field edits
 need not re-render unchanged valid images.
 
-On partial delivery, retain bug/attachment identities and receipts; reconcile
-uncertain operations before resuming only missing authorized work. Do not blindly
-recreate a bug, replay completed writes or regenerate approved image bytes on
-resume. Return verified links and truthful pending/failed/uncertain outcomes.
+On partial delivery, use `reconcile` to verify known identities from local receipts.
+If the creation ID is missing, show the bounded candidates and obtain the user's
+explicit operation-to-ID mapping before recording a validated resolution. A search
+match cannot identify the operation. Resume only missing approved work and report
+the per-write outcomes. Technical fingerprints stay local.

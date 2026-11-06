@@ -66,9 +66,7 @@ export function allowedFieldValue(spec, value) {
   return spec.allowedValues.some(item => validType(spec, item) && normalize(item) === normalize(value));
 }
 
-/** Fresh reads are used at dispatch; an immutable fingerprint binds the exact observed schema/configuration. */
-export async function loadBugSchema(client, {refresh = false} = {}) {
-  const read = route => refresh ? client.read(route) : client.cachedRead(route), configured = client.configuration.bugs ?? {};
+async function bugWorkItemType(read, configured) {
   let type = configured.workItemType;
   if (type === undefined) {
     const category = await read('wit/workitemtypecategories/Microsoft.BugCategory?api-version=7.1');
@@ -77,12 +75,38 @@ export async function loadBugSchema(client, {refresh = false} = {}) {
     requireValue(category.workItemTypes.some(item => item.name === type), 'ADO Bug category default has an invalid identity.');
   }
   requireValue(typeof type === 'string' && type.trim() && type.length <= 150 && !/[\/\\?#\r\n\0]/.test(type), 'ADO defect work-item type is invalid.');
+  return type;
+}
+
+async function bugFieldInstances(read, type) {
   const fieldResult = await read(`wit/workitemtypes/${encodeURIComponent(type)}/fields?$expand=All&api-version=7.1`);
-  const stateResult = await read(`wit/workitemtypes/${encodeURIComponent(type)}/states?api-version=7.1`);
   requireValue(Array.isArray(fieldResult.value) && fieldResult.value.length > 0 && fieldResult.value.length <= 1000 && (fieldResult.count === undefined || fieldResult.count === fieldResult.value.length), 'ADO defect fields are incomplete or exceed their bound.');
+  return fieldResult.value;
+}
+
+export async function bugDiscoveryFields(client) {
+  const read = route => client.cachedRead(route), configured = client.configuration.bugs ?? {};
+  const type = await bugWorkItemType(read, configured);
+  const instances = await bugFieldInstances(read, type), available = new Set(instances.map(field => field.referenceName));
+  const standard = [FALLBACKS.description, FALLBACKS.reproSteps];
+  const fields = Object.fromEntries(standard.filter(name => available.has(name)).map(name => [name, 'html']));
+  for (const name of new Set([configured.fieldMap?.description, configured.fieldMap?.reproSteps])) {
+    if (!available.has(name) || Object.hasOwn(fields, name)) continue;
+    const detail = await read(`wit/fields/${encodeURIComponent(name)}?api-version=7.1`), fieldType = typeOf(detail);
+    requireValue(detail.referenceName === name, 'ADO discovery field identity differs from the configured field.');
+    if (['string', 'plaintext', 'html'].includes(fieldType)) fields[name] = fieldType;
+  }
+  return {type, fields};
+}
+
+/** Fresh reads are used at dispatch; an immutable fingerprint binds the exact observed schema/configuration. */
+export async function loadBugSchema(client, {refresh = false} = {}) {
+  const read = route => refresh ? client.read(route) : client.cachedRead(route), configured = client.configuration.bugs ?? {};
+  const type = await bugWorkItemType(read, configured), instances = await bugFieldInstances(read, type);
+  const stateResult = await read(`wit/workitemtypes/${encodeURIComponent(type)}/states?api-version=7.1`);
   requireValue(Array.isArray(stateResult.value) && stateResult.value.length > 0 && stateResult.value.length <= 100 && (stateResult.count === undefined || stateResult.count === stateResult.value.length), 'ADO defect states are incomplete or exceed their bound.');
   const fields = [], seen = new Set();
-  for (const instance of fieldResult.value) {
+  for (const instance of instances) {
     const referenceName = instance?.referenceName;
     requireValue(typeof referenceName === 'string' && FIELD_REFERENCE.test(referenceName) && !seen.has(referenceName), 'ADO defect field identity is invalid or duplicated.'); seen.add(referenceName);
     let detail = {}, unavailable = false;

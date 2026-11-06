@@ -6,8 +6,10 @@ import {deflateSync} from 'node:zlib';
 import {fixture} from './fixtures/execution-core.mjs';
 import {adoFixture} from './fixtures/ado.mjs';
 import {executionFixture, executeApi} from './fixtures/execute.mjs';
-import {createAdoClient} from '../scripts/lib/integrations/ado-client.mjs';
-import {prepareBugReport, readBugReport, editBugReport, previewBugReport, approveBugReport, fileBugReport, annotateBugReport, reviewBugAnnotation, bugReportFromExecution} from '../scripts/lib/bug-report/index.mjs';
+import {adoRequestFingerprint, createAdoClient} from '../scripts/lib/integrations/ado-client.mjs';
+import {fingerprint} from '../scripts/lib/execution-core/data.mjs';
+import {ownedFile, writeJson} from '../scripts/lib/execute/storage.mjs';
+import {prepareBugReport, readBugReport, editBugReport, discoverBugReport, previewBugReport, compactBugPreview, approveBugReport, fileBugReport, reconcileBugReport, annotateBugReport, reviewBugAnnotation, bugReportFromExecution} from '../scripts/lib/bug-report/index.mjs';
 import {collectExecution, deliverableDefects} from '../scripts/lib/execute/report.mjs';
 
 const input = () => ({version: 1, description: 'The status API returned 500 for an existing record.', source: {content: 'Existing records must return status 200.', expected: 'Status 200'},
@@ -35,12 +37,24 @@ test('missing story/expectations leaves a useful provisional draft with explicit
   assert.equal(state.confirmation.agent, 'not-run'); assert(readBugReport(roots, 'bug-gap').draft.title);
   const preview = await previewBugReport(roots, 'bug-gap'); assert.equal(preview.ready, false); assert(preview.problems.length); assert.equal(preview.destination, null);
 });
-test('exact preview approval files a user-confirmed API-only issue once, resumes lost acknowledgement, and preserves report provenance', async t => {
+test('exact approval files an API-only issue once and a lost ID requires a validated user mapping', async t => {
   const ado = await adoFixture(t), {roots} = fixture(t), dependencies = deps(ado, roots);
   prepareBugReport(roots, 'bug-api', input()); const preview = await previewBugReport(roots, 'bug-api', dependencies);
   assert.equal(preview.ready, true); assert.equal(writes(ado).length, 0); assert.equal(preview.bugs[0].attachments.length, 0);
   approveBugReport(roots, 'bug-api', preview.hash);
-  ado.state.afterBugCreate = ({res}) => res.destroy(); await assert.rejects(fileBugReport(roots, 'bug-api', preview.hash, dependencies), /incomplete/); ado.state.afterBugCreate = null;
+  ado.state.afterBugCreate = ({res}) => res.destroy();
+  const lost = (await fileBugReport(roots, 'bug-api', preview.hash, dependencies)).bugs[0]; assert.equal(lost.state, 'UNCERTAIN'); assert.equal(lost.id, null);
+  ado.state.afterBugCreate = null;
+  assert.equal((await fileBugReport(roots, 'bug-api', preview.hash, dependencies)).bugs[0].state, 'UNCERTAIN');
+  ado.state.fault = ({path, send}) => {if (path === 'wit/wiql') {send({workItems: [{id: 800}]}); return true;}};
+  const unresolved = await reconcileBugReport(roots, 'bug-api', undefined, dependencies);
+  assert.equal(unresolved.bugs[0].state, 'UNCERTAIN'); assert.equal(unresolved.candidateSearch.candidates[0].id, 800);
+  const {fingerprint, requestFingerprint} = lost;
+  const wrong = await reconcileBugReport(roots, 'bug-api', {fingerprint, requestFingerprint, adoId: 200}, dependencies);
+  assert.equal(wrong.bugs[0].state, 'UNCERTAIN'); assert.equal(wrong.bugs[0].id, null);
+  const matched = await reconcileBugReport(roots, 'bug-api', {fingerprint, requestFingerprint, adoId: 800}, dependencies);
+  assert.deepEqual(matched.bugs[0].confirmation, {source: 'user', adoId: 800, requestFingerprint});
+  assert.equal(writes(ado).length, 1, 'Reconciliation itself performs no remote writes.');
   const done = await fileBugReport(roots, 'bug-api', preview.hash, dependencies); assert.equal(done.bugs[0].state, 'COMPLETED');
   await fileBugReport(roots, 'bug-api', preview.hash, dependencies); assert.equal(writes(ado).filter(r => r.path === 'wit/workitems/$bug').length, 1);
   assert.equal(readBugReport(roots, 'bug-api').confirmation.agent, 'not-run');
@@ -79,15 +93,63 @@ test('explicit assignee overrides defaults and an optional default can be omitte
   raw.draft.fields = {'System.AssignedTo': 'selected@example.test'}; raw.draft.omitFields = ['Microsoft.VSTS.Common.Priority']; prepareBugReport(roots, 'bug-defaults', raw);
   const preview = await previewBugReport(roots, 'bug-defaults', deps(ado, roots)); assert(preview.ready); assert.equal(preview.bugs[0].fields['System.AssignedTo'], 'selected@example.test'); assert(!Object.hasOwn(preview.bugs[0].fields, 'Microsoft.VSTS.Common.Priority'));
 });
-test('a second report of the same intake detects the existing defect without creating twice', async t => {
+test('untagged bug discovery reads summaries first and only an explicit approved reference skips creation', async t => {
   const ado = await adoFixture(t), {roots} = fixture(t), dependencies = deps(ado, roots);
-  for (const reportId of ['bug-original', 'bug-second']) {prepareBugReport(roots, reportId, input()); const preview = await previewBugReport(roots, reportId, dependencies); approveBugReport(roots, reportId, preview.hash); const result = await fileBugReport(roots, reportId, preview.hash, dependencies); assert.equal(result.bugs[0].state, reportId === 'bug-original' ? 'COMPLETED' : 'DUPLICATE');}
-  assert.equal(writes(ado).filter(item => item.path === 'wit/workitems/$bug').length, 1);
+  ado.state.items.set(701, {id: 701, rev: 1, fields: {'System.TeamProject': 'demo', 'System.WorkItemType': 'Bug', 'System.Title': 'Read endpoint unavailable', 'System.State': 'Closed', 'Microsoft.VSTS.TCM.ReproSteps': '<p>The record status API returns 500.</p>'}, relations: []});
+  ado.state.fault = ({path, body, url, send}) => {
+    if (path !== 'wit/wiql') return;
+    assert.match(body.query, /\[Microsoft\.VSTS\.TCM\.ReproSteps\] CONTAINS WORDS 'status API'/);
+    assert.equal(url.searchParams.get('$top'), '13'); send({workItems: [{id: 701}]}); return true;
+  };
+  const state = prepareBugReport(roots, 'bug-reference', input());
+  const found = await discoverBugReport(roots, 'bug-reference', {queries: [['status API']]}, dependencies);
+  assert.deepEqual(found.candidates, [{id: 701, title: 'Read endpoint unavailable', state: 'Closed'}]);
+  assert(!ado.state.requests.findLast(row => row.path === 'wit/workitemsbatch').body.fields.includes('Microsoft.VSTS.TCM.ReproSteps'));
+  assert(!ado.state.requests.some(row => row.path.startsWith('wit/fields/') || row.path.endsWith('/states')));
+  const details = await discoverBugReport(roots, 'bug-reference', {ids: [701]}, dependencies);
+  assert.equal(details.candidates[0].content['Microsoft.VSTS.TCM.ReproSteps'], 'The record status API returns 500.');
+  assert.equal(writes(ado).length, 0);
+  editBugReport(roots, 'bug-reference', {head: state.head, referenceId: 701});
+  const preview = await previewBugReport(roots, 'bug-reference', dependencies); approveBugReport(roots, 'bug-reference', preview.hash);
+  assert.equal((await fileBugReport(roots, 'bug-reference', preview.hash, dependencies)).bugs[0].state, 'REFERENCED');
+  assert.equal(writes(ado).length, 0);
+  for (const reportId of ['bug-original', 'bug-second']) {
+    prepareBugReport(roots, reportId, input()); const next = await previewBugReport(roots, reportId, dependencies); approveBugReport(roots, reportId, next.hash);
+    const compact = compactBugPreview(next), saved = JSON.parse(readFileSync(compact.previewFile, 'utf8'));
+    assert.equal(compact.hash, saved.hash); assert.equal(compact.bugs[0].request, undefined); assert(saved.bugs[0].request.body.length > 0);
+    assert.equal((await fileBugReport(roots, reportId, next.hash, dependencies)).bugs[0].state, 'COMPLETED');
+  }
+  assert.equal(writes(ado).filter(item => item.path === 'wit/workitems/$bug').length, 2, 'An approved new bug is never automatically replaced by an exact match.');
 });
 test('server readback mismatch cannot become a completed bug delivery', async t => {
   const ado = await adoFixture(t), {roots} = fixture(t), dependencies = deps(ado, roots); prepareBugReport(roots, 'bug-readback', input()); const preview = await previewBugReport(roots, 'bug-readback', dependencies); approveBugReport(roots, 'bug-readback', preview.hash);
   ado.state.afterBugCreate = ({item}) => {item.fields['System.Title'] = 'Unexpectedly transformed title';};
   await assert.rejects(fileBugReport(roots, 'bug-readback', preview.hash, dependencies), /approved value at readback/i); assert.equal(ado.state.items.get(800).id, 800);
+});
+test('an older approved bug resumes its attachment using the retained creation receipt', async t => {
+  const ado = await adoFixture(t), {roots} = fixture(t), dependencies = deps(ado, roots), raw = input(), reportId = 'bug-legacy-receipt';
+  writeFileSync(join(roots.projectRoot, 'proof.log'), 'Synthetic status failure.');
+  raw.evidence = [{path: 'proof.log', kind: 'log', origin: 'user', sanitized: true, verification: {privacy: true, relevance: true}, context: 'Approved status response'}];
+  const state = prepareBugReport(roots, reportId, raw);
+  const {previewFile, hash: ignored, ...preview} = await previewBugReport(roots, reportId, dependencies);
+  const {request, ...bug} = preview.bugs[0];
+  const legacy = {...bug, fields: {...bug.fields, 'System.Tags': `${bug.fingerprint}; harness-filing-abcd1234`}, duplicates: {open: [], closed: []}};
+  legacy.review = legacy.review.map(field => field.field === 'System.Tags' ? {...field, value: legacy.fields['System.Tags']} : field);
+  const body = Object.entries(legacy.fields).map(([name, value]) => ({op: 'add', path: `/fields/${name}`, value}));
+  const {executionId, revisions, skipped, destination} = preview;
+  const bugs = [legacy], old = {...preview, bugs, planHash: fingerprint({executionId, revisions, skipped, bugs, destination})};
+  const hash = fingerprint(old);
+  writeJson(previewFile, {...old, hash});
+  approveBugReport(roots, reportId, hash);
+  const delivery = dependencies.client.delivery('bugs', true, state.intakeFingerprint);
+  const created = await delivery.write('create-bug', request.route, body, {method: request.method, patch: true});
+  writeJson(ownedFile(roots, reportId, 'delivery/bugs.json'), {version: 1, entries: [{fingerprint: bug.fingerprint, state: 'ATTACHMENTS_PENDING', planHash: fingerprint(legacy), bodyFingerprint: fingerprint(body), requestFingerprint: adoRequestFingerprint(request.route, request.method, body), receipt: delivery.receipt}]});
+  delete ado.state.items.get(created.id).fields['System.Tags'];
+  const recovered = (await reconcileBugReport(roots, reportId, undefined, dependencies)).bugs[0];
+  assert.equal(recovered.id, created.id); assert.equal(recovered.writes[0].status, 'confirmed');
+  assert.equal((await fileBugReport(roots, reportId, hash, dependencies)).bugs[0].state, 'COMPLETED');
+  assert.equal(writes(ado).filter(item => item.path === 'wit/workitems/$bug').length, 1);
+  assert.equal(ado.state.attachments.size, 1);
 });
 test('a changed selected story revision blocks approval dispatch', async t => {
   const ado = await adoFixture(t), {roots} = fixture(t), dependencies = deps(ado, roots), raw = input(); raw.source.storyId = 200; raw.source.revision = 1;
@@ -142,10 +204,14 @@ test('an eligible screenshot needs an annotation attempt; an explicit eligible r
   assert.equal(fallback.annotations[0].record.state, 'RAW_ONLY'); assert.equal(fallback.annotations[0].record.reason, 'renderer-unavailable');
   const preview = await previewBugReport(roots, 'bug-fallback', dependencies); assert(preview.ready); assert.equal(preview.bugs[0].attachments.length, 1); approveBugReport(roots, 'bug-fallback', preview.hash); await fileBugReport(roots, 'bug-fallback', preview.hash, dependencies); assert.equal(ado.state.attachments.size, 1);
 });
-test('execution handoff retains the defect identity, verified observations and case-path configuration', async t => {
-  const ado = await adoFixture(t), execution = await executionFixture(t, {organizationUrl: ado.config.organizationUrl, handler: (req, res) => {res.writeHead(500); res.end('{}');}}); execution.apiStep(); execution.freeze(); await executeApi(execution);
+test('execution handoff retains its story for discovery, verified observations and case-path configuration', async t => {
+  const ado = await adoFixture(t), execution = await executionFixture(t, {organizationUrl: ado.config.organizationUrl, storyId: 200, handler: (req, res) => {res.writeHead(500); res.end('{}');}}); execution.apiStep(); execution.freeze(); await executeApi(execution);
   const defect = deliverableDefects(collectExecution(execution.roots, execution.executionId)).defects[0]; ado.config.bugs = {pathsFrom: 'case'};
   const state = bugReportFromExecution(execution.roots, 'bug-execution', execution.executionId, defect.fingerprint), dependencies = deps(ado, execution.roots); assert.equal(state.intake.source.caseId, 101); assert.equal(state.confirmation.agent, 'reproduced');
+  ado.state.items.get(200).fields['System.AreaPath'] = 'demo\\API';
+  const discovery = await discoverBugReport(execution.roots, 'bug-execution', {queries: [['status']]}, dependencies);
+  assert.equal(discovery.scope.areaPath, 'demo\\API');
+  assert.equal(ado.state.requests.filter(request => request.path === 'wit/workitems/200').length, 1);
   const preview = await previewBugReport(execution.roots, 'bug-execution', dependencies); assert.equal(preview.ready, true); assert.equal(preview.bugs[0].fingerprint, defect.fingerprint);
   ado.state.items.get(101).rev = 2; const stale = await previewBugReport(execution.roots, 'bug-execution', dependencies); assert.equal(stale.ready, false); assert.match(stale.problems[0].message, /case revision changed/i); assert.equal(writes(ado).length, 0);
 });
