@@ -35,8 +35,8 @@ export function tokens(text) {
     } else if (ch === '?') {
       kind = 'parameter'; value = ch; i++;
     } else {
-      const match = /^(?:[A-Za-z_][A-Za-z0-9_$]*|\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)/.exec(text.slice(i));
-      if (match) {value = match[0]; kind = /^[0-9]/.test(value) ? 'number' : 'word'; i += value.length;}
+      const match = /^(?:[A-Za-z_][A-Za-z0-9_$]*|0x[0-9a-fA-F]+|0b[01]+|(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)/.exec(text.slice(i));
+      if (match) {value = match[0]; kind = /^(?:[0-9]|\.)/.test(value) ? 'number' : 'word'; i += value.length;}
       else {
         requireThat('(),.;+-*/%=<>!|&^~'.includes(ch), 'Unsupported SQL character or variable; bind values with native ? parameters.');
         value = ch; i++;
@@ -66,7 +66,7 @@ function validateFunctionCalls(list) {
   }
 }
 
-/** Classify ordinary single-statement SQL; server privileges remain the boundary. */
+/** Classify ordinary single-statement SQL before query scope and native checks. */
 export function classifySql(text) {
   const all = tokens(text), list = all.at(-1)?.kind === 'symbol' && all.at(-1).value === ';' ? all.slice(0, -1) : all;
   requireThat(list.length && !list.some(t => t.kind === 'symbol' && t.value === ';'), 'Only one SQL statement is supported.');

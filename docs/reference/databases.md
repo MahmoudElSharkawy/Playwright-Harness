@@ -46,25 +46,26 @@ and hostname. Literal IP targets require an explicit unencrypted or trusted-cert
 fixture policy because the pinned driver omits their TLS server name.
 SELECT/DML/exploration capabilities follow [configuration](../configuration.md).
 
-| Engine | Required dedicated principal scope |
-|---|---|
-| SQL Server | Configured default schema and required SELECT/INSERT/UPDATE/DELETE; no server/admin roles, database-wide data grants, schema ownership, DDL or EXECUTE |
-| PostgreSQL | CONNECT, selected-schema USAGE and ordinary DML; no memberships/admin flags, database CREATE/TEMP, schema CREATE, table ownership or broad privileges |
-| MySQL | Direct database-level SELECT/INSERT/UPDATE/DELETE on exactly the target database, optionally USAGE; no roles, global/admin, table/column, proxy or grant-option privileges |
+Use an account with the database permissions required by the selected operations.
+Broader grants, inherited roles and ownership are accepted. The harness still
+requires operation authorization and checks each statement's direct references
+against the selected database and schema before dispatch. The database enforces
+its own authentication and permissions.
 
-Preflight checks effective privileges. PostgreSQL PUBLIC grants often need narrowing;
-cross-schema table/column, sequence and user-function access is refused. Permissions
-are the authorization boundary, not the lightweight lexer. Approved-schema triggers,
-views/functions and ownership chains remain database-owner-controlled dependencies
-requiring target administrator review. System database/schema and cross-database scope
-are unsupported.
+Qualify application objects with the configured schema spelling or leave their
+names unqualified. The runtime resolves unqualified persistent objects to the
+configured scope, independently of the account's default schema or search path.
+Use the same spelling for references to aliases and CTE names. The runtime refuses
+ambiguous names before dispatch. System schemas, linked servers,
+cross-database access and references whose scope cannot be established are refused.
+SQL Server resolves relation names to visible application objects and excludes
+catalog aliases and synonyms. MySQL checks the referenced tables and requires
+InnoDB base tables. Unrelated tables and views do not affect the operation.
 
-MySQL checks `SHOW GRANTS`, active and applicable roles, and visible table metadata
-before each operation. Only InnoDB base tables are supported; visible views and
-nontransactional tables fail preflight. Database names containing `_` require an
-escaped literal database grant when `partial_revokes` is off. Database owners must
-review triggers and definer dependencies; a DML-only principal cannot inspect all
-such bodies. These checks do not isolate an untrusted database administrator.
+Database owners remain responsible for views, functions, triggers and ownership
+chains, including their downstream effects and native row-security policies.
+The harness checks direct SQL references. Isolation of database-owned behavior
+requires controls at the database.
 
 ## Schema-backed query discovery
 
@@ -76,7 +77,7 @@ grant nothing: the selected target must permit both `dbSelect` and `dbExploratio
 Keep suitable API preparation, required GUI journeys and UI-specific checks.
 
 Initial discovery supports **SQL Server ordinary tables and exact unique-key
-SELECTs**. PostgreSQL/MySQL execution is unchanged; their automatic discovery and
+SELECTs**. PostgreSQL/MySQL automatic discovery and
 durable generated MySQL services are unsupported. Joins, views, functions,
 ambiguous keys, unsupported native types and automatic mutation recipes remain
 explicit gaps. Metadata relationships are evidence, never inferred join semantics.
@@ -90,9 +91,9 @@ No matches or more than eight matches is an explicit gap. Matches do not establi
 business meaning; choose the exact relevant table from verified source evidence.
 The invocation must serve a frozen scenario expectation. The shared sequential
 callback exposes the same method at `context.database.inspectSchema`. Fixed
-catalog requests use the existing SQL Server driver, target/principal preflight,
-typed parameters, cancellation and result limits; no metadata SQL is accepted from
-callers and no privileges are broadened. Each run permits at most eight inspections
+catalog requests use the existing SQL Server driver, destination verification,
+typed parameters, cancellation and result limits. Callers select only a table or
+hint. Each run permits at most eight inspections
 and eight distinct target/table pairs, with a 10-second inspection ceiling, fewer
 than 512 metadata rows per table and 256 KiB overall. No application rows are read.
 
@@ -298,8 +299,12 @@ later assertion failures remain failures even when that mutation has committed.
 
 ## Supported SQL and recovery
 
-The classifiers admit single SELECT/INSERT/UPDATE/DELETE, read CTEs and INSERT SELECT;
-native engines validate grammar. There is no universal WHERE requirement.
+The runtime supports single SELECT/INSERT/UPDATE/DELETE statements, read CTEs,
+joins, subqueries, set operations and INSERT SELECT when it can resolve their
+scope. Native engines evaluate SQL. There is no universal WHERE requirement.
+Supported built-in value, aggregate and window functions run normally. Use
+qualified names for database-owned functions. Scope validation rejects unsupported
+clauses and object-bearing expressions whose references cannot be resolved.
 
 - SQL Server refuses DDL/admin/EXEC/MERGE, legacy text writes, broker/batch/session
   commands, SELECT INTO, linked/cross-database names, temporary objects and sequence increments.
@@ -309,6 +314,9 @@ native engines validate grammar. There is no universal WHERE requirement.
   are refused except pg_typeof, pg_column_size, pg_backend_pid, pg_sleep,
   pg_sleep_for and pg_sleep_until. Large-object APIs, set_config, query_to_xml
   family and ts_stat/ts_rewrite evaluators are unsupported, including bound/quoted names.
+  Use a static sequence name for nextval, currval and setval. Scope resolution
+  qualifies it before execution. Computed object names and numeric object IDs
+  cannot establish sequence scope.
 - MySQL refuses multi-statements, executable/optimizer comments, DDL/admin/session
   commands, CALL/LOAD, REPLACE statements, IGNORE/UPSERT, SELECT INTO, user variables,
   lock/file/admin/session-state functions and guarded restoration. SELECT runs in
@@ -321,6 +329,9 @@ budget. Sensitive inputs resolve once per invocation. Interrupted transmitted DM
 stays uncertain and is not automatically replayed; a lost PostgreSQL or MySQL COMMIT reply can
 follow an actual commit. There is no automatic DB reconciliation workflow. A later
 read cannot replace a missing response/count assertion. Unresolved effects need review.
+
+Sanitized observation reasons distinguish operation policy failures, scope denials,
+unsupported scope or objects, authentication failures and native permission denials.
 
 Only sanitized metadata/checks and selected outputs persist. Raw SQL errors, credentials,
 unrestricted rows and before-state are not evidence. Sensitive selectors/overlapping

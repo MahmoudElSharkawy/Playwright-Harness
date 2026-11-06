@@ -4,7 +4,7 @@ import pg from 'pg';
 import {randomUUID} from 'node:crypto';
 import {createServer, connect} from 'node:net';
 import {setTimeout as pause} from 'node:timers/promises';
-import {fixture, operation, param, output, check} from './fixtures/database.mjs';
+import {fixture, operation, param, output, check, proveAccountCrud} from './fixtures/database.mjs';
 
 const target = JSON.parse(process.env.HARNESS_M10_TARGET ?? 'null');
 assert(target?.engine === 'postgresql', 'Run through the disposable PostgreSQL probe.');
@@ -14,6 +14,17 @@ after(async () => {await admin?.end();});
 beforeEach(async () => {await admin.query('DELETE FROM m10."Items"');});
 const op = (name, d = {}) => operation(name,{engine:'postgresql',sql:'SELECT 1 AS "Id"',...d});
 const live = (t, definitions, settings = {}) => fixture(t,definitions,{target,...settings});
+const {user: adminUser, password: adminPassword} = JSON.parse(process.env.HARNESS_M10_ADMIN);
+const broadAuth = () => ({user: adminUser, password: adminPassword});
+const scopedAuth = () => JSON.parse(process.env.M10_DB_CREDENTIAL);
+
+for (const [profile, resolveCredential] of [['narrow', scopedAuth], ['owner', broadAuth]]) test(`real PostgreSQL ${profile} account executes all authorized CRUD verbs`, async t => {
+  await admin.query('CREATE TABLE public."Items" ("Id" integer PRIMARY KEY, "Label" text)');
+  t.after(() => admin.query('DROP TABLE public."Items"'));
+  await admin.query('INSERT INTO public."Items" VALUES (147, $1)', ['outside']);
+  await proveAccountCrud(t, target, resolveCredential);
+  assert.equal((await admin.query('SELECT "Label" FROM public."Items" WHERE "Id"=147')).rows[0].Label, 'outside');
+});
 
 test('real PostgreSQL native parameter binding executes and returns neutral typed results', async t => {
   const read=op('read',{sql:'SELECT $1::integer AS "Id"',parameters:[param('recordId','integer')],extract:[output()]});
@@ -48,21 +59,68 @@ test('server read-only mode also refuses sequence advancement through SELECT',as
   const read=op('read',{sql:"SELECT nextval('m10.fixture_sequence') AS value"}),f=live(t,[read]);await f.call();assert.equal(f.runtime.finish().status,'BLOCKED');
   assert.equal((await admin.query('SELECT is_called FROM m10.fixture_sequence')).rows[0].is_called,false);
 });
-test('broad roles and ambient type-parser overrides cannot bypass principal checks',async t=>{
-  const config=JSON.parse(process.env.HARNESS_M10_ADMIN),read=op('read'),original=pg.types.getTypeParser(16);
-  pg.types.setTypeParser(16,()=>true);t.after(()=>pg.types.setTypeParser(16,original));
-  const f=live(t,[read],{runtime:{resolveCredential:()=>({user:config.user,password:config.password})}});const attempt=await f.call();assert.equal(attempt.effect.certainty,'not-executed');assert.equal(f.runtime.finish().status,'BLOCKED');
+test('real inherited broad roles work and ambient type parsers cannot change results', async t => {
+  await admin.query('GRANT pg_read_all_data TO harness_runner');
+  t.after(() => admin.query('REVOKE pg_read_all_data FROM harness_runner'));
+  const original = pg.types.getTypeParser(23);
+  pg.types.setTypeParser(23, () => -1);
+  t.after(() => pg.types.setTypeParser(23, original));
+  const f = live(t, [op('read', {extract: [output()]})]);
+  const attempt = await f.call();
+  assert.equal(attempt.outputs[0].value, 1);
+  assert.equal(f.runtime.finish().status, 'PASS');
+  await proveAccountCrud(t, target, scopedAuth);
 });
-test('cross-schema column-only grants are detected before business dispatch',async t=>{
+test('column-only access elsewhere does not disqualify the PostgreSQL account',async t=>{
   await admin.query('GRANT USAGE ON SCHEMA public TO harness_runner');await admin.query('GRANT SELECT ("Id") ON public."OutsideScope" TO harness_runner');
   t.after(async()=>{await admin.query('REVOKE SELECT ("Id") ON public."OutsideScope" FROM harness_runner');await admin.query('REVOKE USAGE ON SCHEMA public FROM harness_runner');});
   const control=new pg.Client({host:target.server,port:target.port,database:target.database,...JSON.parse(process.env.M10_DB_CREDENTIAL),ssl:false});await control.connect();
   try{assert.equal((await control.query('SELECT "Id" FROM public."OutsideScope"')).rows[0].Id,1);}finally{await control.end();}
-  const f=live(t,[op('read')]);const attempt=await f.call();assert.equal(attempt.effect.certainty,'not-executed');assert.equal(f.runtime.finish().status,'BLOCKED');
+  const f=live(t,[op('read')]);await f.call();assert.equal(f.runtime.finish().status,'PASS');
 });
-test('native schema permissions refuse an out-of-scope read without exposing diagnostics',async t=>{
-  const read=op('outside',{sql:'SELECT "Id" FROM public."OutsideScope"'}),f=live(t,[read]);const attempt=await f.call();
-  assert.equal(attempt.failureClass,'EXECUTOR');assert.equal(attempt.effect.certainty,'none');assert.equal(f.runtime.finish().status,'BLOCKED');assert(!f.allText().includes('permission denied'));
+test('real PostgreSQL admin cannot dispatch cross-scope sources, mutations or sequence references', async t => {
+  await admin.query('CREATE SEQUENCE public.outside_sequence');
+  t.after(() => admin.query('DROP SEQUENCE public.outside_sequence'));
+  for (const sql of [
+    'SELECT "Id" FROM public."OutsideScope"',
+    'INSERT INTO m10."Items" ("Id") SELECT "Id" FROM public."OutsideScope"',
+    'UPDATE public."OutsideScope" SET "Id"=2',
+    'DELETE FROM public."OutsideScope"',
+    "INSERT INTO m10.\"Items\" (\"Id\") VALUES (nextval('public.outside_sequence'))",
+    "INSERT INTO m10.\"Items\" (\"Id\") VALUES (CAST('public.outside_sequence' AS regclass)::integer)"
+  ]) {
+    const f = live(t, [op('outside', {sql})], {runtime: {resolveCredential: broadAuth}});
+    const attempt = await f.call();
+    assert.equal(attempt.effect.certainty, 'not-executed');
+    assert.match(f.allText(), /DB_SCOPE_DENIED/);
+    assert.equal(f.runtime.finish().status, 'BLOCKED');
+  }
+  assert.equal((await admin.query('SELECT "Id" FROM public."OutsideScope"')).rows[0].Id, 1);
+  assert.equal((await admin.query('SELECT is_called FROM public.outside_sequence')).rows[0].is_called, false);
+  assert.equal((await admin.query('SELECT "Id" FROM m10."Items"')).rowCount, 0);
+});
+test('real PostgreSQL scopes an unqualified sequence reference inside an authorized write', async t => {
+  await admin.query('CREATE SEQUENCE m10.fixture_sequence START 147');
+  t.after(() => admin.query('DROP SEQUENCE m10.fixture_sequence'));
+  const write = op('sequence-write', {sql: "INSERT INTO \"Items\" (\"Id\") VALUES (nextval('fixture_sequence'))",
+    checks: [check('created', 'affectedRows')]});
+  const f = live(t, [write], {runtime: {resolveCredential: broadAuth}});
+  await f.call();
+  assert.equal(f.runtime.finish().status, 'PASS');
+  assert.equal((await admin.query('SELECT "Id" FROM m10."Items"')).rows[0].Id, 147);
+});
+test('real PostgreSQL differentiates login failure and native write denial', async t => {
+  await admin.query('REVOKE DELETE ON m10."Items" FROM harness_runner');
+  t.after(() => admin.query('GRANT DELETE ON m10."Items" TO harness_runner'));
+  const f = live(t, [op('denied', {sql: 'DELETE FROM m10."Items"'})]);
+  const denied = await f.call();
+  assert.equal(denied.effect.certainty, 'uncertain');
+  assert.equal(f.runtime.finish().status, 'NEEDS_REVIEW');
+  assert.match(f.allText(), /DB_PERMISSION_DENIED/);
+  const invalid = live(t, [op('invalid')], {runtime: {resolveCredential: () => ({...scopedAuth(), password: randomUUID()})}});
+  await invalid.call();
+  assert.equal(invalid.runtime.finish().status, 'BLOCKED');
+  assert.match(invalid.allText(), /DB_AUTHENTICATION_FAILED/);
 });
 for(const [name,sql,limits] of [['rows','SELECT generate_series(1,10) AS "Id"',{maxRows:2}],['bytes',"SELECT repeat('synthetic-data',1000) AS \"Label\"",{maxResponseBytes:100}],['unsupported','SELECT ARRAY[1,2] AS value',{}],['duplicate','SELECT 1 AS "Id",2 AS "Id"',{}],['unsafe','SELECT 1 AS "__proto__"',{}]])test(`real ${name} result refusal never returns partial success`,async t=>{
   const f=live(t,[op('read',{sql,...limits})]);const attempt=await f.call();assert.equal(attempt.outcome,'INFRASTRUCTURE_FAILURE');assert.equal(attempt.outputs.length,0);assert.equal(f.runtime.finish().status,'BLOCKED');

@@ -3,50 +3,12 @@ import {readFileSync} from 'node:fs';
 import {registerEvidence, verifyEvidence} from '../execution-core/evidence.mjs';
 import {data, fingerprint, frozen, id, integer, keys, oneOf, requireThat, unique} from '../execution-core/data.mjs';
 import {requireScenarioState, writeScenario, checkWorkWindow, rememberSensitive, publicValue, requireObservationCapacity} from '../sequential/state.mjs';
-import {validateTarget, executeSqlServer} from './sqlserver-driver.mjs';
+import {validateTarget, inspectSqlServer} from './sqlserver-driver.mjs';
 import {bounded, credentials, DatabaseFailure} from './shared.mjs';
 
 const receipts = new WeakMap(), budgets = new WeakMap();
 const MAX_TABLES = 8, MAX_METADATA_ROWS = 512, MAX_METADATA_BYTES = 262144;
 const phases = {SETUP: 0, EXERCISE: 1, VERIFY: 2};
-const tableSearchSql = `SELECT TOP (9) t.name AS tableName
-FROM sys.tables t JOIN sys.schemas s ON s.schema_id=t.schema_id
-WHERE s.name=@scope AND t.is_ms_shipped=0 AND CHARINDEX(@tableHint,t.name)>0
-ORDER BY t.name`;
-
-// Fixed catalog reads are internal driver requests, never a caller-authored SQL escape hatch.
-// SELECT on the exact table establishes catalog visibility without new metadata grants.
-const metadataSql = `WITH selected AS (
- SELECT t.* FROM sys.tables t JOIN sys.schemas s ON s.schema_id=t.schema_id
- WHERE s.name=@scope AND t.name=@tableName AND t.is_ms_shipped=0
-)
-SELECT 'table' AS kind,t.name AS tableName,CAST(NULL AS nvarchar(128)) AS columnName,0 AS ordinal,
- CAST(NULL AS nvarchar(128)) AS typeName,CAST(NULL AS bit) AS nullable,CAST(NULL AS int) AS length,
- CAST(NULL AS int) AS precision,CAST(NULL AS int) AS scale,CAST(NULL AS nvarchar(128)) AS keyName,
- CAST(NULL AS bit) AS primaryKey,CAST(NULL AS nvarchar(128)) AS referencedSchema,
- CAST(NULL AS nvarchar(128)) AS referencedTable,CAST(NULL AS nvarchar(128)) AS referencedColumn,
- CAST(CASE WHEN t.temporal_type=0 AND t.is_memory_optimized=0 AND t.is_filetable=0 AND t.is_external=0
- AND HAS_PERMS_BY_NAME(QUOTENAME(@scope)+'.'+QUOTENAME(t.name),'OBJECT','SELECT')=1 THEN 1 ELSE 0 END AS bit) AS supported
-FROM selected t
-UNION ALL
-SELECT 'column',t.name,c.name,c.column_id,ty.name,c.is_nullable,c.max_length,c.precision,c.scale,
- NULL,NULL,NULL,NULL,NULL,CAST(CASE WHEN c.user_type_id=c.system_type_id AND c.is_computed=0 AND c.is_hidden=0 THEN 1 ELSE 0 END AS bit)
-FROM selected t JOIN sys.columns c ON c.object_id=t.object_id JOIN sys.types ty ON ty.user_type_id=c.user_type_id
-UNION ALL
-SELECT 'key',t.name,c.name,ic.key_ordinal,NULL,NULL,NULL,NULL,NULL,i.name,i.is_primary_key,NULL,NULL,NULL,CAST(1 AS bit)
-FROM selected t JOIN sys.indexes i ON i.object_id=t.object_id
- JOIN sys.index_columns ic ON ic.object_id=i.object_id AND ic.index_id=i.index_id
- JOIN sys.columns c ON c.object_id=ic.object_id AND c.column_id=ic.column_id
-WHERE i.is_unique=1 AND i.is_disabled=0 AND i.is_hypothetical=0 AND i.has_filter=0 AND i.type IN (1,2) AND ic.key_ordinal>0 AND ic.is_included_column=0
-UNION ALL
-SELECT 'foreignKey',t.name,c.name,fc.constraint_column_id,NULL,NULL,NULL,NULL,NULL,f.name,NULL,rs.name,rt.name,rc.name,
- CAST(CASE WHEN f.is_disabled=0 AND f.is_not_trusted=0 AND rt.is_ms_shipped=0 THEN 1 ELSE 0 END AS bit)
-FROM selected t JOIN sys.foreign_keys f ON f.parent_object_id=t.object_id
- JOIN sys.foreign_key_columns fc ON fc.constraint_object_id=f.object_id
- JOIN sys.columns c ON c.object_id=fc.parent_object_id AND c.column_id=fc.parent_column_id
- LEFT JOIN sys.tables rt ON rt.object_id=fc.referenced_object_id
- LEFT JOIN sys.schemas rs ON rs.schema_id=rt.schema_id
- LEFT JOIN sys.columns rc ON rc.object_id=fc.referenced_object_id AND rc.column_id=fc.referenced_column_id`;
 
 function name(value) {
   requireThat(typeof value === 'string' && value.length > 0 && value.length <= 128 && value.trim().length > 0
@@ -135,8 +97,7 @@ export async function inspectDatabaseSchema(state, options, {signal, resolveCred
       destination: {server: target.server, port: target.port ?? 1433, database: target.database, schema: target.schema}, signal: controller.signal}), controller.signal));
     rememberSensitive(state, auth.user); rememberSensitive(state, auth.password);
     if (hasHint) {
-      const response = await executeSqlServer(target, auth, {text: tableSearchSql, command: 'SELECT', capability: 'dbSelect', parameters: [
-        {name: 'scope', type: 'nvarchar', length: 128, value: target.schema}, {name: 'tableHint', type: 'nvarchar', length: 128, value: tableHint}]},
+      const response = await inspectSqlServer(target, auth, 'tableHint', tableHint,
       {signal: controller.signal, timeoutMs, maxRows: MAX_TABLES + 1, maxResponseBytes: 8192});
       requireThat(response.rows.length > 0, 'DB_SCHEMA_TABLE_NOT_FOUND: no visible table matches the selected scenario hint.');
       requireThat(response.rows.length <= MAX_TABLES, 'DB_SCHEMA_TABLE_HINT_AMBIGUOUS: narrow the scenario hint before inspecting table details.');
@@ -146,9 +107,7 @@ export async function inspectDatabaseSchema(state, options, {signal, resolveCred
     }
     const tables = [];
     for (const tableName of selectedTables.sort()) {
-      const request = {text: metadataSql, command: 'SELECT', capability: 'dbSelect', parameters: [
-        {name: 'scope', type: 'nvarchar', length: 128, value: target.schema}, {name: 'tableName', type: 'nvarchar', length: 128, value: tableName}]};
-      const response = await executeSqlServer(target, auth, request, {signal: controller.signal, timeoutMs, maxRows: MAX_METADATA_ROWS, maxResponseBytes: MAX_METADATA_BYTES});
+      const response = await inspectSqlServer(target, auth, 'tableName', tableName, {signal: controller.signal, timeoutMs, maxRows: MAX_METADATA_ROWS, maxResponseBytes: MAX_METADATA_BYTES});
       tables.push(tableMetadata(response.rows, tableName));
     }
     requireThat(!controller.signal.aborted && checkWorkWindow(state, {phase, signal}).allowed, 'DB_SCHEMA_UNAVAILABLE: metadata work window ended.');

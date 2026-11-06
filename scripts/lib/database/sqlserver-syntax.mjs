@@ -18,12 +18,12 @@ export function validateVersionParameter(version) {
 
 /** A lexer for classification and binding locations, not a SQL grammar or compiler. */
 export function tokens(text) {
-  requireThat(typeof text === 'string' && text.length > 0 && text.length <= 65536, 'SQL must be bounded text.');
+  requireThat(typeof text === 'string' && text.length > 0 && text.length <= 65536 && !/[\x00-\x08\x0e-\x1f\x7f-\x9f\p{Cf}\p{Cs}\u2028\u2029]/u.test(text), 'SQL must be bounded text without control characters.');
   const result = []; let i = 0, depth = 0;
   while (i < text.length) {
     const start = i, ch = text[i];
-    if (/\s/.test(ch)) {i++; continue;}
-    if (text.startsWith('--', i)) {i = text.indexOf('\n', i); if (i < 0) break; continue;}
+    if (/[ \t\r\n\v\f]/.test(ch)) {i++; continue;}
+    if (text.startsWith('--', i)) {while (i < text.length && !/[\r\n]/.test(text[i])) i++; continue;}
     if (text.startsWith('/*', i)) {
       let nesting = 1; i += 2;
       while (i < text.length && nesting) {if (text.startsWith('/*', i)) {nesting++; i += 2;} else if (text.startsWith('*/', i)) {nesting--; i += 2;} else i++;}
@@ -37,8 +37,8 @@ export function tokens(text) {
     } else if (text.startsWith('{{', i)) {
       const match = /^\{\{([A-Za-z][A-Za-z0-9_]*)\}\}/.exec(text.slice(i)); requireThat(match, 'Invalid identifier slot.'); kind = 'slot'; value = match[1]; i += match[0].length;
     } else {
-      const match = /^(?:@@?[A-Za-z_][A-Za-z0-9_]*|[A-Za-z_#][A-Za-z0-9_$#]*|\d+(?:\.\d+)?)/.exec(text.slice(i));
-      if (match) {value = match[0]; kind = value.startsWith('@') ? 'parameter' : /^[0-9]/.test(value) ? 'number' : 'word'; i += value.length;}
+      const match = /^(?:@@?[A-Za-z_][A-Za-z0-9_]*|[A-Za-z_#][A-Za-z0-9_$#]*|0[xX][0-9a-fA-F]*|(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)/.exec(text.slice(i));
+      if (match) {value = match[0]; kind = value.startsWith('@') ? 'parameter' : /^(?:[0-9]|\.)/.test(value) ? 'number' : 'word'; i += value.length;}
       else {value = ch; i++;}
     }
     if (kind === 'symbol' && value === ')') depth--;
@@ -49,7 +49,7 @@ export function tokens(text) {
   requireThat(depth === 0, 'Unbalanced SQL parentheses.'); return result;
 }
 
-const forbidden = new Set('EXEC EXECUTE USE CREATE ALTER DROP TRUNCATE DBCC GRANT REVOKE DENY BACKUP RESTORE KILL WAITFOR MERGE BULK OPENROWSET OPENQUERY OPENDATASOURCE COMMIT ROLLBACK BEGIN DECLARE GO INTO WRITETEXT UPDATETEXT READTEXT SEND RECEIVE MOVE GET CHECKPOINT SHUTDOWN RECONFIGURE ENABLE DISABLE PRINT RAISERROR THROW RETURN OPEN FETCH CLOSE DEALLOCATE'.split(' '));
+const forbidden = new Set('EXEC EXECUTE USE CREATE ALTER DROP TRUNCATE DBCC GRANT REVOKE DENY BACKUP RESTORE KILL WAITFOR MERGE BULK OPENROWSET OPENQUERY OPENDATASOURCE COMMIT ROLLBACK BEGIN DECLARE GO INTO WRITETEXT UPDATETEXT READTEXT SEND RECEIVE MOVE GET CHECKPOINT SHUTDOWN RECONFIGURE ENABLE DISABLE PRINT RAISERROR THROW RETURN OPEN FETCH CLOSE DEALLOCATE REVERT SETUSER ADD SAVE BREAK CONTINUE GOTO IF WHILE'.split(' '));
 
 /** Ordinary single-statement DML including CTEs/INSERT SELECT. Database validates syntax. */
 export function classifySql(text) {
@@ -66,6 +66,7 @@ export function classifySql(text) {
     requireThat(!(['word','identifier'].includes(t.kind) && t.value.startsWith('#')), 'Temporary database objects are outside the configured schema.');
   }
   const commands = list.filter(t => t.kind === 'word' && t.depth === 0 && ['SELECT', 'INSERT', 'UPDATE', 'DELETE'].includes(t.upper));
+  requireThat(!list.some(t => t.kind === 'word' && t.depth > 0 && ['INSERT', 'UPDATE', 'DELETE'].includes(t.upper)), 'Nested database writes are unsupported.');
   const command = commands[0]?.upper;
   requireThat(list.filter(t => t.kind === 'word' && t.upper === 'SET').length === (command === 'UPDATE' ? 1 : 0), 'Session SET commands are unsupported.');
   requireThat(['SELECT', 'INSERT', 'UPDATE', 'DELETE'].includes(command) && list[0].kind === 'word' && (list[0].upper === command || list[0].upper === 'WITH'), 'Only SELECT/INSERT/UPDATE/DELETE are supported.');

@@ -25,7 +25,8 @@ function native(t, records = metadataRows()) {
     cancel() {}
     async query(text) {
       calls.push({text, bindings: this.bindings});
-      if (!this.stream) return {recordsets: [[{databaseName: 'HarnessDiscovery', defaultSchema: 'discovery'}], [], [], [], []]};
+      if (!this.stream) return {recordset: text.includes('COUNT(*) AS supported') ? [{supported: 1}]
+        : [{databaseName: 'HarnessDiscovery', schemaName: 'discovery'}]};
       const rows = text.includes('sys.tables') ? records : [{Id: this.bindings.key1, Label: privateValue}];
       this.emit('recordset', Object.fromEntries(Object.keys(rows[0] ?? {}).map(name => [name, {type: {name: 'NVarChar'}}])));
       for (const row of rows) this.emit('row', row);

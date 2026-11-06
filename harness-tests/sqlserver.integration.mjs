@@ -4,7 +4,7 @@ import {randomUUID} from 'node:crypto';
 import {setTimeout as pause} from 'node:timers/promises';
 import sql from 'mssql';
 import {executeSqlServer} from '../scripts/lib/database/sqlserver-driver.mjs';
-import {fixture, operation, check, param, output} from './fixtures/database.mjs';
+import {fixture, operation, check, param, output, proveAccountCrud} from './fixtures/database.mjs';
 import {defineOperation} from '../scripts/lib/execution-core/index.mjs';
 
 // This suite fails when no real fixture is configured; it never silently skips.
@@ -18,6 +18,26 @@ const live = (t, ops, options = {}) => fixture(t, ops, {...options, target: {...
 const insert = (id = 'insert', extra = {}) => operation(id, {sql: 'INSERT INTO m8.Items (Id,Label) OUTPUT INSERTED.Id,INSERTED.Revision VALUES (@recordId,@label)',
   parameters: [param('recordId'),param('label','nvarchar',{length: 500})], checks: [check(`check-${id}`, 'affectedRows')], affectedRows: {min: 1,max: 1}, extract: [output(),output('revision','string','Revision')], ...extra});
 const seed = async () => admin.request().query("INSERT m8.Items (Id,Label) VALUES (1,N'original')");
+const {user: adminUser, password: adminPassword} = JSON.parse(process.env.HARNESS_M8_ADMIN);
+const broadAuth = () => ({user: adminUser, password: adminPassword});
+const scopedAuth = () => JSON.parse(process.env.M8_DB_CREDENTIAL);
+
+for (const [profile, resolveCredential] of [['narrow', scopedAuth], ['admin', broadAuth]]) test(`real SQL Server ${profile} account executes all authorized CRUD verbs`, async t => {
+  await admin.request().query("CREATE TABLE dbo.Items (Id int PRIMARY KEY, Label nvarchar(100)); INSERT dbo.Items VALUES (147,N'outside')");
+  t.after(() => admin.request().query('DROP TABLE dbo.Items'));
+  await proveAccountCrud(t, target, resolveCredential);
+  assert.equal((await admin.request().query('SELECT Label FROM dbo.Items WHERE Id=147')).recordset[0].Label, 'outside');
+});
+
+test('real SQL Server role grants and a different default schema permit in-scope CRUD', async t => {
+  await admin.request().query(`CREATE ROLE harness_broad;
+    GRANT CONTROL, ALTER, EXECUTE TO harness_broad;
+    ALTER ROLE harness_broad ADD MEMBER harness_runner;
+    ALTER USER harness_runner WITH DEFAULT_SCHEMA=dbo`);
+  t.after(() => admin.request().query(`ALTER USER harness_runner WITH DEFAULT_SCHEMA=m8;
+    ALTER ROLE harness_broad DROP MEMBER harness_runner; DROP ROLE harness_broad`));
+  await proveAccountCrud(t, target, scopedAuth);
+});
 
 for (const kind of ['catalog','helper','inline','exploration']) test(`real ${kind} read has equivalent typed output`, async t => {
   const op = operation('query', {kind, extract: [output()]}), f = live(t, [op]); const a = await f.call();
@@ -56,10 +76,81 @@ test('controlled dynamic table identifiers and bound values execute on the real 
 test('wrong affected-row expectation is FAIL and cannot retry to green',async t=>{
   const op=operation('write',{sql:'DELETE FROM m8.Items',checks:[check('count','affectedRows',0)],affectedRows:{min:1,max:1}}),f=live(t,[op]);await f.call();const result=f.runtime.finish();assert.equal(result.status,'FAIL');assert.equal(result.scenarios[0].attempts.length,1);
 });
-test('scoped principal cannot read another schema and broad admin credentials are refused before dispatch',async t=>{
-  const op=operation('outside',{sql:'SELECT Id FROM dbo.OutsideScope'}),f=live(t,[op]);const a=await f.call();assert.equal(a.failureClass,'EXECUTOR');assert.equal(f.runtime.finish().status,'BLOCKED');
-  const config=JSON.parse(process.env.HARNESS_M8_ADMIN),broad=live(t,[operation()],{runtime:{resolveCredential:()=>({user:config.user,password:config.password})}});
-  assert.equal((await broad.call()).effect.certainty,'not-executed');assert.equal(broad.runtime.finish().status,'BLOCKED');
+test('real SQL Server admin cannot dispatch cross-scope sources, mutations or catalog aliases', async t => {
+  for (const [text, scope] of [
+    ['SELECT Id FROM dbo.OutsideScope', 'm8'],
+    ['INSERT INTO m8.Items (Id) SELECT Id FROM dbo.OutsideScope', 'm8'],
+    ['UPDATE dbo.OutsideScope SET Id=2', 'm8'],
+    ['DELETE FROM dbo.OutsideScope', 'm8'],
+    ['SELECT name FROM dbo.sysobjects', 'dbo']
+  ]) {
+    const f = live(t, [operation('outside', {sql: text})], {target: {schema: scope}, runtime: {resolveCredential: broadAuth}});
+    assert.equal((await f.call()).effect.certainty, 'not-executed');
+    assert.match(f.allText(), /DB_SCOPE_DENIED|DB_OBJECT_UNAVAILABLE/);
+    assert.equal(f.runtime.finish().status, 'BLOCKED');
+  }
+  assert.equal((await admin.request().query('SELECT Id FROM dbo.OutsideScope')).recordset[0].Id, 1);
+  assert.equal((await admin.request().query('SELECT COUNT(*) AS n FROM m8.Items')).recordset[0].n, 0);
+});
+test('real SQL Server legacy table hints bind to the configured schema', async t => {
+  await admin.request().query('CREATE TABLE dbo.ABS(Id int); CREATE TABLE m8.ABS(Id int); INSERT dbo.ABS VALUES (2); INSERT m8.ABS VALUES (1)');
+  t.after(() => admin.request().query('DROP TABLE dbo.ABS; DROP TABLE m8.ABS'));
+  for (const sql of ['SELECT Id FROM ABS (NOLOCK)', 'SELECT a.Id FROM ABS AS a (NOLOCK)']) {
+    const f = live(t, [operation('hint', {sql, checks: [check('scoped-id', 'rows', 1, [0, 'Id'])]})],
+      {runtime: {resolveCredential: broadAuth}});
+    await f.call();
+    assert.equal(f.runtime.finish().status, 'PASS');
+  }
+});
+test('real SQL Server bare HOLDLOCK cannot make an out-of-scope table a write target', async t => {
+  await seed();
+  await admin.request().query("CREATE TABLE dbo.[HOLDLOCK](Label nvarchar(100)); INSERT dbo.[HOLDLOCK] VALUES (N'outside')");
+  t.after(() => admin.request().query('DROP TABLE dbo.[HOLDLOCK]'));
+  const op = operation('hold-lock', {sql: "UPDATE [HOLDLOCK] SET Label=N'changed' FROM m8.Items HOLDLOCK"});
+  const f = live(t, [op], {runtime: {resolveCredential: broadAuth}});
+  assert.equal((await f.call()).effect.certainty, 'not-executed');
+  assert.match(f.allText(), /DB_OBJECT_UNAVAILABLE/);
+  assert.equal(f.runtime.finish().status, 'BLOCKED');
+  assert.equal((await admin.request().query('SELECT Label FROM dbo.[HOLDLOCK]')).recordset[0].Label, 'outside');
+});
+test('real SQL Server validates a scoped application function as a routine', async t => {
+  await admin.request().query('CREATE FUNCTION m8.ScopeValue(@Id int) RETURNS int AS BEGIN RETURN @Id END');
+  t.after(() => admin.request().query('DROP FUNCTION m8.ScopeValue'));
+  const read = operation('routine', {sql: 'SELECT m8.ScopeValue(147) AS Id', checks: [check('scoped-value', 'rows', 147, [0, 'Id'])]});
+  const f = live(t, [read], {runtime: {resolveCredential: broadAuth}});
+  await f.call();
+  assert.equal(f.runtime.finish().status, 'PASS');
+});
+test('real SQL Server never redirects a collating alias to a different table', async t => {
+  await seed();
+  await admin.request().query("CREATE TABLE m8.I(Id int, Label nvarchar(100)); INSERT m8.I VALUES (1,N'other')");
+  t.after(() => admin.request().query('DROP TABLE m8.I'));
+  const op = operation('alias-case', {sql: "UPDATE I SET Label=N'changed' FROM m8.Items AS i WHERE i.Id=1"});
+  const f = live(t, [op], {runtime: {resolveCredential: broadAuth}});
+  assert.equal((await f.call()).effect.certainty, 'not-executed');
+  assert.match(f.allText(), /DB_SCOPE_AMBIGUOUS/);
+  assert.equal(f.runtime.finish().status, 'BLOCKED');
+  assert.equal((await admin.request().query('SELECT Label FROM m8.I')).recordset[0].Label, 'other');
+  assert.equal((await admin.request().query('SELECT Label FROM m8.Items')).recordset[0].Label, 'original');
+});
+test('real SQL Server catalog access remains bounded with admin credentials', async t => {
+  const f = live(t, [operation()], {runtime: {resolveCredential: broadAuth}});
+  const receipt = await f.runtime.inspectSchema({target: 'db', operationId: 'query', invocationId: 'query', tableHint: 'OtherItems'});
+  assert.equal(receipt.schema.schema, 'm8');
+  assert.deepEqual(receipt.schema.tables.map(table => table.name), ['OtherItems']);
+});
+test('real SQL Server differentiates login failure and native write denial', async t => {
+  await admin.request().query('DENY DELETE ON OBJECT::m8.Items TO harness_runner');
+  t.after(() => admin.request().query('REVOKE DELETE ON OBJECT::m8.Items FROM harness_runner'));
+  const denied = live(t, [operation('denied', {sql: 'DELETE FROM m8.Items'})]);
+  const deniedAttempt = await denied.call();
+  assert.equal(deniedAttempt.effect.certainty, 'uncertain');
+  assert.equal(denied.runtime.finish().status, 'NEEDS_REVIEW');
+  assert.match(denied.allText(), /DB_PERMISSION_DENIED/);
+  const invalid = live(t, [operation()], {runtime: {resolveCredential: () => ({...scopedAuth(), password: randomUUID()})}});
+  await invalid.call();
+  assert.equal(invalid.runtime.finish().status, 'BLOCKED');
+  assert.match(invalid.allText(), /DB_AUTHENTICATION_FAILED/);
 });
 test('DDL/admin is refused even when configured; no arbitrary execution fallback',async t=>{
   const normal=operation(),f=live(t,[normal],{capabilities:{ddl:true,admin:true}});
@@ -206,8 +297,12 @@ test('shared temporary tables are outside runtime scope in fixed and dynamic def
   await admin.request().query('CREATE TABLE ##HarnessM8ScopeProof(Id int); INSERT ##HarnessM8ScopeProof VALUES(1)');
   try {
     // Confirm the real server fixture's shared visibility; runtime policy must supply the exclusion.
-    const shared=await executeSqlServer(target,JSON.parse(process.env.M8_DB_CREDENTIAL),{text:'SELECT Id FROM [##HarnessM8ScopeProof]',parameters:[]},{signal:new AbortController().signal,timeoutMs:3000,maxRows:10,maxResponseBytes:1024});
-    assert.equal(shared.rows[0].Id,1);
+    const native = await new sql.ConnectionPool({...JSON.parse(process.env.HARNESS_M8_ADMIN), ...scopedAuth()}).connect();
+    try {assert.equal((await native.request().query('SELECT Id FROM [##HarnessM8ScopeProof]')).recordset[0].Id, 1);}
+    finally {await native.close();}
+    await assert.rejects(executeSqlServer(target, broadAuth(), {text: 'SELECT Id FROM [##HarnessM8ScopeProof]', parameters: []},
+      {signal: new AbortController().signal, timeoutMs: 3000, maxRows: 10, maxResponseBytes: 1024}),
+    error => error.reason === 'DB_SCOPE_UNSUPPORTED' && !error.dispatched);
     for(const text of ['SELECT Id FROM [##HarnessM8ScopeProof]','SELECT Id FROM "##HarnessM8ScopeProof"'])assert.throws(()=>operation('fixed',{sql:text}));
     const op=operation('dynamic',{sql:'SELECT Id FROM {{table}}',identifiers:{table:{input:'table',allowed:['##HarnessM8ScopeProof']}}}),f=live(t,[op],{mode:'protected',values:[['table','##HarnessM8ScopeProof']]});
     const a=await f.call();assert.equal(a.effect.certainty,'not-executed');assert.equal(f.runtime.finish().status,'BLOCKED');
