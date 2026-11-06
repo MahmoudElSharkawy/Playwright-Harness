@@ -251,6 +251,13 @@ need independent verification, resolve their ordering/readiness explicitly befor
 delivery rather than inventing a readiness result. Missing setup/data remains a
 decision. Keep secret references; never publish actual external credentials.
 
+For proposed new ADO cases, use `discover` with one or two short query groups.
+Reuse captured cases, read the compact shortlist first and fetch details only for
+plausible IDs. Compare the covered rule, role, inputs, starting state and expected
+outcome during normal review. Similar steps alone are weak evidence of overlap.
+Select existing cases by real ID only after the user's decision. Search results
+are advisory and carry no publication authority.
+
 Obtain one consolidated approval for this complete unchanged preview. Reuse already
 given authorization when it covers exactly this content, selection, operations and
 destination. Changed content, relevant source/case revisions, field values/schema,
@@ -259,21 +266,22 @@ Use only `publish`
 with its exact fingerprint; do not bypass it with direct ADO writes.
 
 Native Title receives the title. Description receives the selected-story coverage
-block while retaining unrelated content. Two separate tags use the exact test/scenario
-values, preserving unrelated tags. Native steps begin with combined Preparation and
+block while retaining unrelated content. Classification stays in the proposal and
+existing tags are preserved. Native steps begin with combined Preparation and
 its readiness check, followed by all reviewed business steps; update reconciles
 existing preparation and preserves stable step IDs. Sequence position is consecutive.
 No duplicate setup in Description or chat steps, separate final result or chat-only
 columns. Resolve missing/invalid writable values and genuine process or permission
 failures before publication; do not silently omit requested fields or invent values.
-New cases link to the approved story atomically. Native History carries the previewed
-operation marker needed for unambiguous recovery.
+New cases link to the approved story atomically. Operation fingerprints stay in
+the local preview, outcomes and receipts.
 
-On partial/interrupted delivery, `reconcile` reads exact native history, fields and
-story links against durable request fingerprints. Never identify by title, blindly
-retry, recreate uncertain cases or repeat confirmed writes. Resume only remaining
-authorized work using the same approval. Retain returned IDs/URLs, failed/pending/
-uncertain outcomes and immutable receipts. Use real ADO IDs in subsequent proposals.
+On partial/interrupted delivery, `reconcile` verifies a known ID against the
+approved fields, expected revision and story link. For a lost creation ID, review
+the candidates and pass the user's explicit case-to-ID mapping for that approval.
+An unconfirmed or mismatched outcome stays uncertain. Resume only remaining work
+with the same approval. Retain IDs/URLs, outcomes and receipts, and report compact
+per-write status. Use real ADO IDs in subsequent proposals.
 
 ## Handoff
 

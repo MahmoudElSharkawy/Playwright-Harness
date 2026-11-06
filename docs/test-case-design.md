@@ -664,11 +664,21 @@ When no material additional concern remains, zero optional drafts is valid.
 ## Preview, approve, publish and recover
 
 ```sh
+npx --no pom-harness test-case-design discover --id sign-in --input search.json
 npx --no pom-harness test-case-design preview --id sign-in --selected NEW-01,5678 --format compact
 npx --no pom-harness test-case-design publish --id sign-in --approval <preview-fingerprint>
 npx --no pom-harness test-case-design reject --id sign-in
-npx --no pom-harness test-case-design reconcile --id sign-in
+npx --no pom-harness test-case-design reconcile --id sign-in [--input confirmed-id.json]
 ```
+
+Use `discover` during ADO-backed review when proposing new cases. It reuses captured
+cases and accepts one or two groups of up to four title/content terms, for example
+`{"queries":[["sign-in","dashboard"]]}`. The first result is a bounded list of IDs,
+titles and states. Read details for up to five selected IDs with `{"ids":[5678]}`.
+Summarize only relevant similarities and differences and disclose incomplete
+results. Discovery is advisory. To use an existing case, explicitly select its
+real ID through the existing `prepare` case selection and review its coverage and
+proposed action before approval.
 
 Omit `--selected` to preview all main cases; optional drafts are ineligible. The saved preview binds full reviewed
 content, selected IDs, native operations, accepted source revisions, independent
@@ -686,7 +696,7 @@ Compact preview retains the exact destination, selected IDs, native changes,
 the complete cases in the same current Markdown. A concise chat summary cannot hide
 approval-relevant values. The immutable preview remains the approval authority.
 Detailed/default JSON preserves the stored plan fields and adds a separate
-`presentation` containing `rendered`, `reviewFile` and `nativePreview`. Compact output
+`presentation` containing `rendered`, `reviewFile`, `previewFile` and `nativePreview`. Compact output
 uses that presentation. File paths or write failures never change the saved plan's
 approval fingerprint; regenerate a preview when its actual approved payload changes.
 
@@ -727,10 +737,10 @@ the input file. Changed material values/defaults/schema require affected revalid
 and approval. Updates preserve unspecified current values and never apply creation
 defaults; a material field change cannot remain Reuse unchanged.
 
-Native publication maps title to Title; coverage reference to a marked story-specific
-Description block (keeping unrelated existing content); exact test/scenario values
-to separate tags (keeping unrelated tags); and preparation plus business actions/
-expectations to native Steps XML. Example first step action:
+Native publication maps title to Title, coverage reference to a story-specific
+Description block, and preparation plus business actions/expectations to native
+Steps XML. Test/scenario classification stays in the local proposal. Existing
+unrelated Description and tags are preserved. Example first step action:
 
 > Preparation<br>Prerequisites: Confirm an active dedicated account exists and the user is signed out.<br>Test data: Account username and valid password from the approved secret reference.
 
@@ -742,7 +752,7 @@ Shared/parameterized/unsupported XML is an explicit publication gap. It is never
 flattened into a lossy update.
 
 The adapter discovers destination field labels, types, required/default/allowed
-values and writability, and checks project/category, tag visibility and server
+values and writability, and checks project/category and server
 validate-only process/permission results. Neither required nor read-only metadata
 alone blocks publication; attempted read-only/server-managed assignments do.
 AreaPath/IterationPath use supported path values or verified server defaults, with
@@ -753,17 +763,20 @@ server validation. These publication checks do not run during ordinary design.
 Populating existing custom fields is supported; creating field definitions or
 changing the ADO process needs a separate explicit request. Validation requests
 do not publish cases. Creation includes the approved Tested By relation
-atomically. Updates preserve relationships and native history. A previewed History
-entry records the stable operation marker; it adds no custom fields or extra tags.
+atomically. Updates preserve relationships. Technical request fingerprints and
+recovery records stay in local consumer state.
 
 Immutable previews persist before dispatch. Per-case ordered intent, request
 fingerprints, returned IDs/URLs, and pending/applied/unchanged/failed/uncertain states
-stay in consumer records and existing integration receipts. A lost acknowledgement
-is reconciled against exact operation marker, expected history revision, full native
-fields and story relation, never title matching. Unknown/mismatched results remain
-uncertain. Repeated invocation never recreates confirmed cases or replays uncertain
-writes. After reconciliation, reuse the same approved `publish` command to perform
-only remaining authorized work. Do not bypass failed recovery by editing receipts.
+stay in consumer records and existing integration receipts. `reconcile` checks
+known IDs against the expected revision, approved fields and story relationship.
+If the creation ID is missing, the shortlist supports a user decision. Supply a
+confirmed mapping such as `{"approval":"<preview-fingerprint>","caseId":"NEW-01","adoId":5678}`
+to record it after the same native checks. Unknown or mismatched results remain
+uncertain, even with a single search match. Compact output shows per-case status,
+known IDs and any remaining action. After reconciliation, use the same approved
+`publish` command for remaining work. Changed pending payloads require a new
+preview and approval. Do not edit receipts to bypass failed recovery.
 Existing saved previews and delivery receipts remain immutable and usable when
 their approved request is still valid. Recovery uses their stored intent and field
 specifications, including supported server-normalized values; it does not rewrite

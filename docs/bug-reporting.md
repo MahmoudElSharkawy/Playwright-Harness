@@ -43,9 +43,8 @@ being serialized into the Description or Repro Steps fields. Generated execution
 defaults summarize recorded failure/inconclusive/diagnostic occurrences without
 claiming a reproduction rate. This also applies to recognized older generated
 defaults; saved intake and draft history remain unchanged. Deliberately reviewed
-API JSON in a user's actual result remains part of that approved report. Existing
-ADO correlation tags still support duplicate detection and delivery recovery.
-Changed rendered content requires a current preview and approval before filing.
+API JSON in a user's actual result remains part of that approved report. Changed
+rendered content requires a current preview and approval before filing.
 
 ## Confirm only what needs confirmation
 
@@ -127,10 +126,23 @@ which deliberately contains unresolved empty values.
 npx --no pom-harness bug-report prepare <report> --input <input.json>
 npx --no pom-harness bug-report show <report>
 npx --no pom-harness bug-report edit <report> --input <revision.json>
-npx --no pom-harness bug-report preview <report>
+npx --no pom-harness bug-report discover <report> --input <search.json>
+npx --no pom-harness bug-report preview <report> --format compact
 npx --no pom-harness bug-report approve <report> --preview <fingerprint>
 npx --no pom-harness bug-report file <report> --approved <fingerprint> --execute
+npx --no pom-harness bug-report reconcile <report> [--input <confirmed-id.json>]
 ```
+
+During the normal review, use `discover` with one or two groups of up to four
+terms, for example `{"queries":[["shipping address","refresh"],["checkout","reverts"]]}`.
+Terms within a group must match the title or relevant text fields. The first read
+returns up to 12 IDs, titles and states, including closed bugs. A separate input
+such as `{"ids":[123]}` reads bounded details for up to five selected IDs.
+Show the match reasons and meaningful differences, including incomplete or truncated
+search results. To reference an existing bug, set `referenceId` in the normal
+`edit` input with the current `head`, then preview and approve that choice. Set
+`referenceId` to `null` to return to creating a new bug. A reference does not reopen,
+link or attach to the existing bug.
 
 ## Post-run review
 
@@ -259,6 +271,8 @@ replace it. Eligible bytes are copied into owned consumer run artifacts and boun
 by hash. Annotation preparation returns `PREPARED`; record visual review only
 after inspecting its exact output. `preview` returns readiness, problems and a
 content-bound hash; approval and filing require that exact latest preview hash.
+The compact view shows the proposed field values and writes once and points to
+the saved preview with the full request.
 
 Approval covers the exact complete table and field payload, configured
 destination/type, selected source revisions, confirmation limits, eligible
@@ -276,10 +290,15 @@ Consumer state belongs under `.harness/runs/<report>/bug-report/`, with
 `current.json` pointing to immutable `revisions/` and saved previews/artifact
 bindings. Delivery receipts remain consumer-owned. This state never
 changes installed package bytes. Partial delivery retains known bug/attachment
-IDs and accurate completed, failed, pending or uncertain outcomes. Reconcile
-uncertain writes before resuming only missing unchanged approved operations;
-never recreate based on a title match or replay a confirmed upload. Return the
-verified bug link and explain any remaining delivery limits.
+IDs and shows status for each recorded write. `reconcile` verifies a saved or
+acknowledged ID against the locally recorded request. If the create ID is missing,
+review the candidates and supply the user-confirmed mapping, for example
+`{"fingerprint":"<outcome fingerprint>","requestFingerprint":"<outcome request fingerprint>","adoId":123}`.
+A matching candidate alone leaves the outcome uncertain. Reconciliation records
+the user's confirmation locally after checking the item type, project, approved
+fields and relationships. Resume only missing work using the same approval.
+Legacy unfinished records without an exact request retain their receipts for
+manual inspection. Confirmed uploads and creates are not repeated.
 
 ## Evaluation scenarios
 

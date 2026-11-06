@@ -152,7 +152,7 @@ test('case validation must return required writable values, even on HTTP success
   assert.equal(mutations(f).length, 0);
 });
 
-test('case permission revocation blocks approved create and update without stripping tags or markers', async t => {
+test('case permission revocation blocks the full marker-free approved create and update', async t => {
   for (const selected of [['NEW-01'], ['101']]) {
     const f = await adoDesignFixture(t), fault = f.state.fault;
     const preview = await previewDesign(f.roots, 'login', {client: f.client, selected}); let deny = true;
@@ -165,8 +165,8 @@ test('case permission revocation blocks approved create and update without strip
     assert.equal(mutations(f).length, 0);
     const validation = f.state.requests.filter(row => row.query.includes('validateOnly=true')).at(-1);
     assert.deepEqual(validation.body, preview.operations[0].request.body);
-    assert(validation.body.some(row => row.path === '/fields/System.History'));
-    assert(validation.body.some(row => row.path === '/fields/System.Tags' && row.value.includes('Functional')));
+    assert(!validation.body.some(row => ['/fields/System.History', '/fields/System.Tags'].includes(row.path)));
+    assert(validation.body.some(row => row.path === '/fields/Microsoft.VSTS.TCM.Steps'));
     deny = false; await previewDesign(f.roots, 'login', {client: f.client, selected});
     assert.equal(mutations(f).length, 0);
   }
@@ -188,7 +188,7 @@ test('dispatch-time case rejection retains sanitized permission guidance and a n
 
 test('bug report permission revocation remains actionable and blocked before creation or evidence uploads', async t => {
   const f = await adoFixture(t), dependencies = {client: f.client, inventory: async () => [{pid: process.pid, identity: '1'}]};
-  prepareBugReport(f.roots, 'permission', {version: 1, description: 'Synthetic failure', source: {content: 'The operation must succeed.', expected: 'Success'}, draft: {title: 'Synthetic operation fails', prerequisites: ['A record exists'], steps: ['Run the operation'], expected: 'Success', actual: 'Failure', fields: {}}, confirmation: {user: 'confirmed', agent: 'not-run'}, evidence: []});
+  prepareBugReport(f.roots, 'permission', {version: 1, description: 'Synthetic failure', source: {content: 'The operation must succeed.', expected: 'Success'}, draft: {title: 'Synthetic operation fails', prerequisites: ['A record exists'], steps: ['Run the operation'], expected: 'Success', actual: 'Failure', fields: {'System.Tags': 'team-reviewed'}}, confirmation: {user: 'confirmed', agent: 'not-run'}, evidence: []});
   const preview = await previewBugReport(f.roots, 'permission', dependencies); assert(preview.ready); approveBugReport(f.roots, 'permission', preview.hash);
   let deny = true;
   f.state.fault = ({path, url, send}) => {
@@ -203,19 +203,19 @@ test('bug report permission revocation remains actionable and blocked before cre
   const blocked = await previewBugReport(f.roots, 'permission', dependencies); assert(!blocked.ready); assert.match(JSON.stringify(blocked.problems), /TF401289/);
   const validation = f.state.requests.filter(row => row.query.includes('validateOnly=true')).at(-1);
   assert.deepEqual(Object.fromEntries(validation.body.filter(row => row.path.startsWith('/fields/')).map(row => [row.path.slice(8), row.value])), preview.bugs[0].fields);
-  assert(validation.body.some(row => row.path === '/fields/System.Tags' && row.value.includes('harness-filing-')));
+  assert(validation.body.some(row => row.path === '/fields/System.Tags' && row.value === 'team-reviewed'));
   assert.equal(mutations(f).length, 0); assert.equal(f.state.attachments.size, 0);
   deny = false; assert((await previewBugReport(f.roots, 'permission', dependencies)).ready);
   assert.equal(mutations(f).length, 0);
 });
 
 test('execution-result bug filing uses the same full-payload permission block', async t => {
-  const ado = await adoFixture(t), f = await executionFixture(t, {organizationUrl: ado.config.organizationUrl, handler: (_, res) => {res.writeHead(500); res.end('{}');}});
+  const ado = await adoFixture(t, {bugs: {tags: ['team-reviewed']}}), f = await executionFixture(t, {organizationUrl: ado.config.organizationUrl, handler: (_, res) => {res.writeHead(500); res.end('{}');}});
   f.apiStep(); f.freeze(); await executeApi(f);
   const dependencies = {client: ado.client, inventory: async () => [{pid: process.pid, identity: '1'}]};
   ado.state.fault = ({url, send}) => {if (url.searchParams.get('validateOnly') === 'true') {send(deniedTags, 403); return true;}};
   await assert.rejects(deliverExecution(f.roots, f.executionId, 'file-bugs', {}, dependencies), /TF401289.*Create tag definition/);
   const validation = ado.state.requests.filter(row => row.query.includes('validateOnly=true')).at(-1);
-  assert(validation.body.some(row => row.path === '/fields/System.Tags' && row.value.includes('harness-filing-')));
+  assert(validation.body.some(row => row.path === '/fields/System.Tags' && row.value === 'team-reviewed'));
   assert.equal(mutations(ado).length, 0);
 });

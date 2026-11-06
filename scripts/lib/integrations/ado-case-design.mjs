@@ -6,9 +6,8 @@ import {parameterizedText, parseStepsXml, htmlToText} from './ado-steps.mjs';
 import {escapeHtml} from '../requirements/review.mjs';
 import {TEST_TYPES, SCENARIO_TYPES, preparationSteps} from '../test-case-design/review.mjs';
 
-const FIELDS = ['System.Title', 'System.Description', 'Microsoft.VSTS.TCM.Steps', 'System.Tags', 'System.History'];
-const CLASSIFICATIONS = [...TEST_TYPES, ...SCENARIO_TYPES].map(value => value.toLowerCase());
-export const operationMarker = identity => `[pom-harness:test-case-design:${identity}]`;
+const FIELDS = ['System.Title', 'System.Description', 'Microsoft.VSTS.TCM.Steps'];
+const CLASSIFICATIONS = new Set([...TEST_TYPES, ...SCENARIO_TYPES].map(value => value.toLowerCase()));
 export async function caseCapabilities(client, type, {write = true} = {}) {
   const fields = await client.list(`wit/workitemtypes/${encodeURIComponent(type)}/fields?$expand=all&api-version=7.1`), global = await client.list('wit/fields?api-version=7.1');
   requireThat(fields.length > 0 && fields.length <= 1000 && new Set(fields.map(field => field.referenceName)).size === fields.length, 'Test Case field metadata is incomplete or duplicated.');
@@ -20,8 +19,6 @@ export async function caseCapabilities(client, type, {write = true} = {}) {
     return workItemField(instance, detail);
   });
   if (write) for (const name of FIELDS) requireThat(schema.some(field => field.referenceName === name && !field.readOnly), `Test Case field ${name} is unavailable, locked or not writable.`);
-  const tags = await client.list('wit/tags?api-version=7.1');
-  requireThat(tags.every(tag => typeof tag.name === 'string'), 'Tag definitions are unavailable.');
   return schema;
 }
 
@@ -30,7 +27,7 @@ function publicationFields(client, schema, overrides, before, project) {
   const values = {...(before ? {} : client.configuration.testCases?.fields ?? {}), ...overrides}, problems = [], missing = [];
   for (const [name, value] of Object.entries(values)) {
     const spec = schema.find(field => field.referenceName === name);
-    if (FIELDS.includes(name)) {problems.push(`${name}: use the reviewed case content instead of a native override`); continue;}
+    if ([...FIELDS, 'System.Tags', 'System.History'].includes(name)) {problems.push(`${name}: use the reviewed case content instead of a native override`); continue;}
     if (!spec) {problems.push(`${name}: unavailable in the selected Test Case type`); continue;}
     if (spec.readOnly) {problems.push(`${name}: read-only/server-managed assignment is not allowed`); continue;}
     if (!validFieldType(spec, value)) {problems.push(`${name}: invalid ${spec.type} type/value`); continue;}
@@ -58,7 +55,7 @@ function validatedDefaults(schema, fields, item, before) {
   for (const spec of schema) {
     const name = spec.referenceName, value = item.fields[name];
     if (spec.alwaysRequired && !spec.readOnly) requireThat(value !== undefined && value !== null && (typeof value !== 'string' || value.trim() || allowedFieldValue(spec, value)), `ADO server validation did not resolve required field ${name}.`);
-    if (spec.readOnly || FIELDS.includes(name) || Object.hasOwn(fields, name)) continue;
+    if (spec.readOnly || FIELDS.includes(name) || name === 'System.History' || Object.hasOwn(fields, name)) continue;
     if (before && Object.hasOwn(before.fields, name)) {
       requireThat(Object.hasOwn(item.fields, name) && (before.fields[name] === value || equivalentFieldValue(spec, before.fields[name], value)), `ADO server validation changed preserved field ${name}; request and review an explicit field update.`);
       preserved.push(name);
@@ -100,10 +97,6 @@ function description(row, storyId, old) {
   requireThat((start === -1) === (stop === -1) && (start === -1 || stop > start && before.indexOf(begin, start + begin.length) === -1 && before.indexOf(end, stop + end.length) === -1), 'Existing coverage block is malformed or duplicated; review before editing.');
   return start === -1 ? before + block : before.slice(0, start) + block + before.slice(stop + end.length);
 }
-function tags(row, old) {
-  const before = old?.fields['System.Tags'] ?? ''; requireThat(typeof before === 'string', 'Existing Tags are unsupported.');
-  return [...new Set([...before.split(';').map(value => value.trim()).filter(value => value && !CLASSIFICATIONS.includes(value.toLowerCase())), row.testType, row.scenarioType])].join('; ');
-}
 export async function prepareCaseOperation(client, state, row, {validate = true, fields: overrides = {}} = {}) {
   const captured = state.evidence.existing.find(item => String(item.id) === row.id), preparation = state.draft.preparations.find(item => item.caseId === row.id);
   const project = await client.projectIdentity(), storyId = state.evidence.requirements.origin.storyId;
@@ -118,7 +111,7 @@ export async function prepareCaseOperation(client, state, row, {validate = true,
     type = category.defaultWorkItemType.name;
   }
   const identity = fingerprint({consumer: state.consumer, proposal: state.proposal, caseId: row.id});
-  const fields = {'System.Title': row.title, 'System.Description': description(row, storyId, before), 'Microsoft.VSTS.TCM.Steps': steps(row, preparation, before), 'System.Tags': tags(row, before)};
+  const fields = {'System.Title': row.title, 'System.Description': description(row, storyId, before), 'Microsoft.VSTS.TCM.Steps': steps(row, preparation, before)};
   const capabilities = await caseCapabilities(client, type, {write: row.proposedAction !== 'Reuse unchanged'}), extra = publicationFields(client, capabilities, overrides, before, project);
   Object.assign(fields, extra.values);
   const sharedWith = (before?.relations ?? []).filter(relation => relation.rel === 'Microsoft.VSTS.Common.TestedBy-Reverse').map(relation => workItemLinkId(relation.url, client.configuration.organizationUrl, project)).filter(id => id && id !== storyId);
@@ -128,12 +121,14 @@ export async function prepareCaseOperation(client, state, row, {validate = true,
     requireThat(Object.entries(extra.values).every(([name, value]) => equivalentFieldValue(capabilities.find(field => field.referenceName === name), value, before.fields[name])), 'Reuse has a material native field change; propose a reviewed Update instead.');
     const actual = parseStepsXml(before.fields['Microsoft.VSTS.TCM.Steps']).map(step => ({action: step.action, expected: step.expected}));
     requireThat(before.fields['System.Title'] === row.title && fingerprint(actual) === fingerprint([...preparationSteps(row, preparation), ...row.steps]), 'Reuse content differs from the current case; propose the material update instead.');
-    const existingTags = String(before.fields['System.Tags'] ?? '').split(';').map(tag => tag.trim()), description = htmlToText(before.fields['System.Description'] ?? '');
-    const classifications = existingTags.filter(tag => CLASSIFICATIONS.includes(tag.toLowerCase()));
-    requireThat(classifications.length === 2 && [row.testType, row.scenarioType].every(tag => classifications.includes(tag)) && description.includes(`Story ${storyId}`) && row.coverageReferences.every(ref => description.includes(ref.label)), 'Reuse classification or coverage reference differs from the current case.');
+    const classifications = String(before.fields['System.Tags'] ?? '').split(';').map(tag => tag.trim().toLowerCase()).filter(tag => CLASSIFICATIONS.has(tag));
+    const reviewed = [row.testType, row.scenarioType].map(tag => tag.toLowerCase());
+    requireThat(classifications.every(tag => reviewed.includes(tag)), 'Reuse classification conflicts with the current case.');
+    const description = htmlToText(before.fields['System.Description'] ?? '');
+    requireThat(description.includes(`Story ${storyId}`) && row.coverageReferences.every(ref => description.includes(ref.label)), 'Reuse coverage reference differs from the current case.');
     return {caseId: row.id, identity, action: row.proposedAction, adoId: before.id, revision: before.rev, before, sharedWith, fields: before.fields, relation: null, request: null, publicationFields: extra.metadata};
   }
-  fields['System.History'] = operationMarker(identity);
+  requireThat(!before || different.length > 0, 'Update has no material native changes; explicitly choose Reuse unchanged if appropriate.');
   const relation = before ? null : {rel: 'Microsoft.VSTS.Common.TestedBy-Reverse', url: `${client.configuration.organizationUrl}/_apis/wit/workitems/${storyId}`};
   const body = [...(before ? [{op: 'test', path: '/rev', value: before.rev}] : []), ...Object.entries(fields).map(([name, value]) => ({op: 'add', path: '/fields/' + name, value})), ...(relation ? [{op: 'add', path: '/relations/-', value: relation}] : [])];
   const request = {route: before ? `wit/workitems/${before.id}?api-version=7.1` : `wit/workitems/$${encodeURIComponent(type)}?api-version=7.1`, method: before ? 'PATCH' : 'POST', body};
@@ -153,18 +148,22 @@ export async function prepareCaseOperation(client, state, row, {validate = true,
 
 export async function verifyCaseOperation(client, operation, id, {historical = false} = {}) {
   const item = await client.read(`wit/workitems/${adoId(id)}?$expand=relations&api-version=7.1`); await client.requireWorkItemProject(item);
-  requireThat(item.id === id && Number.isInteger(item.rev), 'Case readback identity is incomplete.');
+  requireThat(item.id === id && Number.isInteger(item.rev) && (operation.adoId === null || operation.adoId === id), 'Case readback identity is incomplete or differs from the approved target.');
   if (operation.action === 'Reuse unchanged') {
     requireThat(item.rev === operation.revision && fingerprint(item.fields) === fingerprint(operation.fields) && fingerprint(item.relations ?? []) === fingerprint(operation.before.relations ?? []), 'Reused case changed.'); return item;
   }
   const expectedRevision = operation.revision === null ? 1 : operation.revision + 1;
   const revision = historical ? await client.read(`wit/workitems/${id}/revisions/${expectedRevision}?$expand=relations&api-version=7.1`) : item;
-  requireThat(revision.id === id && revision.rev === expectedRevision && revision.fields?.['System.History'] === operationMarker(operation.identity), 'Operation identity is not present in the expected native history revision.');
-  requireThat(Object.entries(operation.fields).every(([name, value]) => matchesField(operation, name, value, revision.fields[name])), 'Readback differs from the approved native fields.');
-  requireThat(Object.entries(operation.fields).filter(([name]) => name !== 'System.History').every(([name, value]) => matchesField(operation, name, value, item.fields[name])), 'Case changed after the approved operation; revalidate affected coverage.');
+  await client.requireWorkItemProject(revision);
+  const isType = target => typeof target.fields?.['System.WorkItemType'] === 'string' && target.fields['System.WorkItemType'].toLowerCase() === operation.type?.toLowerCase();
+  requireThat(revision.id === id && revision.rev === expectedRevision && item.rev >= expectedRevision && isType(item) && isType(revision), 'Case type or expected native revision did not verify.');
+  // Legacy approvals retain their original marker in the request, but known/confirmed IDs are verified by native content.
+  const expected = Object.entries(operation.fields).filter(([name]) => name !== 'System.History');
+  requireThat(expected.every(([name, value]) => matchesField(operation, name, value, revision.fields[name])), 'Readback differs from the approved native fields.');
+  requireThat(expected.every(([name, value]) => matchesField(operation, name, value, item.fields[name])), 'Case changed after the approved operation; revalidate affected coverage.');
   requireThat(Object.entries(operation.publicationFields?.defaults ?? {}).every(([name, value]) => matchesField(operation, name, value, revision.fields[name]) && matchesField(operation, name, value, item.fields[name])), 'Readback differs from the approved server-default fields.');
   requireThat((operation.publicationFields?.preserved ?? []).every(name => operation.before && Object.hasOwn(operation.before.fields, name) && Object.hasOwn(revision.fields, name) && Object.hasOwn(item.fields, name) && matchesField(operation, name, operation.before.fields[name], revision.fields[name]) && matchesField(operation, name, operation.before.fields[name], item.fields[name])), 'Readback changed an unrequested preserved field; retain uncertainty and review the native change.');
-  if (operation.relation) requireThat((item.relations ?? []).some(relation => relation.rel === operation.relation.rel && relation.url.toLowerCase() === operation.relation.url.toLowerCase()), 'Created case lacks the approved story relation.');
+  if (operation.relation) requireThat([revision, item].every(target => (target.relations ?? []).some(relation => relation.rel === operation.relation.rel && relation.url.toLowerCase() === operation.relation.url.toLowerCase())), 'Created case lacks the approved story relation.');
   if (operation.before) requireThat(fingerprint(item.relations ?? []) === fingerprint(operation.before.relations ?? []), 'Existing case relationships changed.');
   return item;
 }

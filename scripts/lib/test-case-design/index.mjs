@@ -114,11 +114,13 @@ export function compactDesignResult(result) {
     : result.draft ? 'Proposal saved. Independent assessment is required before handoff or publication.'
     : 'Selected sources prepared. Save a source-grounded proposal, then obtain independent assessment.';
   const bindings = Object.fromEntries(['head', 'source', 'sourceFingerprint', 'proposal', 'assessment', 'approval', 'fingerprint', 'approvalGeneration'].filter(key => typeof result[key] === 'string' || typeof result[key] === 'number').map(key => [key, result[key]]));
+  const outcomes = result.outcomes?.map(({caseId, action, status, adoId, url, reason, confirmation}) => ({caseId, action, status, adoId, ...(url ? {url} : {}), ...(reason ? {reason} : {}), ...(confirmation ? {confirmation} : {})}));
   return { ...(result.id ? {id: result.id} : {}), status,
     summary: presentation.rendered?.chatSummary ? (rejected ? summary + '\n\n' : '') + presentation.rendered.chatSummary : result.note ?? summary,
     ...(presentation.rendered?.summary ? {counts: presentation.rendered.summary} : {}), ...(presentation.reviewFile ? {reviewFile: presentation.reviewFile} : {}), ...(presentation.nativePreview ? {nativePreview: presentation.nativePreview} : {}), bindings,
     ...(assessedCoverage ? {coverage: assessedCoverage} : {}),
-    ...Object.fromEntries(['destination', 'selected', 'fieldPreview', 'preparationPreview', 'confirmed', 'outcomes', 'execution', 'path', 'note'].filter(key => result[key] !== undefined).map(key => [key, result[key]]))};
+    ...(presentation.previewFile ? {previewFile: presentation.previewFile} : {}), ...(outcomes ? {outcomes} : {}),
+    ...Object.fromEntries(['destination', 'selected', 'fieldPreview', 'preparationPreview', 'confirmed', 'candidateSearch', 'execution', 'path', 'note'].filter(key => result[key] !== undefined).map(key => [key, result[key]]))};
 }
 export function requireReviewed(state, selected, roots) {
   requireThat(state?.draft && state.review, 'Independent source-grounding and semantic coverage assessment is required.');

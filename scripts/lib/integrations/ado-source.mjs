@@ -11,10 +11,15 @@ const storyLinks = Object.freeze({'tested-by': 'Microsoft.VSTS.Common.TestedBy-F
 const discovery = ['System.Id', 'System.WorkItemType', 'System.TeamProject'];
 
 /** Use process metadata, including custom/localized case types, rather than a label. */
-export async function adoTestCaseType(client) {
+export async function adoTestCaseTypes(client) {
   const category = await client.read('wit/workitemtypecategories/Microsoft.TestCaseCategory?api-version=7.1'), kinds = category.workItemTypes;
   requireValue(String(category.referenceName).toLowerCase() === 'microsoft.testcasecategory' && Array.isArray(kinds) && kinds.length > 0 && kinds.length <= 100 && kinds.every(kind => typeof kind?.name === 'string' && kind.name.trim()), 'ADO test-case category is unavailable or incomplete.');
-  return type => typeof type === 'string' && kinds.some(kind => kind.name.toLowerCase() === type.toLowerCase());
+  return kinds.map(kind => kind.name);
+}
+
+export async function adoTestCaseType(client) {
+  const types = new Set((await adoTestCaseTypes(client)).map(type => type.toLowerCase()));
+  return type => typeof type === 'string' && types.has(type.toLowerCase());
 }
 
 export function createAdoTestSource(client) {

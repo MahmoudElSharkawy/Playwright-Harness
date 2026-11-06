@@ -1,7 +1,8 @@
 import {captureRequirements, prepareRequirements, readRequirements, readRequirementsSource} from '../requirements/index.mjs';
 import {requirementsClient} from '../requirements/sources.mjs';
 import {adoId, workItemLinkId} from '../integrations/config.mjs';
-import {adoTestCaseType} from '../integrations/ado-source.mjs';
+import {adoTestCaseType, adoTestCaseTypes} from '../integrations/ado-source.mjs';
+import {caseDiscoveryFields, discoverWorkItems} from '../integrations/ado-discovery.mjs';
 import {readContextOverview, searchContext} from '../context/search.mjs';
 import {contextData} from '../context/model.mjs';
 import {keys, fingerprint, requireThat} from '../execution-core/data.mjs';
@@ -53,8 +54,16 @@ export async function captureDesign(roots, raw, options = {}) {
   }
   const references = await captureReferences(roots, source, requirements, story, input, options);
   // Keep the selected sanitized source fields; arbitrary raw markup can hide credentials in hrefs.
-  const retainedStory = story && {id: story.id, rev: story.rev, fields: Object.fromEntries(source.parts.filter(part => part.sourceId === 'story').map(part => [part.location, part.text]))};
+  const retainedStory = story && {id: story.id, rev: story.rev, ...(typeof story.fields['System.AreaPath'] === 'string' ? {areaPath: story.fields['System.AreaPath']} : {}), fields: Object.fromEntries(source.parts.filter(part => part.sourceId === 'story').map(part => [part.location, part.text]))};
   return {request: input, requirements: source, inventory: requirements, existing, related, ...(retainedStory ? {story: retainedStory} : {}), context, references, conventions: captureConventions(roots, requirements), reviewContract: 'retained-run-v1'};
+}
+
+export async function discoverDesignCases(roots, state, input, options = {}) {
+  const origin = state?.evidence.requirements.origin;
+  requireThat(origin, 'Prepare an ADO-backed design before searching for existing cases.');
+  const client = requirementsClient(roots, options), project = await client.projectIdentity();
+  requireThat(origin.organizationUrl === client.configuration.organizationUrl && origin.projectId.toLowerCase() === project.id.toLowerCase(), 'Source and configured discovery destination differ.');
+  return discoverWorkItems(client, input, {types: await adoTestCaseTypes(client), fields: caseDiscoveryFields, areaPath: state.evidence.story?.areaPath, captured: state.evidence.existing});
 }
 
 export async function requireFreshDesign(roots, state, options = {}) {

@@ -8,7 +8,7 @@ One delivery operation owns an execution at a time; another receives `BUSY`.
 After it completes, retries resume the persisted delivery identities and receipts.
 
 Bug previews validate the process's Bug category, fields, required defaults,
-picklists, area/iteration paths, duplicate tags and validateOnly request.
+picklists, area/iteration paths and validateOnly request.
 `.harness/integrations.json` can configure `ado.bugs` defaults. Use `--drafts <json>`
 to edit title, severity, priority and notes, keyed by defect fingerprint. Set
 `file: false` to exclude a specific defect. Default candidates are reliable matching
@@ -17,12 +17,13 @@ Generated titles are bounded to ADO's limit; invalid edited titles identify the
 fingerprint before any filing writes. Legacy eligibility is checked per occurrence.
 ReproSteps and verified evidence remain source-derived.
 
-An open fingerprint duplicate is skipped. A closed one gets a new bug with a
-Related link. Filing IDs and fingerprint tags support recovery. A create whose
-identity is unknown is reconciled by its filing tag before any new create.
-No match means UNCERTAIN; use `--recreate <fingerprint>` only with authorization
-to create another bug. Attachment acknowledgement identities survive interrupted
-delivery, matched by operation and exact request fingerprint. An uncertain upload
+Defect fingerprints stay local. Review possible duplicates in the bug-report
+workflow; delivery never chooses an existing bug. `file-bugs <exec> --reconcile`
+uses local requests and receipts to verify known IDs and shows candidates for
+missing IDs. Use `--confirmation <json>` with the user-confirmed `fingerprint`,
+`requestFingerprint` and `adoId`. An unknown create stays UNCERTAIN until validated
+and cannot be recreated through `--recreate`. Attachment acknowledgement identities
+survive interrupted delivery, matched by operation and exact request fingerprint. An uncertain upload
 does not block unrelated defects. After investigation, `--recreate <fingerprint>:<sha256>`
 authorizes recreation of that specific attachment; it never replays other uploads.
 

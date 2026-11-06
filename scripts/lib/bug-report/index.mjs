@@ -1,13 +1,15 @@
 import {existsSync, mkdirSync, lstatSync, readFileSync, writeFileSync, openSync, closeSync, unlinkSync} from 'node:fs';
 import {dirname, extname, isAbsolute, relative, join} from 'node:path';
-import {randomUUID} from 'node:crypto';
 import {consumerPath} from '../consumer-paths.mjs';
 import {data, digest, fingerprint, id, requireThat} from '../execution-core/data.mjs';
 import {readBounded, writeJson} from '../execute/storage.mjs';
 import {withTransition} from '../execute/lock.mjs';
 import {createAdoClient} from '../integrations/ado-client.mjs';
-import {loadAdoConfiguration} from '../integrations/config.mjs';
+import {adoId, loadAdoConfiguration, workItemLinkId} from '../integrations/config.mjs';
 import {createAdoTestSource} from '../integrations/ado-source.mjs';
+import {bugDiscoveryFields} from '../integrations/bug-fields.mjs';
+import {discoverWorkItems} from '../integrations/ado-discovery.mjs';
+import {htmlToText} from '../integrations/ado-steps.mjs';
 import {checkSourceRevisions} from '../execute/source.mjs';
 import {deliverBugReports} from '../execute/delivery.mjs';
 import {executionBugActual} from '../execute/bug-narrative.mjs';
@@ -83,17 +85,17 @@ export function prepareBugReport(roots, reportId, input) {
     const confirmation = {user: 'reported', agent: 'not-run', ...intake.confirmation}; validateDraft(draft, confirmation);
     const evidence = selectedEvidence(roots, reportId, intake.evidence ?? []);
     writeJson(path(roots, reportId, 'intake.json'), intake, {exclusive: true});
-    return save(roots, reportId, {version: 1, reportId, consumer: fingerprint({projectRoot: roots.projectRoot, packageRoot: roots.packageRoot}), intake, intakeFingerprint: fingerprint(intake), filingId: randomUUID(), draft, confirmation, evidence, annotations: [], history: []});
+    return save(roots, reportId, {version: 1, reportId, consumer: fingerprint({projectRoot: roots.projectRoot, packageRoot: roots.packageRoot}), intake, intakeFingerprint: fingerprint(intake), draft, confirmation, evidence, annotations: [], history: []});
   });
 }
 export function editBugReport(roots, reportId, input) {
   return locked(roots, reportId, () => {
     const state = readBugReport(roots, reportId), patch = data(input);
     requireThat(patch.head === state.head, 'Bug draft changed; reread the current revision.');
-    requireThat(Object.keys(patch).every(key => ['head', 'draft', 'confirmation', 'evidence'].includes(key)), 'Unsupported editable bug input.');
+    requireThat(Object.keys(patch).every(key => ['head', 'draft', 'confirmation', 'evidence', 'referenceId'].includes(key)), 'Unsupported editable bug input.');
     const draft = {...state.draft, ...patch.draft}, confirmation = {...state.confirmation, ...patch.confirmation}; validateDraft(draft, confirmation);
-    const {head, ...prior} = state;
-    return save(roots, reportId, {...prior, draft, confirmation, evidence: patch.evidence ? selectedEvidence(roots, reportId, patch.evidence) : state.evidence, history: [...state.history, head]});
+    const {head, referenceId, ...prior} = state, selected = Object.hasOwn(patch, 'referenceId') ? patch.referenceId : referenceId;
+    return save(roots, reportId, {...prior, draft, confirmation, ...(selected == null ? {} : {referenceId: adoId(selected)}), evidence: patch.evidence ? selectedEvidence(roots, reportId, patch.evidence) : state.evidence, history: [...state.history, head]});
   });
 }
 function verifiedAttachments(roots, state) {
@@ -109,23 +111,31 @@ function verifiedAttachments(roots, state) {
   }
   return attachments;
 }
-async function sourceFresh(client, state) {
+async function sourceFresh(client, state, storyWithRelations) {
   const source = state.intake.source;
+  const readStory = async (storyId, revision, message) => {
+    const expand = storyWithRelations === storyId ? '$expand=relations&' : '';
+    const story = await client.read(`wit/workitems/${adoId(storyId)}?${expand}api-version=7.1`);
+    await client.requireWorkItemProject(story);
+    requireThat(story.id === storyId && story.rev === revision, message);
+    return story;
+  };
   if (source?.postRun) {
     const review = await reviewRunFailures(state.roots, source.postRun.run);
     requireThat(review.hash === source.postRun.hash, 'Post-run source or observations changed; classify the current failures and review new drafts.');
-    for (const reference of source.postRun.references) await sourceFresh(client, {...state, intake: {source: reference}});
-    return;
+    let story;
+    for (const reference of source.postRun.references) {
+      const fresh = await sourceFresh(client, {...state, intake: {source: reference}}, storyWithRelations);
+      if (fresh?.id === source.storyId) story = fresh;
+    }
+    return story;
   }
   if (source?.ado) {
     const captured = source.ado;
     requireThat(captured.organizationUrl === client.configuration.organizationUrl && captured.project.toLowerCase() === client.configuration.project.toLowerCase(), 'Bug destination differs from the captured automation source.');
     const changes = await checkSourceRevisions(captured, createAdoTestSource(client));
     requireThat(changes.length === 0, 'Automated case or shared-step source revision changed; review current source before filing.');
-    if (captured.storyId) {
-      const story = await client.read(`wit/workitems/${captured.storyId}?api-version=7.1`); await client.requireWorkItemProject(story);
-      requireThat(story.id === captured.storyId && story.rev === captured.storyRev, 'Automated story revision changed; review current source before filing.');
-    }
+    if (captured.storyId) return readStory(captured.storyId, captured.storyRev, 'Automated story revision changed; review current source before filing.');
     return;
   }
   if (source?.executionId) {
@@ -140,13 +150,12 @@ async function sourceFresh(client, state) {
       const changes = await checkSourceRevisions({...view.source, cases: [original]}, createAdoTestSource(client));
       requireThat(changes.length === 0, 'Executed case or shared-step source changed; review current source before filing.');
     }
-    if (view.source.scope.kind === 'story') {const story = await client.read(`wit/workitems/${view.source.scope.storyId}?api-version=7.1`); await client.requireWorkItemProject(story); requireThat(story.id === view.source.scope.storyId && story.rev === view.source.scopeRev, 'Executed story revision changed; review current source before filing.');}
+    if (view.source.scope.kind === 'story') return readStory(view.source.scope.storyId, view.source.scopeRev, 'Executed story revision changed; review current source before filing.');
     return;
   }
   if (!source?.storyId) return;
   requireThat(Number.isSafeInteger(source.storyId) && source.storyId > 0 && Number.isSafeInteger(source.revision), 'Selected story needs a captured ID and revision.');
-  const item = await client.read(`wit/workitems/${source.storyId}?api-version=7.1`); await client.requireWorkItemProject(item);
-  requireThat(item.id === source.storyId && item.rev === source.revision, 'Selected story revision changed; capture and review the updated source.');
+  return readStory(source.storyId, source.revision, 'Selected story revision changed; capture and review the updated source.');
 }
 function projection(state, attachments) {
   const fp = state.intake.source?.defectFingerprint ?? `harness-defect-${fingerprint({source: state.intake.source ?? null, description: state.intake.description}).slice(0, 12)}`;
@@ -154,6 +163,16 @@ function projection(state, attachments) {
   return {fingerprint: fp, view: {execution: {id: state.reportId, freezeFingerprint: state.intakeFingerprint}, source: {scope, cases: [], scenarios: []}, reportContext: {origin: source?.executionId ? 'execution' : 'user-report', source: source ?? null, confirmation: state.confirmation}, reportDefects: [{fingerprint: fp, title: state.draft.title, ...(source?.caseId ? {caseId: source.caseId} : {}), occurrences: []}], reportAttachments: attachments}};
 }
 const clientFor = (roots, supplied) => supplied ?? createAdoClient({...loadAdoConfiguration(roots), roots});
+export async function discoverBugReport(roots, reportId, input, dependencies = {}) {
+  const state = readBugReport(roots, reportId), client = clientFor(roots, dependencies.client);
+  const storyId = state.intake.source?.storyId;
+  const story = await sourceFresh(client, {...state, roots}, input.queries ? storyId : undefined);
+  requireThat(!storyId || story?.id === storyId, 'Selected story is unavailable for discovery.');
+  const {type, fields} = await bugDiscoveryFields(client), project = await client.projectIdentity();
+  const areaPath = client.configuration.bugs?.areaPath ?? story?.fields['System.AreaPath'];
+  const related = (story?.relations ?? []).filter(item => ['System.LinkTypes.Related', 'System.LinkTypes.Hierarchy-Forward'].includes(item.rel)).map(item => workItemLinkId(item.url, client.configuration.organizationUrl, project)).filter(Boolean);
+  return discoverWorkItems(client, input, {types: [type], fields, areaPath, related});
+}
 async function preparePreview(roots, reportId, dependencies) {
   const state = readBugReport(roots, reportId), attachments = verifiedAttachments(roots, state), problems = [];
   for (const name of ['title', 'description', 'expected', 'actual']) if (!hasText(state.draft[name])) problems.push({field: name, code: 'missing'});
@@ -164,7 +183,7 @@ async function preparePreview(roots, reportId, dependencies) {
   const base = {version: 1, head: state.head, draft: state.draft, confirmation: state.confirmation, rejectedEvidence: state.evidence.filter(item => !item.eligible), annotations: state.annotations, problems, destination: null, ready: false, bugs: []};
   if (problems.length) return base;
   const client = clientFor(roots, dependencies.client); await sourceFresh(client, {...state, roots});
-  const {view, fingerprint: fp} = projection(state, attachments), options = {draftValues: {[fp]: state.draft}, filingIds: {[fp]: state.filingId}};
+  const {view, fingerprint: fp} = projection(state, attachments), options = {draftValues: {[fp]: state.draft}, referenceId: state.referenceId};
   const prepared = await deliverBugReports(client, roots, reportId, view, options);
   return {...base, ...prepared, ready: true, destination: {organizationUrl: client.configuration.organizationUrl, project: client.configuration.project}, planHash: prepared.planHash};
 }
@@ -172,7 +191,8 @@ export async function previewBugReport(roots, reportId, dependencies = {}) {
   return withTransition(roots, async () => {
     let preview;
     try {preview = await preparePreview(roots, reportId, dependencies);} catch (error) {const state = readBugReport(roots, reportId); preview = {version: 1, head: state.head, ready: false, destination: null, problems: error.fieldProblems ?? [{code: 'preflight-failed', message: error.message}], fieldReview: error.fieldReview ?? [], draft: state.draft, bugs: []};}
-    const hash = fingerprint(preview), result = {...preview, hash}; writeJson(path(roots, reportId, 'preview.json'), result); return result;
+    const hash = fingerprint(preview), result = {...preview, hash}, previewFile = path(roots, reportId, 'preview.json');
+    writeJson(previewFile, result); return {...result, previewFile};
   }, {key: `bug-report-${reportId}`, ...(dependencies.inventory ? {inventory: dependencies.inventory} : {})});
 }
 export function approveBugReport(roots, reportId, hash) {
@@ -182,16 +202,51 @@ export function approveBugReport(roots, reportId, hash) {
     writeJson(path(roots, reportId, 'approval.json'), {head: state.head, hash}); return {reportId, approved: hash};
   });
 }
+function approvedPreview(roots, reportId, state, hash) {
+  const approval = readBounded(path(roots, reportId, 'approval.json'));
+  requireThat(approval.hash === (hash ?? approval.hash) && approval.head === state.head, 'Bug approval is stale or missing.');
+  const saved = readBounded(path(roots, reportId, 'preview.json')), {hash: savedHash, ...content} = saved;
+  requireThat(savedHash === approval.hash && fingerprint(content) === savedHash && saved.head === state.head && saved.ready, 'Approved bug preview changed.');
+  return saved;
+}
 export async function fileBugReport(roots, reportId, hash, dependencies = {}) {
   return withTransition(roots, () => lockedOperation(roots, reportId, async () => {
-    const state = readBugReport(roots, reportId), approval = readBounded(path(roots, reportId, 'approval.json'));
-    requireThat(approval.hash === hash && approval.head === state.head, 'Bug approval is stale or missing.');
-    const saved = readBounded(path(roots, reportId, 'preview.json')), {hash: savedHash, ...content} = saved;
-    requireThat(savedHash === hash && fingerprint(content) === hash && saved.head === state.head && saved.ready, 'Approved bug preview changed.');
+    requireThat(typeof hash === 'string' && /^[a-f0-9]{64}$/.test(hash), 'Bug approval is stale or missing.');
+    const state = readBugReport(roots, reportId), saved = approvedPreview(roots, reportId, state, hash);
     const client = clientFor(roots, dependencies.client); await sourceFresh(client, {...state, roots});
     const attachments = verifiedAttachments(roots, state), {view, fingerprint: fp} = projection(state, attachments);
-    return deliverBugReports(client, roots, reportId, view, {execute: true, approvedPlan: saved.planHash, draftValues: {[fp]: state.draft}, filingIds: {[fp]: state.filingId}});
+    return deliverBugReports(client, roots, reportId, view, {execute: true, approvedPlan: saved.planHash, approvedPreview: saved, reportHead: state.head, draftValues: {[fp]: state.draft}, referenceId: state.referenceId});
   }), {key: `bug-report-${reportId}`, ...(dependencies.inventory ? {inventory: dependencies.inventory} : {})});
+}
+
+export async function reconcileBugReport(roots, reportId, confirmation, dependencies = {}) {
+  return withTransition(roots, () => lockedOperation(roots, reportId, async () => {
+    const state = readBugReport(roots, reportId), client = clientFor(roots, dependencies.client), {view} = projection(state, []);
+    let saved;
+    try {saved = approvedPreview(roots, reportId, state);} catch { /* Newer deliveries carry their exact request in the journal. */ }
+    return deliverBugReports(client, roots, reportId, view, {reconcile: true, confirmation, approvedPreview: saved});
+  }), {key: `bug-report-${reportId}`, ...(dependencies.inventory ? {inventory: dependencies.inventory} : {})});
+}
+
+export function compactBugPreview(preview) {
+  const {ready, hash, previewFile, destination, problems, reference, completed} = preview;
+  if (!ready) return {ready, hash, previewFile, destination, problems, draft: preview.draft, fieldReview: preview.fieldReview?.filter(row => row.required || problems.some(problem => problem.field === row.field))};
+  const bugs = preview.bugs.map(bug => {
+    const shown = new Map(), fields = [];
+    for (const {field, label, type, value, defaultValue} of bug.review) {
+      if (value === undefined && defaultValue == null) continue;
+      if (value === undefined) {fields.push({field, label, defaultValue}); continue;}
+      const html = type?.toLowerCase() === 'html';
+      const display = html ? htmlToText(value) : value;
+      const key = typeof value === 'string' && value.length > 120 ? `${type}\0${value}` : null;
+      const sameAs = shown.get(key), truncated = typeof display === 'string' && display.length > 2000;
+      fields.push({field, label, ...(sameAs ? {sameAs} : {value: truncated ? display.slice(0, 2000) : display, ...(html ? {format: 'plain-text'} : {}), ...(truncated ? {truncated: true} : {})})});
+      if (!sameAs && key) shown.set(key, field);
+    }
+    const attachments = bug.attachments.map(({name, kind, bytes, context}) => ({name, kind, bytes, context}));
+    return {type: bug.type, fields, attachments, writes: [{operation: 'create-bug', relations: bug.request.body.filter(row => row.path === '/relations/-').map(row => row.value)}, ...attachments.flatMap(({name}) => [{operation: 'upload-attachment', name}, {operation: 'attach-evidence', name}])]};
+  });
+  return {ready, hash, previewFile, destination, confirmation: preview.confirmation, rejectedEvidence: preview.rejectedEvidence, ...(reference ? {reference} : {}), ...(completed ? {completed} : {}), bugs};
 }
 export async function annotateBugReport(roots, reportId, input, dependencies = {}) {
   const state = readBugReport(roots, reportId), selected = state.evidence.find(item => item.path === input.source && item.eligible && item.kind === 'screenshot');

@@ -18,21 +18,44 @@ async function fixture(t, {fail = false} = {}) {
   const deliver = (command, options = {}) => deliverExecution(execution.roots, execution.executionId, command, options, {client: client(), inventory}); return {ado, execution, run, deliver};
 }
 test('bug preview validates fully with zero writes; create identities are acknowledged and repeated filing resumes', async t => {
-  const f = await fixture(t, {fail: true}), preview = await f.deliver('file-bugs'); assert.equal(preview.bugs.length, 1); assert.equal(writes(f.ado).length, 0); assert(f.ado.state.requests.some(request => request.query.includes('validateOnly=true')));
+  const f = await fixture(t, {fail: true});
+  f.ado.state.fault = ({path, body, send}) => {
+    if (path === 'wit/workitems/$bug' && body.some(row => ['/fields/System.Tags', '/fields/System.History'].includes(row.path))) {send({}, 403); return true;}
+  };
+  const preview = await f.deliver('file-bugs'); assert.equal(preview.bugs.length, 1); assert.equal(writes(f.ado).length, 0); assert(f.ado.state.requests.some(request => request.query.includes('validateOnly=true')));
+  assert(!Object.hasOwn(preview.bugs[0].fields, 'System.Tags'), 'A standard bug preview does not require new tag definitions.');
   const actual = await f.deliver('file-bugs', {execute: true}); assert.equal(actual.bugs[0].state, 'COMPLETED'); await f.deliver('file-bugs', {execute: true}); assert.equal(writes(f.ado).filter(request => request.path === 'wit/workitems/$bug').length, 1);
 });
-test('lost bug create response adopts its filing tag without creating twice', async t => {
-  const f = await fixture(t, {fail: true}); f.ado.state.afterBugCreate = ({res}) => res.destroy(); await assert.rejects(f.deliver('file-bugs', {execute: true}), /incomplete/); f.ado.state.afterBugCreate = null;
+test('lost execution bug response requires user confirmation and never creates twice', async t => {
+  const f = await fixture(t, {fail: true}); f.ado.state.afterBugCreate = ({res}) => res.destroy();
+  const lost = (await f.deliver('file-bugs', {execute: true})).bugs[0]; assert.equal(lost.state, 'UNCERTAIN'); f.ado.state.afterBugCreate = null;
+  const {fingerprint, requestFingerprint} = lost;
+  assert.equal((await f.deliver('file-bugs', {reconcile: true})).bugs[0].state, 'UNCERTAIN');
+  const recovered = await f.deliver('file-bugs', {reconcile: true, confirmation: {fingerprint, requestFingerprint, adoId: 800}});
+  assert.equal(recovered.bugs[0].confirmation.source, 'user'); assert.equal(writes(f.ado).filter(request => request.path === 'wit/workitems/$bug').length, 1);
   const resumed = await f.deliver('file-bugs', {execute: true}); assert.equal(resumed.bugs[0].state, 'COMPLETED'); assert.equal(writes(f.ado).filter(request => request.path === 'wit/workitems/$bug').length, 1);
 });
-test('explicit recreation after an unacknowledged non-create binds its new plan and resumes unchanged', async t => {
+test('an acknowledged receipt recovers the bug ID when the local outcome did not retain it', async t => {
+  const f = await fixture(t, {fail: true}), preview = await f.deliver('file-bugs');
+  f.ado.state.afterBugCreate = ({item}) => {item.fields['System.Title'] = 'Unexpected title';};
+  await assert.rejects(f.deliver('file-bugs', {execute: true}), /approved value at readback/);
+  f.ado.state.items.get(800).fields['System.Title'] = preview.bugs[0].fields['System.Title'];
+  const path = ownedFile(f.execution.roots, f.execution.executionId, 'delivery/bugs.json');
+  const journal = JSON.parse(readFileSync(path, 'utf8'));
+  delete journal.entries[0].workItemId;
+  writeJson(path, journal);
+  const recovered = (await f.deliver('file-bugs', {reconcile: true})).bugs[0];
+  assert.equal(recovered.id, 800); assert.equal(recovered.writes[0].status, 'confirmed'); assert.equal(recovered.confirmation, undefined);
+  assert.equal((await f.deliver('file-bugs', {execute: true})).bugs[0].state, 'COMPLETED');
+  assert.equal(writes(f.ado).filter(request => request.path === 'wit/workitems/$bug').length, 1);
+});
+test('an unacknowledged create never replays even when the old recreation flag is supplied', async t => {
   const f = await fixture(t, {fail: true}), initial = await f.deliver('file-bugs');
   f.ado.state.fault = ({req, res, path, url}) => {if (req.method === 'POST' && path === 'wit/workitems/$bug' && url.searchParams.get('validateOnly') !== 'true') {res.destroy(); return true;}};
-  await assert.rejects(f.deliver('file-bugs', {execute: true}), /incomplete/); f.ado.state.fault = null;
-  await assert.rejects(f.deliver('file-bugs', {execute: true, recreate: initial.bugs[0].fingerprint, approvedPlan: (await f.deliver('file-bugs')).planHash}), /new preview/i);
-  const recreated = await f.deliver('file-bugs', {execute: true, recreate: initial.bugs[0].fingerprint}); assert.equal(recreated.bugs[0].state, 'COMPLETED');
-  const resumed = await f.deliver('file-bugs', {execute: true}); assert.equal(resumed.bugs[0].id, recreated.bugs[0].id); assert.equal(resumed.bugs[0].state, 'COMPLETED');
-  assert.equal([...f.ado.state.items.values()].filter(item => item.fields['System.WorkItemType'] === 'Bug').length, 1);
+  assert.equal((await f.deliver('file-bugs', {execute: true})).bugs[0].state, 'UNCERTAIN'); f.ado.state.fault = null;
+  assert.equal((await f.deliver('file-bugs', {execute: true, recreate: initial.bugs[0].fingerprint, approvedPlan: initial.planHash})).bugs[0].state, 'UNCERTAIN');
+  assert.equal(writes(f.ado).filter(request => request.path === 'wit/workitems/$bug').length, 1);
+  assert.equal([...f.ado.state.items.values()].filter(item => item.fields['System.WorkItemType'] === 'Bug').length, 0);
 });
 test('publication preview is read-only, lost create reconciles using paged client-side names, and new-run is unique', async t => {
   const f = await fixture(t); const preview = await f.deliver('publish-results'); assert.equal(preview.cases[0].outcome, 'Passed'); assert.equal(writes(f.ado).length, 0);
@@ -132,6 +155,16 @@ test('D8 S7: lost attachment-link acknowledgement reuses the verified upload and
     lost = true; const item = f.ado.state.items.get(800); item.relations ??= []; item.relations.push(body.find(row => row.value?.rel === 'AttachedFile').value); item.rev++; res.destroy(); return true;
   };
   await assert.rejects(f.deliver('file-bugs', {execute: true}), /incomplete/); assert(lost); f.ado.state.fault = null;
+  const journalPath = ownedFile(f.execution.roots, f.execution.executionId, 'delivery/bugs.json');
+  const journal = JSON.parse(readFileSync(journalPath, 'utf8')), attachment = journal.entries[0].attachments[0];
+  delete attachment.id;
+  attachment.state = 'DISPATCHING';
+  writeJson(journalPath, journal);
+  const writesBefore = writes(f.ado).length;
+  const reconciled = (await f.deliver('file-bugs', {reconcile: true})).bugs[0];
+  assert.equal(reconciled.state, 'ATTACHMENTS_PENDING');
+  assert.deepEqual(reconciled.writes.map(row => [row.operation, row.status]), [['create-bug', 'confirmed'], ['upload-attachment', 'confirmed'], ['attach-evidence', 'confirmed']]);
+  assert.equal(writes(f.ado).length, writesBefore);
   assert.equal((await f.deliver('file-bugs', {execute: true})).bugs[0].state, 'COMPLETED');
   assert.equal(f.ado.state.attachments.size, 1); assert.equal(f.ado.state.items.get(800).relations.filter(row => row.rel === 'AttachedFile').length, 1);
 });
