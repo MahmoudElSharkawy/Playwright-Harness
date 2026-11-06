@@ -6,7 +6,7 @@ import {setTimeout as pause} from 'node:timers/promises';
 import {existsSync, readFileSync} from 'node:fs';
 import {join} from 'node:path';
 import mysql from 'mysql2/promise';
-import {fixture, operation, param, output, check} from './fixtures/database.mjs';
+import {fixture, operation, param, output, check, proveAccountCrud} from './fixtures/database.mjs';
 import {fixture as sequentialFixture} from './fixtures/sequential.mjs';
 import {operation as api} from './fixtures/api.mjs';
 import {defineOperation} from '../scripts/lib/execution-core/index.mjs';
@@ -32,6 +32,12 @@ const insert = (name = 'seed') => op(name, {sql: 'INSERT INTO Items (Label) VALU
 const clean = (name = 'clean') => op(name, {sql: 'DELETE FROM Items WHERE Id=?', parameters: [param('recordId','unsigned bigint')],
   checks: [check(`${name}-removed`,'affectedRows')], affectedRows: {min:1,max:1}});
 const rows = async () => (await admin.execute('SELECT Id,Label FROM Items ORDER BY Id'))[0];
+const broadAuth = () => ({user: config.user, password: config.password});
+
+for (const [profile, resolveCredential] of [['narrow', () => credential], ['admin', broadAuth]]) test(`real MySQL ${profile} account executes all authorized CRUD verbs`, async t => {
+  await proveAccountCrud(t, target, resolveCredential);
+  assert.equal((await admin.query('SELECT Id FROM OutsideMysql.Items'))[0][0].Id, 1);
+});
 
 test('real MySQL prepared CRUD preserves injection-shaped values and exact generated identities through cleanup', async t => {
   const label = "'); DELETE FROM Items; -- \\ ' قيمة", changed = 'updated قيمة';
@@ -130,39 +136,65 @@ test('real MySQL refuses previously persisted invalid dates without exposing a s
 });
 
 for (const [name, grant, revoke] of [
-  ['table grant',"GRANT SELECT ON HarnessMysql.Items TO 'harness_runner'@'%'","REVOKE SELECT ON HarnessMysql.Items FROM 'harness_runner'@'%'"] ,
-  ['column grant',"GRANT SELECT (Id) ON OutsideMysql.Items TO 'harness_runner'@'%'","REVOKE SELECT (Id) ON OutsideMysql.Items FROM 'harness_runner'@'%'"] ,
-  ['cross-database grant',"GRANT SELECT ON OutsideMysql.* TO 'harness_runner'@'%'","REVOKE SELECT ON OutsideMysql.* FROM 'harness_runner'@'%'"] ,
-  ['global privilege',"GRANT FILE ON *.* TO 'harness_runner'@'%'","REVOKE FILE ON *.* FROM 'harness_runner'@'%'"] ,
-  ['grant option',"GRANT GRANT OPTION ON HarnessMysql.* TO 'harness_runner'@'%'","REVOKE GRANT OPTION ON HarnessMysql.* FROM 'harness_runner'@'%'"]
-]) test(`real MySQL principal with ${name} is rejected before business dispatch`, async t => {
-  await admin.query(grant); t.after(()=>admin.query(revoke));
-  const f = live(t,[op('read')]); const attempted = await f.call();
-  assert.equal(attempted.effect.certainty,'not-executed'); assert.equal(f.runtime.finish().status,'BLOCKED');
+  ['table grant', "GRANT SELECT ON HarnessMysql.Items TO 'harness_runner'@'%'", "REVOKE SELECT ON HarnessMysql.Items FROM 'harness_runner'@'%'"],
+  ['column grant', "GRANT SELECT (Id) ON OutsideMysql.Items TO 'harness_runner'@'%'", "REVOKE SELECT (Id) ON OutsideMysql.Items FROM 'harness_runner'@'%'"],
+  ['cross-database grant', "GRANT SELECT ON OutsideMysql.* TO 'harness_runner'@'%'", "REVOKE SELECT ON OutsideMysql.* FROM 'harness_runner'@'%'"],
+  ['global privilege', "GRANT FILE ON *.* TO 'harness_runner'@'%'", "REVOKE FILE ON *.* FROM 'harness_runner'@'%'"],
+  ['grant option', "GRANT GRANT OPTION ON HarnessMysql.* TO 'harness_runner'@'%'", "REVOKE GRANT OPTION ON HarnessMysql.* FROM 'harness_runner'@'%'"]
+]) test(`real MySQL account with ${name} can execute a scoped read`, async t => {
+  await admin.query(grant);
+  t.after(() => admin.query(revoke));
+  const f = live(t, [op('read')]);
+  await f.call();
+  assert.equal(f.runtime.finish().status, 'PASS');
 });
 
-test('real MySQL applicable roles are refused even when the role is inactive', async t => {
-  await admin.query("CREATE ROLE 'harness_role'"); t.after(async()=>{await admin.query("REVOKE 'harness_role' FROM 'harness_runner'@'%'"); await admin.query("DROP ROLE 'harness_role'");});
+test('real MySQL accounts with applicable and active roles can execute scoped operations', async t => {
+  await admin.query("CREATE ROLE 'harness_role'");
+  t.after(async () => {
+    await admin.query("SET DEFAULT ROLE NONE TO 'harness_runner'@'%'");
+    await admin.query("REVOKE 'harness_role' FROM 'harness_runner'@'%'");
+    await admin.query("DROP ROLE 'harness_role'");
+  });
+  await admin.query("GRANT SELECT ON OutsideMysql.* TO 'harness_role'");
   await admin.query("GRANT 'harness_role' TO 'harness_runner'@'%'");
-  const peer = await mysql.createConnection({...config,...credential});
-  try {const [[row]] = await peer.query('SELECT CURRENT_ROLE() AS activeRole'); assert.equal(row.activeRole,'NONE');} finally {await peer.end();}
-  const f = live(t,[op('read')]); const attempted = await f.call(); assert.equal(attempted.effect.certainty,'not-executed'); assert.equal(f.runtime.finish().status,'BLOCKED');
+  const peer = await mysql.createConnection({...config, ...credential});
+  try {const [[row]] = await peer.query('SELECT CURRENT_ROLE() AS activeRole'); assert.equal(row.activeRole, 'NONE');}
+  finally {await peer.end();}
+  const f = live(t, [op('read')]);
+  await f.call();
+  assert.equal(f.runtime.finish().status, 'PASS');
+  await admin.query("SET DEFAULT ROLE 'harness_role' TO 'harness_runner'@'%'");
+  await proveAccountCrud(t, target, () => credential);
 });
 
-for (const [name, create, drop] of [
-  ['view','CREATE VIEW FixtureView AS SELECT Id FROM Items','DROP VIEW FixtureView'],
-  ['nontransactional table','CREATE TABLE FixtureMyisam (Id INT) ENGINE=MyISAM','DROP TABLE FixtureMyisam']
-]) test(`real MySQL refuses a visible ${name} before business dispatch`, async t => {
-  await admin.query(create); t.after(()=>admin.query(drop));
-  const f = live(t,[op('read')]); const attempted = await f.call(); assert.equal(attempted.effect.certainty,'not-executed'); assert.equal(f.runtime.finish().status,'BLOCKED');
+for (const [table, create, drop] of [
+  ['FixtureView', 'CREATE VIEW FixtureView AS SELECT Id FROM Items', 'DROP VIEW FixtureView'],
+  ['FixtureMyisam', 'CREATE TABLE FixtureMyisam (Id INT) ENGINE=MyISAM', 'DROP TABLE FixtureMyisam']
+]) test(`real MySQL blocks references to ${table} without blocking unrelated CRUD`, async t => {
+  await admin.query(create);
+  t.after(() => admin.query(drop));
+  await proveAccountCrud(t, target, broadAuth);
+  const f = live(t, [op('unsupported', {sql: 'SELECT Id FROM ' + table})], {runtime: {resolveCredential: broadAuth}});
+  assert.equal((await f.call()).effect.certainty, 'not-executed');
+  assert.equal(f.runtime.finish().status, 'BLOCKED');
+  assert.match(f.allText(), /DB_OBJECT_UNSUPPORTED/);
 });
 
-test('real MySQL refuses administrative credentials and wrong passwords without native diagnostics', async t => {
-  for (const auth of [{user:config.user,password:config.password},{...credential,password:randomUUID()}]) {
-    const f = live(t,[op('read')],{runtime:{resolveCredential:()=>auth}}); const attempted = await f.call();
-    assert.equal(attempted.effect.certainty,'not-executed'); assert.equal(f.runtime.finish().status,'BLOCKED');
-    assert(!f.allText().includes(auth.password)); assert(!f.allText().includes('Access denied'));
-  }
+test('real MySQL differentiates login failure and native write denial without native diagnostics', async t => {
+  await admin.query("REVOKE DELETE ON HarnessMysql.* FROM 'harness_runner'@'%'");
+  t.after(() => admin.query("GRANT DELETE ON HarnessMysql.* TO 'harness_runner'@'%'"));
+  const denied = live(t, [op('denied', {sql: 'DELETE FROM Items'})]);
+  const deniedAttempt = await denied.call();
+  assert.equal(deniedAttempt.effect.certainty, 'uncertain');
+  assert.equal(denied.runtime.finish().status, 'NEEDS_REVIEW');
+  assert.match(denied.allText(), /DB_PERMISSION_DENIED/);
+  const invalid = {...credential, password: randomUUID()};
+  const f = live(t, [op('read')], {runtime: {resolveCredential: () => invalid}});
+  assert.equal((await f.call()).effect.certainty, 'not-executed');
+  assert.equal(f.runtime.finish().status, 'BLOCKED');
+  assert.match(f.allText(), /DB_AUTHENTICATION_FAILED/);
+  assert(!f.allText().includes(invalid.password)); assert(!f.allText().includes('Access denied'));
 });
 
 test('real MySQL TLS rejects a trusted certificate with the wrong hostname and allows explicit fixture trust', async t => {
@@ -174,9 +206,20 @@ test('real MySQL TLS rejects a trusted certificate with the wrong hostname and a
   const fixtureTrust = live(t,[op('fixture-trust')],{target:{encrypt:true,trustServerCertificate:true}}); await fixtureTrust.call(); assert.equal(fixtureTrust.runtime.finish().status,'PASS');
 });
 
-test('native MySQL grants block out-of-scope reads without exposing native permission errors', async t => {
-  const f = live(t,[op('outside',{sql:'SELECT Id FROM OutsideMysql.Items'})]); const attempted = await f.call();
-  assert.equal(attempted.outputs.length,0); assert.equal(f.runtime.finish().status,'BLOCKED'); assert(!f.allText().includes('SELECT command denied'));
+test('real MySQL admin cannot dispatch cross-database reads, sources or mutations', async t => {
+  for (const sql of [
+    'SELECT Id FROM OutsideMysql.Items',
+    'INSERT INTO Items (Id) SELECT Id FROM OutsideMysql.Items',
+    'UPDATE OutsideMysql.Items SET Id=2',
+    'DELETE FROM OutsideMysql.Items'
+  ]) {
+    const f = live(t, [op('outside', {sql})], {runtime: {resolveCredential: broadAuth}});
+    assert.equal((await f.call()).effect.certainty, 'not-executed');
+    assert.equal(f.runtime.finish().status, 'BLOCKED');
+    assert.match(f.allText(), /DB_SCOPE_DENIED/);
+  }
+  assert.equal((await admin.query('SELECT Id FROM OutsideMysql.Items'))[0][0].Id, 1);
+  assert.equal((await rows()).length, 0);
 });
 
 for (const [name, sql, limits] of [

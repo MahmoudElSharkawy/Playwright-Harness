@@ -12,7 +12,7 @@ import {runSequentialScenario} from '../scripts/lib/sequential/index.mjs';
 const scope = {target: 'db', operationId: 'query', invocationId: 'query', tables: ['Items']};
 const row = (kind, extra = {}) => ({kind, tableName: 'Items', columnName: null, ordinal: 0, typeName: null, nullable: null, length: null, precision: null, scale: null, keyName: null, primaryKey: null, referencedSchema: null, referencedTable: null, referencedColumn: null, supported: true, ...extra});
 const rows = () => [row('table'), row('column', {columnName: 'Id', ordinal: 1, typeName: 'int', nullable: false, length: 4, precision: 10, scale: 0}), row('column', {columnName: 'Label', ordinal: 2, typeName: 'nvarchar', nullable: false, length: 200, precision: 0, scale: 0}), row('key', {columnName: 'Id', ordinal: 1, keyName: 'PK_Items', primaryKey: true})];
-function native(t, records = rows(), {denied = false} = {}) {
+function native(t, records = rows(), {broad = false, schemaName = 'm8'} = {}) {
   const calls = [];
   class Pool extends EventEmitter {async connect() {} async close() {}}
   class Request extends EventEmitter {
@@ -21,7 +21,10 @@ function native(t, records = rows(), {denied = false} = {}) {
     cancel() {}
     async query(text) {
       calls.push({text, bindings: this.bindings});
-      if (!this.stream) return {recordsets: [[{databaseName: 'HarnessM8', defaultSchema: 'm8'}], denied ? [{permission_name: 'CONTROL'}] : [], [], [], []]};
+      if (!this.stream) {
+        const recordset = [{databaseName: 'HarnessM8', schemaName, defaultSchema: broad ? 'dbo' : 'm8'}];
+        return {recordset, recordsets: [recordset, broad ? [{permission_name: 'CONTROL'}] : []]};
+      }
       const selected = typeof records === 'function' ? records(this.bindings) : records;
       this.emit('recordset', Object.fromEntries(Object.keys(selected[0] ?? {}).map(name => [name, {type: {name: 'NVarChar'}}])));
       for (const record of selected) this.emit('row', record);
@@ -97,9 +100,17 @@ for (const [name, records] of [['absent table', []], ['hidden or unsupported tab
   await assert.rejects(f.runtime.inspectSchema(scope)); assert.equal(f.allText(), '');
 });
 
-test('native principal preflight remains mandatory for metadata', async t => {
-  const calls = native(t, rows(), {denied: true}), f = fixture(t, [operation()], {runtime: {resolveCredential: credentials}});
+test('native destination verification remains mandatory for metadata', async t => {
+  const calls = native(t, rows(), {schemaName: 'other'}), f = fixture(t, [operation()], {runtime: {resolveCredential: credentials}});
   await assert.rejects(f.runtime.inspectSchema(scope)); assert.equal(calls.length, 1); assert.equal(f.allText(), '');
+});
+
+test('broader credentials and a different default schema do not block selected metadata', async t => {
+  const calls = native(t, rows(), {broad: true}), f = fixture(t, [operation()], {runtime: {resolveCredential: credentials}});
+  const receipt = await f.runtime.inspectSchema(scope);
+  assert.equal(requireSchemaEvidence(receipt), receipt);
+  assert.deepEqual(calls[1].bindings, {scope: 'm8', tableName: 'Items'});
+  assert.equal(calls.length, 2);
 });
 
 test('schema metadata never embeds supplied table names in SQL', async t => {

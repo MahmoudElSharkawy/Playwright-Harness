@@ -3,6 +3,7 @@ import {isIP} from 'node:net';
 import {requireThat, integer} from '../execution-core/data.mjs';
 import {DatabaseFailure, bounded, credentials} from './shared.mjs';
 import {quoteIdentifier} from './mysql-syntax.mjs';
+import {scopeDatabaseRequest} from './scope.mjs';
 
 const types = mysql.Types, typed = mysql.TypedParameter;
 function validTemporal(value, type) {
@@ -76,32 +77,13 @@ export function normalized(value, field) {
   throw new DatabaseFailure('EXECUTOR', true, 'UNSUPPORTED_RESULT');
 }
 
-/** A narrow, complete SHOW GRANTS allowlist; unknown or role-derived grants fail closed. */
-export function validateGrants(grants, database, principal, partialRevokes) {
-  const at = principal.lastIndexOf('@'); requireThat(at > 0, 'Invalid database principal.');
-  const account = `${quoteIdentifier(principal.slice(0, at))}@${quoteIdentifier(principal.slice(at + 1))}`;
-  let scoped = false;
-  for (const grant of grants) {
-    requireThat(typeof grant === 'string' && grant.endsWith(` TO ${account}`), 'Unsupported database principal grant.');
-    const statement = grant.slice(0, -` TO ${account}`.length);
-    if (statement === 'GRANT USAGE ON *.*') continue;
-    const match = /^GRANT ([A-Z, ]+) ON `((?:[^`]|``)+)`\.\*$/.exec(statement);
-    requireThat(match && match[1].split(', ').every(p => ['SELECT', 'INSERT', 'UPDATE', 'DELETE'].includes(p)), 'Database principal must have only scoped DML grants.');
-    let scope = match[2].replaceAll('``', '`');
-    if (!partialRevokes) {
-      requireThat(!/(?:^|[^\\])(?:\\\\)*[_%]/.test(scope), 'Wildcard database grants are unsupported.');
-      scope = scope.replace(/\\([_%\\])/g, '$1');
-    }
-    requireThat(scope === database, 'Database grant is outside the configured scope.'); scoped = true;
-  }
-  requireThat(scoped, 'A dedicated database grant is required.');
-}
-
 /** One connection/transaction per operation; never report partial or uncertain work as success. */
 export async function executeMysql(target, auth, request, {signal, timeoutMs, maxRows, maxResponseBytes}) {
-  validateTarget(target); auth = credentials(auth); const values = request.parameters.map(parameter);
-  requireThat(!request.guard, 'MySQL restoration is unsupported.');
+  validateTarget(target); auth = credentials(auth);
   if (signal.aborted) throw new DatabaseFailure(signal.reason === 'TIMEOUT' ? 'TIMEOUT' : 'CANCELLED');
+  request = scopeDatabaseRequest(target, request);
+  requireThat(!request.guard, 'MySQL restoration is unsupported.');
+  const values = request.parameters.map(parameter);
   const connection = mysql.createConnection({host: target.server, port: target.port ?? 3306, database: target.database, ...auth,
     ssl: target.encrypt === false ? undefined : {rejectUnauthorized: !target.trustServerCertificate, verifyIdentity: !target.trustServerCertificate},
     connectTimeout: Math.min(timeoutMs, 5000), charset: 'utf8mb4', timezone: 'Z', multipleStatements: false,
@@ -150,14 +132,24 @@ export async function executeMysql(target, auth, request, {signal, timeoutMs, ma
     }), signal);
   }
   try {
-    const state = (await collect('SELECT VERSION() AS version, DATABASE() AS databaseName, CURRENT_USER() AS principal, CURRENT_ROLE() AS roles, @@GLOBAL.partial_revokes AS partialRevokes')).rows[0];
-    requireThat(/^8\.4\.\d+(?:[-.].*)?$/.test(state?.version) && state.databaseName === target.database
-      && state.principal.slice(0, state.principal.lastIndexOf('@')) === auth.user && state.roles === 'NONE', 'MySQL 8.4 and a dedicated direct-grant principal are required.');
-    const grants = (await collect('SHOW GRANTS', [], {prepared: false})).rows.map(row => Object.values(row)[0]);
-    requireThat([0, 1, '0', '1'].includes(state.partialRevokes), 'Unknown privilege matching mode.');
-    validateGrants(grants, target.database, state.principal, state.partialRevokes === 1 || state.partialRevokes === '1');
-    requireThat((await collect('SELECT COUNT(*) AS count FROM information_schema.APPLICABLE_ROLES')).rows[0].count === '0', 'Database roles are unsupported.');
-    requireThat((await collect("SELECT COUNT(*) AS count FROM information_schema.TABLES WHERE TABLE_SCHEMA=? AND (TABLE_TYPE<>'BASE TABLE' OR ENGINE<>'InnoDB')", [target.database])).rows[0].count === '0', 'MySQL execution requires InnoDB base tables.');
+    const state = (await collect('SELECT VERSION() AS version, DATABASE() AS databaseName, @@lower_case_table_names AS tableCase')).rows[0];
+    requireThat(/^8\.4\.\d+(?:[-.].*)?$/.test(state?.version), 'MySQL execution requires a supported 8.4 server.');
+    if (state.databaseName !== target.database) throw new DatabaseFailure('EXECUTOR', false, 'DB_SCOPE_DENIED');
+    const foldsCase = Number(state.tableCase) !== 0;
+    if (foldsCase && request.localPairs.length) {
+      const comparison = request.localPairs.map(() => 'CAST(LOWER(?) AS BINARY)=CAST(LOWER(?) AS BINARY)').join(' OR ');
+      const collision = await collect('SELECT (' + comparison + ') AS collision', request.localPairs.flat());
+      if (Number(collision.rows[0]?.collision) !== 0) throw new DatabaseFailure('EXECUTOR', false, 'DB_SCOPE_AMBIGUOUS');
+    }
+    if (request.tables.length) {
+      const refs = new Set(request.tables.map(name => foldsCase ? name.toLowerCase() : name));
+      const column = foldsCase ? 'LOWER(TABLE_NAME)' : 'TABLE_NAME';
+      const slots = [...refs].map(() => 'BINARY ?').join(',');
+      const metadata = await collect(`SELECT TABLE_NAME AS name, TABLE_TYPE AS type, ENGINE AS storageEngine
+        FROM information_schema.TABLES WHERE BINARY TABLE_SCHEMA=BINARY ? AND BINARY ${column} IN (${slots})`, [target.database, ...refs]);
+      if (metadata.rows.some(row => row.type !== 'BASE TABLE' || row.storageEngine !== 'InnoDB')) throw new DatabaseFailure('EXECUTOR', false, 'DB_OBJECT_UNSUPPORTED');
+      if (metadata.rows.length !== refs.size) throw new DatabaseFailure('EXECUTOR', false, 'DB_OBJECT_UNAVAILABLE');
+    }
     await collect("SET SESSION sql_mode='STRICT_ALL_TABLES,NO_BACKSLASH_ESCAPES,NO_ENGINE_SUBSTITUTION,NO_ZERO_DATE,NO_ZERO_IN_DATE,ERROR_FOR_DIVISION_BY_ZERO', time_zone='+00:00', innodb_lock_wait_timeout=1", [], {prepared: false});
     await collect(request.capability === 'dbSelect' ? 'START TRANSACTION READ ONLY' : 'START TRANSACTION READ WRITE', [], {prepared: false});
     if (signal.aborted) throw new DatabaseFailure(signal.reason === 'TIMEOUT' ? 'TIMEOUT' : 'CANCELLED');
@@ -182,7 +174,10 @@ export async function executeMysql(target, auth, request, {signal, timeoutMs, ma
     const classification = ['ER_QUERY_TIMEOUT', 'ER_LOCK_WAIT_TIMEOUT', 'PROTOCOL_SEQUENCE_TIMEOUT'].includes(error.code) ? 'TIMEOUT'
       : ['ECONNRESET', 'ECONNREFUSED', 'EPIPE', 'ENOTFOUND', 'ETIMEDOUT', 'PROTOCOL_CONNECTION_LOST'].includes(error.code) ? 'TRANSPORT'
       : ['ER_ACCESS_DENIED_ERROR', 'ER_DBACCESS_DENIED_ERROR', 'ER_BAD_DB_ERROR', 'HANDSHAKE_SSL_ERROR'].includes(error.code) ? 'UNAVAILABLE' : 'EXECUTOR';
-    throw new DatabaseFailure(classification, dispatched, classification === 'EXECUTOR' ? 'SERVER_REJECTED' : classification);
+    const reason = error.code === 'ER_ACCESS_DENIED_ERROR' ? 'DB_AUTHENTICATION_FAILED'
+      : ['ER_DBACCESS_DENIED_ERROR', 'ER_TABLEACCESS_DENIED_ERROR', 'ER_COLUMNACCESS_DENIED_ERROR', 'ER_PROCACCESS_DENIED_ERROR', 'ER_SPECIFIC_ACCESS_DENIED_ERROR'].includes(error.code) ? 'DB_PERMISSION_DENIED'
+        : classification === 'EXECUTOR' ? 'SERVER_REJECTED' : classification;
+    throw new DatabaseFailure(classification, dispatched, reason);
   } finally {
     signal.removeEventListener('abort', close); close();
   }

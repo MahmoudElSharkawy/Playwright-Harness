@@ -6,6 +6,7 @@ import {data, fingerprint, id, keys, oneOf, requireThat, typedValue, protectedRe
 import {createScenarioState, requireScenarioState, initializeStorage, writeScenario, finishScenario, rememberSensitive, publicValue as checkedPublicValue, checkWorkWindow, requireObservationCapacity} from '../sequential/state.mjs';
 import {databaseCapabilities, validateDatabaseOperation, bindDatabase, select, expected} from './definition.mjs';
 import {DatabaseFailure, bounded, credentials} from './shared.mjs';
+import {scopeDatabaseRequest} from './scope.mjs';
 import * as sqlserver from './sqlserver-driver.mjs';
 import * as postgresql from './postgresql-driver.mjs';
 import * as mysql from './mysql-driver.mjs';
@@ -130,7 +131,7 @@ export function createDatabaseRuntime(run, inputRoots, {signal, resolveCredentia
               }
               resolvedBindings = bindings;
             }
-            const request = bindDatabase(d, resolvedBindings);
+            const request = scopeDatabaseRequest(target, bindDatabase(d, resolvedBindings));
             if (!authCache.has(operation.target)) {
               const auth = credentials(await bounded(() => resolveCredential({reference: target.connectionRef, target: operation.target, destination: {server: target.server, port: target.port ?? driver.port, database: target.database, schema: target.schema}, signal: controller.signal}), controller.signal));
               remember(auth.user); remember(auth.password); authCache.set(operation.target, auth);
@@ -181,7 +182,8 @@ export function createDatabaseRuntime(run, inputRoots, {signal, resolveCredentia
           if (current.effect.certainty === 'confirmed') current.effect.resourceIds.push(existing.id);
           existing.lifecycle = {...existing.lifecycle, status: complete ? 'completed' : phase === 'RESTORE' && response?.affectedRows === 0 ? 'conflict' : 'failed', attemptId: current.identity.attemptId, evidenceIds: [proof], ...(phase === 'RESTORE' ? {guard: {kind: 'version', evidenceIds: [proof]}} : {})};
         }
-        evidence(current, 'observation', {target: operation.target, dispatched: current.effect.certainty !== 'not-executed', effect: current.effect.certainty, ...(failure ? {reason: failure.reason} : {})});
+        const reason = failure?.reason ?? authorization.reason;
+        evidence(current, 'observation', {target: operation.target, dispatched: current.effect.certainty !== 'not-executed', effect: current.effect.certainty, ...(reason ? {reason} : {})});
         current.endedAt = Date.now();
         if (current.outcome === 'SUCCESS' && current.endedAt > (phaseNumber === 3 ? cleanupStartedAt + run.inputs.limits.cleanupTimeoutMs : run.deadlineAt)) {
           current.outcome = 'INFRASTRUCTURE_FAILURE'; current.failureClass = 'TIMEOUT';

@@ -1,6 +1,6 @@
 import {keys, requireThat} from '../execution-core/data.mjs';
 
-// Shared by the two concrete drivers; native messages never enter public results.
+// Native messages never enter public results.
 export class DatabaseFailure extends Error {
   constructor(classification, dispatched = false, reason = classification) {super(`Database execution failed: ${reason}.`); this.classification = classification; this.dispatched = dispatched; this.reason = reason;}
 }

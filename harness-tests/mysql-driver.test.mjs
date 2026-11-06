@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import mysql from 'mysql2';
-import {parameter, normalized, validateTarget, validateGrants, executeMysql} from '../scripts/lib/database/mysql-driver.mjs';
+import {parameter, normalized, validateTarget, executeMysql} from '../scripts/lib/database/mysql-driver.mjs';
 
 test('native MySQL bindings reject coercion and preserve exact values and microseconds', () => {
   const bind = (type, value, metadata = {}) => parameter({type, value, ...metadata});
@@ -49,20 +49,14 @@ test('MySQL targets use one ordinary database namespace', () => {
   assert.doesNotThrow(() => validateTarget({...target, server: '127.0.0.1', trustServerCertificate: true}));
 });
 
-test('SHOW GRANTS admits only direct DML on the exact database', () => {
-  const grants = ['GRANT USAGE ON *.* TO `runner`@`%`', 'GRANT SELECT, INSERT, UPDATE, DELETE ON `HarnessMysql`.* TO `runner`@`%`'];
-  assert.doesNotThrow(() => validateGrants(grants, 'HarnessMysql', 'runner@%', false));
-  const check = value => validateGrants([...grants, value], 'HarnessMysql', 'runner@%', false);
-  for (const grant of ['GRANT ALL PRIVILEGES ON `HarnessMysql`.* TO `runner`@`%`', 'GRANT SELECT ON *.* TO `runner`@`%`',
-    'GRANT SELECT ON `Other`.* TO `runner`@`%`', 'GRANT SELECT ON `HarnessMysql`.`Items` TO `runner`@`%`',
-    'GRANT SELECT (`Id`) ON `Other`.`Items` TO `runner`@`%`', 'GRANT SELECT ON `HarnessMysql`.* TO `runner`@`%` WITH GRANT OPTION',
-    'GRANT `reader`@`%` TO `runner`@`%`', 'GRANT PROXY ON `admin`@`%` TO `runner`@`%`',
-    'GRANT SYSTEM_USER ON *.* TO `runner`@`%`', 'REVOKE SELECT ON `Other`.* FROM `runner`@`%`',
-    'GRANT SELECT ON `HarnessMysql`.* TO `another`@`%`']) assert.throws(() => check(grant));
-  assert.throws(() => validateGrants([grants[0]], 'HarnessMysql', 'runner@%', false));
-  assert.throws(() => validateGrants(['GRANT SELECT ON `Test_Db`.* TO `runner`@`%`'], 'Test_Db', 'runner@%', false));
-  assert.doesNotThrow(() => validateGrants(['GRANT SELECT ON `Test\\_Db`.* TO `runner`@`%`'], 'Test_Db', 'runner@%', false));
-  assert.doesNotThrow(() => validateGrants(['GRANT SELECT ON `Test_Db`.* TO `runner`@`%`'], 'Test_Db', 'runner@%', true));
+test('direct MySQL driver calls cannot bypass scope validation', async t => {
+  const connect = t.mock.method(mysql, 'createConnection', () => {throw Error('Do not connect');});
+  const target = {engine: 'mysql', server: 'localhost', database: 'HarnessMysql'};
+  const request = {text: 'DELETE FROM OutsideMysql.Items', parameters: [], capability: 'dbDml'};
+  await assert.rejects(executeMysql(target, {user: 'runner', password: randomUUID()}, request,
+    {signal: new AbortController().signal, timeoutMs: 1000, maxRows: 10, maxResponseBytes: 100}),
+  error => error.reason === 'DB_SCOPE_DENIED' && !error.dispatched);
+  assert.equal(connect.mock.callCount(), 0);
 });
 
 test('already-cancelled MySQL execution opens no connection', async () => {

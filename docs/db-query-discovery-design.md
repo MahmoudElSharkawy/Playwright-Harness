@@ -26,7 +26,7 @@ soft-delete and status semantics from source evidence; metadata cannot do that.
    target, `dbSelect` and `dbExploration`. Unknown names use a bounded literal
    table-name hint in the configured schema before inspecting matched tables.
    Fixed metadata requests use the existing
-   driver and its principal preflight, deadlines, cancellation and result limits.
+   driver and its destination verification, deadlines, cancellation and result limits.
    No caller-authored metadata SQL or row samples are accepted. Evidence binds
    the selected scenario, run, target fingerprint, engine and configured schema.
 3. A query candidate is derived from that evidence and source-grounded intent.

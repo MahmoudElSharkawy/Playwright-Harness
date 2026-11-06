@@ -5,6 +5,9 @@
 - Add bounded IDs-first ADO candidate discovery, compact bug previews and local
   receipt-based recovery for bug and test-case publication. Lost creation IDs
   require user confirmation. New requests omit harness tags and History hashes.
+- Allow broader database accounts for authorized SELECT, INSERT, UPDATE and
+  DELETE on SQL Server, PostgreSQL and MySQL. Resolve direct SQL references
+  against the selected database and schema before dispatch. (#147)
 
 ## 4.3.2 — Reliable ADO validation and portable updates
 

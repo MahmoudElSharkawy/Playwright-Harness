@@ -37,7 +37,7 @@
     "probe:browser": "node scripts/probes/browser.mjs",
     "probe:observed-api": "node scripts/probes/observed-api.mjs",
     "test:api": "node --test harness-tests/api-runtime.test.mjs",
-    "test:database": "node --test harness-tests/database-runtime.test.mjs",
+    "test:database": "node --test harness-tests/database-runtime.test.mjs harness-tests/database-scope.test.mjs",
     "probe:database": "node scripts/probes/sqlserver.mjs",
     "test:db-discovery": "node --test --test-concurrency=1 harness-tests/database-schema.test.mjs harness-tests/database-discovery.test.mjs harness-tests/database-discovery-report.test.mjs",
     "probe:discovered-db": "node scripts/probes/sqlserver.mjs --discovery",

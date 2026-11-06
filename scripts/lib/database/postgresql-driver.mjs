@@ -2,6 +2,7 @@ import pg from 'pg';
 import {requireThat, integer} from '../execution-core/data.mjs';
 import {DatabaseFailure, bounded, credentials} from './shared.mjs';
 import {quoteIdentifier} from './postgresql-syntax.mjs';
+import {scopeDatabaseRequest} from './scope.mjs';
 
 export function validateTarget(target) {
   requireThat(target?.engine === 'postgresql' && typeof target.server === 'string' && /^[A-Za-z0-9.-]+$/.test(target.server), 'PostgreSQL needs an explicit server.');
@@ -55,21 +56,7 @@ export function normalized(value, oid) {
   throw new DatabaseFailure('EXECUTOR', true, 'UNSUPPORTED_RESULT');
 }
 
-const scopeQuery = `SELECT current_database() AS database_name, current_user AS login,
- NOT (r.rolsuper OR r.rolcreatedb OR r.rolcreaterole OR r.rolreplication OR r.rolbypassrls) AS ordinary_role,
- NOT has_database_privilege(current_user,current_database(),'CREATE,TEMPORARY') AS ordinary_database,
- EXISTS (SELECT 1 FROM pg_namespace n WHERE n.nspname=$1 AND has_schema_privilege(current_user,n.oid,'USAGE')) AS target_usage,
- NOT EXISTS (SELECT 1 FROM pg_roles other WHERE other.rolname<>current_user AND pg_has_role(current_user,other.oid,'MEMBER')) AS no_memberships,
- NOT EXISTS (SELECT 1 FROM pg_namespace n WHERE has_schema_privilege(current_user,n.oid,'CREATE')) AS no_schema_create,
- NOT EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
-  WHERE n.nspname !~ '^pg_' AND n.nspname<>'information_schema' AND c.relkind IN ('r','p','v','m','f') AND
-   (pg_has_role(current_user,c.relowner,'USAGE') OR has_table_privilege(current_user,c.oid,'TRUNCATE,REFERENCES,TRIGGER') OR has_any_column_privilege(current_user,c.oid,'REFERENCES')
-    OR (n.nspname<>$1 AND (has_table_privilege(current_user,c.oid,'SELECT,INSERT,UPDATE,DELETE') OR has_any_column_privilege(current_user,c.oid,'SELECT,INSERT,UPDATE'))))) AS scoped_tables,
- NOT EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE c.relkind='S' AND n.nspname<>$1
-  AND has_sequence_privilege(current_user,c.oid,'USAGE,SELECT,UPDATE')) AS scoped_sequences,
- NOT EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname !~ '^pg_'
-  AND n.nspname<>'information_schema' AND n.nspname<>$1 AND has_function_privilege(current_user,p.oid,'EXECUTE')) AS scoped_functions
- FROM pg_roles r WHERE r.rolname=current_user`;
+const destinationSql = 'SELECT current_database() AS database_name, session_user AS login';
 
 const restorationQuery = `SELECT EXISTS (SELECT 1 FROM pg_class t JOIN pg_namespace n ON n.oid=t.relnamespace
  JOIN pg_attribute a ON a.attrelid=t.oid AND a.attname=$3 AND a.attnum>0 AND NOT a.attisdropped
@@ -79,18 +66,20 @@ const restorationQuery = `SELECT EXISTS (SELECT 1 FROM pg_class t JOIN pg_namesp
 
 /** Own one native connection/transaction per operation, with server-enforced read-only reads. */
 export async function executePostgresql(target, auth, request, {signal, timeoutMs, maxRows, maxResponseBytes}) {
-  validateTarget(target); auth = credentials(auth); const values = request.parameters.map(parameter);
+  validateTarget(target); auth = credentials(auth);
+  if (signal.aborted) throw new DatabaseFailure(signal.reason === 'TIMEOUT' ? 'TIMEOUT' : 'CANCELLED');
+  request = scopeDatabaseRequest(target, request);
+  const values = request.parameters.map(parameter);
   if (request.guard) {
     requireThat((request.guard.schema ?? target.schema) === target.schema && request.guard.versionColumn === 'xmin', 'Restoration is outside the configured table scope.');
     const version = request.parameters.find(p => p.name === request.guard.versionParameter);
     requireThat(version?.type === 'xid' && version.value !== null, 'Restoration requires a concrete xmin.');
   }
-  if (signal.aborted) throw new DatabaseFailure(signal.reason === 'TIMEOUT' ? 'TIMEOUT' : 'CANCELLED');
   const client = new pg.Client({host: target.server, port: target.port ?? 5432, database: target.database, ...auth,
     ssl: target.encrypt === false ? false : {rejectUnauthorized: !target.trustServerCertificate}, sslnegotiation: 'postgres', replication: 'false', client_encoding: 'UTF8',
     connectionTimeoutMillis: Math.min(timeoutMs, 5000), statement_timeout: timeoutMs, lock_timeout: timeoutMs, idle_in_transaction_session_timeout: timeoutMs,
     application_name: 'playwright-pom-harness', pipeline: false, binary: false,
-    options: '-c search_path=pg_catalog -c timezone=UTC -c datestyle=ISO,YMD -c standard_conforming_strings=on'});
+    options: '-c search_path=pg_catalog,pg_temp -c timezone=UTC -c datestyle=ISO,YMD -c standard_conforming_strings=on'});
   client.on('error', () => {}); // Native diagnostics may contain SQL or confidential data.
   let dispatched = false, closing, ownFailure;
   const close = () => closing ??= client.end();
@@ -98,11 +87,8 @@ export async function executePostgresql(target, auth, request, {signal, timeoutM
   const query = (text, args = []) => bounded(() => client.query({text, values: args, queryMode: 'extended', types: {getTypeParser: oid => value => normalized(value, oid)}}), signal);
   try {
     await bounded(() => client.connect(), signal);
-    const scoped = (await query(scopeQuery, [target.schema])).rows[0];
-    requireThat(scoped?.database_name === target.database && scoped.login === auth.user
-      && ['ordinary_role','ordinary_database','target_usage','no_memberships','no_schema_create','scoped_tables','scoped_sequences','scoped_functions'].every(name => scoped[name] === true),
-    'Database principal must be dedicated to the configured schema without broad privileges.');
-    await query("SELECT set_config('search_path',$1,false)", [`${quoteIdentifier(target.schema)},pg_catalog`]);
+    const destination = (await query(destinationSql)).rows[0];
+    if (destination?.database_name !== target.database || destination.login !== auth.user) throw new DatabaseFailure('EXECUTOR', false, 'DB_SCOPE_DENIED');
     if (request.guard) requireThat((await query(restorationQuery, [target.schema, request.guard.table, request.guard.identityColumn])).rows[0]?.supported === true, 'Restoration requires a unique identity on an ordinary table and server-owned xmin.');
     await query(request.capability === 'dbSelect' ? 'BEGIN READ ONLY' : 'BEGIN READ WRITE');
     if (signal.aborted) throw new DatabaseFailure(signal.reason === 'TIMEOUT' ? 'TIMEOUT' : 'CANCELLED');
@@ -133,7 +119,9 @@ export async function executePostgresql(target, auth, request, {signal, timeoutM
     if (signal.aborted) throw new DatabaseFailure(signal.reason === 'TIMEOUT' ? 'TIMEOUT' : 'CANCELLED', dispatched);
     if (error instanceof DatabaseFailure) throw error;
     const code = error.code, classification = code === '57014' || code === '55P03' ? 'TIMEOUT' : ['ECONNRESET','ECONNREFUSED','EPIPE','ENOTFOUND','57P01','08006'].includes(code) || /connection.*(?:terminated|closed)/i.test(error.message ?? '') ? 'TRANSPORT' : ['28P01','28000','3D000'].includes(code) ? 'UNAVAILABLE' : 'EXECUTOR';
-    throw new DatabaseFailure(classification, dispatched, typeof code === 'string' && /^[0-9A-Z]{5}$/.test(code) && classification === 'EXECUTOR' ? 'SERVER_REJECTED' : classification);
+    const reason = ['28P01', '28000'].includes(code) ? 'DB_AUTHENTICATION_FAILED' : code === '42501' ? 'DB_PERMISSION_DENIED'
+      : typeof code === 'string' && /^[0-9A-Z]{5}$/.test(code) && classification === 'EXECUTOR' ? 'SERVER_REJECTED' : classification;
+    throw new DatabaseFailure(classification, dispatched, reason);
   } finally {
     signal.removeEventListener('abort', cancel); let timer;
     try {await Promise.race([close(), new Promise((_, reject) => {timer = setTimeout(() => reject(new DatabaseFailure('EXECUTOR', dispatched, 'CONNECTION_CLEANUP')), 1500);})]);}
