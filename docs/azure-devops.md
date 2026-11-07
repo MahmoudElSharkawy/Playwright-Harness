@@ -106,6 +106,14 @@ only execution-tests.
 
 ## Story links, identity and changes
 
+Bug creation uses `ado.bugs.storyLink`: omitted/`"parent"` creates the bug as a
+child of its bound story, `"related"`/legacy `true` uses Related, and `false`
+adds no story link. Without a bound story no relation is added. Existing bug
+references are unchanged. Review the relation before approval; server rejection
+never silently changes it. Existing dispatched requests keep their original links
+on recovery. See [bug reporting](bug-reporting.md#story-links) for upgrade actions,
+strict story-revision checks and target-team backlog limitations.
+
 Story fetch follows Tested By by default. `--links` allows tested-by, child and
 related; cases changed by relink-story become Related. Selected URLs must match the
 configured collection/project name-or-ID form; aliases/foreign forms fail rather

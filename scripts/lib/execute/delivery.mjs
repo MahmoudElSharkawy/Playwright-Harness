@@ -52,7 +52,7 @@ export function draftMetadata(drafts, fp, defaults, title) {
   return output;
 }
 export {allowedFieldValue} from '../integrations/bug-fields.mjs';
-async function prepareBug(client, view, defect, revisions, metadata, drafts) {
+async function prepareBug(client, view, defect, revisions, metadata, drafts, retainedRequest) {
   const defaults = client.configuration.bugs ?? {}, edited = draftMetadata(drafts, defect.fingerprint, defaults, defect.title), changed = revisions.find(item => item.caseId === defect.caseId);
   const fields = {...defaults.fields, ...(defaults.tags?.length ? {'System.Tags': defaults.tags.join('; ')} : {}), ...edited.fields, [metadata.mappings.title]: edited.title};
   let paths = {};
@@ -75,7 +75,13 @@ async function prepareBug(client, view, defect, revisions, metadata, drafts) {
   if (!inspection.ready) {const details = inspection.problems.map(problem => problem.code === 'allowed-value' ? `Bug field ${problem.field} is outside its allowed values.` : ['unavailable', 'read-only'].includes(problem.code) ? `Bug field ${problem.field} is unavailable or read-only.` : problem.code === 'required' ? `Required bug field ${problem.field} needs a supplied value or configured default.` : `${problem.field}:${problem.code}`); const error = new Error(`Bug fields need review: ${details.join(' ')}`); error.fieldProblems = inspection.problems; error.fieldReview = inspection.review; throw error;}
   await validatePath(client, 'areas', fields['System.AreaPath']); await validatePath(client, 'iterations', fields['System.IterationPath']);
   const body = Object.entries(fields).map(([name, value]) => ({op: 'add', path: `/fields/${name}`, value}));
-  if (defaults.storyLink && view.source.scope.kind === 'story') {await workItem(client, view.source.scope.storyId); body.push({op: 'add', path: '/relations/-', value: {rel: 'System.LinkTypes.Related', url: `${client.configuration.organizationUrl}/_apis/wit/workitems/${view.source.scope.storyId}`}});}
+  // A dispatched request keeps its approved links across a change to the default.
+  if (retainedRequest) body.push(...retainedRequest.body.filter(row => row.path === '/relations/-'));
+  else if (defaults.storyLink !== false && view.source.scope.kind === 'story') {
+    await workItem(client, view.source.scope.storyId);
+    const rel = defaults.storyLink === true || defaults.storyLink === 'related' ? 'System.LinkTypes.Related' : 'System.LinkTypes.Hierarchy-Reverse';
+    body.push({op: 'add', path: '/relations/-', value: {rel, url: `${client.configuration.organizationUrl}/_apis/wit/workitems/${view.source.scope.storyId}`}});
+  }
   await client.validateWorkItem(metadata.type, body, {fresh: true});
   const request = {route: `wit/workitems/$${encodeURIComponent(metadata.type)}?api-version=7.1`, method: 'POST', body};
   const fieldSpecifications = metadata.fields.filter(field => Object.hasOwn(fields, field.referenceName)).map(({referenceName, type, isIdentity}) => ({referenceName, type, isIdentity}));
@@ -270,7 +276,7 @@ async function fileBugs(client, roots, executionId, view, revisions, options) {
     const legacy = row && row.state !== 'INTENT' && !row.operation && await legacyBugOperation(client, row, view, options.approvedPreview);
     if (legacy) {prepared.push({row, defect, ...legacy}); continue;}
     metadata ??= await bugMetadata(client);
-    prepared.push({row, ...await prepareBug(client, view, defect, revisions, metadata, drafts)});
+    prepared.push({row, ...await prepareBug(client, view, defect, revisions, metadata, drafts, row && row.state !== 'INTENT' ? row.operation?.request : undefined)});
   }
   const attachments = view.reportAttachments ?? [];
   for (const record of attachments) {consumerPath(roots, record.path); const bytes = readVerifiedEvidence({runRoot: roots.projectRoot}, record); requireThat(bytes.length <= (client.configuration.bugs?.maxAttachmentBytes ?? 2 * 1024 * 1024), 'Bug evidence exceeds the destination attachment bound.');}

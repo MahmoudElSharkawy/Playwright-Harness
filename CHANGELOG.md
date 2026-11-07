@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Create story-scoped bugs as children by default and add severity/priority advice
+  to the editable review using actual project choices and evidenced impact. Keep
+  user values, configured defaults and original links on dispatched recovery. (#149)
+  **Upgrade:** set `ado.bugs.storyLink` to `false` to keep the former unlinked
+  default, or `"related"`/existing `true` for Related. Refresh undispatched previews.
+  Target-team backlog/revision behavior still needs the authorized live spike;
+  source revision checks remain strict.
+
 - Add bounded IDs-first ADO candidate discovery, compact bug previews and local
   receipt-based recovery for bug and test-case publication. Lost creation IDs
   require user confirmation. New requests omit harness tags and History hashes.

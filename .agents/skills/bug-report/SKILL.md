@@ -56,6 +56,11 @@ expected/actual results, source/story links, environment, confirmation limits an
 eligible/rejected attachments with reasons. Add applicable destination fields,
 including required/custom fields, valid choices and unresolved values.
 
+Propose severity and priority using the playbook's
+[impact rubric](references/playbook.md#severity-and-priority-advice). Read actual
+project choices first, preserve configured defaults and user choices, and give a
+one-line reason in this table. Unknown impact or an unfamiliar scale gets no guess.
+
 Users may add/edit/remove draft details and optional fields. Save their corrections
 and redisplay the revised table. Required fields stay visible until valid;
 system-managed fields are read-only. Reconcile edits against source requirements

@@ -26,6 +26,43 @@ custom fields and missing choices belong in this same review. Explain relevant
 source conflicts outside the table. Apply requested changes to the working draft,
 preserving original source/execution records, and repeat only affected checks.
 
+## Severity and priority advice
+
+Read the destination's actual Severity/Priority fields and allowed values from
+the full preview (`bugs[].review`, or `fieldReview` when validation is blocked).
+The compact preview omits some optional-field metadata; read its saved preview
+file when needed. If metadata is unavailable, explain the gap without guessing.
+
+Use the following rubric only when the project's exposed values and meanings
+match. These labels describe the standard scale; they are not universal defaults.
+
+| Observed impact | Suggested Severity | Suggested Priority |
+|---|---|---|
+| Blocks the flow with no workaround | `1 - Critical` | `1` |
+| Wrong or missing data in an issued artifact, or a broken core path with a workaround | `2 - High` | `1` or `2` |
+| Localized functional error, visible but non-blocking | `3 - Medium` | `2` or `3` |
+| Minor cosmetic or edge polish | `4 - Low` | `3` or `4` |
+
+- Base impact on the user's account and verified evidence. Within a priority
+  range, choose only when evidenced urgency supports it; otherwise leave priority
+  unresolved. Do not invent a workaround, business impact or urgency.
+- Give no suggestion for a field whose impact, availability, allowed values or
+  scale is unclear. Show available choices and the gap. Missing Severity does not
+  prevent supported Priority advice. Never translate unfamiliar labels by guess.
+- Preserve user-entered values and configured `bugs.fields` defaults instead of
+  replacing them automatically with advice. Explicit user edits still win.
+- Otherwise use existing draft `severity` and `priority` keys (the same keys in
+  `file-bugs --drafts`). Show each proposed value with a one-line reason in the
+  editable chat table. The user may change or decline it before approval; save
+  the retained values and redisplay edits through the existing workflow.
+
+Examples, when these standard choices are exposed: checkout blocked without a
+workaround suggests Critical/1; a cosmetic alignment issue explicitly described
+as low urgency suggests Low/4. "Sometimes the screen behaves strangely" supplies
+too little impact evidence for a suggestion. A configured Priority of 2 remains
+2 unless the user changes it. Keep reasons in chat; add no advice object or
+provenance fields. Existing validation and approval cover final filed values.
+
 ## Confirmation and evidence
 
 Retain user confirmation separately from agent reproduction and record uncertain
