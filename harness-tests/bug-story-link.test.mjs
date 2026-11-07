@@ -7,6 +7,7 @@ import {executionFixture, executeApi} from './fixtures/execute.mjs';
 import {createAdoClient, adoRequestFingerprint} from '../scripts/lib/integrations/ado-client.mjs';
 import {validateAdoConfiguration} from '../scripts/lib/integrations/config.mjs';
 import {fingerprint} from '../scripts/lib/execution-core/data.mjs';
+import {registerEvidence} from '../scripts/lib/execution-core/index.mjs';
 import {deliverExecution} from '../scripts/lib/execute/delivery.mjs';
 import {ownedFile, writeJson} from '../scripts/lib/execute/storage.mjs';
 import {prepareBugReport, readBugReport, editBugReport, previewBugReport, compactBugPreview, approveBugReport, fileBugReport, reconcileBugReport} from '../scripts/lib/bug-report/index.mjs';
@@ -90,8 +91,8 @@ test('severity and priority use existing draft edits, picklists, payloads and ap
 });
 
 // Reconstruct an approved pre-upgrade request, with the same schema/configuration.
-async function pendingBeforeUpgrade(t, relation, identity) {
-  const ado = await adoFixture(t), deps = dependencies(ado), raw = input();
+async function pendingBeforeUpgrade(t, relation, identity, bugs = {}) {
+  const ado = await adoFixture(t, {bugs}), deps = dependencies(ado), raw = input();
   writeFileSync(join(ado.roots.projectRoot, 'proof.log'), 'Synthetic sanitized status=500');
   raw.evidence = [{path: 'proof.log', kind: 'log', origin: 'user', sanitized: true, verification: {privacy: true, relevance: true}, context: 'Status response'}];
   const state = prepareBugReport(ado.roots, 'old', raw), prepared = await previewBugReport(ado.roots, 'old', deps);
@@ -139,4 +140,89 @@ test('approved parent relation is required at readback and user-confirmed reconc
   const recovered = await reconcileBugReport(ado.roots, 'readback', {fingerprint: lost.fingerprint, requestFingerprint: lost.requestFingerprint, adoId: 800}, deps);
   assert.equal(recovered.bugs[0].state, 'UNCERTAIN'); assert.equal(recovered.bugs[0].id, null); assert.match(recovered.bugs[0].reason, /approved relationship/);
   assert.equal(creates(ado).length, 1);
+});
+
+for (const [before, after, relation] of [[{}, false, null], [{storyLink: true}, 'related', related], [{storyLink: 'parent'}, false, parent]]) {
+  for (const identity of ['known', 'unknown']) test(`report recovery keeps ${relation ?? 'unlinked'} after storyLink becomes ${after} (${identity})`, async t => {
+    const {ado, hash, row} = await pendingBeforeUpgrade(t, relation, identity, before);
+    ado.config.bugs = {storyLink: after}; const deps = dependencies(ado);
+    if (identity === 'unknown') {
+      assert.equal((await fileBugReport(ado.roots, 'old', hash, deps)).bugs[0].state, 'UNCERTAIN');
+      await reconcileBugReport(ado.roots, 'old', {fingerprint: row.fingerprint, requestFingerprint: row.requestFingerprint, adoId: 800}, deps);
+    }
+    const preview = await previewBugReport(ado.roots, 'old', deps); assert(preview.ready); approveBugReport(ado.roots, 'old', preview.hash);
+    assert.equal((await fileBugReport(ado.roots, 'old', preview.hash, deps)).bugs[0].state, 'COMPLETED');
+    assert.deepEqual(ado.state.items.get(800).relations.filter(row => row.rel !== 'AttachedFile').map(row => row.rel), relation ? [relation] : []);
+    assert.equal(creates(ado).length, 1); assert.equal(ado.state.attachments.size, 1);
+  });
+}
+
+for (const change of ['fields', 'metadata', 'evidence', 'settings']) test(`link-only recovery does not admit changed ${change}`, async t => {
+  const {ado} = await pendingBeforeUpgrade(t, null, 'known'); ado.config.bugs = {storyLink: false};
+  if (change === 'fields') ado.config.bugs.fields = {'Microsoft.VSTS.Common.Priority': 2};
+  if (change === 'settings') ado.config.bugs.maxAttachmentBytes = 1024 * 1024;
+  if (change === 'metadata') ado.state.fault = ({path, send}) => {if (path === 'wit/workitemtypes/bug/fields') {send({value: ado.state.fieldDefinitions.map(field => ({...field, name: `Revised ${field.referenceName}`}))}); return true;}};
+  if (change === 'evidence') {
+    const state = readBugReport(ado.roots, 'old');
+    editBugReport(ado.roots, 'old', {head: state.head, evidence: []});
+  }
+  const deps = dependencies(ado), preview = await previewBugReport(ado.roots, 'old', deps); assert(preview.ready); approveBugReport(ado.roots, 'old', preview.hash);
+  await assert.rejects(fileBugReport(ado.roots, 'old', preview.hash, deps), /Previously dispatched bug plan changed/);
+  assert.equal(creates(ado).length, 1); assert.equal(ado.state.attachments.size, 0);
+});
+
+for (const rejected of [false, true]) test(`a ${rejected ? 'rejected' : 'undispatched'} creation still needs approval after a link setting changes`, async t => {
+  const {ado, deps, hash} = await pendingBeforeUpgrade(t, null, 'not-created');
+  let approvalHash = hash;
+  if (rejected) {
+    const preview = await previewBugReport(ado.roots, 'old', deps); approveBugReport(ado.roots, 'old', preview.hash);
+    approvalHash = preview.hash;
+    ado.state.fault = ({path, url, send}) => {if (path === 'wit/workitems/$bug' && !url.searchParams.has('validateOnly')) {send({}, 400); return true;}};
+    await assert.rejects(fileBugReport(ado.roots, 'old', preview.hash, deps), /incomplete/); ado.state.fault = undefined;
+  }
+  ado.config.bugs = {storyLink: 'related'}; const changed = dependencies(ado);
+  await assert.rejects(fileBugReport(ado.roots, 'old', approvalHash, changed), /preview changed/i);
+  const preview = await previewBugReport(ado.roots, 'old', changed); approveBugReport(ado.roots, 'old', preview.hash);
+  assert.equal((await fileBugReport(ado.roots, 'old', preview.hash, changed)).bugs[0].state, 'COMPLETED');
+  assert.equal(ado.state.nextBug, 801); assert.equal(ado.state.items.get(800).relations[0].rel, related);
+});
+
+async function pendingExecution(t, bugs = {}) {
+  const ado = await adoFixture(t, {bugs}), execution = await executionFixture(t, {organizationUrl: ado.config.organizationUrl, storyId: 200, handler: (_, res) => {res.writeHead(500); res.end('{}');}});
+  execution.apiStep(); execution.freeze(); const run = await executeApi(execution);
+  const observations = JSON.parse(readFileSync(join(run.roots.runRoot, 'observations.json'), 'utf8')), attempt = observations.scenarios[0].attempts[0], path = 'evidence/context.png';
+  writeFileSync(join(run.roots.runRoot, path), Buffer.from('89504e470d0a1a0a', 'hex'));
+  const record = registerEvidence(run.run, run.roots, {id: 'context', kind: 'screenshot', identity: attempt.identity, path, sanitized: true});
+  observations.evidence.push(record); attempt.evidenceIds.push(record.id); writeJson(join(run.roots.runRoot, 'observations.json'), observations);
+  const deliver = options => deliverExecution(execution.roots, execution.executionId, 'file-bugs', options, dependencies(ado, execution.roots));
+  const preview = await deliver({});
+  ado.state.fault = ({path, req, send}) => {if (path === 'wit/workitems/800' && req.method === 'GET') {send({}, 503); return true;}};
+  await assert.rejects(deliver({execute: true, approvedPlan: preview.planHash}), /ADO request-rejected/); ado.state.fault = undefined;
+  return {ado, execution, preview, deliver};
+}
+
+for (const [before, after, relation] of [[{storyLink: false}, 'parent', null], [{storyLink: true}, 'related', related], [{}, false, parent]]) test(`execution attachment recovery keeps ${relation ?? 'unlinked'} after storyLink becomes ${after}`, async t => {
+  const {ado, preview, deliver} = await pendingExecution(t, before); ado.config.bugs = {storyLink: after};
+  assert.equal((await deliver({execute: true, approvedPlan: preview.planHash})).bugs[0].state, 'COMPLETED');
+  assert.deepEqual(ado.state.items.get(800).relations.filter(row => row.rel !== 'AttachedFile').map(row => row.rel), relation ? [relation] : []);
+  assert.equal(creates(ado).length, 1); assert.equal(ado.state.attachments.size, 1);
+});
+
+for (const change of ['project', 'deleted', 'revision']) test(`execution attachment recovery rejects a story with changed ${change}`, async t => {
+  const {ado, preview, deliver} = await pendingExecution(t, {storyLink: true});
+  if (change === 'project') ado.state.items.get(200).fields['System.TeamProject'] = 'foreign-project';
+  if (change === 'deleted') ado.state.items.delete(200);
+  if (change === 'revision') {ado.state.items.get(200).rev++; ado.state.items.get(200).fields['System.Title'] = 'Changed source requirements';}
+  await assert.rejects(deliver({execute: true, approvedPlan: preview.planHash}), /project ownership|request-rejected|story revision changed/i);
+  assert.equal(creates(ado).length, 1); assert.equal(ado.state.attachments.size, 0);
+});
+
+for (const storyLink of [undefined, false]) test(`unrelated story revision blocks a fresh execution creation (storyLink ${storyLink})`, async t => {
+  const ado = await adoFixture(t, {bugs: storyLink === undefined ? {} : {storyLink}}), execution = await executionFixture(t, {organizationUrl: ado.config.organizationUrl, storyId: 200, handler: (_, res) => {res.writeHead(500); res.end('{}');}});
+  execution.apiStep(); execution.freeze(); await executeApi(execution);
+  const deliver = options => deliverExecution(execution.roots, execution.executionId, 'file-bugs', options, dependencies(ado, execution.roots)), preview = await deliver({});
+  ado.state.items.get(200).rev++; ado.state.items.get(200).fields['System.Title'] = 'Changed source requirements';
+  await assert.rejects(deliver({}), /story revision changed/i);
+  await assert.rejects(deliver({execute: true, approvedPlan: preview.planHash}), /story revision changed/i);
+  assert.equal(creates(ado).length, 0);
 });

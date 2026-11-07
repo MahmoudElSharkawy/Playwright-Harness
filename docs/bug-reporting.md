@@ -319,8 +319,10 @@ automatic downgrade or reduced-payload retry. A lost response remains uncertain.
 
 After an upgrade, undispatched plans whose payload changes need a new preview
 and approval. Dispatched requests retain their original relation choice while
-finishing approved work; recovery does not re-parent or recreate the bug. Other
-field, source, evidence and destination checks still apply.
+finishing approved work; recovery does not re-parent or recreate the bug. Changing
+only `storyLink` (including the upgrade opt-out and `true` to `"related"`) preserves
+that original plan when its fields, current schema, attachments and other settings
+still match. Other field, source, evidence and destination checks still apply.
 
 ADO maintains the reciprocal story link; its effect on story revisions and the
 target team's board behavior needs an authorized disposable-project spike. That
@@ -329,6 +331,10 @@ suitable backlog layout: bugs tracked as requirements can cause same-category
 nesting and ordering problems. Use Related or no link where appropriate. Story
 revision checks remain strict; a changed story still requires source review,
 including on attachment resume or another report for the same captured story.
+Direct execute-test `file-bugs` also rechecks the bound story's identity, project
+and captured revision before preview or filing, even with story linking disabled.
+A changed or missing captured revision requires capturing and reviewing current
+source; no own-link revision exception is inferred from fixtures.
 
 ## Severity and priority advice
 

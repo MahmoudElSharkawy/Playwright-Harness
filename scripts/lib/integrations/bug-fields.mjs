@@ -132,7 +132,11 @@ export async function loadBugSchema(client, {refresh = false} = {}) {
     return {name: state.name, category: state.category};
   });
   const schema = {type, fields, states, mappings, limitations: [...LIMITATIONS]};
-  return {...schema, fingerprint: fingerprint({organizationUrl: client.configuration.organizationUrl, project: client.configuration.project, ...schema, configuration: configured})};
+  return {...schema, fingerprint: bugSchemaFingerprint(schema, client.configuration)};
+}
+
+export function bugSchemaFingerprint({type, fields, states, mappings, limitations}, configuration) {
+  return fingerprint({organizationUrl: configuration.organizationUrl, project: configuration.project, type, fields, states, mappings, limitations, configuration: configuration.bugs ?? {}});
 }
 
 /** Local validation is a preflight, never a claim that hidden server rules, paths or identities passed. */

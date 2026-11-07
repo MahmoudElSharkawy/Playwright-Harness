@@ -13,7 +13,7 @@ import {EXECUTION_DOCUMENT, readBounded, writeJson, ownedFile} from './storage.m
 import {withTransition} from './lock.mjs';
 import {consumerPath, packageRoot} from '../consumer-paths.mjs';
 import {digest} from '../execution-core/data.mjs';
-import {loadBugSchema, inspectBugFields, allowedFieldValue} from '../integrations/bug-fields.mjs';
+import {loadBugSchema, bugSchemaFingerprint, inspectBugFields, allowedFieldValue} from '../integrations/bug-fields.mjs';
 import {discoverWorkItems} from '../integrations/ado-discovery.mjs';
 
 const workItem = async (client, id) => {const item = await client.read(`wit/workitems/${adoId(id)}?$expand=relations&api-version=7.1`); requireThat(adoId(item.id) === adoId(id) && Number.isInteger(item.rev) && item.rev > 0 && item.fields, 'Bug readback has an invalid identity.'); await client.requireWorkItemProject(item); return item;};
@@ -78,7 +78,6 @@ async function prepareBug(client, view, defect, revisions, metadata, drafts, ret
   // A dispatched request keeps its approved links across a change to the default.
   if (retainedRequest) body.push(...retainedRequest.body.filter(row => row.path === '/relations/-'));
   else if (defaults.storyLink !== false && view.source.scope.kind === 'story') {
-    await workItem(client, view.source.scope.storyId);
     const rel = defaults.storyLink === true || defaults.storyLink === 'related' ? 'System.LinkTypes.Related' : 'System.LinkTypes.Hierarchy-Reverse';
     body.push({op: 'add', path: '/relations/-', value: {rel, url: `${client.configuration.organizationUrl}/_apis/wit/workitems/${view.source.scope.storyId}`}});
   }
@@ -255,6 +254,10 @@ async function fileBugs(client, roots, executionId, view, revisions, options) {
     return reconcileBugs(client, roots, executionId, view, options);
   }
   requireThat(options.confirmation === undefined, 'Use reconciliation to confirm a missing ADO ID.');
+  if (view.source.scope.kind === 'story') {
+    const story = await workItem(client, view.source.scope.storyId);
+    if (!view.reportDefects) requireThat(Number.isSafeInteger(view.source.scopeRev) && story.rev === view.source.scopeRev, 'Executed story revision changed or is unavailable; capture and review current source before filing.');
+  }
   const journal = ledger(roots, executionId, 'bugs'), save = () => journal.save(journal.value), drafts = options.draftValues ?? (options.drafts ? readBounded(options.drafts) : {}), {defects, skipped} = view.reportDefects ? {defects: view.reportDefects, skipped: []} : deliverableDefects(view, options.include), prepared = [], filed = [];
   if (options.referenceId !== undefined) {
     requireThat(view.reportDefects && !journal.value.entries.some(row => row.state !== 'INTENT'), 'Reconcile the original bug delivery before changing it to an existing reference.');
@@ -281,6 +284,16 @@ async function fileBugs(client, roots, executionId, view, revisions, options) {
   const attachments = view.reportAttachments ?? [];
   for (const record of attachments) {consumerPath(roots, record.path); const bytes = readVerifiedEvidence({runRoot: roots.projectRoot}, record); requireThat(bytes.length <= (client.configuration.bugs?.maxAttachmentBytes ?? 2 * 1024 * 1024), 'Bug evidence exceeds the destination attachment bound.');}
   const bugPreview = item => item.legacyPreview ?? {fingerprint: item.defect.fingerprint, type: item.type, fields: item.fields, request: item.request, review: item.review, schemaFingerprint: item.schemaFingerprint, revision: item.revisions, attachments};
+  // Old receipts hash storyLink in the schema. Accept only a full original-plan match.
+  for (const item of prepared) {
+    if (!item.row?.operation || item.row.state === 'INTENT' || item.row.planHash === fingerprint(bugPreview(item))) continue;
+    const {storyLink, ...settings} = client.configuration.bugs ?? {};
+    for (const value of [undefined, 'parent', 'related', true, false]) {
+      const bugs = {...settings, ...(value === undefined ? {} : {storyLink: value})};
+      const schemaFingerprint = bugSchemaFingerprint(metadata, {...client.configuration, bugs});
+      if (item.row.planHash === fingerprint(bugPreview({...item, schemaFingerprint}))) {item.schemaFingerprint = schemaFingerprint; break;}
+    }
+  }
   const preview = {mode: 'dry-run', executionId, revisions, skipped, bugs: prepared.map(bugPreview), ...(filed.length ? {completed: filed} : {})};
   preview.planHash = fingerprint({executionId, revisions, skipped, bugs: preview.bugs, destination: {organizationUrl: client.configuration.organizationUrl, project: client.configuration.project}});
   if (!options.execute) return preview;
