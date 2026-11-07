@@ -2,22 +2,33 @@
 
 ## Unreleased
 
+## 4.3.3 — Story-linked ADO bugs and broader database access
+
+### Upgrade actions
+
+- Download the 4.3.3 archive and checksum from the same release, verify SHA-256,
+  and re-run setup in each consumer project. Review customized managed instructions,
+  then reload skills or restart the host.
+- Story-scoped bugs are now created as children of their story by default. Set
+  `ado.bugs.storyLink` to `false` to keep the former unlinked default, or to
+  `"related"` (or the existing `true`) for a Related link. Refresh undispatched bug
+  previews.
+- Existing execution histories need no migration.
+
+### Changes
+
 - Preserve pending bug attachments across link-only configuration changes using
   the exact original plan. Recheck story ownership on execution recovery and
   reject stale story revisions before direct bug previews or filing. The live ADO
   revision/board spike remains pending. (#149)
-
 - Create story-scoped bugs as children by default and add severity/priority advice
   to the editable review using actual project choices and evidenced impact. Keep
   user values, configured defaults and original links on dispatched recovery. (#149)
-  **Upgrade:** set `ado.bugs.storyLink` to `false` to keep the former unlinked
-  default, or `"related"`/existing `true` for Related. Refresh undispatched previews.
   Target-team backlog/revision behavior still needs the authorized live spike;
   source revision checks remain strict.
-
 - Add bounded IDs-first ADO candidate discovery, compact bug previews and local
   receipt-based recovery for bug and test-case publication. Lost creation IDs
-  require user confirmation. New requests omit harness tags and History hashes.
+  require user confirmation. New requests omit harness tags and History hashes. (#146)
 - Allow broader database accounts for authorized SELECT, INSERT, UPDATE and
   DELETE on SQL Server, PostgreSQL and MySQL. Resolve direct SQL references
   against the selected database and schema before dispatch. (#147)
