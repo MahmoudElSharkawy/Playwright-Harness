@@ -17,6 +17,18 @@ Generated titles are bounded to ADO's limit; invalid edited titles identify the
 fingerprint before any filing writes. Legacy eligibility is checked per occurrence.
 ReproSteps and verified evidence remain source-derived.
 
+For severity/priority suggestions, follow the single
+[bug-report impact rubric](../../bug-report/references/playbook.md#severity-and-priority-advice).
+Use actual project choices and supported impact/urgency, preserve configured
+defaults and user choices, and give one-line reasons in the editable chat review.
+Store accepted values in the existing draft keys; unclear evidence gets no guess.
+
+Story-scoped bugs use a Parent link by default. `ado.bugs.storyLink` accepts
+`"parent"`, `"related"`, legacy `true` (Related), or `false` (no link). Without
+story scope no story link is added. Review the relation before approving creation;
+existing references are never re-parented. See the
+[configuration and recovery limits](../../../../docs/bug-reporting.md#story-links).
+
 Defect fingerprints stay local. Review possible duplicates in the bug-report
 workflow; delivery never chooses an existing bug. `file-bugs <exec> --reconcile`
 uses local requests and receipts to verify known IDs and shows candidates for

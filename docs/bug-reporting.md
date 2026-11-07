@@ -300,6 +300,51 @@ fields and relationships. Resume only missing work using the same approval.
 Legacy unfinished records without an exact request retain their receipts for
 manual inspection. Confirmed uploads and creates are not repeated.
 
+## Story links
+
+A new story-scoped bug is created as a child of its bound story. Configure
+`ado.bugs.storyLink` in `.harness/integrations.json`:
+
+| Value | Relation from the new bug to the story |
+|---|---|
+| Omitted or `"parent"` | Parent |
+| `"related"` or existing `true` | Related |
+| `false` | None |
+
+No story means no story relation. Selecting an existing bug reference adds no
+link. The existing preview includes the relation and approval covers it. The
+relation is sent in the create request and checked at readback and reconciliation.
+Definitive rejection preserves the draft and sanitized diagnostics; there is no
+automatic downgrade or reduced-payload retry. A lost response remains uncertain.
+
+After an upgrade, undispatched plans whose payload changes need a new preview
+and approval. Dispatched requests retain their original relation choice while
+finishing approved work; recovery does not re-parent or recreate the bug. Changing
+only `storyLink` (including the upgrade opt-out and `true` to `"related"`) preserves
+that original plan when its fields, current schema, attachments and other settings
+still match. Other field, source, evidence and destination checks still apply.
+
+ADO maintains the reciprocal story link; its effect on story revisions and the
+target team's board behavior needs an authorized disposable-project spike. That
+live spike has not been run for this change. API acceptance does not guarantee a
+suitable backlog layout: bugs tracked as requirements can cause same-category
+nesting and ordering problems. Use Related or no link where appropriate. Story
+revision checks remain strict; a changed story still requires source review,
+including on attachment resume or another report for the same captured story.
+Direct execute-test `file-bugs` also rechecks the bound story's identity, project
+and captured revision before preview or filing, even with story linking disabled.
+A changed or missing captured revision requires capturing and reviewing current
+source; no own-link revision exception is inferred from fixtures.
+
+## Severity and priority advice
+
+The agent uses the [impact rubric](../.agents/skills/bug-report/references/playbook.md#severity-and-priority-advice)
+with actual project choices, shows proposed values and one-line reasons in the
+editable chat table, and saves accepted values in existing `severity`/`priority`
+draft keys. User values and configured defaults are preserved; explicit user edits
+win. Unknown impact, missing fields or unfamiliar scales produce no guessed
+suggestion. Reasons stay in chat. Final values use existing validation and approval.
+
 ## Evaluation scenarios
 
 These are synthetic evaluation inputs, not claims of executed product behavior.
