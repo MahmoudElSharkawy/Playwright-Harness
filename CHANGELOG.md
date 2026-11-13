@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Reuse unchanged story and suite cases and compatible refinement in execute-test.
+  Refresh affected cases by revision and summarize membership changes. Rerun a
+  frozen selection under a fresh execution ID with zero Azure DevOps calls. (#153)
+
 ## 4.3.3 — Story-linked ADO bugs and broader database access
 
 ### Upgrade actions

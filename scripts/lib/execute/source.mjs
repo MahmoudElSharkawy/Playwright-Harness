@@ -28,11 +28,23 @@ export function substitute(text, bindings) {
   const values = new Map(entries.map(([name, value]) => [name.toLowerCase(), value])), names = entries.map(([name]) => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
   return String(text).replace(new RegExp(`(?<![\\w@.])@(${names})(?!\\w)`, 'gi'), (_, name) => String(values.get(name.toLowerCase())));
 }
-/** Convert a tolerant read-only ADO snapshot without writing legacy fetch artifacts. */
-export function prepareSource(fetched, scope) {
+/** Convert a tolerant ADO selection, retaining screened scenarios for unchanged cases. */
+export function prepareSource(fetched, scope, previous) {
   const scenarios = [], excluded = [...(fetched.excluded ?? [])], cases = [], sharedSteps = {};
+  const reused = new Set(fetched.reusedCaseIds);
   for (const tc of fetched.cases) {
+    for (const [id, revision] of Object.entries(tc.sharedRevisions ?? {})) {
+      requireThat(!Object.hasOwn(sharedSteps, id) || sharedSteps[id] === revision, 'ADO shared steps changed during preparation. Retry preparation.');
+    }
     try {
+      if (previous && reused.has(tc.id)) {
+        const saved = previous.scenarios.filter(scenario => scenario.caseId === tc.id);
+        requireThat(scenarios.length + saved.length <= 500, 'iteration-limit');
+        scenarios.push(...saved);
+        cases.push(previous.cases.find(item => item.id === tc.id));
+        Object.assign(sharedSteps, tc.sharedRevisions);
+        continue;
+      }
       requireThat(tc.steps?.length > 0 && tc.steps.length <= 1000, tc.steps?.length ? 'step-limit' : 'no-steps');
       requireThat(!tc.sharedParameterSet, 'shared-parameter-set');
       const names = [...parameterNames(tc.parameters)];

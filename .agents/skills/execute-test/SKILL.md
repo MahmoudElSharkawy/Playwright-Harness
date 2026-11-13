@@ -15,6 +15,7 @@ Accept `/execute-test suite <id> [plan <id>] [on <environment>] [checkpoint]`
 or `/execute-test story <id> [on <environment>]`. Execute sequentially, pausing
 on blockers. In checkpoint mode, pause after each case. Authorization already
 given by the user remains in force for ordinary permitted application operations.
+For an exact whole-selection rerun, accept `from-snapshot <exec>` on either form.
 
 Published [test-case-design](../test-case-design/SKILL.md) cases enter through these
 existing ADO routes. Preserve preparation, explicit inputs/variations, all ordered
@@ -43,10 +44,14 @@ metadata/identity/semantics or cleanup remains a case gap. Return to refinement
 instead of mutating a frozen step; report saved paths separately from verdicts.
 
 1. Run `prepare suite|story <id> [--plan <id>] [--environment <name>] [--checkpoint]`.
-   Read the captured source and exclusions. Edit only its draft `refinement.json`,
+   Share the returned case changes and exclusions. Review the affected source and
+   draft entries. Carry forward the scenario IDs listed in `reusedRefinement`.
+   Edit only the new draft `refinement.json`,
    following [refinement](references/refinement.md); then run `freeze <exec>`.
    Complete required login, API/DB operations, provenance and cleanup declarations.
    Resolve `readiness.ready: false` for the selected scenario before starting it.
+   For `from-snapshot`, pass `--from-snapshot <exec>` to `prepare`. Use its fresh
+   execution ID and already frozen inputs. Start at step 2 after checking readiness.
 2. Read [protocol](references/protocol.md) and [verdicts](references/verdicts.md).
    Run `next <exec>` and drive its live commands. Adapt to the observed UI using
    fresh refs. Every expected condition needs a check, grounded observation or
@@ -76,6 +81,8 @@ instead of mutating a frozen step; report saved paths separately from verdicts.
    Present complete drafts and remaining investigation/repair items for edits,
    selection or deferral. Reuse verified run evidence. Drafting does not
    authorize filing or additional reproduction.
+   For a frozen rerun, use local failure review and draft preparation only. Defer
+   ADO discovery, preview, and publication to explicitly requested online delivery.
    Read [delivery](references/delivery.md) only when ADO delivery is requested.
    Preview first. External writes require `--execute`; the request must authorize
    the concrete delivery. Story scope supports bugs only.

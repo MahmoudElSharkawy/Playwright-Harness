@@ -3,14 +3,11 @@ import {existsSync} from 'node:fs';
 import {join} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {projectArgument, consumerPath} from './lib/consumer-paths.mjs';
-import {loadEnvironment} from './lib/project-config.mjs';
-import {loadAdoConfiguration, adoId} from './lib/integrations/config.mjs';
-import {createAdoClient} from './lib/integrations/ado-client.mjs';
-import {createAdoTestSource} from './lib/integrations/ado-source.mjs';
+import {adoId} from './lib/integrations/config.mjs';
 import {requireThat, fingerprint} from './lib/execution-core/data.mjs';
-import {prepareSource} from './lib/execute/source.mjs';
-import {draftRefinement, freezeExecution, scopedReadiness} from './lib/execute/refinement.mjs';
-import {createExecution, readExecution, readFrozen, readBounded, readOptional, ownedFile, publishExclusive} from './lib/execute/storage.mjs';
+import {prepareExecution, prepareFrozenRerun} from './lib/execute/prepare.mjs';
+import {freezeExecution, scopedReadiness} from './lib/execute/refinement.mjs';
+import {readExecution, readFrozen, readBounded, readOptional, ownedFile, publishExclusive} from './lib/execute/storage.mjs';
 import {startScenario, runHostedScenario, deleteLogin, importLogin} from './lib/execute/host.mjs';
 import {controlDirectory, sendCommand, delay} from './lib/execute/mailbox.mjs';
 import {isSnapshotRef} from './lib/browser/snapshot.mjs';
@@ -28,18 +25,15 @@ function options(args, values = [], flags = []) {
   }
   return {positional, opt};
 }
-export async function executeMain(roots, args) {
+export async function executeMain(roots, args, dependencies = {}) {
   const [command, ...rest] = args;
   if (command === '_host') {await runHostedScenario(roots, ...rest); return undefined;}
   if (command === 'prepare') {
-    const {positional, opt} = options(rest, ['plan', 'environment', 'diagnostics'], ['checkpoint']);
-    requireThat(positional.length === 2 && ['suite', 'story'].includes(positional[0]) && ['end', 'per-step', 'off'].includes(opt.diagnostics ?? 'end'), 'prepare suite|story <id> [--plan <id>] [--environment <name>] [--checkpoint] [--diagnostics end|per-step|off]');
-    const configured = loadAdoConfiguration(roots), client = createAdoClient({...configured, roots}), source = createAdoTestSource(client), selected = adoId(positional[1]), environment = loadEnvironment(roots, opt.environment);
-    const planId = positional[0] === 'suite' ? adoId(opt.plan ?? configured.configuration.planId) : undefined;
-    const fetched = positional[0] === 'suite' ? await source.fetchSuite(planId, selected, {tolerant: true}) : await source.fetchStory(selected, ['tested-by'], {tolerant: true});
-    const captured = prepareSource(fetched, positional[0] === 'suite' ? {kind: 'suite', planId, suiteId: selected} : {kind: 'story', storyId: selected});
-    const refinement = draftRefinement(captured, environment), result = createExecution(roots, captured, refinement, {checkpoint: opt.checkpoint, diagnostics: opt.diagnostics});
-    return {...result, status: 'PREPARED', refinement: `${result.directory}/refinement.json`, readiness: scopedReadiness(roots, {environment, scenarios: refinement.scenarios})};
+    const {positional, opt} = options(rest, ['plan', 'environment', 'diagnostics', 'from-snapshot'], ['checkpoint']);
+    const [kind, selected] = positional;
+    requireThat(positional.length === 2 && ['suite', 'story'].includes(kind) && ['end', 'per-step', 'off'].includes(opt.diagnostics ?? 'end'), 'prepare suite|story <id> [--plan <id>] [--environment <name>] [--checkpoint] [--diagnostics end|per-step|off] [--from-snapshot <exec>]');
+    if (opt['from-snapshot']) return prepareFrozenRerun(roots, kind, adoId(selected), opt);
+    return prepareExecution(roots, kind, adoId(selected), opt, dependencies);
   }
   const executionId = rest[0]; requireThat(executionId, 'An execution ID is required.');
   if (command === 'freeze') return freezeExecution(roots, executionId);

@@ -49,7 +49,10 @@ export function createAdoTestSource(client) {
         if (node.kind === 'step') result.push(node);
         else {
           requireValue(!trail.includes(node.ref), 'ADO shared steps contain a cycle.');
-          if (!shared.has(node.ref)) shared.set(node.ref, (await batch([node.ref])).get(node.ref));
+          if (!shared.has(node.ref)) {
+            try {shared.set(node.ref, (await batch([node.ref])).get(node.ref));}
+            catch (error) {error.sourceReadFatal = true; throw error;}
+          }
           const item = shared.get(node.ref);
           if (tolerant || includeRevisions) {
             dependencies[node.ref] = item.rev;
@@ -82,7 +85,7 @@ export function createAdoTestSource(client) {
         ...(tolerant ? {contentSha256: fingerprint({title: f['System.Title'], steps: f['Microsoft.VSTS.TCM.Steps'], parameters: f['Microsoft.VSTS.TCM.Parameters'] ?? null, dataTable: dataTableXml}), sharedRevisions: dependencies, sharedParameters: [...sharedParameters]} : {})});
       if (tolerant || includeRevisions) requireValue(Number.isInteger(items.get(id).rev) && items.get(id).rev > 0, 'ADO case revision is incomplete.');
       } catch (error) {
-        if (!tolerant || error instanceof AdoError || error.ownershipFatal) throw error;
+        if (!tolerant || error instanceof AdoError || error.ownershipFatal || error.sourceReadFatal) throw error;
         if (cases.at(-1)?.id === id) cases.pop();
         const reason = /cycle/.test(error.message) ? 'shared-step-cycle' : /nesting/.test(error.message) ? 'shared-step-depth' : ['step-limit', 'shared-step-limit', 'parameters-without-data'].includes(error.message) ? error.message : /Shared parameter/.test(error.message) ? 'shared-parameter-set' : /absent/.test(error.message) ? 'no-steps' : 'unparsable-steps';
         excluded.push({id, reason});
@@ -90,13 +93,28 @@ export function createAdoTestSource(client) {
     }
     return tolerant ? {cases, excluded} : cases;
   }
+  async function revisions(ids) {
+    const items = await batch([...new Set(ids)], ['System.Id', 'System.Rev', 'System.TeamProject']);
+    return new Map([...items].map(([id, item]) => {requireValue(Number.isInteger(item.rev) && item.rev > 0, 'ADO revision is incomplete.'); return [id, item.rev];}));
+  }
+  async function readSelection(ids, options) {
+    if (!options.previousCases) {
+      const loaded = await readCases(ids, options);
+      return options.tolerant ? loaded : {cases: loaded};
+    }
+    const previous = new Map(options.previousCases.map(tc => [tc.id, tc]));
+    const retained = ids.filter(id => previous.has(id)), current = await revisions(retained);
+    const candidates = retained.map(id => previous.get(id)).filter(tc => current.get(tc.id) === tc.rev);
+    const shared = await revisions(candidates.flatMap(tc => Object.keys(tc.sharedRevisions).map(Number)));
+    const reused = new Map(candidates.filter(tc => Object.entries(tc.sharedRevisions).every(([id, rev]) => shared.get(Number(id)) === rev)).map(tc => [tc.id, tc]));
+    const loaded = await readCases(ids.filter(id => !reused.has(id)), options);
+    const fetched = new Map(loaded.cases.map(tc => [tc.id, tc]));
+    return {...loaded, cases: ids.map(id => reused.get(id) ?? fetched.get(id)).filter(Boolean), caseIds: ids, reusedCaseIds: [...reused.keys()]};
+  }
   return Object.freeze({
     listPlans: () => client.list('testplan/plans?api-version=7.1'),
     listSuites: plan => client.list(`testplan/Plans/${adoId(plan)}/suites?api-version=7.1`),
-    async revisions(ids) {
-      const items = await batch([...new Set(ids)], ['System.Id', 'System.Rev', 'System.TeamProject']);
-      return new Map([...items].map(([id, item]) => {requireValue(Number.isInteger(item.rev) && item.rev > 0, 'ADO revision is incomplete.'); return [id, item.rev];}));
-    },
+    revisions,
     async fetchSuite(plan, suite, options = {}) {
       const planId = adoId(plan), suiteId = adoId(suite);
       const metadata = await client.read(`testplan/Plans/${planId}/suites/${suiteId}?api-version=7.1`);
@@ -104,8 +122,8 @@ export function createAdoTestSource(client) {
       const entries = await client.list(`testplan/Plans/${planId}/Suites/${suiteId}/TestCase?api-version=7.1&excludeFlags=0`);
       const ids = [...new Set(entries.map(entry => adoId(entry.workItem?.id)))];
       requireValue(ids.length > 0 && ids.length <= 500, 'ADO suite needs 1–500 test cases.');
-      const loaded = await readCases(ids, options);
-      return {planId, suiteId, suiteName: metadata.name, organizationUrl: client.configuration.organizationUrl, project: client.configuration.project, ...(options.tolerant ? loaded : {cases: loaded})};
+      const loaded = await readSelection(ids, options);
+      return {planId, suiteId, suiteName: metadata.name, organizationUrl: client.configuration.organizationUrl, project: client.configuration.project, ...loaded};
     },
     async fetchStory(story, links = ['tested-by'], options = {}) {
       const storyId = adoId(story);
@@ -136,9 +154,9 @@ export function createAdoTestSource(client) {
       }
       requireValue(ids.length > 0, 'ADO story has no linked test cases for the selected link types.');
       requireValue(ids.length <= 500, 'ADO story needs 1–500 linked test cases.');
-      const loaded = await readCases(ids, options);
+      const loaded = await readSelection(ids, options);
       return {storyId, storyTitle: item.fields['System.Title'], links: selected, organizationUrl: client.configuration.organizationUrl, project: client.configuration.project,
-        ...(options.tolerant ? {cases: loaded.cases, excluded: [...excluded, ...loaded.excluded]} : {cases: loaded, excluded}),
+        ...loaded, excluded: [...excluded, ...(loaded.excluded ?? [])],
         ...(options.tolerant || options.includeRevisions ? {storyRev: item.rev} : {})};
     }
   });

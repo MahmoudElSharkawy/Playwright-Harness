@@ -83,6 +83,27 @@ case and 500 scenarios overall. Substitution is declared, bounded, case-insensit
 and longest-first. Sensitive values are withheld; shared parameter sets are unsupported.
 Synthesized missing expectations always require review.
 
+Repeat the same `prepare` command to run the current selection. Preparation
+checks story links or suite membership and case/shared-step revisions. It reuses
+unchanged cases and compatible frozen refinement, refreshes affected cases, and returns
+added, updated and removed case IDs. Any revision change refreshes the affected
+case. The case manifest and readable specs under `execution-tests/` reflect the
+current selection, with refinement logs preserved. Saved executions remain available
+for reference. Review fresh draft entries, freeze, and run the new execution ID.
+
+To repeat the captured selection, pass `--from-snapshot` with the saved execution ID.
+
+```sh
+npx --no pom-harness execute prepare story 400 --from-snapshot <previous-exec>
+npx --no pom-harness execute prepare suite 4521 --from-snapshot <previous-exec>
+```
+
+The response is `FROZEN` and includes the new execution ID and `parentExecutionId`.
+Use `next` and `report` with the new ID. The rerun uses the saved environment and
+case inputs, with fresh runtime sessions and results. Preparation, execution,
+reporting and local defect drafts require zero Azure DevOps calls. Explicit ADO
+delivery uses the usual online checks. Live application credentials still apply.
+
 Refine source actions into ordered conditions, bind checks to expected source data,
 identify targets/credentials, and declare read-only and cleanup contracts. Freeze
 checks exact coverage, condition segmentation, monotonic phases and traceable expected
@@ -91,8 +112,8 @@ API/DB checks map one-to-one. The receipt binds source, refinement, environment 
 compiled operations. Readiness is scoped to selected targets/secret references.
 
 Source/refinement/freeze aggregate limits are 500 scenarios, 64 MiB, 2,000,000 nodes
-and depth 32. Execution uses the captured snapshot, not later edits. Revisions are
-checked again only for bug/result delivery, in batches of at most 200; reports show
+and depth 32. Execution uses the captured snapshot. During bug/result delivery,
+the harness checks revisions in batches of at most 200. Reports show
 the saved check's timestamp and executed/current revisions without another remote read.
 Changed cases are excluded from publication unless `--include-changed` is selected.
 

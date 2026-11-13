@@ -224,17 +224,21 @@ for (const mode of ['near-limit', 'oversized', 'post-dispatch']) test(`H3 H5 L4:
   else {assert.equal(receipt.status, mode === 'oversized' ? 'REPLY_OMITTED' : 'ERROR'); assert.equal(receipt.dispatch.dispatched, true); assert.equal(receipt.dispatch.nativeCommand, 'click');}
   assert.equal(receipt.requestId, duplicateId); assert.equal(collectExecution(f.roots, f.executionId).runs[0].state, 'ASSESSED');
 });
-test('detached API-only host completes, reassesses, reports, and needs no browser or unrelated secrets', {timeout: 120000}, async t => {
+test('a frozen rerun completes in the detached API-only host and reports under its own execution ID', {timeout: 120000}, async t => {
   const f = await executionFixture(t), nativeTimeoutMs = process.platform === 'win32' ? 60000 : 15000;
   // This proves a real detached lifecycle, not a short deadline. Windows CIM
   // and ACL startup count against the frozen scenario's budget too.
   if (process.platform === 'win32') f.refinement.limits = {timeoutMs: 60000, cleanupTimeoutMs: 10000};
-  f.apiStep(); f.freeze(); const started = await startScenario(f.roots, f.executionId, {readyTimeoutMs: nativeTimeoutMs}); assert.equal(started.status, 'READY');
-  const directory = controlDirectory(f.roots, f.executionId, started.runId), reply = await sendCommand(directory, started.runId, ['begin-step', 's001'], {timeoutMs: nativeTimeoutMs}); assert.equal(reply.status, 'STEP_COMPLETE'); assert.equal(reply.assertions[0].status, 'PASS');
+  f.apiStep(); f.freeze();
+  const clone = await executeMain(f.roots, ['prepare', 'suite', '2', '--from-snapshot', f.executionId], {environment: {}});
+  assert.notEqual(clone.executionId, f.executionId);
+  const started = await executeMain(f.roots, ['next', clone.executionId]); assert.equal(started.status, 'READY');
+  const directory = controlDirectory(f.roots, clone.executionId, started.runId), reply = await sendCommand(directory, started.runId, ['begin-step', 's001'], {timeoutMs: nativeTimeoutMs}); assert.equal(reply.status, 'STEP_COMPLETE'); assert.equal(reply.assertions[0].status, 'PASS');
   await waitForHost(directory, 'FINISHED', nativeTimeoutMs);
   assert.equal(await lockStatus(f.roots), null);
-  const view = collectExecution(f.roots, f.executionId); assert.equal(view.scenarios[0].status, 'PASS'); assert.equal(view.runs[0].result.scenarios[0].resources.length, 0); assert.equal(f.requests.length, 1);
-  const report = writeExecutionReport(f.roots, f.executionId); assert.equal(report.status, 'WRITTEN'); assert.equal(report.scenarios[0].methods.checked, 1);
+  const view = collectExecution(f.roots, clone.executionId); assert.equal(view.scenarios[0].status, 'PASS'); assert.equal(view.runs[0].result.scenarios[0].resources.length, 0); assert.equal(f.requests.length, 1);
+  assert.deepEqual(readFrozen(f.roots, f.executionId).execution.runs, []);
+  const report = writeExecutionReport(f.roots, clone.executionId); assert.equal(report.status, 'WRITTEN'); assert.equal(report.scenarios[0].methods.checked, 1);
   const pid = readBounded(join(directory, 'host.json')).pid; for (let i = 0; i < 10 && (await processInventory()).some(item => item.pid === pid); i++) await delay(100);
 });
 

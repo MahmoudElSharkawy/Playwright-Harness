@@ -9,6 +9,8 @@ import {createAdoTestSource, adoSuiteToSource, adoStoryToSource} from './ado-sou
 import {createAdoTestManagement, prepareLegacyPublication} from './ado-management.mjs';
 import {createAdoSourceControl} from './ado-delivery.mjs';
 import {slugify, pascalCase, renderSpec, selfTest} from './ado-steps.mjs';
+import {writeText} from '../execute/storage.mjs';
+import {withTransition} from '../execute/lock.mjs';
 
 const options = {
   'fetch-ado-suite': {values: ['plan', 'suite', 'list-suites', 'org', 'org-url', 'project', 'env', 'out', 'source-out'], flags: ['list-plans', 'force', 'dry-run', 'json', 'revisions']},
@@ -28,7 +30,14 @@ function argumentsFor(command, args) {
   }
   requireValue(!(output.execute && output['dry-run']), 'Choose preview or --execute, not both.'); return output;
 }
-const hash = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
+const fetchedFingerprint = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
+export function manifestSource(manifest) {
+  const {org, orgUrl, sourceFingerprint, environment, target, fetchedAt, suggestedFeature, suggestedSpecFile, suggestedDataFile,
+    explore, resolvedSpecFiles, pr, markedAutomated, executionId, excluded, ...scope} = manifest;
+  if (!Array.isArray(scope.cases) || scope.cases.some(tc => !tc || typeof tc !== 'object')) return undefined;
+  scope.cases = scope.cases.map(({specFile, stepCount, preservedRefinement, ...tc}) => tc);
+  return fetchedFingerprint(scope) === sourceFingerprint ? scope : undefined;
+}
 function sameDestination(manifest, configuration, planId, suiteId) {
   requireValue((manifest.orgUrl ?? manifest.organizationUrl) === configuration.organizationUrl && manifest.project === configuration.project && adoId(manifest.planId) === planId && adoId(manifest.suiteId) === suiteId, 'Suite manifest does not match the configured ADO destination and scope.');
 }
@@ -47,14 +56,14 @@ function pointers(roots, manifest) {
   return found;
 }
 /** One consumer write flow for every fetch scope; the scope object is exactly what the fingerprint covers. */
-function writeFetched(roots, opt, config, {name, scope, title, same, convert, extra = {}}) {
+export function writeFetched(roots, opt, config, {name, scope, title, same, convert, extra = {}, execution}) {
   const folder = join(opt.out ?? 'execution-tests', name), path = join(folder, '_suite.json');
-  const previous = readConsumerJson(roots, path, true);
-  if (previous) same(previous);
-  const sourceFingerprint = hash(scope), feature = pascalCase(title);
-  const legacy = readConsumerJson(roots, 'config/project.json', true) ?? {}, environment = opt.env ?? legacy.defaultEnvironment;
+  const previous = execution ? execution.previous : readConsumerJson(roots, path, true);
+  if (previous && same) same(previous);
+  const sourceFingerprint = fetchedFingerprint(scope), feature = pascalCase(title);
+  const legacy = execution ? {} : readConsumerJson(roots, 'config/project.json', true) ?? {}, environment = opt.env ?? legacy.defaultEnvironment;
   if (environment !== undefined) requireValue(/^[A-Za-z0-9_-]+$/.test(environment), 'Invalid environment identifier.');
-  const target = environment ? (readConsumerJson(roots, `environments/${environment}.json`, true)?.portalUrl ?? '') : '';
+  const target = execution ? execution.target : environment ? (readConsumerJson(roots, `environments/${environment}.json`, true)?.portalUrl ?? '') : '';
   const manifest = {...scope, ...extra, org: config.organizationUrl, orgUrl: config.organizationUrl, sourceFingerprint, environment: environment ?? null, target, fetchedAt: new Date().toISOString(),
     suggestedFeature: feature, suggestedSpecFile: `tests/${feature}Tests.spec.ts`, suggestedDataFile: `data/${feature}Data.json`, cases: []};
   for (const key of ['explore', 'resolvedSpecFiles', 'pr', 'markedAutomated']) if (previous?.[key] !== undefined) manifest[key] = previous[key];
@@ -62,9 +71,16 @@ function writeFetched(roots, opt, config, {name, scope, title, same, convert, ex
   for (const tc of scope.cases) {
     const old = previous?.cases?.find(item => item.id === tc.id), specFile = old?.specFile ?? `tc-${tc.id}-${slugify(tc.title)}.md`;
     requireValue(typeof specFile === 'string' && !/[\\/]/.test(specFile) && specFile.endsWith('.md'), 'Invalid legacy spec filename.');
-    const file = consumerPath(roots, join(folder, specFile)), preserved = !opt.force && existsSync(file) && /^##\s+Refinement log/m.test(readFileSync(file, 'utf8'));
+    const file = consumerPath(roots, join(folder, specFile));
+    const existing = !opt.force && existsSync(file) ? readFileSync(file, 'utf8') : '';
+    const preserved = /^##\s+Refinement log/m.test(existing);
     manifest.cases.push({...tc, specFile, stepCount: tc.steps.length, preservedRefinement: preserved});
-    if (!preserved) files.push({path: join(folder, specFile), text: renderSpec({tc, ...scope, target, org: config.organizationUrl, project: config.project})});
+    if (!(execution?.reused.has(tc.id) && old && existing) && (execution || !preserved)) {
+      const spec = renderSpec({tc, ...scope, target, org: config.organizationUrl, project: config.project});
+      const log = execution ? existing.match(/^##\s+Refinement log[\s\S]*/m)?.[0] : undefined;
+      const text = log ? `${spec}\n${log}` : spec;
+      if (!execution || text !== existing) files.push({path: join(folder, specFile), text});
+    }
   }
   // Conversion must succeed before any compatibility output is changed.
   if (opt['source-out']) files.push({path: opt['source-out'], text: JSON.stringify(convert(scope), null, 2) + '\n'});
@@ -72,9 +88,19 @@ function writeFetched(roots, opt, config, {name, scope, title, same, convert, ex
   const destinations = files.map(file => consumerPath(roots, file.path));
   requireValue(new Set(destinations.map(file => process.platform === 'win32' ? file.toLowerCase() : file)).size === files.length, 'Output paths collide.');
   if (!opt['dry-run']) for (const file of files) {
-    mkdirSync(dirname(consumerPath(roots, file.path)), {recursive: true}); writeFileSync(consumerPath(roots, file.path), file.text);
+    const destination = consumerPath(roots, file.path);
+    if (execution) writeText(destination, file.text);
+    else {mkdirSync(dirname(destination), {recursive: true}); writeFileSync(destination, file.text);}
   }
   return {mode: opt['dry-run'] ? 'dry-run' : 'fetched', cases: scope.cases.length, files: files.map(file => file.path.replaceAll('\\', '/')), sourceFingerprint};
+}
+
+function writeCompatibilityFetch(roots, opt, config, input, inventory) {
+  if (opt['dry-run'] || !['win32', 'linux'].includes(process.platform)) return writeFetched(roots, opt, config, input);
+  const parent = consumerPath(roots, opt.out ?? 'execution-tests');
+  const standard = consumerPath(roots, 'execution-tests');
+  if (parent !== standard) return writeFetched(roots, opt, config, input);
+  return withTransition(roots, () => writeFetched(roots, opt, config, input), {key: `prepare-${input.name}`, inventory});
 }
 
 /** Existing command names; consumer IO stays here, remote responsibilities stay in adapters. */
@@ -88,7 +114,7 @@ export async function runCompatibility(command, argv, dependencies = {}) {
     if (opt['list-plans']) return source.listPlans();
     if (opt['list-suites']) return source.listSuites(opt['list-suites']);
     const suite = await source.fetchSuite(opt.plan ?? config.planId, opt.suite, {includeRevisions: Boolean(opt.revisions)});
-    return writeFetched(roots, opt, config, {name: `ado-suite-${suite.suiteId}`, scope: suite, title: suite.suiteName, same: previous => sameDestination(previous, config, suite.planId, suite.suiteId), convert: adoSuiteToSource});
+    return writeCompatibilityFetch(roots, opt, config, {name: `ado-suite-${suite.suiteId}`, scope: suite, title: suite.suiteName, same: previous => sameDestination(previous, config, suite.planId, suite.suiteId), convert: adoSuiteToSource}, dependencies.inventory);
   }
   if (command === 'fetch-ado-story') {
     requireValue(opt.story, 'Supply --story.');
@@ -96,7 +122,7 @@ export async function runCompatibility(command, argv, dependencies = {}) {
     const {excluded, ...story} = await createAdoTestSource(client).fetchStory(opt.story, opt.links?.split(',').map(value => value.trim()), {includeRevisions: Boolean(opt.revisions)});
     const same = previous => requireValue((previous.orgUrl ?? previous.organizationUrl) === config.organizationUrl && previous.project === config.project && previous.storyId === story.storyId
       && previous.planId === undefined && previous.suiteId === undefined, 'Story manifest does not match the configured ADO destination and scope.');
-    return {...writeFetched(roots, opt, config, {name: `ado-story-${story.storyId}`, scope: story, title: story.storyTitle, same, convert: adoStoryToSource, extra: {excluded}}), excluded};
+    return {...await writeCompatibilityFetch(roots, opt, config, {name: `ado-story-${story.storyId}`, scope: story, title: story.storyTitle, same, convert: adoStoryToSource, extra: {excluded}}, dependencies.inventory), excluded};
   }
   const management = createAdoTestManagement(client);
   if (command === 'edit-ado-cases') {
