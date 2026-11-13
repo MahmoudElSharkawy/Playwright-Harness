@@ -94,6 +94,12 @@ unless `--force`; previous destination identity is checked before reuse.
 changing the default legacy output. Use a fresh `--out` folder when comparing
 edited cases with frozen execution sources.
 
+`execute prepare` checks membership and revisions on repeat story or suite runs.
+It refreshes the same export folders from screened execution inputs, retaining
+refinement logs. The structured run capture supplies the execution inputs.
+Use `fetch-story` or `fetch-suite` for a raw case export. See
+[frozen reruns](manual-execution.md#start-refine-and-freeze) for local replay.
+
 Nested shared steps have cycle/depth limits. Missing/partial content fails rather
 than inventing assertions. Parameter metadata/table XML is retained; parameterized
 or incomplete semantics need explicit refinement before neutral conversion, which

@@ -50,14 +50,17 @@ export function readBounded(file, maximum = 2 * 1024 * 1024) {
   const bytes = readFileSync(file); requireThat(bytes.length <= maximum, 'Execution input exceeds its byte limit.'); return JSON.parse(bytes.toString('utf8'));
 }
 /** Atomic owner-only records; a caller selects exclusive creation for immutable receipts. */
-export function writeJson(file, value, {exclusive = false, maximum = 2 * 1024 * 1024, maxNodes = 20000, compact = false} = {}) {
-  const body = JSON.stringify(data(value, maximum, {maxNodes}), null, compact ? undefined : 2) + '\n';
-  requireThat(Buffer.byteLength(body) <= maximum, 'Execution data exceeds its serialized byte limit.');
+export function writeText(file, body, {exclusive = false} = {}) {
   mkdirSync(dirname(file), {recursive: true, mode: 0o700});
   if (exclusive) {publishExclusive(file, body); return;}
   const temporary = `${file}.${randomUUID()}.tmp`;
   try {writeFileSync(temporary, body, {flag: 'wx', mode: 0o600, flush: true}); commitFile(temporary, file);}
   finally {if (existsSync(temporary)) unlinkSync(temporary);}
+}
+export function writeJson(file, value, {exclusive = false, maximum = 2 * 1024 * 1024, maxNodes = 20000, compact = false} = {}) {
+  const body = JSON.stringify(data(value, maximum, {maxNodes}), null, compact ? undefined : 2) + '\n';
+  requireThat(Buffer.byteLength(body) <= maximum, 'Execution data exceeds its serialized byte limit.');
+  writeText(file, body, {exclusive});
 }
 export function createExecution(roots, source, refinement, options = {}) {
   const executionId = options.id ?? `execute-${randomUUID()}`, directory = executionDirectory(roots, executionId);
@@ -66,7 +69,10 @@ export function createExecution(roots, source, refinement, options = {}) {
   requireThat(source.scenarios.length <= 500 && refinement.scenarios.length <= 500, 'Execution exceeds 500 scenarios.');
   writeJson(join(directory, 'source.json'), source, {exclusive: true, ...EXECUTION_DOCUMENT});
   writeJson(join(directory, 'refinement.json'), refinement, {exclusive: true, ...EXECUTION_DOCUMENT});
-  writeJson(join(directory, 'execution.json'), {version: 1, id: executionId, createdAt: Date.now(), sourceFingerprint: fingerprint(source), runs: [], checkpoint: Boolean(options.checkpoint), diagnostics: options.diagnostics ?? 'end'}, {exclusive: true});
+  if (options.freeze) writeJson(join(directory, 'freeze.json'), options.freeze, {exclusive: true, ...EXECUTION_DOCUMENT});
+  writeJson(join(directory, 'execution.json'), {version: 1, id: executionId, createdAt: Date.now(), sourceFingerprint: fingerprint(source), runs: [], checkpoint: Boolean(options.checkpoint), diagnostics: options.diagnostics ?? 'end',
+    ...(options.parentExecutionId ? {parentExecutionId: options.parentExecutionId} : {}),
+    ...(options.freeze ? {freezeFingerprint: fingerprint(options.freeze), ...(options.guardRefs ? {guardRefs: options.guardRefs} : {})} : {})}, {exclusive: true});
   return {executionId, directory, scenarios: source.scenarios.length, exclusions: source.excluded};
 }
 export function readExecution(roots, executionId) {
