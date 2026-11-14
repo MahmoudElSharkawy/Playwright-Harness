@@ -130,6 +130,21 @@ Consolidate overlap while retaining meaningful role/input/state/integration/outc
 differences. No category or count quotas. Use consumer setup/data conventions and
 per-case/per-run ownership; include necessary cleanup in the actual ordered steps.
 
+Default to one negative case per field for related required-value, length, format
+and character checks supported by accepted requirements. Give each variation an
+exact input, trigger and observable expectation in the ordered steps. Restore
+the starting field or form state between checks and keep other fields valid.
+Map each requirement to its verifying steps. Cover accepted inputs and valid
+boundaries in positive cases. Split a field's checks when they need materially
+different setup, workflows or independent pass/fail reporting, and record the
+reason in the existing review notes.
+
+Give each distinct uniqueness or other business-rule failure its own case with
+independent starting data and otherwise valid inputs. Use the rule and required
+state to decide grouping. Submit, field blur and API calls describe how to trigger
+a check. Include combined failures only to verify an accepted combined-error or
+precedence rule. See the [registration example](../../../docs/test-case-design.md#registration-example).
+
 Case content is exactly ID, title, prerequisites, test data, coverage references,
 test type, scenario type and ordered action/observable-expectation pairs. Proposed
 action is a review control. Choose one test type: Functional, Accessibility,
@@ -159,6 +174,11 @@ review does not accept additional scope. An author-filled reviewer name, schema 
 not evidence of independent review. Fix findings and revalidate edited content.
 Record residual gaps after edits, selection and delivery. Never equate publication,
 approval or valid unchanged cases with passing execution.
+
+Ask the reviewer to check field grouping, explicit source-backed variations and
+their step mappings, isolated uniqueness scenarios and reasons for any splits.
+Use the existing verdicts for gaps, unsupported outcomes or unjustified grouping
+or splits. Unrun variations remain unverified in execution.
 
 Ask the reviewer: “Can another agent identify the actor, starting state, target,
 inputs, action, observable outcome and necessary cleanup without inventing business

@@ -466,6 +466,80 @@ claiming a successful download. File or notes failures return
 without a success/stale link or automatic full-chat dump; saved details remain
 available via an explicitly requested detailed read/chat fallback.
 
+### Registration example
+
+This fictional registration form asks for a username, email and mobile number.
+The accepted sample requirements define the feedback and the trigger for each check.
+
+- **REG-1** An empty username shows “Username is required” on Register.
+- **REG-2** A nonempty username shorter than 3 or longer than 20 characters shows
+  “Use 3–20 characters” on Register.
+- **REG-3** A username of valid length with any character outside ASCII letters
+  and digits shows “Use only letters and digits” on Register.
+- **REG-4** Leaving the email field with an already registered address shows
+  “Email already registered”.
+- **REG-5** Selecting Register with an already registered mobile number and
+  otherwise valid inputs shows “Mobile already registered”.
+- **REG-6** Submitting a valid username and unused email and mobile creates the
+  account and displays “Account created” with the submitted username.
+
+Use a disposable environment. Each case starts signed out with a blank form.
+Reserve the listed unused values per case and run. Seed only the specified
+conflict for each uniqueness case.
+
+| **1. CASE DETAILS** | | | | |
+|---|---|---|---|---|
+| **ID** | **Title** | **Coverage reference** | **Test type** | **Scenario type** |
+| NEW-01 | Reject invalid usernames | REG-1, REG-2, REG-3 | Functional | Negative |
+| **2. SETUP** | | | | |
+| **Prerequisites** | Open the registration form. For each step, start with a fresh blank form and fill the email and mobile below. | | | |
+| **Test data** | Unused `field@example.test` and `2025550100`. Username values are listed in the steps. | | | |
+| **3. STEPS** | **Step action** | **Step expected result** | | |
+| **1** | Leave username empty and select Register | “Username is required” appears. | | |
+| **2** | Enter `ab` and select Register | “Use 3–20 characters” appears. | | |
+| **3** | Enter `abcdefghijklmnopqrstu` and select Register | “Use 3–20 characters” appears. | | |
+| **4** | Enter `ab cd` and select Register | “Use only letters and digits” appears. | | |
+| **5** | Enter `abc!` and select Register | “Use only letters and digits” appears. | | |
+
+| **1. CASE DETAILS** | | | | |
+|---|---|---|---|---|
+| **ID** | **Title** | **Coverage reference** | **Test type** | **Scenario type** |
+| NEW-02 | Reject a registered email | REG-4 | Functional | Negative |
+| **2. SETUP** | | | | |
+| **Prerequisites** | An existing account uses the case email. The case mobile is unused. | | | |
+| **Test data** | Username `Mira`, registered email `taken@example.test`, unused mobile `2025550101`. | | | |
+| **3. STEPS** | **Step action** | **Step expected result** | | |
+| **1** | Enter the case username and mobile, enter the registered email, then move focus out of the email field | “Email already registered” appears. | | |
+| **2** | Remove the case's seeded account | The fixture no longer contains the seeded account. | | |
+
+| **1. CASE DETAILS** | | | | |
+|---|---|---|---|---|
+| **ID** | **Title** | **Coverage reference** | **Test type** | **Scenario type** |
+| NEW-03 | Reject a registered mobile number | REG-5 | Functional | Negative |
+| **2. SETUP** | | | | |
+| **Prerequisites** | An existing account uses the case mobile. The case email is unused. | | | |
+| **Test data** | Username `Noor`, unused email `mobile-check@example.test`, registered mobile `2025550102`. | | | |
+| **3. STEPS** | **Step action** | **Step expected result** | | |
+| **1** | Enter the case username, unused email and registered mobile, then select Register | “Mobile already registered” appears. | | |
+| **2** | Remove the case's seeded account | The fixture no longer contains the seeded account. | | |
+
+| **1. CASE DETAILS** | | | | |
+|---|---|---|---|---|
+| **ID** | **Title** | **Coverage reference** | **Test type** | **Scenario type** |
+| NEW-04 | Register at the valid username length boundaries | REG-6 | Functional | Positive |
+| **2. SETUP** | | | | |
+| **Prerequisites** | Both email and mobile pairs are unused. A fresh signed-out form is available for each registration. | | | |
+| **Test data** | Minimum `Ada`, `min@example.test`, `2025550103`. Maximum `abcdefghijklmnopqrst`, `max@example.test`, `2025550104`. | | | |
+| **3. STEPS** | **Step action** | **Step expected result** | | |
+| **1** | Fill the form with the minimum-length data and select Register | “Account created” appears with username `Ada`. | | |
+| **2** | Open a fresh signed-out form, fill it with the maximum-length data and select Register | “Account created” appears with username `abcdefghijklmnopqrst`. | | |
+| **3** | Remove the two accounts created by the case using their email addresses | The fixture no longer contains either case account. | | |
+
+Map REG-1 to NEW-01 step 1, REG-2 to steps 2–3, and REG-3 to steps 4–5.
+Map REG-4 to NEW-02 step 1, REG-5 to NEW-03 step 1, and REG-6 to NEW-04 steps 1–2.
+In a real proposal, use the accepted inventory IDs and the exact test data and
+expectation for each mapped step.
+
 ### Checkout example
 
 Illustrative requirements and data only; these are not live project evidence or executed tests. This example preserves the current main-proposal format and shows the optional addition separately. AC/BR labels below are readable sample references; real proposals retain their actual inventory identities and verifying-step mappings.
