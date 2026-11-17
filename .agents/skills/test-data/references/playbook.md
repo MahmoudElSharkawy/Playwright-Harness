@@ -136,6 +136,77 @@ live as an array INSIDE its cluster — one cluster, one tracked case, one test 
 — each record-creating row composes its distinguishing param into the base, so
 sibling rows never collide either.
 
+### Optional localization
+
+Flat cases read directly from the paired JSON with `const testData = cases.tc12346`.
+For a case with localized inputs or expectations, keep common fields on the case
+and put the consumer-approved values under `locales`, keyed by short language code.
+
+```json
+{
+  "tc12346": {
+    "email": "qa@example.test",
+    "wrongPassword": "<different-invalid-password>",
+    "locales": {
+      "en": { "expectedError": "Your email or password is incorrect." },
+      "fr": { "expectedError": "Votre adresse e-mail ou votre mot de passe est incorrect." },
+      "ar": { "expectedError": "البريد الإلكتروني أو كلمة المرور غير صحيحة." }
+    }
+  }
+}
+```
+
+Copy the optional
+[`resolveLocalizedCaseData.ts`](../../../../examples/src/utils/resolveLocalizedCaseData.ts)
+example into `src/utils/`. Call it inside the Playwright test only for a case with
+`locales`. It reads the active project's `use.locale` and merges its values with the
+shared fields. A missing entry reports the test title and language.
+
+```ts
+import { resolveLocalizedCaseData } from '../src/utils/resolveLocalizedCaseData';
+
+// Inside the test, after loading its paired JSON as cases.
+const testData = resolveLocalizedCaseData(cases.tc12346);
+await loginPage.login(testData.email, testData.wrongPassword);
+await loginPage.verifyLoginErrorMessage(testData.expectedError);
+```
+
+Add language variants to `playwright.config.ts` using the existing Chromium
+project's device options. Set `use.locale` to the corresponding JSON key.
+
+```ts
+const defaultLanguage = 'en';
+const additionalLanguages = ['fr', 'ar'];
+const chromium = { ...devices['Desktop Chrome'], viewport: { width: 1920, height: 1080 } };
+
+// Inside defineConfig, alongside the project's other settings.
+projects: [
+  { name: 'chromium', use: { ...chromium, locale: defaultLanguage } },
+  ...additionalLanguages.map(language => ({
+    name: `chromium-${language}`,
+    use: { ...chromium, locale: language },
+  })),
+],
+```
+
+If the application uses another way to set its language, apply the same code
+through the existing project or page setup. Check the actual UI text against the
+expected value from the paired JSON.
+
+```sh
+# Default project. Also works for a flat case in its ordinary configuration.
+npx playwright test tests/LoginTests.spec.ts --grep "Test Case 12346:" --project=chromium
+# French only.
+npx playwright test tests/LoginTests.spec.ts --grep "Test Case 12346:" --project=chromium-fr
+# French and Arabic.
+npx playwright test tests/LoginTests.spec.ts --grep "Test Case 12346:" --project=chromium-fr --project=chromium-ar
+# Every configured project.
+npx playwright test tests/LoginTests.spec.ts --grep "Test Case 12346:"
+```
+
+An additional language needs its code in `additionalLanguages` and an entry in
+each relevant case's `locales` map.
+
 ## 5. Enums for fixed option lists
 
 **Rule:** when an input can only take a small fixed set of values defined by the
