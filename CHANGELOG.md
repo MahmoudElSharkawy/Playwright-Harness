@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+## 4.4.1 — Context search headings
+
+### Upgrade actions
+
+- Download the 4.4.1 archive and checksum from the same release, verify SHA-256,
+  and re-run setup in each consumer project. Explicitly refresh saved context to
+  index work-item titles and document headings. If rolling back after refreshing,
+  update each context with the older release to rebuild its compatible index.
+
+### Changes
+
+- Include work-item titles and document heading ancestry in context full-text
+  search while retaining citations to the original passages.
+
+
 ## 4.4.0 — Test design coverage and execution reuse
 
 ### Upgrade actions
