@@ -735,6 +735,32 @@ Already accepted accessibility requirements belong in the main proposal; adequat
 shared coverage is proposed for reuse without cloning, merging or deleting cases.
 When no material additional concern remains, zero optional drafts is valid.
 
+#### Check existing outage coverage before drafting
+
+In this variant, the story omits the lookup service. A selected checkout guide
+says entering a postcode in the delivery address editor requests suggestions
+from Address Directory. A QA guide provides an outage fixture. The four accepted
+requirements above can be designed from the story alone. If the matching guide
+is saved in project context, a later chat in the same workspace can select that
+context by ID.
+
+- **Partial coverage.** A linked test makes Address Directory unavailable and
+  checks only that the error banner appears. It would still pass if checkout
+  erased the cart's saved address. The blank-postcode and cancel cases verify
+  address preservation under different triggers. Credit the banner check and
+  keep the uncovered behavior optional. Ask the product owner whether the
+  original address must persist until a successful save and whether the shopper
+  can enter and save a replacement manually during the outage.
+- **Full coverage.** The product owner has confirmed both expectations. Under
+  the same outage, the linked test verifies manual entry and checks that the
+  original address is still stored before Save and still displayed on the same
+  cart after reloading following an unsaved edit. It then verifies that the
+  replacement is stored and displayed on that cart after a successful save and
+  reload. Reuse the linked test. Propose zero new or updated outage cases.
+
+If only the linked test's title is available, record which assertion you need
+to confirm coverage and continue with the supported cases.
+
 ## Preview, approve, publish and recover
 
 ```sh

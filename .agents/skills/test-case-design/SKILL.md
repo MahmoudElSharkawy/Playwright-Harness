@@ -90,6 +90,8 @@ Distinguish explicit requirements, applicable documented standards/design system
 agreed targets, quality risks and assumptions; a retrieved reference alone accepts
 no new behavior and requests no cases.
 
+For a material scenario the story leaves implicit, find the passage connecting it to this workflow. Before drafting, inspect relevant existing cases and available linked tests for the same trigger and observable outcome, and ask which failure could still pass. Propose only the uncovered behavior, and ask for any missing business decision.
+
 Draft a small relevant set of optional cases on the first pass, without waiting for
 a separate request to design suggestions. Save ordinary case content, actual source
 basis and specific unresolved questions in `optionalDrafts`; see the documented
