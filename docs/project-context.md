@@ -45,6 +45,8 @@ npx --no pom-harness context search --id checkout-qa --catalog sources
 Use exactly one of `--request` or `--id` for these operations. Source browsing
 and search are bounded, cursor-paged and read-only. Work-item/source/topic filters
 restrict evidence. An ID query does not include neighboring or related items.
+Full-text search indexes each passage with its work-item title or captured
+document heading ancestry. Results cite and quote the original passage.
 
 Exact selection uses `ado.scope.workItemIds` (distinct positive numeric IDs).
 It skips project-wide enumeration and checks only those items. Missing selected
@@ -125,8 +127,9 @@ Bounded heading labels can be shortened; original text stays in the capture.
 
 ## Storage, provenance and recovery
 
-The consumer owns `.harness/context/<context-id>/`. The existing version-2
-storage layout and SQLite FTS5 schema are retained:
+The consumer owns the version-2 storage layout under
+`.harness/context/<context-id>/`.
+
 - `current.json`: bounded 64 KiB manifest, identity/scope and catalog/index references.
 - `objects/<prefix>/<sha256>.json`: immutable sources, facts, chunks, catalogs and selections.
 - `indexes/<sha256>.sqlite`: rebuildable local Node 24 SQLite FTS5 index.
@@ -152,18 +155,23 @@ or partial sources retain last valid evidence as stale. Extraction receipts bind
 to current bytes and precise locations. Local documents are rehashed; unchanged
 bytes/reader recipes reuse extraction. Owner notes are not automatically Q&A evidence.
 
-Captures made before section extraction remain usable with the supported business
-index recipe; reads/searches perform no migration. Explicit refresh detects the
-new native Markdown/text recipe even when file bytes are unchanged. Unaffected
-formats and saved host-reader receipts retain their recipes and reusable evidence;
-an unavailable original retains stale evidence. JSON storage, index schema and
-index recipe stay unchanged. Older unsupported/mixed indexes still require their
-existing explicit selection/update path.
+Existing body-only indexes remain readable. An explicit refresh builds an FTS5
+index with a heading column for captured titles and headings. The JSON storage
+format and history are preserved. If you roll back to a release that predates
+heading indexing after refreshing a capture, run
+`npx --no pom-harness context update --id <context-id>` with that release to rebuild
+its compatible index.
+
+Explicit refresh also detects the native Markdown/text reader recipe even when
+file bytes are unchanged. Unaffected formats and saved host-reader receipts retain
+their recipes and reusable evidence. An unavailable original retains stale
+evidence. Older unsupported/mixed indexes still require their existing explicit
+selection/update path.
 
 The corrected `native-document-sections-v2` reader preserves list-contained fenced
 examples, full multiline setext headings and literal separators in plain text.
 Explicit refresh upgrades both the original native line reader and sections-v1;
-read/search alone never reparses documents. The index recipe remains unchanged.
+read/search alone never reparses documents.
 
 Regrouping can change fact/chunk/passage IDs, result counts and ranking without
 changing business requirements. History remains immutable; new citations/cursors

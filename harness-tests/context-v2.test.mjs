@@ -53,6 +53,25 @@ test('search normalizes Arabic, preserves evidence, paginates deterministically 
   assert.throws(() => searchContext(roots, 'checkout', {query: 'payment', limit: 3, cursor: first.cursor}), /cursor/i);
 });
 
+test('search matches work-item titles and heading ancestry on the passages they describe', async t => {
+  const {roots} = fixture(t), f = adoFixture();
+  f.items.get(1).fields['System.Title'] = 'Gift refunds';
+  f.items.get(1).fields['Microsoft.VSTS.Common.AcceptanceCriteria'] = 'The order number is sufficient.';
+  const filler = 'Provide the information requested by the support team. '.repeat(48);
+  const guide = `# Billing disputes\n\n## Resolution\n\n${filler}\nThe supervisor must approve duplicate charges.`;
+  put(roots, 'guide.md', guide);
+  await updateContext(roots, {...request([source('guide', 'guide.md')]), ado: {sourceId: 'backlog'}}, {client: f.client});
+
+  const ticket = searchContext(roots, 'checkout', {query: 'gift refunds'}).results.find(hit => hit.citation.location === 'Acceptance criteria');
+  assert.equal(ticket?.excerpt, 'The order number is sufficient.');
+  assert.equal(ticket.workItemId, 1);
+  const passage = searchContext(roots, 'checkout', {query: 'billing disputes'}).results.find(hit => hit.sourceId === 'guide' && hit.excerpt.includes('approve duplicate charges'));
+  assert.deepEqual(passage?.headings, ['Billing disputes', 'Resolution']);
+  assert.equal(passage.match, 'text');
+  assert.doesNotMatch(passage.excerpt, /\b(?:billing|disputes)\b/i);
+  assert.equal(passage.excerpt, guide.slice(passage.documentOffsets.start, passage.documentOffsets.end));
+});
+
 test('captured search reads no original source or credentials and missing indexes require explicit update', async t => {
   const {roots} = fixture(t); put(roots, 'guide.txt', 'Captured payment'); await updateContext(roots, request([source('guide', 'guide.txt')]));
   put(roots, '.harness/integrations.json', 'broken'); unlinkSync(join(roots.projectRoot, 'guide.txt'));

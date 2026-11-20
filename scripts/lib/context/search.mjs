@@ -7,8 +7,14 @@ import {contextFile, readManifest, storeFor, capturedCustom} from './storage.mjs
 import {scopeKey, inactive, RECIPE, HASH, contextData, businessSource} from './model.mjs';
 
 const NORMALIZER = 'unicode-arabic-v1';
+const BODY_ONLY_INDEX = `${RECIPE}/${NORMALIZER}`;
+const INDEX_RECIPE = `${BODY_ONLY_INDEX}/passage-headings-v1`;
 export function normalize(text) {
   return text.normalize('NFKC').toLowerCase().replace(/[\u0640\u064b-\u065f\u0670\u06d6-\u06ed]/gu, '').replace(/[أإآٱ]/gu, 'ا').replace(/ى/gu, 'ي').replace(/ؤ/gu, 'و').replace(/ئ/gu, 'ي').replace(/ة/gu, 'ه');
+}
+function indexHeading(source, part) {
+  if (source.kind === 'work-item') return part.location === 'System.Title' ? '' : normalize(source.title ?? '');
+  return normalize(part.document?.headings.join(' ') ?? '');
 }
 function fileHash(path) {
   const hash = createHash('sha256'), file = openSync(path, 'r'), buffer = Buffer.alloc(65536);
@@ -20,12 +26,14 @@ function indexPath(roots, manifest) {
   const path = contextFile(roots, manifest.contextId, manifest.index.path);
   requireThat(existsSync(path) && statSync(path).isFile() && fileHash(path) === manifest.index.hash, 'Missing or corrupt context index; run an explicit update to repair it.'); return path;
 }
-function openIndex(roots, manifest) {
+function openIndex(roots, manifest, {allowBodyOnly = true} = {}) {
   const db = new DatabaseSync(indexPath(roots, manifest), {readOnly: true, allowExtension: false, defensive: true});
   try {
     db.exec('PRAGMA query_only=ON; PRAGMA trusted_schema=OFF;');
     const meta = db.prepare('SELECT scopeKey, contentKey, recipe FROM metadata').get();
-    requireThat(meta?.scopeKey === scopeKey(manifest) && meta.contentKey === manifest.index.contentKey && meta.recipe === `${RECIPE}/${NORMALIZER}`, 'Context index scope or recipe mismatch; run an explicit update to repair it.'); return db;
+    requireThat(meta?.scopeKey === scopeKey(manifest) && meta.contentKey === manifest.index.contentKey
+      && (meta.recipe === INDEX_RECIPE || allowBodyOnly && meta.recipe === BODY_ONLY_INDEX), 'Context index scope or recipe mismatch; run an explicit update to repair it.');
+    return db;
   } catch (error) {db.close(); throw error;}
 }
 const schema = `
@@ -33,13 +41,13 @@ CREATE TABLE metadata(scopeKey TEXT, contentKey TEXT, recipe TEXT);
 CREATE TABLE sources(sourceId TEXT PRIMARY KEY, signature TEXT NOT NULL);
 CREATE TABLE relations(sourceId TEXT, collection TEXT, workItemId INTEGER);
 CREATE INDEX relations_source ON relations(sourceId);
-CREATE TABLE entries(rowid INTEGER PRIMARY KEY, key TEXT UNIQUE, sourceId TEXT, collection TEXT, workItemId INTEGER, factId TEXT, factRef TEXT, chunkId TEXT, chunkRef TEXT, location TEXT, topic TEXT, authority TEXT, status TEXT, text TEXT);
+CREATE TABLE entries(rowid INTEGER PRIMARY KEY, key TEXT UNIQUE, sourceId TEXT, collection TEXT, workItemId INTEGER, factId TEXT, factRef TEXT, chunkId TEXT, chunkRef TEXT, location TEXT, topic TEXT, authority TEXT, status TEXT, text TEXT, heading TEXT);
 CREATE INDEX entries_source ON entries(sourceId);
 CREATE INDEX entries_item ON entries(workItemId);
 CREATE INDEX entries_topic ON entries(topic);
-CREATE VIRTUAL TABLE fts USING fts5(text, content='entries', content_rowid='rowid', tokenize='unicode61');
-CREATE TRIGGER entries_insert AFTER INSERT ON entries BEGIN INSERT INTO fts(rowid,text) VALUES(new.rowid,new.text); END;
-CREATE TRIGGER entries_delete AFTER DELETE ON entries BEGIN INSERT INTO fts(fts,rowid,text) VALUES('delete',old.rowid,old.text); END;`;
+CREATE VIRTUAL TABLE fts USING fts5(text, heading, content='entries', content_rowid='rowid', tokenize='unicode61');
+CREATE TRIGGER entries_insert AFTER INSERT ON entries BEGIN INSERT INTO fts(rowid,text,heading) VALUES(new.rowid,new.text,new.heading); END;
+CREATE TRIGGER entries_delete AFTER DELETE ON entries BEGIN INSERT INTO fts(fts,rowid,text,heading) VALUES('delete',old.rowid,old.text,old.heading); END;`;
 
 /** Copy-on-write index generation: unchanged sources retain their rows and immutable evidence. */
 export function buildIndex(roots, prepared, snapshot, previous) {
@@ -49,10 +57,10 @@ export function buildIndex(roots, prepared, snapshot, previous) {
     const {retrievedAt, verifiedAt, revisionVerifiedAt, membershipVerifiedAt, ...content} = source;
     signatures.set(id, fingerprint({content, statuses: source.contributions.map(part => statuses.get(store.get(part.fact, 'fact').id) ?? 'inactive')}));
   }
-  const contentKey = fingerprint({scopeKey: manifest.scopeKey, recipe: `${RECIPE}/${NORMALIZER}`, sources: [...signatures]});
+  const contentKey = fingerprint({scopeKey: manifest.scopeKey, recipe: INDEX_RECIPE, sources: [...signatures]});
   let previousPath;
   if (previous?.version === 2 && previous.scopeKey === manifest.scopeKey) {
-    try {const db = openIndex(roots, previous); db.close(); previousPath = indexPath(roots, previous);} catch {/* Only explicit update may rebuild a missing/invalid derived index. */}
+    try {const db = openIndex(roots, previous, {allowBodyOnly: false}); db.close(); previousPath = indexPath(roots, previous);} catch {/* The previous index may need rebuilding on explicit update. */}
     if (previousPath && previous.index.contentKey === contentKey) return previous.index;
   }
   const temporary = contextFile(roots, manifest.contextId, `indexes/build-${randomUUID()}.sqlite`); mkdirSync(dirname(temporary), {recursive: true});
@@ -65,7 +73,7 @@ export function buildIndex(roots, prepared, snapshot, previous) {
     const old = new Map(db.prepare('SELECT sourceId,signature FROM sources').all().map(row => [row.sourceId, row.signature]));
     const removeEntries = db.prepare('DELETE FROM entries WHERE sourceId=?'), removeLinks = db.prepare('DELETE FROM relations WHERE sourceId=?'), removeSource = db.prepare('DELETE FROM sources WHERE sourceId=?');
     const insertSource = db.prepare('INSERT INTO sources VALUES(?,?)'), insertLink = db.prepare('INSERT INTO relations VALUES(?,?,?)');
-    const insert = db.prepare('INSERT INTO entries(key,sourceId,collection,workItemId,factId,factRef,chunkId,chunkRef,location,topic,authority,status,text) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)');
+    const insert = db.prepare('INSERT INTO entries(key,sourceId,collection,workItemId,factId,factRef,chunkId,chunkRef,location,topic,authority,status,text,heading) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
     for (const id of new Set([...old.keys(), ...signatures.keys()])) {
       if (old.get(id) === signatures.get(id)) continue;
       removeEntries.run(id); removeLinks.run(id); removeSource.run(id);
@@ -74,14 +82,14 @@ export function buildIndex(roots, prepared, snapshot, previous) {
       for (const link of source.relations ?? []) insertLink.run(id, source.collection ?? '', link.workItemId);
       const workItemId = source.workItemId ?? sourceRecords.get(source.parentId)?.workItemId ?? null;
       for (const part of source.contributions) {
-        const fact = store.get(part.fact, 'fact');
+        const fact = store.get(part.fact, 'fact'), heading = indexHeading(source, part);
         for (const ref of fact.chunks) {
           const chunk = store.get(ref, 'chunk'), key = fingerprint({sourceId: id, factId: fact.id, chunkId: chunk.id, location: part.location, authority: part.authority});
-          insert.run(key, id, source.collection ?? '', workItemId, fact.id, part.fact, chunk.id, ref, part.location, fact.topic, part.authority, statuses.get(fact.id), normalize(chunk.text));
+          insert.run(key, id, source.collection ?? '', workItemId, fact.id, part.fact, chunk.id, ref, part.location, fact.topic, part.authority, statuses.get(fact.id), normalize(chunk.text), heading);
         }
       }
     }
-    db.exec('DELETE FROM metadata'); db.prepare('INSERT INTO metadata VALUES(?,?,?)').run(manifest.scopeKey, contentKey, `${RECIPE}/${NORMALIZER}`);
+    db.exec('DELETE FROM metadata'); db.prepare('INSERT INTO metadata VALUES(?,?,?)').run(manifest.scopeKey, contentKey, INDEX_RECIPE);
     db.exec("INSERT INTO fts(fts) VALUES('integrity-check'); COMMIT;"); db.close(); db = undefined;
     const hash = fileHash(temporary), path = `indexes/${hash}.sqlite`, target = contextFile(roots, manifest.contextId, path);
     if (existsSync(target) && fileHash(target) !== hash) renameSync(target, `${target}.corrupt-${randomUUID()}`);
@@ -107,6 +115,7 @@ function capturedHit(store, manifest, row) {
   const part = source.contributions.find(part => part.fact === row.factRef && part.location === row.location && part.authority === row.authority);
   const chunkIndex = fact.chunks.indexOf(row.chunkRef), chunkCount = fact.chunks.length;
   requireThat(businessSource(source) && !inactive.has(source.status) && part && fact.id === row.factId && chunkIndex >= 0 && chunk.id === row.chunkId && chunk.factId === fact.id && normalize(chunk.text) === row.text
+    && (row.heading === undefined || row.heading === indexHeading(source, part))
     && row.key === fingerprint({sourceId: source.id, factId: fact.id, chunkId: chunk.id, location: part.location, authority: part.authority}), 'Search index and captured evidence differ; run an explicit update.');
   const document = part.document;
   return {passageId: row.key, sourceId: source.id, factId: fact.id, chunkId: chunk.id, topic: fact.topic, excerpt: chunk.text, location: row.location,
