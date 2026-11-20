@@ -23,6 +23,8 @@
 - Support optional locale-specific test data keyed by the active Playwright
   project's locale, with shared fields and an explicit error for a missing
   locale entry. (#158)
+- Update Azure Identity to 4.14.1 in the runtime and example locks to include
+  the MSAL Node fix for CVE-2026-109461.
 
 ## 4.3.3 — Story-linked ADO bugs and broader database access
 

@@ -7,9 +7,9 @@ before returning the candidate checksum. Later verification binds that checksum
 and checks the bundled identities, file digests and upstream notices. The generated
 record is build evidence inside the archive, not a substitute for the trusted
 candidate checksum. Example/spike installations, browser binaries and container
-images remain outside this runtime bundle. Dependency versions and licenses are
-unchanged; see [third-party notices](../THIRD_PARTY_NOTICES.md). The milestone notes
-below retain the history of earlier source-only distributions.
+images remain outside this runtime bundle. See [third-party notices](../THIRD_PARTY_NOTICES.md)
+for the locked dependencies and licenses. The milestone notes below retain the
+history of earlier source-only distributions.
 
 Issue #62's requirements-analysis skill, chat drafts, source/acceptance inventory
 and delivery adapters are project-authored. Official Microsoft project-team,

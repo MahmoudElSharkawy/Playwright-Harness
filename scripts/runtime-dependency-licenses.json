@@ -84,11 +84,11 @@
     },
     {
       "path": "node_modules/@azure/identity",
-      "version": "4.14.0",
+      "version": "4.14.1",
       "license": "MIT",
       "optional": false,
-      "resolved": "https://registry.npmjs.org/@azure/identity/-/identity-4.14.0.tgz",
-      "integrity": "sha512-8utCLdTZn14CiAe0HW4JbtzUMsc0mdDwnjUvStFMrR4IxQP8S2eL9zVAdplpfORVJGYmidZElpeXRYjJQ4UyUw=="
+      "resolved": "https://registry.npmjs.org/@azure/identity/-/identity-4.14.1.tgz",
+      "integrity": "sha512-HHuuFrmN1uuF9D5A6aAo5eHzNFNX4Q+P4SksZqDKse5YaJFFy/zDLG3wXHEV2FVGgetZ3QM8jGURNBtnQYf1NQ=="
     },
     {
       "path": "node_modules/@azure/keyvault-common",
@@ -132,11 +132,19 @@
     },
     {
       "path": "node_modules/@azure/msal-node",
-      "version": "6.0.1",
+      "version": "7.2.3",
       "license": "MIT",
       "optional": false,
-      "resolved": "https://registry.npmjs.org/@azure/msal-node/-/msal-node-6.0.1.tgz",
-      "integrity": "sha512-ixSO1Y/kCVRthRs+hSx/5qkwaunX1/RAePhlMN0wIpIQ4WEZ6AREGGnGd1AP0qspHVsAwzWQKGubpjh50JyJIQ=="
+      "resolved": "https://registry.npmjs.org/@azure/msal-node/-/msal-node-7.2.3.tgz",
+      "integrity": "sha512-eRIo5XuQAJrubo4514gEnmREKI35045LItjucOEK/YNQYj3LhEpYEbBdqjlu/wmd9Rcqp2c3GJ4ynFoEqby3sg=="
+    },
+    {
+      "path": "node_modules/@azure/msal-node/node_modules/@azure/msal-common",
+      "version": "16.17.0",
+      "license": "MIT",
+      "optional": false,
+      "resolved": "https://registry.npmjs.org/@azure/msal-common/-/msal-common-16.17.0.tgz",
+      "integrity": "sha512-rNvtEm7Axzj18neIk0C8kjr1ZXbJsHkWDqGedCfOiLVBjSCxWBcbJ26/I7g9owoeGKUoyrOgs73cIk7WxLd9qA=="
     },
     {
       "path": "node_modules/@js-joda/core",
