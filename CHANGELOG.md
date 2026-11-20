@@ -2,9 +2,29 @@
 
 ## Unreleased
 
+## 4.4.0 — Test design coverage and execution reuse
+
+### Upgrade actions
+
+- Download the 4.4.0 archive and checksum from the same release, verify SHA-256,
+  and re-run setup in each consumer project. Review customized managed instructions,
+  then reload skills or restart the host.
+
+### Changes
+
 - Reuse unchanged story and suite cases and compatible refinement in execute-test.
   Refresh affected cases by revision and summarize membership changes. Rerun a
   frozen selection under a fresh execution ID with zero Azure DevOps calls. (#153)
+- Group related validation checks into one negative case per field by default
+  and give distinct business-rule failures their own cases. (#154)
+- Check the assertions in relevant existing tests before drafting an implicit
+  scenario. The checkout example shows when to propose missing coverage and
+  when to reuse a test that already verifies the agreed behavior. (#157)
+- Support optional locale-specific test data keyed by the active Playwright
+  project's locale, with shared fields and an explicit error for a missing
+  locale entry. (#158)
+- Update Azure Identity to 4.14.1 in the runtime and example locks to include
+  the MSAL Node fix for CVE-2026-109461.
 
 ## 4.3.3 — Story-linked ADO bugs and broader database access
 

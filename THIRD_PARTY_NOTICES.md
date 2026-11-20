@@ -9,6 +9,10 @@ them. Example and spike dependencies, browser binaries and container images rema
 separate distributions. The milestone notes below describe how dependencies were
 introduced, including earlier releases that installed runtime packages separately.
 
+Release 4.4.0 updates Azure Identity to 4.14.1 and MSAL Node to 7.2.3 in the
+runtime and example locks to address CVE-2026-109461. These packages and their
+updated MSAL Common dependency retain their upstream MIT notices.
+
 The requirements-analysis workflow is project-authored and has no external analysis
 integration or new npm dependency. The prerelease GapCue integration was removed
 before release; no GapCue implementation is copied or bundled. AgenTeX and SHAFT

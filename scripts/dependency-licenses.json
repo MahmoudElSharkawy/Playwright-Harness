@@ -203,44 +203,12 @@
       "integrity": "sha512-IQbwnbrC2FJibjKZJTZxtUXzVWute6hEFB13ZOcr42BuSkWbcGpREZP0QYl0mXrQbyF2h3/zc+3bNi7HZHE1uA=="
     },
     {
-      "path": "node_modules/@allurereport/service/node_modules/open",
-      "version": "11.0.4",
-      "license": "MIT",
-      "optional": false,
-      "resolved": "https://registry.npmjs.org/open/-/open-11.0.4.tgz",
-      "integrity": "sha512-++Zlftm0kVLPmzC06t6epuWmcRMDbI4z5P3NNX979WA/k23+NtSOynEGzsVfZwguKw2mi5umVgnBlJQMwRz4Pg=="
-    },
-    {
-      "path": "node_modules/@allurereport/service/node_modules/wsl-utils",
-      "version": "1.0.1",
-      "license": "MIT",
-      "optional": false,
-      "resolved": "https://registry.npmjs.org/wsl-utils/-/wsl-utils-1.0.1.tgz",
-      "integrity": "sha512-c16PKLIRxBYpR3jSWsdS7SFp0COm5SOQdiFjY818dYFHJbMGuLBszpF07LBWmOS1uzrHa9VGdynsEgoeKy0oOQ=="
-    },
-    {
       "path": "node_modules/@allurereport/static-server",
       "version": "3.19.1",
       "license": "Apache-2.0",
       "optional": false,
       "resolved": "https://registry.npmjs.org/@allurereport/static-server/-/static-server-3.19.1.tgz",
       "integrity": "sha512-C2jZ3zwaUrGVzWtnFGDroy2Cv8VS0rRRJNiIX/3kfM+cvn2/Wr4cPREvLfH0cejTby6Sl+WL08w196Gzp18chw=="
-    },
-    {
-      "path": "node_modules/@allurereport/static-server/node_modules/open",
-      "version": "11.0.4",
-      "license": "MIT",
-      "optional": false,
-      "resolved": "https://registry.npmjs.org/open/-/open-11.0.4.tgz",
-      "integrity": "sha512-++Zlftm0kVLPmzC06t6epuWmcRMDbI4z5P3NNX979WA/k23+NtSOynEGzsVfZwguKw2mi5umVgnBlJQMwRz4Pg=="
-    },
-    {
-      "path": "node_modules/@allurereport/static-server/node_modules/wsl-utils",
-      "version": "1.0.1",
-      "license": "MIT",
-      "optional": false,
-      "resolved": "https://registry.npmjs.org/wsl-utils/-/wsl-utils-1.0.1.tgz",
-      "integrity": "sha512-c16PKLIRxBYpR3jSWsdS7SFp0COm5SOQdiFjY818dYFHJbMGuLBszpF07LBWmOS1uzrHa9VGdynsEgoeKy0oOQ=="
     },
     {
       "path": "node_modules/@allurereport/summary",
@@ -340,11 +308,11 @@
     },
     {
       "path": "node_modules/@azure/identity",
-      "version": "4.13.3",
+      "version": "4.14.1",
       "license": "MIT",
       "optional": false,
-      "resolved": "https://registry.npmjs.org/@azure/identity/-/identity-4.13.3.tgz",
-      "integrity": "sha512-zGQPtqvXPgSA8yfV2CkIQ1qirqk0p9AIVpC5uEkdXQYcKl07QHvyaGYRnZOk0AsQUmxNb4wfkcwY5di8Z5xa9A=="
+      "resolved": "https://registry.npmjs.org/@azure/identity/-/identity-4.14.1.tgz",
+      "integrity": "sha512-HHuuFrmN1uuF9D5A6aAo5eHzNFNX4Q+P4SksZqDKse5YaJFFy/zDLG3wXHEV2FVGgetZ3QM8jGURNBtnQYf1NQ=="
     },
     {
       "path": "node_modules/@azure/keyvault-common",
@@ -388,11 +356,19 @@
     },
     {
       "path": "node_modules/@azure/msal-node",
-      "version": "6.0.1",
+      "version": "7.2.3",
       "license": "MIT",
       "optional": false,
-      "resolved": "https://registry.npmjs.org/@azure/msal-node/-/msal-node-6.0.1.tgz",
-      "integrity": "sha512-ixSO1Y/kCVRthRs+hSx/5qkwaunX1/RAePhlMN0wIpIQ4WEZ6AREGGnGd1AP0qspHVsAwzWQKGubpjh50JyJIQ=="
+      "resolved": "https://registry.npmjs.org/@azure/msal-node/-/msal-node-7.2.3.tgz",
+      "integrity": "sha512-eRIo5XuQAJrubo4514gEnmREKI35045LItjucOEK/YNQYj3LhEpYEbBdqjlu/wmd9Rcqp2c3GJ4ynFoEqby3sg=="
+    },
+    {
+      "path": "node_modules/@azure/msal-node/node_modules/@azure/msal-common",
+      "version": "16.17.0",
+      "license": "MIT",
+      "optional": false,
+      "resolved": "https://registry.npmjs.org/@azure/msal-common/-/msal-common-16.17.0.tgz",
+      "integrity": "sha512-rNvtEm7Axzj18neIk0C8kjr1ZXbJsHkWDqGedCfOiLVBjSCxWBcbJ26/I7g9owoeGKUoyrOgs73cIk7WxLd9qA=="
     },
     {
       "path": "node_modules/@js-joda/core",
@@ -1828,11 +1804,11 @@
     },
     {
       "path": "node_modules/open",
-      "version": "10.2.0",
+      "version": "11.0.4",
       "license": "MIT",
       "optional": false,
-      "resolved": "https://registry.npmjs.org/open/-/open-10.2.0.tgz",
-      "integrity": "sha512-YgBpdJHPyQ2UE5x+hlSXcnejzAvD0b22U2OuAP+8OnlJT+PjWPxtgmGqKKc+RgTM63U9gN0YzrYc71R2WT/hTA=="
+      "resolved": "https://registry.npmjs.org/open/-/open-11.0.4.tgz",
+      "integrity": "sha512-++Zlftm0kVLPmzC06t6epuWmcRMDbI4z5P3NNX979WA/k23+NtSOynEGzsVfZwguKw2mi5umVgnBlJQMwRz4Pg=="
     },
     {
       "path": "node_modules/p-limit",
@@ -2164,11 +2140,11 @@
     },
     {
       "path": "node_modules/wsl-utils",
-      "version": "0.1.0",
+      "version": "1.0.1",
       "license": "MIT",
       "optional": false,
-      "resolved": "https://registry.npmjs.org/wsl-utils/-/wsl-utils-0.1.0.tgz",
-      "integrity": "sha512-h3Fbisa2nKGPxCpm89Hk33lBLsnaGBvctQopaBSOW/uIs6FTe1ATyAnKFJrzVs9vpGdsTe73WF3V4lIsk4Gacw=="
+      "resolved": "https://registry.npmjs.org/wsl-utils/-/wsl-utils-1.0.1.tgz",
+      "integrity": "sha512-c16PKLIRxBYpR3jSWsdS7SFp0COm5SOQdiFjY818dYFHJbMGuLBszpF07LBWmOS1uzrHa9VGdynsEgoeKy0oOQ=="
     },
     {
       "path": "node_modules/xml-naming",

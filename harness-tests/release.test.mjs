@@ -87,7 +87,10 @@ test('release helper verifies the bundled runtime and its candidate on a fresh r
     const file = join(root, name); mkdirSync(dirname(file), {recursive: true}); writeFileSync(file, bytes);
   }
   const record = JSON.parse(readFileSync(join(root, RUNTIME_BUNDLE_RECORD), 'utf8'));
-  assert.equal(Object.keys(record.packages).length, 99);
+  const lock = JSON.parse(readFileSync(join(packageRoot, 'npm-shrinkwrap.json'), 'utf8'));
+  const expectedPackages = Object.keys(lock.packages).filter(Boolean).sort();
+  assert(expectedPackages.length > 0);
+  assert.deepEqual(Object.keys(record.packages).sort(), expectedPackages);
   for (const path of Object.keys(record.packages)) assert(existsSync(join(root, path, 'package.json')));
   const result = command([join(root, 'scripts/ci/release.mjs'), 'verify', directory], {cwd: root, env: {GITHUB_EVENT_NAME: 'workflow_dispatch', GITHUB_REF: 'refs/heads/main', GITHUB_SHA: context.commit, GITHUB_REPOSITORY: context.repository, GITHUB_RUN_ID: context.runId}});
   assert.equal(result.status, 'PASS', result.output); assert.deepEqual(JSON.parse(result.stdout), candidate);

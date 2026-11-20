@@ -1,6 +1,6 @@
 {
   "name": "playwright-pom-harness",
-  "version": "4.3.3",
+  "version": "4.4.0",
   "private": true,
   "license": "MIT",
   "type": "module",
@@ -95,7 +95,7 @@
     "!**/node_modules/**"
   ],
   "dependencies": {
-    "@azure/identity": "4.14.0",
+    "@azure/identity": "4.14.1",
     "@azure/msal-browser": "5.23.0",
     "@js-joda/core": "6.1.0",
     "@playwright/cli": "0.1.22",
