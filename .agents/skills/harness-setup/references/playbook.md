@@ -40,7 +40,7 @@ npm-cache prompts.
      counts, each feature's readiness, the notes, the upgrade actions and the next steps.
 
    After installation, ask the user to set up
-   [ChaosEngine Core](https://github.com/ShaftHQ/SHAFT_ENGINE/tree/main/chaos-engine#install)
+   [ChaosEngine Core](https://github.com/ShaftHQ/chaosengine-harness#quick-start)
    in the same project if they have not already.
 
    Then show `git status --short`.

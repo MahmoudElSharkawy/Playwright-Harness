@@ -257,7 +257,7 @@ export function upgradeActions(previousVersion, version, changelog = join(runnin
 }
 const nextSteps = starter => [
   'Review the changes (git diff) and commit them, including the archive under .harness/vendor.',
-  'Set up ChaosEngine Core in this project if you have not already: https://github.com/ShaftHQ/SHAFT_ENGINE/tree/main/chaos-engine#install',
+  'Set up ChaosEngine Core in this project if you have not already: https://github.com/ShaftHQ/chaosengine-harness#quick-start',
   'If the skills do not appear yet, run /reload-skills in Claude Code or restart Codex.',
   starter ? 'The starter has no tests yet; ask the AI to configure the harness with your project information and automate your first scenarios.' : 'Ask the AI to configure the harness with your project information.',
 ];
