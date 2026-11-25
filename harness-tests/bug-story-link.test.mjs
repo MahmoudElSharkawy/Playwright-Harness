@@ -97,6 +97,14 @@ async function pendingBeforeUpgrade(t, relation, identity, bugs = {}) {
   raw.evidence = [{path: 'proof.log', kind: 'log', origin: 'user', sanitized: true, verification: {privacy: true, relevance: true}, context: 'Status response'}];
   const state = prepareBugReport(ado.roots, 'old', raw), prepared = await previewBugReport(ado.roots, 'old', deps);
   const {hash: ignored, ...preview} = JSON.parse(readFileSync(prepared.previewFile, 'utf8')), bug = preview.bugs[0];
+  const previousNarrative = '<p>Source: User report; Story #200</p><p>User confirmation: Not confirmed</p><p>Agent reproduction: Not performed</p>'
+    + '<p>The request fails.</p><h3>Prerequisites</h3><pre></pre><h3>Steps to reproduce</h3><pre>1. Request status</pre>'
+    + '<h3>Expected</h3><pre>Status 200</pre><h3>Actual</h3><pre>Status 500</pre><p></p>';
+  for (const field of ['System.Description', 'Microsoft.VSTS.TCM.ReproSteps'].filter(name => Object.hasOwn(bug.fields, name))) {
+    bug.fields[field] = previousNarrative;
+    bug.review.find(entry => entry.field === field).value = previousNarrative;
+    bug.request.body.find(entry => entry.path === `/fields/${field}`).value = previousNarrative;
+  }
   bug.request.body = bug.request.body.filter(row => row.path !== '/relations/-');
   if (relation) bug.request.body.push({op: 'add', path: '/relations/-', value: {rel: relation, url: `${ado.config.organizationUrl}/_apis/wit/workitems/200`}});
   preview.planHash = fingerprint({executionId: preview.executionId, revisions: preview.revisions, skipped: preview.skipped, bugs: preview.bugs, destination: preview.destination});
@@ -196,6 +204,7 @@ async function pendingExecution(t, bugs = {}) {
   observations.evidence.push(record); attempt.evidenceIds.push(record.id); writeJson(join(run.roots.runRoot, 'observations.json'), observations);
   const deliver = options => deliverExecution(execution.roots, execution.executionId, 'file-bugs', options, dependencies(ado, execution.roots));
   const preview = await deliver({});
+  assert.deepEqual(preview.bugs[0].attachments, [{name: 'context.png', kind: 'screenshot', bytes: record.bytes, sha256: record.sha256}]);
   ado.state.fault = ({path, req, send}) => {if (path === 'wit/workitems/800' && req.method === 'GET') {send({}, 503); return true;}};
   await assert.rejects(deliver({execute: true, approvedPlan: preview.planHash}), /ADO request-rejected/); ado.state.fault = undefined;
   return {ado, execution, preview, deliver};

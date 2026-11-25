@@ -39,8 +39,22 @@ export function decodeEntities(s) {
  *  Content arrives XML-escaped inside the Steps field (&lt;DIV&gt;…), so decode
  *  first to expose the tags, strip them, then decode once more for HTML-level
  *  entities (&amp;amp; is the double-escaped form of a literal &). */
-export function htmlToText(html) {
+export function htmlToText(html, {rendered = false} = {}) {
   if (!html) return '';
+  if (rendered) {
+    return html.split(/(<pre>[\s\S]*?<\/pre>)/gi).map((part, index) => {
+      if (index % 2) return decodeEntities(part.replace(/<\/?(?:pre|code)>/gi, ''));
+      return decodeEntities(part.replace(/<ol>([\s\S]*?)<\/ol>/gi, (_, items) => {
+        let number = 0;
+        return items.replace(/<li>/gi, () => `${++number}. `).replace(/<\/li>/gi, '\n');
+      }).replace(/<\/(td|th)>(?=<(td|th)>)/gi, ' | ')
+        .replace(/<\/(ul|table)>/gi, '\n')
+        .replace(/<br\s*\/?>|<\/(p|div|li|tr|h[1-6])\s*>/gi, '\n')
+        .replace(/<li\b[^>]*>/gi, '- ')
+        .replace(/<\/?[A-Za-z][^>]*>/g, '')
+        .replace(/\n{3,}/g, '\n\n').trim());
+    }).filter(Boolean).join('\n\n');
+  }
   let t = decodeEntities(html);
   t = t
     .replace(/<br\s*\/?>/gi, '\n')

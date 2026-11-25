@@ -36,15 +36,20 @@ valid; system-managed fields are read-only. A changed expected result that confl
 with the story needs a requirement decision. Draft edits never rewrite original
 requirements, execution results, assertions or raw evidence.
 
-ADO bug narratives show readable source references and separate user-confirmation
-and agent-reproduction details. Internal source snapshots, run/evidence identities,
-fingerprints and raw observation structures stay in consumer records rather than
-being serialized into the Description or Repro Steps fields. Generated execution
-defaults summarize recorded failure/inconclusive/diagnostic occurrences without
-claiming a reproduction rate. This also applies to recognized older generated
-defaults; saved intake and draft history remain unchanged. Deliberately reviewed
-API JSON in a user's actual result remains part of that approved report. Changed
-rendered content requires a current preview and approval before filing.
+ADO narratives follow the [report layout](../.agents/skills/bug-report/references/playbook.md#report-layout)
+for UI, API and DB defects, including combinations. They start with the summary,
+numbered steps, expected result and actual result. Numbered captions identify
+approved screenshot attachments when applicable. Use one reviewed side-by-side
+screenshot for a visual comparison. Add evidence and reproduction limits under
+Technical details, and use `draft.configuration` for a final one-line environment,
+build and browser or device. Optional `caption` values label screenshot evidence.
+
+Technical details includes source references, user confirmation, agent reproduction
+and generated occurrence counts. Execution dates, internal source snapshots and
+raw observation structures belong in consumer evidence records. Fill in observed
+values from reviewed evidence before filing a generated draft. A changed narrative
+requires a fresh preview and approval for an undispatched report. A dispatched
+report can resume its exact approved request.
 
 ## Confirm only what needs confirmation
 

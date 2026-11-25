@@ -6,8 +6,8 @@ import {createAdoTestManagement, prepareExecutionPublication} from '../integrati
 import {loadAdoConfiguration, adoId, adoGuid, workItemLinkId} from '../integrations/config.mjs';
 import {fingerprint, keys, requireThat} from '../execution-core/data.mjs';
 import {escapeHtml} from '../reporting/render.mjs';
-import {renderBugNarrative} from './bug-narrative.mjs';
-import {collectExecution, executionDefects, deliverableDefects, readVerifiedEvidence} from './report.mjs';
+import {bugScreenshots, renderBugNarrative} from './bug-narrative.mjs';
+import {collectExecution, executionDefects, executionBugObservation, deliverableDefects, readVerifiedEvidence} from './report.mjs';
 import {checkSourceRevisions} from './source.mjs';
 import {EXECUTION_DOCUMENT, readBounded, writeJson, ownedFile} from './storage.mjs';
 import {withTransition} from './lock.mjs';
@@ -41,10 +41,14 @@ async function validatePath(client, group, path) {
   requireThat(nodeParts[1]?.toLowerCase() === structure && [nodeParts[0], ...nodeParts.slice(2)].join('\\').toLowerCase() === path.toLowerCase(), 'ADO area/iteration path did not match.');
 }
 export function draftMetadata(drafts, fp, defaults, title) {
-  const input = drafts?.[fp] ?? {}; requireThat(input && typeof input === 'object' && !Array.isArray(input) && Object.keys(input).every(key => ['file', 'title', 'severity', 'priority', 'notes', 'description', 'prerequisites', 'steps', 'expected', 'actual', 'fields', 'omitFields'].includes(key)) && (input.file === undefined || typeof input.file === 'boolean'), `Invalid bug draft: ${fp}.`);
+  const input = drafts?.[fp] ?? {}; requireThat(input && typeof input === 'object' && !Array.isArray(input) && Object.keys(input).every(key => ['file', 'title', 'severity', 'priority', 'notes', 'description', 'prerequisites', 'steps', 'expected', 'actual', 'configuration', 'fields', 'omitFields'].includes(key)) && (input.file === undefined || typeof input.file === 'boolean'), `Invalid bug draft: ${fp}.`);
   const generated = title.length <= 255 ? title : `${title.slice(0, 252).replace(/[\uD800-\uDBFF]$/, '')}...`;
   const output = {title: input.title ?? generated, ...(input.severity === undefined ? {} : {severity: input.severity}), ...(input.priority === undefined ? {} : {priority: input.priority}), notes: input.notes ?? ''};
   requireThat(typeof output.title === 'string' && output.title.trim() && output.title.length <= 255 && typeof output.notes === 'string' && output.notes.length <= 4000, `Invalid bug title or notes: ${fp}.`);
+  if (input.configuration !== undefined) {
+    requireThat(typeof input.configuration === 'string' && input.configuration.length <= 4000 && !/[\r\n\0]/.test(input.configuration), 'Invalid bug test configuration.');
+    output.configuration = input.configuration;
+  }
   for (const name of ['description', 'expected', 'actual']) if (input[name] !== undefined) {requireThat(typeof input[name] === 'string' && input[name].length <= 16000, `Invalid bug draft ${name}.`); output[name] = input[name];}
   for (const name of ['prerequisites', 'steps']) if (input[name] !== undefined) {requireThat(Array.isArray(input[name]) && input[name].length <= 100 && input[name].every(value => typeof value === 'string' && value.length <= 4000), `Invalid bug draft ${name}.`); output[name] = input[name];}
   if (input.fields !== undefined) {requireThat(input.fields && !Array.isArray(input.fields) && Object.entries(input.fields).length <= 100 && Object.entries(input.fields).every(([name, value]) => /^[A-Za-z][A-Za-z0-9_.]{0,149}$/.test(name) && ['string', 'number', 'boolean'].includes(typeof value) && String(value).length <= 16000), 'Invalid bug draft fields.'); output.fields = input.fields;}
@@ -64,10 +68,16 @@ async function prepareBug(client, view, defect, revisions, metadata, drafts, ret
   if (defaults.assignedTo) fields['System.AssignedTo'] ??= defaults.assignedTo;
   if (edited.priority !== undefined) fields['Microsoft.VSTS.Common.Priority'] = edited.priority;
   if (edited.severity !== undefined) fields['Microsoft.VSTS.Common.Severity'] = edited.severity;
-  const {html: content, actual} = renderBugNarrative(view, defect, edited, changed);
+  const attachments = (view.reportAttachments ?? executionBugEvidence(view, defect).map(item => item.record))
+    .filter(record => record.bytes <= (defaults.maxAttachmentBytes ?? 2 * 1024 * 1024));
   requireThat(metadata.mappings.reproSteps || metadata.mappings.description, 'Configure an available bug narrative field mapping.');
-  fields[metadata.mappings.reproSteps ?? metadata.mappings.description] = content;
-  if (metadata.mappings.description && metadata.mappings.description !== metadata.mappings.reproSteps) fields[metadata.mappings.description] = content;
+  const narrativeFields = [...new Set([metadata.mappings.reproSteps, metadata.mappings.description].filter(Boolean))];
+  // Only a request that already dispatched can retain the previous layout.
+  const legacy = retainedRequest && edited.configuration === undefined ? renderBugNarrative(view, defect, edited, changed, {legacy: true}) : null;
+  const retainedLegacy = legacy && narrativeFields.every(field => retainedRequest.body.some(entry => entry.path === `/fields/${field}` && entry.value === legacy.html));
+  const recordedObservation = !retainedLegacy && !view.reportContext && edited.actual === undefined ? executionBugObservation(view, defect) : '';
+  const {html, actual} = retainedLegacy ? legacy : renderBugNarrative(view, defect, edited, changed, {attachments, recordedObservation});
+  for (const name of narrativeFields) fields[name] = html;
   for (const name of ['expected', 'actual']) if (metadata.mappings[name] && edited[name] !== undefined) {const spec = metadata.fields.find(field => field.referenceName === metadata.mappings[name]), value = name === 'actual' ? actual : edited[name]; fields[metadata.mappings[name]] = /^html$/i.test(spec?.type ?? '') ? `<pre>${escapeHtml(value)}</pre>` : value;}
   for (const name of edited.omitFields ?? []) {requireThat(!Object.values(metadata.mappings).includes(name), 'Cannot omit bug narrative fields.'); delete fields[name];}
   requireThat(!String(fields['System.Tags'] ?? '').split(';').some(tag => correlationTag(tag.trim())), 'Harness correlation tags are not supported. Review the proposed Tags field.');
@@ -84,7 +94,8 @@ async function prepareBug(client, view, defect, revisions, metadata, drafts, ret
   await client.validateWorkItem(metadata.type, body, {fresh: true});
   const request = {route: `wit/workitems/$${encodeURIComponent(metadata.type)}?api-version=7.1`, method: 'POST', body};
   const fieldSpecifications = metadata.fields.filter(field => Object.hasOwn(fields, field.referenceName)).map(({referenceName, type, isIdentity}) => ({referenceName, type, isIdentity}));
-  return {defect, type: metadata.type, request, fields, fieldSpecifications, schemaFingerprint: metadata.fingerprint, review: inspection.review, revisions: changed ?? null};
+  const executionAttachments = !view.reportAttachments && !retainedLegacy ? bugScreenshots(attachments).map(({id, name, kind, bytes, sha256}) => ({name: name ?? `${id}.png`, kind, bytes, sha256})) : [];
+  return {defect, type: metadata.type, request, fields, fieldSpecifications, schemaFingerprint: metadata.fingerprint, review: inspection.review, revisions: changed ?? null, executionAttachments};
 }
 
 // Older standalone reports retained the approved fields and relation choices separately.
@@ -207,13 +218,18 @@ async function reconcileBugs(client, roots, executionId, view, options) {
   }
   return {mode: 'reconcile', executionId, bugs: journal.value.entries.map(bugOutcome), ...(candidateSearch ? {candidateSearch} : {})};
 }
+function executionBugEvidence(view, defect) {
+  return defect.occurrences.flatMap(occurrence => {
+    const run = view.runs.find(item => item.runId === occurrence.runId && item.state === 'ASSESSED');
+    return run.result.evidence.filter(record => record.kind === 'screenshot' && (record.identity.invocationId === defect.stepId || occurrence.evidenceIds.includes(record.id))).slice(0, 3).map(record => ({record, evidenceRoots: run.roots}));
+  });
+}
 async function attachEvidence(client, roots, delivery, row, prepared, view, save, options) {
   row.attachments ??= [];
   const used = new Set(); let complete = true;
-  const selected = view.reportAttachments ? view.reportAttachments.map(record => ({record, evidenceRoots: {runRoot: roots.projectRoot}})) : prepared.defect.occurrences.flatMap(occurrence => {
-    const run = view.runs.find(item => item.runId === occurrence.runId && item.state === 'ASSESSED');
-    return run.result.evidence.filter(record => record.kind === 'screenshot' && (record.identity.invocationId === prepared.defect.stepId || occurrence.evidenceIds.includes(record.id))).slice(0, 3).map(record => ({record, evidenceRoots: run.roots}));
-  });
+  const selected = view.reportAttachments
+    ? view.reportAttachments.map(record => ({record, evidenceRoots: {runRoot: roots.projectRoot}}))
+    : executionBugEvidence(view, prepared.defect);
     for (const {record, evidenceRoots} of selected) {
       if (used.has(record.sha256) || record.bytes > (client.configuration.bugs?.maxAttachmentBytes ?? 2 * 1024 * 1024)) continue; used.add(record.sha256);
       let attachment = row.attachments.find(item => item.sha256 === record.sha256);
@@ -283,7 +299,7 @@ async function fileBugs(client, roots, executionId, view, revisions, options) {
   }
   const attachments = view.reportAttachments ?? [];
   for (const record of attachments) {consumerPath(roots, record.path); const bytes = readVerifiedEvidence({runRoot: roots.projectRoot}, record); requireThat(bytes.length <= (client.configuration.bugs?.maxAttachmentBytes ?? 2 * 1024 * 1024), 'Bug evidence exceeds the destination attachment bound.');}
-  const bugPreview = item => item.legacyPreview ?? {fingerprint: item.defect.fingerprint, type: item.type, fields: item.fields, request: item.request, review: item.review, schemaFingerprint: item.schemaFingerprint, revision: item.revisions, attachments};
+  const bugPreview = item => item.legacyPreview ?? {fingerprint: item.defect.fingerprint, type: item.type, fields: item.fields, request: item.request, review: item.review, schemaFingerprint: item.schemaFingerprint, revision: item.revisions, attachments: view.reportAttachments ?? item.executionAttachments};
   // Old receipts hash storyLink in the schema. Accept only a full original-plan match.
   for (const item of prepared) {
     if (!item.row?.operation || item.row.state === 'INTENT' || item.row.planHash === fingerprint(bugPreview(item))) continue;

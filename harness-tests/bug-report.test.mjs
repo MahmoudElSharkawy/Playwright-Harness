@@ -183,17 +183,52 @@ test('a completed report cannot silently claim a newly edited draft was delivere
   editBugReport(roots, 'bug-complete', {head: state.head, draft: {title: 'New reviewed wording'}}); const edited = await previewBugReport(roots, 'bug-complete', dependencies); approveBugReport(roots, 'bug-complete', edited.hash);
   await assert.rejects(fileBugReport(roots, 'bug-complete', edited.hash, dependencies), /dispatched bug (content|plan) changed/i); assert.equal(ado.state.items.get(800).fields['System.Title'], input().draft.title); assert.equal(writes(ado).filter(item => item.path === 'wit/workitems/$bug').length, 1);
 });
+test('changing reviewed screenshots requires review of their numbered references', async t => {
+  const {roots} = fixture(t), raw = input();
+  writeFileSync(join(roots.projectRoot, 'first.png'), image(120, 80));
+  writeFileSync(join(roots.projectRoot, 'second.png'), image(120, 90));
+  raw.evidence = ['first.png', 'second.png'].map(path => ({path, kind: 'screenshot', origin: 'user', sanitized: true, verification: {privacy: true, relevance: true}, context: 'Reviewed status value'}));
+  raw.draft.actual = 'Status 500 (image 1).';
+  const state = prepareBugReport(roots, 'reorder', raw);
+  const patch = {head: state.head, evidence: [...raw.evidence].reverse()};
+  assert.throws(() => editBugReport(roots, 'reorder', patch), /resubmit draft\.actual/);
+  const edited = editBugReport(roots, 'reorder', {...patch, draft: {actual: 'Status 500 (image 2).'}});
+  assert.equal(edited.evidence[1].sha256, state.evidence[0].sha256);
+  assert.equal(edited.draft.actual, 'Status 500 (image 2).');
+  const annotated = await annotateBugReport(roots, 'reorder', {
+    source: edited.evidence[1].path, output: '.harness/runs/reorder/annotated.png', summary: 'Wrong status',
+    expected: edited.draft.expected, actual: edited.draft.actual, verification: {privacy: true, relevance: true},
+    boxes: [{kind: 'defect', x: 0.1, y: 0.1, width: 0.5, height: 0.5}]
+  }, {inventory: async () => [{pid: process.pid, identity: '1'}], render: async () => {throw Object.assign(new Error('Unavailable'), {code: 'RENDERER_UNAVAILABLE'});}});
+  assert.equal(annotated.annotations.length, 1);
+  const removed = editBugReport(roots, 'reorder', {head: annotated.head, evidence: [], draft: {actual: 'Status 500.'}});
+  assert.deepEqual(removed.evidence, []);
+  assert.deepEqual(removed.annotations, []);
+  assert(removed.history.includes(annotated.head));
+});
+
 test('reviewed raw and annotated pair uses one bug and recovers a lost second attachment-link acknowledgement', async t => {
   const ado = await adoFixture(t), {roots} = fixture(t), dependencies = deps(ado, roots), raw = input(); writeFileSync(join(roots.projectRoot, 'raw.png'), image(120, 80));
-  raw.evidence = [{path: 'raw.png', kind: 'screenshot', origin: 'user', sanitized: true, verification: {privacy: true, relevance: true}, context: 'Synthetic QA image reviewed against reported status'}];
+  raw.draft.description = 'Invoice INV-42 shows a total $10 above the approved template.';
+  raw.draft.steps = ['Open INV-42 in Invoice details — the Total row is visible.', 'Open the approved invoice template — the example Total row is visible.', 'Compare the two Total rows (image 1).'];
+  raw.draft.expected = 'Invoice INV-42 shows $100.\nSource: #200, Invoice totals';
+  raw.draft.actual = 'Invoice INV-42 shows the wrong total.\n- Invoice details shows $110 (image 1).\nThe displayed total is $10 above the approved template.';
+  raw.draft.notes = '**Side-by-side comparison**\n\n| Record | Screen | API | Database |\n| --- | --- | --- | --- |\n| INV-42 | $110 | $110 | $100 |';
+  raw.evidence = [{path: 'raw.png', kind: 'screenshot', origin: 'user', sanitized: true, verification: {privacy: true, relevance: true}, context: 'Synthetic comparison evidence reviewed against the reported total', caption: 'Approved template (left), Invoice details (right)'}];
   const initial = prepareBugReport(roots, 'bug-pair', raw), source = initial.evidence[0].path;
   const annotated = await annotateBugReport(roots, 'bug-pair', {source, output: '.harness/runs/bug-pair/annotated.png', summary: 'Wrong status', expected: raw.draft.expected, actual: raw.draft.actual, boxes: [{kind: 'defect', x: 0.1, y: 0.1, width: 0.5, height: 0.5}], verification: {privacy: true, relevance: true}}, {inventory: dependencies.inventory, render: async () => ({bytes: image(120, 160), sourceDimensions: {width: 120, height: 80}, dimensions: {width: 120, height: 160}, transform: {displayWidth: 120, displayHeight: 80, offsetX: 0, offsetY: 80}})});
   const pending = await previewBugReport(roots, 'bug-pair', dependencies); assert.equal(pending.ready, false);
   const record = annotated.annotations[0].record; reviewBugAnnotation(roots, 'bug-pair', {sourceSha256: record.sourceSha256, specificationFingerprint: record.specificationFingerprint, outputSha256: record.sha256, relevance: true, placement: true, privacy: true});
   const preview = await previewBugReport(roots, 'bug-pair', dependencies); assert(preview.ready); assert.equal(preview.bugs[0].attachments.length, 2); approveBugReport(roots, 'bug-pair', preview.hash);
+  const fields = preview.bugs[0].fields, html = fields['System.Description'] ?? fields['Microsoft.VSTS.TCM.ReproSteps'];
+  assert.match(html, /\(image 1\).*<h3>Pictures<\/h3>.*Image 1 – Approved template \(left\), Invoice details \(right\).*annotated-.*<h3>Technical details<\/h3>/s);
+  assert.equal(html.match(/Image 1 –/g).length, 1);
+  assert.match(html, /<tr><td>INV-42<\/td><td>\$110<\/td><td>\$110<\/td><td>\$100<\/td><\/tr>/);
   let links = 0; ado.state.fault = ({req, res, path, body}) => {if (req.method === 'PATCH' && path === 'wit/workitems/800' && ++links === 2) {const item = ado.state.items.get(800); item.relations.push(body[1].value); item.rev++; res.destroy(); return true;}};
   await assert.rejects(fileBugReport(roots, 'bug-pair', preview.hash, dependencies)); ado.state.fault = null;
   const done = await fileBugReport(roots, 'bug-pair', preview.hash, dependencies); assert.equal(done.bugs[0].state, 'COMPLETED'); assert.equal(ado.state.attachments.size, 2); assert.equal(ado.state.items.get(800).relations.filter(item => item.rel === 'AttachedFile').length, 2);
+  const filed = ado.state.items.get(800).fields;
+  assert.equal(filed['System.Description'] ?? filed['Microsoft.VSTS.TCM.ReproSteps'], html);
   assert.equal(writes(ado).filter(item => item.path === 'wit/workitems/$bug').length, 1);
 });
 test('an eligible screenshot needs an annotation attempt; an explicit eligible raw-only fallback can be delivered', async t => {

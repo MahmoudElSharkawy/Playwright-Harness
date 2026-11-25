@@ -12,8 +12,8 @@ import {discoverWorkItems} from '../integrations/ado-discovery.mjs';
 import {htmlToText} from '../integrations/ado-steps.mjs';
 import {checkSourceRevisions} from '../execute/source.mjs';
 import {deliverBugReports} from '../execute/delivery.mjs';
-import {executionBugActual} from '../execute/bug-narrative.mjs';
-import {collectExecution, deliverableDefects, readVerifiedEvidence} from '../execute/report.mjs';
+import {bugScreenshots, executionBugActual, executionBugSteps, withoutUnavailableImageReferences} from '../execute/bug-narrative.mjs';
+import {collectExecution, deliverableDefects, executionBugObservation, readVerifiedEvidence} from '../execute/report.mjs';
 import {prepareAnnotation, bindAnnotationReview, verifyAnnotation, inspectScreenshot} from './annotations.mjs';
 import {reviewRunFailures} from './failures.mjs';
 
@@ -34,9 +34,10 @@ async function lockedOperation(roots, reportId, action) {
   const release = acquireEdit(roots, reportId); try {return await action();} finally {release();}
 }
 function validateDraft(draft, confirmation) {
-  requireThat(draft && Object.keys(draft).every(key => ['title', 'description', 'prerequisites', 'steps', 'expected', 'actual', 'fields', 'notes', 'severity', 'priority', 'omitFields'].includes(key)), 'Unsupported editable bug draft input.');
+  requireThat(draft && Object.keys(draft).every(key => ['title', 'description', 'prerequisites', 'steps', 'expected', 'actual', 'configuration', 'fields', 'notes', 'severity', 'priority', 'omitFields'].includes(key)), 'Unsupported editable bug draft input.');
   for (const name of ['title', 'description', 'expected', 'actual']) requireThat(plain(draft[name]), `Invalid bug draft ${name}.`);
   requireThat(draft.title.length <= 255, 'Bug title exceeds 255 characters.');
+  if (draft.configuration !== undefined) requireThat(plain(draft.configuration) && draft.configuration.length <= 4000 && !/[\r\n]/.test(draft.configuration), 'Invalid bug test configuration.');
   for (const name of ['prerequisites', 'steps']) requireThat(Array.isArray(draft[name]) && draft[name].length <= 100 && draft[name].every(plain), `Invalid bug draft ${name}.`);
   requireThat(draft.fields && typeof draft.fields === 'object' && !Array.isArray(draft.fields), 'Bug draft fields must be an object.');
   requireThat(confirmation && Object.keys(confirmation).every(key => ['user', 'agent', 'notes'].includes(key)) && ['reported', 'confirmed'].includes(confirmation.user) && ['not-run', 'reproduced', 'inconclusive', 'not-reproduced'].includes(confirmation.agent), 'Invalid bug confirmation status.');
@@ -64,6 +65,7 @@ function selectedEvidence(roots, reportId, selected) {
     requireThat(stat.isFile() && !stat.isSymbolicLink() && stat.size > 0 && stat.size <= 2 * 1024 * 1024, 'Bug evidence is missing, linked, empty or oversized.');
     const bytes = readFileSync(source); requireThat(bytes.length === stat.size, 'Bug evidence changed while importing.');
     requireThat(plain(item.context ?? ''), 'Invalid bug evidence context.');
+    if (item.caption !== undefined) requireThat(item.kind === 'screenshot' && hasText(item.caption) && item.caption.length <= 200 && !/[\r\n]/.test(item.caption), 'Invalid screenshot caption.');
     const eligible = item.sanitized === true && item.verification?.privacy === true && item.verification?.relevance === true && hasText(item.context);
     if (!eligible) return {path: item.path, kind: item.kind, origin: item.origin, context: item.context ?? '', sha256: digest(bytes), eligible: false, reason: 'privacy-relevance-or-context-unverified'};
     if (item.kind !== 'screenshot') data({text: bytes.toString('utf8')}, 2 * 1024 * 1024);
@@ -73,7 +75,7 @@ function selectedEvidence(roots, reportId, selected) {
     mkdirSync(dirname(file), {recursive: true, mode: 0o700});
     if (!existsSync(file)) writeFileSync(file, bytes, {flag: 'wx', mode: 0o600});
     requireThat(digest(readFileSync(file)) === sha256, 'Captured bug evidence changed.');
-    return {id: `e-${sha256.slice(0, 24)}`, name: `e-${sha256.slice(0, 24)}${suffix}`, path: relative, bytes: bytes.length, sha256, kind: item.kind, origin: item.origin, context: item.context, eligible: true};
+    return {id: `e-${sha256.slice(0, 24)}`, name: `e-${sha256.slice(0, 24)}${suffix}`, path: relative, bytes: bytes.length, sha256, kind: item.kind, origin: item.origin, context: item.context, eligible: true, ...(item.caption === undefined ? {} : {caption: item.caption})};
   });
 }
 export function prepareBugReport(roots, reportId, input) {
@@ -95,7 +97,21 @@ export function editBugReport(roots, reportId, input) {
     requireThat(Object.keys(patch).every(key => ['head', 'draft', 'confirmation', 'evidence', 'referenceId'].includes(key)), 'Unsupported editable bug input.');
     const draft = {...state.draft, ...patch.draft}, confirmation = {...state.confirmation, ...patch.confirmation}; validateDraft(draft, confirmation);
     const {head, referenceId, ...prior} = state, selected = Object.hasOwn(patch, 'referenceId') ? patch.referenceId : referenceId;
-    return save(roots, reportId, {...prior, draft, confirmation, ...(selected == null ? {} : {referenceId: adoId(selected)}), evidence: patch.evidence ? selectedEvidence(roots, reportId, patch.evidence) : state.evidence, history: [...state.history, head]});
+    const evidence = patch.evidence ? selectedEvidence(roots, reportId, patch.evidence) : state.evidence;
+    let annotations = state.annotations;
+    if (patch.evidence) {
+      const before = bugScreenshots(state.evidence), after = bugScreenshots(evidence);
+      annotations = annotations.filter(({record}) => after.some(item => item.path === record.source && item.sha256 === record.sourceSha256));
+      for (const field of ['steps', 'actual']) {
+        if (Object.hasOwn(patch.draft ?? {}, field)) continue;
+        const value = field === 'steps' ? draft.steps.join('\n') : draft.actual;
+        for (const [, number] of value.matchAll(/\(image ([1-9]\d*)\)/gi)) {
+          const index = Number(number) - 1;
+          requireThat(before[index]?.sha256 === after[index]?.sha256, `Review and resubmit draft.${field} when its image references change.`);
+        }
+      }
+    }
+    return save(roots, reportId, {...prior, draft, confirmation, ...(selected == null ? {} : {referenceId: adoId(selected)}), evidence, annotations, history: [...state.history, head]});
   });
 }
 function verifiedAttachments(roots, state) {
@@ -175,8 +191,10 @@ export async function discoverBugReport(roots, reportId, input, dependencies = {
 }
 async function preparePreview(roots, reportId, dependencies) {
   const state = readBugReport(roots, reportId), attachments = verifiedAttachments(roots, state), problems = [];
-  for (const name of ['title', 'description', 'expected', 'actual']) if (!hasText(state.draft[name])) problems.push({field: name, code: 'missing'});
-  if (!state.draft.steps.length) problems.push({field: 'steps', code: 'missing'});
+  const screenshots = bugScreenshots(attachments).length;
+  for (const name of ['title', 'description', 'expected']) if (!hasText(state.draft[name])) problems.push({field: name, code: 'missing'});
+  if (!hasText(withoutUnavailableImageReferences(state.draft.actual, screenshots))) problems.push({field: 'actual', code: 'missing'});
+  if (!state.draft.steps.some(step => hasText(withoutUnavailableImageReferences(step, screenshots)))) problems.push({field: 'steps', code: 'missing'});
   if (!hasText(state.intake.source?.content ?? '')) problems.push({field: 'source', code: 'missing-accepted-context'});
   if (state.intake.source?.postRun?.classification === 'unknown') problems.push({field: 'classification', code: 'provisional-classification'});
   for (const message of state.intake.source?.postRun?.sourceGaps ?? []) problems.push({field: 'source', code: 'missing-original-revisions', message});
@@ -237,13 +255,13 @@ export function compactBugPreview(preview) {
       if (value === undefined && defaultValue == null) continue;
       if (value === undefined) {fields.push({field, label, defaultValue}); continue;}
       const html = type?.toLowerCase() === 'html';
-      const display = html ? htmlToText(value) : value;
+      const display = html ? htmlToText(value, {rendered: true}) : value;
       const key = typeof value === 'string' && value.length > 120 ? `${type}\0${value}` : null;
       const sameAs = shown.get(key), truncated = typeof display === 'string' && display.length > 2000;
       fields.push({field, label, ...(sameAs ? {sameAs} : {value: truncated ? display.slice(0, 2000) : display, ...(html ? {format: 'plain-text'} : {}), ...(truncated ? {truncated: true} : {})})});
       if (!sameAs && key) shown.set(key, field);
     }
-    const attachments = bug.attachments.map(({name, kind, bytes, context}) => ({name, kind, bytes, context}));
+    const attachments = bug.attachments.map(({name, kind, bytes, context, caption}) => ({name, kind, bytes, context, ...(caption === undefined ? {} : {caption})}));
     return {type: bug.type, fields, attachments, writes: [{operation: 'create-bug', relations: bug.request.body.filter(row => row.path === '/relations/-').map(row => row.value)}, ...attachments.flatMap(({name}) => [{operation: 'upload-attachment', name}, {operation: 'attach-evidence', name}])]};
   });
   return {ready, hash, previewFile, destination, confirmation: preview.confirmation, rejectedEvidence: preview.rejectedEvidence, ...(reference ? {reference} : {}), ...(completed ? {completed} : {}), bugs};
@@ -274,8 +292,10 @@ export function bugReportFromExecution(roots, reportId, executionId, selected) {
       evidence.push({path: relative(roots.projectRoot, join(run.roots.runRoot, record.path)).replaceAll('\\', '/'), kind: record.kind === 'screenshot' ? 'screenshot' : 'log', origin: 'execution', sanitized: record.sanitized === true, verification: {privacy: record.sanitized === true, relevance: false}, context: `Execution ${executionId}; run ${occurrence.runId}; evidence ${record.id}; review attachment relevance before selection`});
     }
   }
+  const expected = scenario.steps.flatMap(item => item.expected).filter(Boolean).join('\n');
+  const observed = executionBugObservation(view, defect), counts = executionBugActual(defect);
   return prepareBugReport(roots, reportId, {version: 1, description: defect.title, source: {executionId, caseId: defect.caseId, ...(view.source.scope.kind === 'story' ? {storyId: view.source.scope.storyId} : {}), sourceFingerprint: view.execution.sourceFingerprint, defectFingerprint: selected, observationsFingerprint: fingerprint(defect.occurrences), content: JSON.stringify({executionId, sourceFingerprint: view.execution.sourceFingerprint, caseId: defect.caseId, revision: tc.rev, occurrences: defect.occurrences}), expected: scenario.steps.flatMap(item => item.expected).join('; ')},
-    draft: {title: defect.title, description: defect.title, prerequisites: [], steps: scenario.steps.map(item => item.action), expected: scenario.steps.flatMap(item => item.expected).join('; '), actual: executionBugActual(defect), fields: {}}, confirmation: {user: 'reported', agent: 'reproduced', notes: 'The failure was verified in the recorded execution; no additional reproduction was performed.'}, evidence: evidence.slice(0, 20)});
+    draft: {title: defect.title, description: defect.title, prerequisites: [], steps: executionBugSteps(scenario), expected: expected ? `${expected}\nSource: Test case #${defect.caseId}, expected results` : '', actual: observed || counts, ...(observed ? {notes: counts} : {}), configuration: view.freeze.environment.name, fields: {}}, confirmation: {user: 'reported', agent: 'reproduced', notes: 'The failure was verified in the recorded execution; no additional reproduction was performed.'}, evidence: evidence.slice(0, 20)});
 }
 
 /** Persist agent classifications and evidence-backed grouping, then reuse ordinary editable drafts. */

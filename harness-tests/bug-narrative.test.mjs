@@ -4,8 +4,8 @@ import {fixture} from './fixtures/execution-core.mjs';
 import {adoFixture} from './fixtures/ado.mjs';
 import {executionFixture, executeApi} from './fixtures/execute.mjs';
 import {createAdoClient} from '../scripts/lib/integrations/ado-client.mjs';
-import {prepareBugReport, readBugReport, editBugReport, previewBugReport, approveBugReport, fileBugReport, bugReportFromExecution} from '../scripts/lib/bug-report/index.mjs';
-import {collectExecution, deliverableDefects} from '../scripts/lib/execute/report.mjs';
+import {prepareBugReport, readBugReport, editBugReport, previewBugReport, compactBugPreview, approveBugReport, fileBugReport, bugReportFromExecution} from '../scripts/lib/bug-report/index.mjs';
+import {collectExecution, deliverableDefects, executionBugObservation} from '../scripts/lib/execute/report.mjs';
 import {deliverExecution} from '../scripts/lib/execute/delivery.mjs';
 import {renderBugNarrative} from '../scripts/lib/execute/bug-narrative.mjs';
 
@@ -43,6 +43,45 @@ test('readable confirmation escapes markup and preserves deliberately approved A
   assert(preview.ready); assert(!html.includes('<script>')); assert(html.includes('&lt;script&gt;')); assert(html.includes('&amp; comparison')); assert(html.includes('missing record')); assert.equal(readBugReport(roots, 'escaped').draft.actual, raw.draft.actual);
 });
 
+for (const [kind, action, actual, evidence] of [
+  ['API', 'Read invoice INV-42 through the invoices API', 'The invoices API returns 503 for INV-42.', 'GET /invoices/INV-42'],
+  ['DB', 'Count the payment schedules for INV-42 using the query below', 'Invoice INV-42 has two payment schedules. One is expected.', "SELECT COUNT(*) FROM PaymentSchedule WHERE InvoiceId = 'INV-42' AND Stage < 3"]
+]) test(`${kind}-only narrative presents the observation before the technical evidence`, async t => {
+  const ado = await adoFixture(t, {bugs: {fieldMap: {actual: 'Custom.Actual'}}}), {roots} = fixture(t), raw = intake(), deps = dependencies(ado, roots);
+  ado.state.fault = ({path, send}) => {
+    if (path !== 'wit/workitemtypes/bug/fields') return;
+    send({value: [{referenceName: 'System.Title', type: 'string'}, {referenceName: 'Microsoft.VSTS.TCM.ReproSteps', type: 'html'}, {referenceName: 'Custom.Actual', type: 'string'}]}); return true;
+  };
+  raw.draft.description = actual;
+  raw.draft.steps = [`${action} — the result includes the recorded status or count.`, 'Optional: Check the adjacent invoice.'];
+  raw.draft.expected = 'The invoice is available with one payment schedule.\n- Keep the invoice date at 2026-08-14.\nSource: #200, Payment schedules';
+  raw.draft.actual = `${actual}\n- INV-42 has an invoice date of 2026-08-14 (image 1).\nThis prevents the expected check.`;
+  raw.draft.notes = '**Evidence**\n\n```\n' + evidence + '\n    literal value: two  spaces\n```\n\n| Record | Value |\n| --- | --- |\n| INV-42 | Recorded result |';
+  raw.draft.configuration = 'QA, build 5.2';
+  const report = `${kind.toLowerCase()}-only`;
+  const placeholder = prepareBugReport(roots, report, {...raw, draft: {...raw.draft, actual: '(image 1)', steps: ['(image 1)']}});
+  const incomplete = await previewBugReport(roots, report, deps);
+  assert.equal(incomplete.ready, false);
+  assert.deepEqual(incomplete.problems.map(problem => problem.field), ['actual', 'steps']);
+  editBugReport(roots, report, {head: placeholder.head, draft: raw.draft});
+  const preview = await previewBugReport(roots, report, deps), html = narrative(preview.bugs[0].fields);
+  assert(preview.ready);
+  assert.match(html, /^<p>.*<h3>Steps<\/h3>.*<ol>.*<li>Optional:.*<h3>Expected Result<\/h3>.*<ul>.*Source: #200, Payment schedules.*<h3>Actual Result<\/h3>.*<h3>Technical details<\/h3>.*<strong>Evidence<\/strong>.*<pre><code>.*<table>.*<strong>Test configuration<\/strong>: QA, build 5\.2<\/p>$/s);
+  assert(!html.includes('Pictures'));
+  assert(!html.includes('(image 1)'));
+  assert(!preview.bugs[0].fields['Custom.Actual'].includes('(image 1)'));
+  const compact = compactBugPreview(preview).bugs[0].fields.find(field => field.format === 'plain-text').value;
+  assert(compact.includes(`1. ${action}`));
+  assert(compact.includes('2. Optional:'));
+  assert(compact.includes(evidence));
+  assert(compact.includes('\n    literal value: two  spaces\n'));
+  assert(html.indexOf(evidence.split(' ')[0]) > html.indexOf('<h3>Technical details</h3>'));
+  assert(html.slice(0, html.indexOf('<h3>Technical details</h3>')).includes('2026-08-14'));
+  approveBugReport(roots, report, preview.hash);
+  await fileBugReport(roots, report, preview.hash, deps);
+  assert.equal(narrative(ado.state.items.get(800).fields), html);
+});
+
 for (const handoff of [true, false]) test(`${handoff ? 'bug-report handoff' : 'direct execution filing'} uses readable execution observations without leaking run metadata`, async t => {
   const ado = await adoFixture(t), f = await executionFixture(t, {organizationUrl: ado.config.organizationUrl, handler: (_, res) => {res.writeHead(500); res.end('{}');}});
   f.apiStep(); f.freeze(); await executeApi(f); await executeApi(f, {explicitRerun: true}); const before = collectExecution(f.roots, f.executionId), defect = deliverableDefects(before).defects[0], deps = dependencies(ado, f.roots);
@@ -56,6 +95,9 @@ for (const handoff of [true, false]) test(`${handoff ? 'bug-report handoff' : 'd
     preview = await deliverExecution(f.roots, f.executionId, 'file-bugs', {}, deps);
   }
   const html = narrative(preview.bugs[0].fields); assert.match(html, /Source: Test execution/); assert.match(html, /Test case #101/); assert.match(html, /Recorded failure occurrences: 2/);
+  assert.match(html, /<li>Read status<\/li>.*Source: Test case #101, expected results.*<h3>Actual Result<\/h3><p>The failing check returned 500\.<\/p>/);
+  const anotherRecord = {...defect.occurrences[0], scenarioId: 'other-invoice', family: 'database'};
+  assert.equal(executionBugObservation(before, {...defect, occurrences: [anotherRecord, ...defect.occurrences]}), 'The failing check returned 500.');
   for (const text of [f.executionId, defect.fingerprint, 'runId', 'evidenceIds', 'sourceFingerprint', ...defect.occurrences.map(row => row.runId)]) assert(!html.includes(text), text);
   if (!handoff) assert.match(html, /changed after execution.*revision 1.*revision 2/);
   assert.deepEqual(collectExecution(f.roots, f.executionId).execution, before.execution); assert.equal(writes(ado).length, 0);
@@ -69,7 +111,9 @@ test('older generated execution defaults are readable in narrative and custom Ac
   ado.config.bugs = {fieldMap: {actual: 'Custom.Actual'}};
   ado.state.fault = ({path, send}) => {if (path === 'wit/workitemtypes/bug/fields') {send({value: ['System.Title', 'System.Tags', 'Microsoft.VSTS.TCM.ReproSteps', 'Custom.Actual'].map(referenceName => ({referenceName, type: referenceName.endsWith('ReproSteps') ? 'html' : 'string'}))}); return true;}};
   const deps = dependencies(ado, f.roots), preview = await previewBugReport(f.roots, 'older', deps); assert(preview.ready);
-  for (const field of ['Microsoft.VSTS.TCM.ReproSteps', 'Custom.Actual']) {assert.match(preview.bugs[0].fields[field], /Recorded failure occurrences: 1/); for (const value of [f.executionId, defect.fingerprint, 'runId', 'evidenceIds']) assert(!preview.bugs[0].fields[field].includes(value), value);}
+  assert.match(preview.bugs[0].fields['Microsoft.VSTS.TCM.ReproSteps'], /Recorded failure occurrences: 1/);
+  assert.match(preview.bugs[0].fields['Custom.Actual'], /The observed value needs review/);
+  for (const field of ['Microsoft.VSTS.TCM.ReproSteps', 'Custom.Actual']) for (const value of [f.executionId, defect.fingerprint, 'runId', 'evidenceIds']) assert(!preview.bugs[0].fields[field].includes(value), value);
   approveBugReport(f.roots, 'older', preview.hash); await fileBugReport(f.roots, 'older', preview.hash, deps);
   assert.equal(ado.state.items.get(800).fields['Custom.Actual'], preview.bugs[0].fields['Custom.Actual']);
   assert.equal(readBugReport(f.roots, 'older').draft.actual, actual); assert.equal(readBugReport(f.roots, 'older').confirmation.notes, notes);
