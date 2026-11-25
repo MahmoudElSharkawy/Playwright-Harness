@@ -70,17 +70,14 @@ async function prepareBug(client, view, defect, revisions, metadata, drafts, ret
   if (edited.severity !== undefined) fields['Microsoft.VSTS.Common.Severity'] = edited.severity;
   const attachments = (view.reportAttachments ?? executionBugEvidence(view, defect).map(item => item.record))
     .filter(record => record.bytes <= (defaults.maxAttachmentBytes ?? 2 * 1024 * 1024));
-  const recordedObservation = !view.reportContext && edited.actual === undefined ? executionBugObservation(view, defect) : '';
-  const {html, actual} = renderBugNarrative(view, defect, edited, changed, {attachments, recordedObservation});
   requireThat(metadata.mappings.reproSteps || metadata.mappings.description, 'Configure an available bug narrative field mapping.');
   const narrativeFields = [...new Set([metadata.mappings.reproSteps, metadata.mappings.description].filter(Boolean))];
-  let content = html;
   // Only a request that already dispatched can retain the previous layout.
-  if (retainedRequest && edited.configuration === undefined) {
-    const legacy = renderBugNarrative(view, defect, edited, changed, {legacy: true}).html;
-    if (narrativeFields.every(field => retainedRequest.body.some(entry => entry.path === `/fields/${field}` && entry.value === legacy))) content = legacy;
-  }
-  for (const name of narrativeFields) fields[name] = content;
+  const legacy = retainedRequest && edited.configuration === undefined ? renderBugNarrative(view, defect, edited, changed, {legacy: true}) : null;
+  const retainedLegacy = legacy && narrativeFields.every(field => retainedRequest.body.some(entry => entry.path === `/fields/${field}` && entry.value === legacy.html));
+  const recordedObservation = !retainedLegacy && !view.reportContext && edited.actual === undefined ? executionBugObservation(view, defect) : '';
+  const {html, actual} = retainedLegacy ? legacy : renderBugNarrative(view, defect, edited, changed, {attachments, recordedObservation});
+  for (const name of narrativeFields) fields[name] = html;
   for (const name of ['expected', 'actual']) if (metadata.mappings[name] && edited[name] !== undefined) {const spec = metadata.fields.find(field => field.referenceName === metadata.mappings[name]), value = name === 'actual' ? actual : edited[name]; fields[metadata.mappings[name]] = /^html$/i.test(spec?.type ?? '') ? `<pre>${escapeHtml(value)}</pre>` : value;}
   for (const name of edited.omitFields ?? []) {requireThat(!Object.values(metadata.mappings).includes(name), 'Cannot omit bug narrative fields.'); delete fields[name];}
   requireThat(!String(fields['System.Tags'] ?? '').split(';').some(tag => correlationTag(tag.trim())), 'Harness correlation tags are not supported. Review the proposed Tags field.');
@@ -97,7 +94,7 @@ async function prepareBug(client, view, defect, revisions, metadata, drafts, ret
   await client.validateWorkItem(metadata.type, body, {fresh: true});
   const request = {route: `wit/workitems/$${encodeURIComponent(metadata.type)}?api-version=7.1`, method: 'POST', body};
   const fieldSpecifications = metadata.fields.filter(field => Object.hasOwn(fields, field.referenceName)).map(({referenceName, type, isIdentity}) => ({referenceName, type, isIdentity}));
-  const executionAttachments = !view.reportAttachments && content === html ? bugScreenshots(attachments).map(({id, name, kind, bytes, sha256}) => ({name: name ?? `${id}.png`, kind, bytes, sha256})) : [];
+  const executionAttachments = !view.reportAttachments && !retainedLegacy ? bugScreenshots(attachments).map(({id, name, kind, bytes, sha256}) => ({name: name ?? `${id}.png`, kind, bytes, sha256})) : [];
   return {defect, type: metadata.type, request, fields, fieldSpecifications, schemaFingerprint: metadata.fingerprint, review: inspection.review, revisions: changed ?? null, executionAttachments};
 }
 

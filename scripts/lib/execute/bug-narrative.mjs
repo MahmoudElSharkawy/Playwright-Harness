@@ -38,6 +38,10 @@ export function bugScreenshots(attachments) {
   });
 }
 
+export function withoutUnavailableImageReferences(text, count) {
+  return text.replace(/[ \t]*\(image ([1-9]\d*)\)/gi, (reference, number) => Number(number) <= count ? reference : '');
+}
+
 function pictures(attachments) {
   return bugScreenshots(attachments).map((raw, index) => {
     const annotated = attachments.find(record => record.sourceSha256 === raw.sha256);
@@ -84,7 +88,7 @@ export function renderBugNarrative(view, defect, edited, changed, {attachments =
     return {actual, html: `${header}<p>${h(edited.description ?? '')}</p><h3>Prerequisites</h3><pre>${h((edited.prerequisites ?? []).join('\n'))}</pre><h3>Steps to reproduce</h3><pre>${h(edited.steps?.map((step, index) => `${index + 1}. ${step}`).join('\n') ?? originalSteps)}</pre><h3>Expected</h3><pre>${h(edited.expected ?? originalSteps)}</pre><h3>Actual</h3><pre>${h(actual)}</pre><p>${h(edited.notes ?? '')}</p>${revision}`};
   }
   const captions = pictures(attachments);
-  const withImages = text => text.replace(/[ \t]*\(image ([1-9]\d*)\)/gi, (reference, number) => Number(number) <= captions.length ? reference : '');
+  const withImages = text => withoutUnavailableImageReferences(text, captions.length);
   const steps = edited.steps ?? executionBugSteps(scenario);
   const setup = edited.prerequisites?.filter(value => value.trim()) ?? [];
   const numbered = steps.map(withImages).filter(step => step.trim()).map(step => `<li>${h(step).replace(/\r?\n/g, '<br>')}</li>`).join('');
@@ -99,12 +103,13 @@ export function renderBugNarrative(view, defect, edited, changed, {attachments =
   const observed = generated ? recordedObservation || (counts.startsWith('Recorded failure occurrences')
     ? 'The recorded result differed from the expected behavior. The observed value needs review.'
     : 'No conclusive actual result was recorded.') : actual;
+  const renderedActual = withImages(observed);
   const configuration = edited.configuration ?? view.freeze?.environment?.name;
-  return {actual, html: [
+  return {actual: renderedActual, html: [
     paragraph(edited.description?.trim() || edited.title || defect.title || 'Bug report'),
     section('Steps', (setup.length ? paragraph(`Before you start: ${setup.join('\n')}`) : '') + (numbered ? `<ol>${numbered}</ol>` : '')),
     section('Expected Result', prose(expected) + citation),
-    section('Actual Result', prose(withImages(observed))),
+    section('Actual Result', prose(renderedActual)),
     section('Pictures', captions.map(paragraph).join('')),
     section('Technical details', technicalNotes(edited.notes) + header + (generated ? prose(counts) : '') + revision),
     configuration?.trim() ? `<p><strong>Test configuration</strong>: ${h(configuration)}</p>` : ''

@@ -183,7 +183,7 @@ test('a completed report cannot silently claim a newly edited draft was delivere
   editBugReport(roots, 'bug-complete', {head: state.head, draft: {title: 'New reviewed wording'}}); const edited = await previewBugReport(roots, 'bug-complete', dependencies); approveBugReport(roots, 'bug-complete', edited.hash);
   await assert.rejects(fileBugReport(roots, 'bug-complete', edited.hash, dependencies), /dispatched bug (content|plan) changed/i); assert.equal(ado.state.items.get(800).fields['System.Title'], input().draft.title); assert.equal(writes(ado).filter(item => item.path === 'wit/workitems/$bug').length, 1);
 });
-test('reordering reviewed screenshots requires review of their numbered references', t => {
+test('changing reviewed screenshots requires review of their numbered references', async t => {
   const {roots} = fixture(t), raw = input();
   writeFileSync(join(roots.projectRoot, 'first.png'), image(120, 80));
   writeFileSync(join(roots.projectRoot, 'second.png'), image(120, 90));
@@ -195,6 +195,16 @@ test('reordering reviewed screenshots requires review of their numbered referenc
   const edited = editBugReport(roots, 'reorder', {...patch, draft: {actual: 'Status 500 (image 2).'}});
   assert.equal(edited.evidence[1].sha256, state.evidence[0].sha256);
   assert.equal(edited.draft.actual, 'Status 500 (image 2).');
+  const annotated = await annotateBugReport(roots, 'reorder', {
+    source: edited.evidence[1].path, output: '.harness/runs/reorder/annotated.png', summary: 'Wrong status',
+    expected: edited.draft.expected, actual: edited.draft.actual, verification: {privacy: true, relevance: true},
+    boxes: [{kind: 'defect', x: 0.1, y: 0.1, width: 0.5, height: 0.5}]
+  }, {inventory: async () => [{pid: process.pid, identity: '1'}], render: async () => {throw Object.assign(new Error('Unavailable'), {code: 'RENDERER_UNAVAILABLE'});}});
+  assert.equal(annotated.annotations.length, 1);
+  const removed = editBugReport(roots, 'reorder', {head: annotated.head, evidence: [], draft: {actual: 'Status 500.'}});
+  assert.deepEqual(removed.evidence, []);
+  assert.deepEqual(removed.annotations, []);
+  assert(removed.history.includes(annotated.head));
 });
 
 test('reviewed raw and annotated pair uses one bug and recovers a lost second attachment-link acknowledgement', async t => {

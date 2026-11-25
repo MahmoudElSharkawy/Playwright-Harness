@@ -40,17 +40,24 @@ export function readVerifiedEvidence(roots, record) {
 /** Bring only bounded, sanitized scalar check results into an automatic bug draft. */
 export function executionBugObservation(view, defect) {
   const values = new Set();
+  const family = defect.occurrences.find(occurrence => occurrence.runId === defect.runId && occurrence.scenarioId === defect.scenarioId)?.family;
+  if (!['api', 'database'].includes(family)) return '';
+  const scenario = view.source.scenarios.find(item => item.id === defect.scenarioId);
+  const expected = scenario.expectations.find(item => item.step === defect.sourceStep && item.expected === defect.expectedIndex);
   for (const occurrence of defect.occurrences) {
-    if (occurrence.status !== 'FAIL' || !['api', 'database'].includes(occurrence.family)) continue;
+    if (occurrence.status !== 'FAIL' || occurrence.scenarioId !== defect.scenarioId || occurrence.family !== family) continue;
     const run = view.runs.find(item => item.runId === occurrence.runId && item.state === 'ASSESSED');
+    const condition = run.conditions.find(item => item.key === expected?.key && item.index === defect.conditionIndex);
+    if (!condition) continue;
     for (const record of run.result.evidence) {
       if (record.kind !== 'assertion' || !record.sanitized || record.bytes > ASSERTION_BYTES || !occurrence.evidenceIds.includes(record.id)) continue;
-      const {actual, passed} = JSON.parse(readVerifiedEvidence(run.roots, record).toString('utf8'));
-      if (passed === false && (Number.isFinite(actual) || typeof actual === 'boolean')) values.add(String(actual));
+      const {check, actual, passed} = JSON.parse(readVerifiedEvidence(run.roots, record).toString('utf8'));
+      if (check === condition.id && passed === false && (Number.isFinite(actual) || typeof actual === 'boolean')) values.add(String(actual));
       if (values.size > 3) return '';
     }
   }
-  return values.size ? `The failing check returned ${[...values].join(', ')}.` : '';
+  if (values.size === 1) return `The failing check returned ${[...values][0]}.`;
+  return values.size ? `Recorded values for the failing check were ${[...values].join(', ')}.` : '';
 }
 
 export function defectFingerprint(source, item) {

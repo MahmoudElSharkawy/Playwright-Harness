@@ -12,7 +12,7 @@ import {discoverWorkItems} from '../integrations/ado-discovery.mjs';
 import {htmlToText} from '../integrations/ado-steps.mjs';
 import {checkSourceRevisions} from '../execute/source.mjs';
 import {deliverBugReports} from '../execute/delivery.mjs';
-import {bugScreenshots, executionBugActual, executionBugSteps} from '../execute/bug-narrative.mjs';
+import {bugScreenshots, executionBugActual, executionBugSteps, withoutUnavailableImageReferences} from '../execute/bug-narrative.mjs';
 import {collectExecution, deliverableDefects, executionBugObservation, readVerifiedEvidence} from '../execute/report.mjs';
 import {prepareAnnotation, bindAnnotationReview, verifyAnnotation, inspectScreenshot} from './annotations.mjs';
 import {reviewRunFailures} from './failures.mjs';
@@ -98,8 +98,10 @@ export function editBugReport(roots, reportId, input) {
     const draft = {...state.draft, ...patch.draft}, confirmation = {...state.confirmation, ...patch.confirmation}; validateDraft(draft, confirmation);
     const {head, referenceId, ...prior} = state, selected = Object.hasOwn(patch, 'referenceId') ? patch.referenceId : referenceId;
     const evidence = patch.evidence ? selectedEvidence(roots, reportId, patch.evidence) : state.evidence;
+    let annotations = state.annotations;
     if (patch.evidence) {
       const before = bugScreenshots(state.evidence), after = bugScreenshots(evidence);
+      annotations = annotations.filter(({record}) => after.some(item => item.path === record.source && item.sha256 === record.sourceSha256));
       for (const field of ['steps', 'actual']) {
         if (Object.hasOwn(patch.draft ?? {}, field)) continue;
         const value = field === 'steps' ? draft.steps.join('\n') : draft.actual;
@@ -109,7 +111,7 @@ export function editBugReport(roots, reportId, input) {
         }
       }
     }
-    return save(roots, reportId, {...prior, draft, confirmation, ...(selected == null ? {} : {referenceId: adoId(selected)}), evidence, history: [...state.history, head]});
+    return save(roots, reportId, {...prior, draft, confirmation, ...(selected == null ? {} : {referenceId: adoId(selected)}), evidence, annotations, history: [...state.history, head]});
   });
 }
 function verifiedAttachments(roots, state) {
@@ -189,8 +191,10 @@ export async function discoverBugReport(roots, reportId, input, dependencies = {
 }
 async function preparePreview(roots, reportId, dependencies) {
   const state = readBugReport(roots, reportId), attachments = verifiedAttachments(roots, state), problems = [];
-  for (const name of ['title', 'description', 'expected', 'actual']) if (!hasText(state.draft[name])) problems.push({field: name, code: 'missing'});
-  if (!state.draft.steps.length) problems.push({field: 'steps', code: 'missing'});
+  const screenshots = bugScreenshots(attachments).length;
+  for (const name of ['title', 'description', 'expected']) if (!hasText(state.draft[name])) problems.push({field: name, code: 'missing'});
+  if (!hasText(withoutUnavailableImageReferences(state.draft.actual, screenshots))) problems.push({field: 'actual', code: 'missing'});
+  if (!state.draft.steps.some(step => hasText(withoutUnavailableImageReferences(step, screenshots)))) problems.push({field: 'steps', code: 'missing'});
   if (!hasText(state.intake.source?.content ?? '')) problems.push({field: 'source', code: 'missing-accepted-context'});
   if (state.intake.source?.postRun?.classification === 'unknown') problems.push({field: 'classification', code: 'provisional-classification'});
   for (const message of state.intake.source?.postRun?.sourceGaps ?? []) problems.push({field: 'source', code: 'missing-original-revisions', message});
