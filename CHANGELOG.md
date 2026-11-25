@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+## 4.4.2 — Readable bug reports
+
+### Upgrade actions
+
+- Download the 4.4.2 archive and checksum from the same release, verify SHA-256,
+  and re-run setup in each consumer project. Refresh previews for undispatched
+  bugs before approving the new report format.
+
+### Changes
+
+- Use one Azure DevOps bug-report format for UI, API and database defects,
+  including reports that combine evidence from several layers. Put reproduction
+  steps and observed results first, followed by numbered screenshot captions where applicable
+  and technical evidence. (#165)
+- Point new-project ChaosEngine setup to the standalone upstream installer. (#164)
+
 ## 4.4.1 — Context search headings
 
 ### Upgrade actions
