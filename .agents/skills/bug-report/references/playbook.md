@@ -26,6 +26,140 @@ custom fields and missing choices belong in this same review. Explain relevant
 source conflicts outside the table. Apply requested changes to the working draft,
 preserving original source/execution records, and repeat only affected checks.
 
+## Report layout
+
+Use the same layout for UI, API and DB defects, including any pair or all three.
+Group observations only when evidence ties them to the same discrepancy and
+record or transaction. Keep checks needed for reproduction in Steps and put
+supporting checks under Technical details. Identify the observation at each
+layer and describe the limits of any comparison.
+
+1. **Summary**. Write one sentence naming the symptom, where it occurs and the
+   requirement it breaks when established.
+2. **Steps**. Number one action and the neutral cue the reader should see after
+   it. Use screen labels for UI actions. Name the account type, record, page,
+   row or section needed. For API or DB steps, identify the operation and
+   record in plain language and point to the precise request or read-only query
+   under Technical details. For a comparison, open the reference and compare
+   the same part. Put warnings only where they prevent a wrong action or result.
+   Put extra checks last and mark them **Optional**. Put verdicts in Actual Result.
+3. **Expected Result**. State the behavior in one or two lines. Use short
+   bullets for multiple parts. End with a `Source: [requirement ID, section]`
+   line. State a gap when the source or section is unknown.
+4. **Actual Result**. Open with the observable symptom. Use one short bullet per
+   relevant screen or step, with the labels and values shown. Add `(image N)`
+   where it helps. Close with a supported impact or what the difference means.
+5. **Pictures**. Give each reviewed image one short, numbered caption. Number
+   images in evidence selection order and update references when it changes.
+   Use the existing red highlight on the annotated image. Use one reviewed
+   side-by-side capture when the reference and actual can be shown together.
+   Label the expected and actual sides. Omit this section when no picture applies.
+6. **Technical details**. Use only the applicable labels below. Put each bold
+   label on its own line, followed by short bullets, a fenced code block for a
+   read-only query or captured request, or a small table for returned values.
+   Explain internal names on first use. Say what the evidence proves and where
+   it stops.
+7. **Test configuration**. End with one line of available environment,
+   build/version and browser or device. Omit report timestamps and dates of
+   execution, observation, rechecks and verification throughout the narrative.
+   Keep dates that are part of the issue and the supported date of a suspected
+   change. Preserve capture times in the evidence record.
+
+Use `draft.description` for the summary and `draft.steps` for the numbered list.
+Use `draft.expected` and `draft.actual` for the result text, with lines starting
+`- ` for bullets. Supply notes and test configuration through `draft.notes` and
+`draft.configuration`. Give screenshot evidence a short `caption` and keep its
+provenance in `context`. The Pictures section names the file in ADO Attachments.
+
+```text
+[Symptom, location and requirement in one sentence]
+
+Steps
+1. [Action] — [what should be visible]
+2. Optional: [extra check] — [what should be visible]
+
+Expected Result
+[What should happen]
+Source: [requirement ID, section]
+
+Actual Result
+[Observed symptom]
+- [Screen or step and value shown] (image 1)
+[Impact or size of the difference]
+
+Pictures
+Image 1 – [What the reviewed image shows]
+
+Technical details
+**[Applicable label]**
+- [Evidence or its limit]
+
+Test configuration: [environment, build/version, browser or device]
+```
+
+### Technical details labels
+
+- **Requirement**. Quote the applicable wording with ID and section. Say when
+  the requirement is silent.
+- **Reference document**. Identify the template, design or specification and how
+  to find the relevant part.
+- **How it works today**. Give the request, response, setting or data and where
+  it was read, such as the network tab, log or named database.
+- **Evidence**. Show the request or query, a small result table and one to three
+  bullets on what it establishes. Use a read-only query and limit large results.
+- **Side-by-side comparison**. Show expected and actual values and say whether
+  the difference is the only one within what was compared.
+- **Scope**. Identify known affected and unaffected cases, one or two examples,
+  exclusions and any separately tracked bug.
+- **Related items**. Link relevant bugs, stories or tasks and explain the difference.
+- **Probable cause**. Label it as a guess. Give plausible candidates and the
+  likely change date when supported.
+- **What needs to change**. Identify where the evidence points for a fix.
+- **Open questions**. Number the decisions needed and name who should answer.
+- **Own test data**. Give short setup steps when useful.
+
+### Worked example
+
+Invoice INV-42 shows a total $10 above the approved template, which breaks
+requirement INV-200, Invoice totals.
+
+**Steps**
+
+1. Open INV-42 in Invoice details — the Total row is visible.
+2. Open the approved invoice template — the example Total row is visible.
+3. Compare the Total rows — both amounts are visible (image 1).
+
+**Expected Result**
+
+The Total matches the amount in the approved template.
+
+Source: INV-200, Invoice totals
+
+**Actual Result**
+
+The totals differ for invoice INV-42.
+
+- Invoice details shows **Total $110** (image 1).
+- The approved template shows **Total $100** (image 1).
+
+The invoice shows $10 more than the template.
+
+**Pictures**
+
+Image 1 – Approved template (left), Invoice details (right)
+
+**Technical details**
+
+**Side-by-side comparison**
+
+| Record | UI Total | API total | Stored total |
+| --- | --- | --- | --- |
+| INV-42 | $110 | $110 | $100 |
+
+- The API response and stored total differ for this invoice.
+
+**Test configuration**: QA, build 5.2, Chromium
+
 ## Severity and priority advice
 
 Read the destination's actual Severity/Priority fields and allowed values from

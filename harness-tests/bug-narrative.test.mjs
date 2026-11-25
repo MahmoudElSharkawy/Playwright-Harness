@@ -4,7 +4,7 @@ import {fixture} from './fixtures/execution-core.mjs';
 import {adoFixture} from './fixtures/ado.mjs';
 import {executionFixture, executeApi} from './fixtures/execute.mjs';
 import {createAdoClient} from '../scripts/lib/integrations/ado-client.mjs';
-import {prepareBugReport, readBugReport, editBugReport, previewBugReport, approveBugReport, fileBugReport, bugReportFromExecution} from '../scripts/lib/bug-report/index.mjs';
+import {prepareBugReport, readBugReport, editBugReport, previewBugReport, compactBugPreview, approveBugReport, fileBugReport, bugReportFromExecution} from '../scripts/lib/bug-report/index.mjs';
 import {collectExecution, deliverableDefects} from '../scripts/lib/execute/report.mjs';
 import {deliverExecution} from '../scripts/lib/execute/delivery.mjs';
 import {renderBugNarrative} from '../scripts/lib/execute/bug-narrative.mjs';
@@ -41,6 +41,35 @@ test('readable confirmation escapes markup and preserves deliberately approved A
   const ado = await adoFixture(t), {roots} = fixture(t), raw = intake(); raw.confirmation.notes = 'QA <script>alert("x")</script> & comparison'; raw.draft.actual = '{"error":"missing record"}';
   prepareBugReport(roots, 'escaped', raw); const preview = await previewBugReport(roots, 'escaped', dependencies(ado, roots)), html = narrative(preview.bugs[0].fields);
   assert(preview.ready); assert(!html.includes('<script>')); assert(html.includes('&lt;script&gt;')); assert(html.includes('&amp; comparison')); assert(html.includes('missing record')); assert.equal(readBugReport(roots, 'escaped').draft.actual, raw.draft.actual);
+});
+
+for (const [kind, action, actual, evidence] of [
+  ['API', 'Read invoice INV-42 through the invoices API', 'The invoices API returns 503 for INV-42.', 'GET /invoices/INV-42'],
+  ['DB', 'Count the payment schedules for INV-42 using the query below', 'Invoice INV-42 has two payment schedules. One is expected.', "SELECT COUNT(*) FROM PaymentSchedule WHERE InvoiceId = 'INV-42' AND Stage < 3"]
+]) test(`${kind}-only narrative presents the observation before the technical evidence`, async t => {
+  const ado = await adoFixture(t), {roots} = fixture(t), raw = intake(), deps = dependencies(ado, roots);
+  raw.draft.description = actual;
+  raw.draft.steps = [`${action} — the result includes the recorded status or count.`, 'Optional: Check the adjacent invoice.'];
+  raw.draft.expected = 'The invoice is available with one payment schedule.\n- Keep the invoice date at 2026-08-14.\nSource: #200, Payment schedules';
+  raw.draft.actual = `${actual}\n- INV-42 has an invoice date of 2026-08-14 (image 1).\nThis prevents the expected check.`;
+  raw.draft.notes = '**Evidence**\n\n```\n' + evidence + '\n```\n\n| Record | Value |\n| --- | --- |\n| INV-42 | Recorded result |';
+  raw.draft.configuration = 'QA, build 5.2';
+  const report = `${kind.toLowerCase()}-only`;
+  prepareBugReport(roots, report, raw);
+  const preview = await previewBugReport(roots, report, deps), html = narrative(preview.bugs[0].fields);
+  assert(preview.ready);
+  assert.match(html, /^<p>.*<h3>Steps<\/h3>.*<ol>.*<li>Optional:.*<h3>Expected Result<\/h3>.*<ul>.*Source: #200, Payment schedules.*<h3>Actual Result<\/h3>.*<h3>Technical details<\/h3>.*<strong>Evidence<\/strong>.*<pre><code>.*<table>.*<strong>Test configuration<\/strong>: QA, build 5\.2<\/p>$/s);
+  assert(!html.includes('Pictures'));
+  assert(!html.includes('(image 1)'));
+  const compact = compactBugPreview(preview).bugs[0].fields.find(field => field.format === 'plain-text').value;
+  assert(compact.includes(`1. ${action}`));
+  assert(compact.includes('2. Optional:'));
+  assert(compact.includes(evidence));
+  assert(html.indexOf(evidence.split(' ')[0]) > html.indexOf('<h3>Technical details</h3>'));
+  assert(html.slice(0, html.indexOf('<h3>Technical details</h3>')).includes('2026-08-14'));
+  approveBugReport(roots, report, preview.hash);
+  await fileBugReport(roots, report, preview.hash, deps);
+  assert.equal(narrative(ado.state.items.get(800).fields), html);
 });
 
 for (const handoff of [true, false]) test(`${handoff ? 'bug-report handoff' : 'direct execution filing'} uses readable execution observations without leaking run metadata`, async t => {

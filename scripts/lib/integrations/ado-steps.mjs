@@ -39,9 +39,16 @@ export function decodeEntities(s) {
  *  Content arrives XML-escaped inside the Steps field (&lt;DIV&gt;…), so decode
  *  first to expose the tags, strip them, then decode once more for HTML-level
  *  entities (&amp;amp; is the double-escaped form of a literal &). */
-export function htmlToText(html) {
+export function htmlToText(html, {rendered = false} = {}) {
   if (!html) return '';
-  let t = decodeEntities(html);
+  let t = rendered ? html : decodeEntities(html);
+  if (rendered) {
+    t = t.replace(/<ol>([\s\S]*?)<\/ol>/gi, (_, items) => {
+      let index = 0;
+      return items.replace(/<li>/gi, () => `${++index}. `).replace(/<\/li>/gi, '\n');
+    }).replace(/<\/(td|th)>(?=<(td|th)>)/gi, ' | ')
+      .replace(/<\/(pre|code|ul|table)>/gi, '\n');
+  }
   t = t
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<\/(p|div|li|tr|h[1-6])\s*>/gi, '\n')
