@@ -12,8 +12,8 @@ import {discoverWorkItems} from '../integrations/ado-discovery.mjs';
 import {htmlToText} from '../integrations/ado-steps.mjs';
 import {checkSourceRevisions} from '../execute/source.mjs';
 import {deliverBugReports} from '../execute/delivery.mjs';
-import {executionBugActual, executionBugSteps} from '../execute/bug-narrative.mjs';
-import {collectExecution, deliverableDefects, readVerifiedEvidence} from '../execute/report.mjs';
+import {bugScreenshots, executionBugActual, executionBugSteps} from '../execute/bug-narrative.mjs';
+import {collectExecution, deliverableDefects, executionBugObservation, readVerifiedEvidence} from '../execute/report.mjs';
 import {prepareAnnotation, bindAnnotationReview, verifyAnnotation, inspectScreenshot} from './annotations.mjs';
 import {reviewRunFailures} from './failures.mjs';
 
@@ -97,7 +97,19 @@ export function editBugReport(roots, reportId, input) {
     requireThat(Object.keys(patch).every(key => ['head', 'draft', 'confirmation', 'evidence', 'referenceId'].includes(key)), 'Unsupported editable bug input.');
     const draft = {...state.draft, ...patch.draft}, confirmation = {...state.confirmation, ...patch.confirmation}; validateDraft(draft, confirmation);
     const {head, referenceId, ...prior} = state, selected = Object.hasOwn(patch, 'referenceId') ? patch.referenceId : referenceId;
-    return save(roots, reportId, {...prior, draft, confirmation, ...(selected == null ? {} : {referenceId: adoId(selected)}), evidence: patch.evidence ? selectedEvidence(roots, reportId, patch.evidence) : state.evidence, history: [...state.history, head]});
+    const evidence = patch.evidence ? selectedEvidence(roots, reportId, patch.evidence) : state.evidence;
+    if (patch.evidence) {
+      const before = bugScreenshots(state.evidence), after = bugScreenshots(evidence);
+      for (const field of ['steps', 'actual']) {
+        if (Object.hasOwn(patch.draft ?? {}, field)) continue;
+        const value = field === 'steps' ? draft.steps.join('\n') : draft.actual;
+        for (const [, number] of value.matchAll(/\(image ([1-9]\d*)\)/gi)) {
+          const index = Number(number) - 1;
+          requireThat(before[index]?.sha256 === after[index]?.sha256, `Review and resubmit draft.${field} when its image references change.`);
+        }
+      }
+    }
+    return save(roots, reportId, {...prior, draft, confirmation, ...(selected == null ? {} : {referenceId: adoId(selected)}), evidence, history: [...state.history, head]});
   });
 }
 function verifiedAttachments(roots, state) {
@@ -276,8 +288,10 @@ export function bugReportFromExecution(roots, reportId, executionId, selected) {
       evidence.push({path: relative(roots.projectRoot, join(run.roots.runRoot, record.path)).replaceAll('\\', '/'), kind: record.kind === 'screenshot' ? 'screenshot' : 'log', origin: 'execution', sanitized: record.sanitized === true, verification: {privacy: record.sanitized === true, relevance: false}, context: `Execution ${executionId}; run ${occurrence.runId}; evidence ${record.id}; review attachment relevance before selection`});
     }
   }
+  const expected = scenario.steps.flatMap(item => item.expected).filter(Boolean).join('\n');
+  const observed = executionBugObservation(view, defect), counts = executionBugActual(defect);
   return prepareBugReport(roots, reportId, {version: 1, description: defect.title, source: {executionId, caseId: defect.caseId, ...(view.source.scope.kind === 'story' ? {storyId: view.source.scope.storyId} : {}), sourceFingerprint: view.execution.sourceFingerprint, defectFingerprint: selected, observationsFingerprint: fingerprint(defect.occurrences), content: JSON.stringify({executionId, sourceFingerprint: view.execution.sourceFingerprint, caseId: defect.caseId, revision: tc.rev, occurrences: defect.occurrences}), expected: scenario.steps.flatMap(item => item.expected).join('; ')},
-    draft: {title: defect.title, description: defect.title, prerequisites: [], steps: executionBugSteps(scenario), expected: scenario.steps.flatMap(item => item.expected).filter(Boolean).join('\n'), actual: executionBugActual(defect), configuration: view.freeze.environment.name, fields: {}}, confirmation: {user: 'reported', agent: 'reproduced', notes: 'The failure was verified in the recorded execution; no additional reproduction was performed.'}, evidence: evidence.slice(0, 20)});
+    draft: {title: defect.title, description: defect.title, prerequisites: [], steps: executionBugSteps(scenario), expected: expected ? `${expected}\nSource: Test case #${defect.caseId}, expected results` : '', actual: observed || counts, ...(observed ? {notes: counts} : {}), configuration: view.freeze.environment.name, fields: {}}, confirmation: {user: 'reported', agent: 'reproduced', notes: 'The failure was verified in the recorded execution; no additional reproduction was performed.'}, evidence: evidence.slice(0, 20)});
 }
 
 /** Persist agent classifications and evidence-backed grouping, then reuse ordinary editable drafts. */

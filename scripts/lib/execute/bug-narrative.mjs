@@ -29,10 +29,17 @@ function technicalNotes(text) {
   }).join('');
 }
 
+export function bugScreenshots(attachments) {
+  const seen = new Set();
+  return attachments.filter(record => {
+    if (record.kind !== 'screenshot' || record.sourceSha256 || record.eligible === false || seen.has(record.sha256)) return false;
+    seen.add(record.sha256);
+    return true;
+  });
+}
+
 function pictures(attachments) {
-  const screenshots = attachments.filter(record => record.kind === 'screenshot' && !record.sourceSha256);
-  const unique = [...new Map(screenshots.map(record => [record.sha256, record])).values()];
-  return unique.map((raw, index) => {
+  return bugScreenshots(attachments).map((raw, index) => {
     const annotated = attachments.find(record => record.sourceSha256 === raw.sha256);
     return `Image ${index + 1} – ${raw.caption ?? 'Screenshot'} (${annotated?.name ?? raw.name ?? `${raw.id}.png`})`;
   });
@@ -48,7 +55,7 @@ export function executionBugActual(defect) {
 }
 
 /** Render only readable source/confirmation facts, never the captured tracking object. */
-export function renderBugNarrative(view, defect, edited, changed, {attachments = [], legacy = false} = {}) {
+export function renderBugNarrative(view, defect, edited, changed, {attachments = [], legacy = false, recordedObservation = ''} = {}) {
   const context = view.reportContext, source = context?.source ?? {}, workflow = source.postRun?.run.workflow;
   let captured;
   if (source.postRun || source.executionId) {try {captured = JSON.parse(source.content);} catch { /* A plain source description has no structured presentation fields. */ }}
@@ -82,14 +89,16 @@ export function renderBugNarrative(view, defect, edited, changed, {attachments =
   const setup = edited.prerequisites?.filter(value => value.trim()) ?? [];
   const numbered = steps.map(withImages).filter(step => step.trim()).map(step => `<li>${h(step).replace(/\r?\n/g, '<br>')}</li>`).join('');
   const expected = edited.expected ?? scenario?.steps.flatMap(step => step.expected).filter(Boolean).join('\n');
-  const citation = expected && !/^Source:/mi.test(expected) && (storyId || cases.length)
-    ? paragraph(storyId ? `Source: Story #${storyId} (section unspecified)` : `Source: Test case ${cases[0]} (section unspecified)`) : '';
+  const citation = expected && !/^Source:/mi.test(expected)
+    ? paragraph(edited.expected === undefined && scenario?.caseId
+      ? `Source: Test case #${scenario.caseId}, expected results`
+      : 'Source: Requirement and section unspecified.') : '';
   const executionDefault = !context || source.executionId;
   const counts = executionBugActual(captured?.occurrences ? captured : defect);
   const generated = executionDefault && (edited.actual === undefined || legacyActual || edited.actual === counts);
-  const observed = generated
-    ? (counts.startsWith('Recorded failure occurrences') ? 'The recorded result differed from the expected behavior. See the selected evidence for details.' : 'No conclusive actual result was recorded.')
-    : actual;
+  const observed = generated ? recordedObservation || (counts.startsWith('Recorded failure occurrences')
+    ? 'The recorded result differed from the expected behavior. The observed value needs review.'
+    : 'No conclusive actual result was recorded.') : actual;
   const configuration = edited.configuration ?? view.freeze?.environment?.name;
   return {actual, html: [
     paragraph(edited.description?.trim() || edited.title || defect.title || 'Bug report'),
@@ -103,8 +112,5 @@ export function renderBugNarrative(view, defect, edited, changed, {attachments =
 }
 
 export function executionBugSteps(scenario) {
-  return (scenario?.steps ?? []).filter(step => step.action).map(step => {
-    const cue = step.expected.filter(Boolean).join(' ');
-    return cue ? `${step.action} — ${cue}` : step.action;
-  });
+  return (scenario?.steps ?? []).map(step => step.action).filter(Boolean);
 }

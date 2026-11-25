@@ -36,6 +36,23 @@ export function readVerifiedEvidence(roots, record) {
     requireThat(length === record.bytes && fstatSync(handle).size === record.bytes && digest(bytes.subarray(0, length)) === record.sha256, 'Registered evidence changed during reading.'); return bytes.subarray(0, length);
   } finally {closeSync(handle);}
 }
+
+/** Bring only bounded, sanitized scalar check results into an automatic bug draft. */
+export function executionBugObservation(view, defect) {
+  const values = new Set();
+  for (const occurrence of defect.occurrences) {
+    if (occurrence.status !== 'FAIL' || !['api', 'database'].includes(occurrence.family)) continue;
+    const run = view.runs.find(item => item.runId === occurrence.runId && item.state === 'ASSESSED');
+    for (const record of run.result.evidence) {
+      if (record.kind !== 'assertion' || !record.sanitized || record.bytes > ASSERTION_BYTES || !occurrence.evidenceIds.includes(record.id)) continue;
+      const {actual, passed} = JSON.parse(readVerifiedEvidence(run.roots, record).toString('utf8'));
+      if (passed === false && (Number.isFinite(actual) || typeof actual === 'boolean')) values.add(String(actual));
+      if (values.size > 3) return '';
+    }
+  }
+  return values.size ? `The failing check returned ${[...values].join(', ')}.` : '';
+}
+
 export function defectFingerprint(source, item) {
   const canonical = {v: 1, org: source.organizationUrl, project: source.project, caseId: item.caseId, kind: item.kind, sourceStep: item.sourceStep,
     ...(item.kind === 'expectation' ? {expectedIndex: item.expectedIndex, conditionIndex: item.conditionIndex, conditionTemplate: item.conditionTemplate} : {signature: item.signature})};

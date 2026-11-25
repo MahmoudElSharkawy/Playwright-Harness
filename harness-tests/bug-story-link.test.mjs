@@ -204,6 +204,7 @@ async function pendingExecution(t, bugs = {}) {
   observations.evidence.push(record); attempt.evidenceIds.push(record.id); writeJson(join(run.roots.runRoot, 'observations.json'), observations);
   const deliver = options => deliverExecution(execution.roots, execution.executionId, 'file-bugs', options, dependencies(ado, execution.roots));
   const preview = await deliver({});
+  assert.deepEqual(preview.bugs[0].attachments, [{name: 'context.png', kind: 'screenshot', bytes: record.bytes, sha256: record.sha256}]);
   ado.state.fault = ({path, req, send}) => {if (path === 'wit/workitems/800' && req.method === 'GET') {send({}, 503); return true;}};
   await assert.rejects(deliver({execute: true, approvedPlan: preview.planHash}), /ADO request-rejected/); ado.state.fault = undefined;
   return {ado, execution, preview, deliver};

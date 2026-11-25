@@ -183,6 +183,20 @@ test('a completed report cannot silently claim a newly edited draft was delivere
   editBugReport(roots, 'bug-complete', {head: state.head, draft: {title: 'New reviewed wording'}}); const edited = await previewBugReport(roots, 'bug-complete', dependencies); approveBugReport(roots, 'bug-complete', edited.hash);
   await assert.rejects(fileBugReport(roots, 'bug-complete', edited.hash, dependencies), /dispatched bug (content|plan) changed/i); assert.equal(ado.state.items.get(800).fields['System.Title'], input().draft.title); assert.equal(writes(ado).filter(item => item.path === 'wit/workitems/$bug').length, 1);
 });
+test('reordering reviewed screenshots requires review of their numbered references', t => {
+  const {roots} = fixture(t), raw = input();
+  writeFileSync(join(roots.projectRoot, 'first.png'), image(120, 80));
+  writeFileSync(join(roots.projectRoot, 'second.png'), image(120, 90));
+  raw.evidence = ['first.png', 'second.png'].map(path => ({path, kind: 'screenshot', origin: 'user', sanitized: true, verification: {privacy: true, relevance: true}, context: 'Reviewed status value'}));
+  raw.draft.actual = 'Status 500 (image 1).';
+  const state = prepareBugReport(roots, 'reorder', raw);
+  const patch = {head: state.head, evidence: [...raw.evidence].reverse()};
+  assert.throws(() => editBugReport(roots, 'reorder', patch), /resubmit draft\.actual/);
+  const edited = editBugReport(roots, 'reorder', {...patch, draft: {actual: 'Status 500 (image 2).'}});
+  assert.equal(edited.evidence[1].sha256, state.evidence[0].sha256);
+  assert.equal(edited.draft.actual, 'Status 500 (image 2).');
+});
+
 test('reviewed raw and annotated pair uses one bug and recovers a lost second attachment-link acknowledgement', async t => {
   const ado = await adoFixture(t), {roots} = fixture(t), dependencies = deps(ado, roots), raw = input(); writeFileSync(join(roots.projectRoot, 'raw.png'), image(120, 80));
   raw.draft.description = 'Invoice INV-42 shows a total $10 above the approved template.';

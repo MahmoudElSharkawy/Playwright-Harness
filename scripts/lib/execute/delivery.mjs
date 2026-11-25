@@ -6,8 +6,8 @@ import {createAdoTestManagement, prepareExecutionPublication} from '../integrati
 import {loadAdoConfiguration, adoId, adoGuid, workItemLinkId} from '../integrations/config.mjs';
 import {fingerprint, keys, requireThat} from '../execution-core/data.mjs';
 import {escapeHtml} from '../reporting/render.mjs';
-import {renderBugNarrative} from './bug-narrative.mjs';
-import {collectExecution, executionDefects, deliverableDefects, readVerifiedEvidence} from './report.mjs';
+import {bugScreenshots, renderBugNarrative} from './bug-narrative.mjs';
+import {collectExecution, executionDefects, executionBugObservation, deliverableDefects, readVerifiedEvidence} from './report.mjs';
 import {checkSourceRevisions} from './source.mjs';
 import {EXECUTION_DOCUMENT, readBounded, writeJson, ownedFile} from './storage.mjs';
 import {withTransition} from './lock.mjs';
@@ -70,7 +70,8 @@ async function prepareBug(client, view, defect, revisions, metadata, drafts, ret
   if (edited.severity !== undefined) fields['Microsoft.VSTS.Common.Severity'] = edited.severity;
   const attachments = (view.reportAttachments ?? executionBugEvidence(view, defect).map(item => item.record))
     .filter(record => record.bytes <= (defaults.maxAttachmentBytes ?? 2 * 1024 * 1024));
-  const {html, actual} = renderBugNarrative(view, defect, edited, changed, {attachments});
+  const recordedObservation = !view.reportContext && edited.actual === undefined ? executionBugObservation(view, defect) : '';
+  const {html, actual} = renderBugNarrative(view, defect, edited, changed, {attachments, recordedObservation});
   requireThat(metadata.mappings.reproSteps || metadata.mappings.description, 'Configure an available bug narrative field mapping.');
   const narrativeFields = [...new Set([metadata.mappings.reproSteps, metadata.mappings.description].filter(Boolean))];
   let content = html;
@@ -96,7 +97,8 @@ async function prepareBug(client, view, defect, revisions, metadata, drafts, ret
   await client.validateWorkItem(metadata.type, body, {fresh: true});
   const request = {route: `wit/workitems/$${encodeURIComponent(metadata.type)}?api-version=7.1`, method: 'POST', body};
   const fieldSpecifications = metadata.fields.filter(field => Object.hasOwn(fields, field.referenceName)).map(({referenceName, type, isIdentity}) => ({referenceName, type, isIdentity}));
-  return {defect, type: metadata.type, request, fields, fieldSpecifications, schemaFingerprint: metadata.fingerprint, review: inspection.review, revisions: changed ?? null};
+  const executionAttachments = !view.reportAttachments && content === html ? bugScreenshots(attachments).map(({id, name, kind, bytes, sha256}) => ({name: name ?? `${id}.png`, kind, bytes, sha256})) : [];
+  return {defect, type: metadata.type, request, fields, fieldSpecifications, schemaFingerprint: metadata.fingerprint, review: inspection.review, revisions: changed ?? null, executionAttachments};
 }
 
 // Older standalone reports retained the approved fields and relation choices separately.
@@ -300,7 +302,7 @@ async function fileBugs(client, roots, executionId, view, revisions, options) {
   }
   const attachments = view.reportAttachments ?? [];
   for (const record of attachments) {consumerPath(roots, record.path); const bytes = readVerifiedEvidence({runRoot: roots.projectRoot}, record); requireThat(bytes.length <= (client.configuration.bugs?.maxAttachmentBytes ?? 2 * 1024 * 1024), 'Bug evidence exceeds the destination attachment bound.');}
-  const bugPreview = item => item.legacyPreview ?? {fingerprint: item.defect.fingerprint, type: item.type, fields: item.fields, request: item.request, review: item.review, schemaFingerprint: item.schemaFingerprint, revision: item.revisions, attachments};
+  const bugPreview = item => item.legacyPreview ?? {fingerprint: item.defect.fingerprint, type: item.type, fields: item.fields, request: item.request, review: item.review, schemaFingerprint: item.schemaFingerprint, revision: item.revisions, attachments: view.reportAttachments ?? item.executionAttachments};
   // Old receipts hash storyLink in the schema. Accept only a full original-plan match.
   for (const item of prepared) {
     if (!item.row?.operation || item.row.state === 'INTENT' || item.row.planHash === fingerprint(bugPreview(item))) continue;

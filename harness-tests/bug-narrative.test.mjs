@@ -52,7 +52,7 @@ for (const [kind, action, actual, evidence] of [
   raw.draft.steps = [`${action} — the result includes the recorded status or count.`, 'Optional: Check the adjacent invoice.'];
   raw.draft.expected = 'The invoice is available with one payment schedule.\n- Keep the invoice date at 2026-08-14.\nSource: #200, Payment schedules';
   raw.draft.actual = `${actual}\n- INV-42 has an invoice date of 2026-08-14 (image 1).\nThis prevents the expected check.`;
-  raw.draft.notes = '**Evidence**\n\n```\n' + evidence + '\n```\n\n| Record | Value |\n| --- | --- |\n| INV-42 | Recorded result |';
+  raw.draft.notes = '**Evidence**\n\n```\n' + evidence + '\n    literal value: two  spaces\n```\n\n| Record | Value |\n| --- | --- |\n| INV-42 | Recorded result |';
   raw.draft.configuration = 'QA, build 5.2';
   const report = `${kind.toLowerCase()}-only`;
   prepareBugReport(roots, report, raw);
@@ -65,6 +65,7 @@ for (const [kind, action, actual, evidence] of [
   assert(compact.includes(`1. ${action}`));
   assert(compact.includes('2. Optional:'));
   assert(compact.includes(evidence));
+  assert(compact.includes('\n    literal value: two  spaces\n'));
   assert(html.indexOf(evidence.split(' ')[0]) > html.indexOf('<h3>Technical details</h3>'));
   assert(html.slice(0, html.indexOf('<h3>Technical details</h3>')).includes('2026-08-14'));
   approveBugReport(roots, report, preview.hash);
@@ -85,6 +86,7 @@ for (const handoff of [true, false]) test(`${handoff ? 'bug-report handoff' : 'd
     preview = await deliverExecution(f.roots, f.executionId, 'file-bugs', {}, deps);
   }
   const html = narrative(preview.bugs[0].fields); assert.match(html, /Source: Test execution/); assert.match(html, /Test case #101/); assert.match(html, /Recorded failure occurrences: 2/);
+  assert.match(html, /<li>Read status<\/li>.*Source: Test case #101, expected results.*<h3>Actual Result<\/h3><p>The failing check returned 500\.<\/p>/);
   for (const text of [f.executionId, defect.fingerprint, 'runId', 'evidenceIds', 'sourceFingerprint', ...defect.occurrences.map(row => row.runId)]) assert(!html.includes(text), text);
   if (!handoff) assert.match(html, /changed after execution.*revision 1.*revision 2/);
   assert.deepEqual(collectExecution(f.roots, f.executionId).execution, before.execution); assert.equal(writes(ado).length, 0);
