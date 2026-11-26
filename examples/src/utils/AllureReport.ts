@@ -4,6 +4,7 @@ import { execFileSync } from 'node:child_process';
 import * as path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { allureConfig } from '../config/reporting';
+import { Logger } from './Logger.js';
 
 /** Records locator-bearing Allure steps and generates HTML after every reporter has flushed. */
 export default class AllureReport extends AllureReporter {
@@ -74,7 +75,7 @@ export default class AllureReport extends AllureReporter {
       helper.captureAllureResults(roots, run.directory, this.options.resultsDir ?? allureConfig.resultsDir);
       const receipt = await helper.generateAllure(roots, run.directory, {configuration: allureConfig.generatorConfig});
       if (receipt.status !== 'GENERATED') throw new Error('Allure report generation failed.');
-      if (receipt.latest?.status === 'FAILED') console.warn(receipt.latest.reason);
+      if (receipt.latest?.status === 'FAILED') Logger.warn('AllureReport', receipt.latest.reason);
       if (process.env.AUTO_ALLURE_OPEN !== 'false' && !process.env.CI) {
         const command = process.platform === 'win32' ? 'rundll32.exe' : process.platform === 'darwin' ? 'open' : 'xdg-open';
         const reportFile = path.resolve(roots.projectRoot, receipt.latest?.status === 'WRITTEN' ? receipt.latest.path : receipt.artifact.path);
@@ -82,7 +83,7 @@ export default class AllureReport extends AllureReporter {
         execFileSync(command, args, { stdio: 'ignore', windowsHide: true, timeout: 15000 });
       }
     } catch {
-      console.warn('Allure report generation or opening failed; test outcomes are unchanged.');
+      Logger.warn('AllureReport', 'Allure report generation or opening failed; test outcomes are unchanged.');
     }
   }
 }

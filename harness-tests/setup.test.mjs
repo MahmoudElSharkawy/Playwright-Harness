@@ -228,6 +228,8 @@ test('restore on a fresh project removes what setup created instead of running n
  const root=project(t);archive(join(root,archiveName));
  const result=setup(root);assert.equal(result.status,'DONE');assert(result.starter.includes('playwright.config.ts'));
  assert(result.starter.includes('src/utils/AllureReport.ts'));
+ assert(result.starter.includes('src/utils/Logger.ts'));
+ assert(result.starter.includes('src/utils/UiActions.ts'));
  const config = readFileSync(join(root,'playwright.config.ts'),'utf8');
  assert.equal((config.match(/\.\/src\/utils\/AllureReport\.ts/g) ?? []).length, 1);
  assert(!config.includes("['allure-playwright'"));

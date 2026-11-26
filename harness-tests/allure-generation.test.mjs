@@ -78,7 +78,7 @@ for (const [name, fake, phase] of [
 for (const [name, fails, missingGenerator] of [['passing test', false, false], ['failing test', true, false], ['missing generator', false, true]]) {
   test(`example post-flush reporting preserves a ${name}'s native outcome`, t => {
     const f = fixture(t), root = f.roots.projectRoot, example = join(f.roots.packageRoot, 'examples');
-    for (const file of ['src/utils/AllureReport.ts', 'src/config/reporting.ts', 'global-setup.ts', 'allurerc.json']) {
+    for (const file of ['src/utils/AllureReport.ts', 'src/utils/Logger.ts', 'src/config/reporting.ts', 'global-setup.ts', 'allurerc.json']) {
       mkdirSync(dirname(join(root, file)), {recursive: true}); cpSync(join(example, file), join(root, file));
     }
     if (missingGenerator) {
@@ -108,7 +108,7 @@ for (const [name, fails, missingGenerator] of [['passing test', false, false], [
 
 test('the example finishes Allure before entering the HTML viewer exit hook', t => {
   const f = fixture(t), root = f.roots.projectRoot, example = join(f.roots.packageRoot, 'examples');
-  for (const file of ['playwright.config.ts', 'src/utils/AllureReport.ts', 'src/config/reporting.ts', 'src/config/timeouts.ts', 'global-setup.ts', 'allurerc.json']) {
+  for (const file of ['playwright.config.ts', 'src/utils/AllureReport.ts', 'src/utils/Logger.ts', 'src/config/reporting.ts', 'src/config/timeouts.ts', 'global-setup.ts', 'allurerc.json']) {
     mkdirSync(dirname(join(root, file)), {recursive: true}); cpSync(join(example, file), join(root, file));
   }
   linkExampleDependencies(root, f.roots.packageRoot);

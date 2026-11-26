@@ -3,10 +3,12 @@ import { type Page, type Locator } from '@playwright/test';
 import { step } from 'allure-js-commons';
 import { applications } from '../config/applications';
 import { expectToBeVisible, expectToHaveText } from '../utils/Expects';
+import { UiActions } from '../utils/UiActions';
 
 export class LoginPage {
   readonly page: Page;
   readonly url: string = `${applications.app.url}/login`;
+  private readonly ui = new UiActions();
 
   // Locators
   private readonly loginUsername_input: Locator;
@@ -34,9 +36,9 @@ export class LoginPage {
 
   async login(username: string, password: string) {
     await step('Log in with configured credentials', async () => {
-      await this.loginUsername_input.fill(username);
-      await this.loginPassword_input.fill(password);
-      await this.login_button.click();
+      await this.ui.fill(this.loginUsername_input, username);
+      await this.ui.fill(this.loginPassword_input, password);
+      await this.ui.click(this.login_button);
     });
   }
 

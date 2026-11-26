@@ -138,7 +138,7 @@ says Delete Account:
 ```ts
 async clickOnContactUsFormLink(){
       await step("Click on Delete Account Link", async () => {
-    await this.contactUsForm_link.click();
+    await this.ui.click(this.contactUsForm_link);
   });
 }
 ```
@@ -208,9 +208,9 @@ mechanical interactions, one business step:
 ```ts
 async login(username: string, password: string) {
   await step(`...`, async () => {
-    await this.loginEmail_Input.fill(username);
-    await this.loginPassword_Input.fill(password);
-    await this.login_Button.click();
+    await this.ui.fill(this.loginEmail_Input, username);
+    await this.ui.fill(this.loginPassword_Input, password);
+    await this.ui.click(this.login_Button);
   });
 }
 ```
@@ -306,6 +306,10 @@ fed from the paired JSON or test-owned disposable runtime values (practice 10).
 Ownership and defaults follow [design-conventions §4a](../../pom-architecture/references/design-conventions.md#4a-test-data-ownership-method-contracts-and-disposable-inputs).
 
 ## 12. Use the verb the control is built for
+
+Use a `UiActions` instance for `click`, `fill`, `pressSequentially`, `press`,
+`check` and `selectOption`. Pass the page-owned locator as the first argument,
+as in `await this.ui.click(this.save_button)`. The facade handles console logging.
 
 Dropdown → `selectOption(...)` (value from test data or an enum). Checkbox and
 radio → `check()` / `uncheck()`, which are idempotent. Hover only when the UI

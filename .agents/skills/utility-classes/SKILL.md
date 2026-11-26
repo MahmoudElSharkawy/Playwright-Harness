@@ -21,11 +21,11 @@ outcome. Business meaning never enters this layer. The root-level `global-setup.
    contract: step-per-operation, attachment nesting, never-throw reporting, redaction,
    options resolution, lifecycle scripts, and how to extend or add a facade.
 
-The living canonical models are `src/utils/ApiActions.ts` and `src/utils/DBActions.ts` —
-pattern-match every new facade on them. Three narrower facades round out the family and
-are worth pattern-matching for their own shape: `UiControls.ts` (async-widget-race
-helpers — bounded retry until a gate signal confirms a flaky third-party control has
-settled), `PdfDocuments.ts` (an external-library facade — transport and parsing stay out
+The living canonical models are `src/utils/ApiActions.ts`, `src/utils/DBActions.ts`
+and `src/utils/UiActions.ts`. Pattern-match new facades on them and use
+`src/utils/Logger.ts` for console output. `UiActions.ts` owns ordinary locator actions
+and bounded retries for controls that initialize asynchronously.
+Other examples include `PdfDocuments.ts` (an external-library facade — transport and parsing stay out
 of business/page classes, same shape as ApiActions/DBActions but wrapping a parsing
 library instead of a network/DB driver), and `IdentityNumbers.ts` (format-constrained
 synthetic-data generation — a checksum-valid value that isn't externally registry-checked

@@ -10,7 +10,7 @@ for (const [scoped, maintained] of [[false, true], [true, true], [true, false]])
   const enabled = ['environment', 'dotenv'].includes(mode);
   test(`${scoped ? maintained ? 'maintained scoped' : 'official scoped' : 'ordinary'} Allure video ${mode} ${enabled ? 'includes' : 'excludes'} videos without changing native attachments`, t => {
     const f = fixture(t), root = f.roots.projectRoot, example = join(f.roots.packageRoot, 'examples');
-    for (const file of ['src/utils/AllureReport.ts', 'src/config/reporting.ts', 'global-setup.ts', 'allurerc.json']) {
+    for (const file of ['src/utils/AllureReport.ts', 'src/utils/Logger.ts', 'src/config/reporting.ts', 'global-setup.ts', 'allurerc.json']) {
       if (!maintained && file === 'src/utils/AllureReport.ts') continue;
       mkdirSync(dirname(join(root, file)), {recursive: true}); cpSync(join(example, file), join(root, file));
     }
