@@ -1,11 +1,11 @@
 // Example skeleton — adapt to your project (ships with the harness package).
-import type { DBConnectionConfig } from '../utils/DBActions';
+import type { DBConnectionConfig } from '../utils/DbActions';
 import { databaseTarget } from './targets';
 
 /**
  * All databases available to tests — one named entry per DB; specs pick what they need:
  *
- *   const appDb = new DBActions(databases.appDb);
+ *   const appDb = new DbActions(databases.appDb);
  *
  * Coordinates come from the database target of the same name in .harness/targets.json,
  * shared with the harness runtime (see targets.ts for the per-machine overrides).

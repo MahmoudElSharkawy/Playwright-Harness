@@ -31,7 +31,7 @@ tests/        → spec files: orchestrate business flows, carry Allure metadata.
 src/pages/    → GUI business layer: page classes (locators + actions + validations)
 src/apis/     → API business layer: Apis<Domain> service classes
 src/dbs/      → DB business layer: Dbs<Domain> service classes
-src/utils/    → technical layer: ApiActions / DBActions facades — technical complexity lives here; small domain cleanup guards stay in services
+src/utils/    → technical layer: ApiActions / DbActions facades — technical complexity lives here; small domain cleanup guards stay in services
 src/config/   → environment & DB coordinates, values from .harness/targets.json or process.env (formerly resources/config/)
 resources/    → testData/ (one JSON per spec, per-case tc<id> clusters) + Queries/ (supplied and reviewed discovered DB-query knowledge — derive-only, see service-classes) + apisCollections/ (team API-collection knowledge library — derive-only, harness-curated on import, see service-classes)
 playwright.config.ts → baseURL, reporters (Allure/HTML/JSON/CTRF), projects, global setup/teardown

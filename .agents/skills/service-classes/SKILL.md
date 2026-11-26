@@ -1,6 +1,6 @@
 ---
 name: service-classes
-description: "Use when creating, extending, or reviewing an ApisDomain class in apis/ or a DbsDomain class in dbs/ — adding an API endpoint or SQL query for tests (source endpoints from the team collection library resources/apisCollections/ and SQL from the team query library resources/Queries/ first), declaring operation_serviceName / operation_query fields, wiring ApiActions/DBActions in the constructor, writing service actions or verify* validations, parameterizing SQL, or managing the DB close() lifecycle."
+description: "Use when creating, extending, or reviewing an ApisDomain class in apis/ or a DbsDomain class in dbs/ — adding an API endpoint or SQL query for tests (source endpoints from the team collection library resources/apisCollections/ and SQL from the team query library resources/Queries/ first), declaring operation_serviceName / operation_query fields, wiring ApiActions/DbActions in the constructor, writing service actions or verify* validations, parameterizing SQL, or managing the DB close() lifecycle."
 ---
 
 # Service Classes (`Apis<Domain>` / `Dbs<Domain>`)
@@ -33,7 +33,7 @@ service method with a business name.
 
 ## Boundaries
 
-- Facade internals — `ApiActions`/`DBActions` step plumbing, `test.info().attach()`
+- Facade internals — `ApiActions`/`DbActions` step plumbing, `test.info().attach()`
   nesting, redaction, never-throw reporting, connection pooling →
   [utility-classes](../utility-classes/SKILL.md)
 - Spec wiring — where to instantiate services (`beforeEach`/`beforeAll`) and call

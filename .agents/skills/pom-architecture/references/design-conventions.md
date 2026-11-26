@@ -22,7 +22,7 @@ deliberate adaptation from the Java originals, so reviewers can trace why a rule
   - `src/pages/` — one class per HTML page or skeleton area. GUI business services.
   - `src/apis/` — `Apis<Domain>` classes exposing API business operations.
   - `src/dbs/` — `Dbs<Domain>` classes exposing DB business operations.
-  - `src/utils/` — `ApiActions`, `DBActions`, and future facades. Connections, logging,
+  - `src/utils/` — `ApiActions`, `DbActions`, and future facades. Connections, logging,
     Allure attachments, redaction, retries — every technically complex concern.
   - `src/config/` — environment coordinates (applications, databases, integration APIs,
     identity pools); values from `.harness/targets.json` (the starter's `targets.ts`)
@@ -53,7 +53,7 @@ deliberate adaptation from the Java originals, so reviewers can trace why a rule
 
 | Identifier | Rule | Examples |
 |---|---|---|
-| Class | PascalCase noun; role suffix/prefix: `<Name>Page`, `Apis<Domain>`, `Dbs<Domain>`, `<Noun>Actions`. Real words, no acronyms. | `LoginPage`, `HeaderPage`, `ApisUserManagement`, `DbsUserManagement`, `DBActions` |
+| Class | PascalCase noun; role suffix/prefix: `<Name>Page`, `Apis<Domain>`, `Dbs<Domain>`, `<Noun>Actions`. Real words, no acronyms. | `LoginPage`, `HeaderPage`, `ApisUserManagement`, `DbsUserManagement`, `DbActions` |
 | Interface / type | PascalCase, descriptive noun or adjective; no `I` prefix | `DBConnectionConfig`, `ApiRequestOptions` |
 | Method | camelCase verb phrase; starts with a verb | `login()`, `clickOnCartLink()`, `verifyErrorMessage()` |
 | Variable | camelCase; no single letters; no leading `_`, `$`, or other special chars | `testData`, `timestamp`, `deleteResponse` |

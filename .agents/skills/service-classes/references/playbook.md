@@ -116,7 +116,7 @@ UI-specific checks and owned cleanup retain their existing criteria.
 ## 4. The constructor wires the facade — methods never touch the raw client
 
 `Apis<Domain>` accepts Playwright's `APIRequestContext` and immediately builds an
-`ApiActions`; `Dbs<Domain>` accepts a `DBConnectionConfig` and builds a `DBActions`.
+`ApiActions`; `Dbs<Domain>` accepts a `DBConnectionConfig` and builds a `DbActions`.
 Every method then calls facade verbs (`apiActions.post(...)`, `dbActions.query(...)`).
 The ban covers every raw verb on the context — `this.request.get`/`post`/`put`/`patch`/
 `delete`/`fetch` all count, not just `fetch()`; where the raw context field is retained,
@@ -136,7 +136,7 @@ constructor(request: APIRequestContext) {
 
 ```ts
 constructor(dbConfig: DBConnectionConfig) {
-  this.dbActions = new DBActions(dbConfig);
+  this.dbActions = new DbActions(dbConfig);
 }
 ```
 
@@ -214,7 +214,7 @@ Type returns honestly: `Promise<APIResponse>`, `Promise<Record<string, unknown> 
 
 SQL strings use `@param` placeholders; values travel as the params object of
 `dbActions.query(queryText, { email })`, which binds them via `request.input()`
-(injection-safe, per the `src/utils/DBActions.ts` contract). Why: string-built SQL is an
+(injection-safe, per the `src/utils/DbActions.ts` contract). Why: string-built SQL is an
 injection vector, breaks on quoting, and dodges the facade's param redaction.
 
 ✅ `src/dbs/DbsUserManagement.ts`:
@@ -286,7 +286,7 @@ test.afterAll(async () => {
 });
 ```
 
-No explicit `connect()` call needed — `DBActions.query()` connects lazily.
+No explicit `connect()` call needed — `DbActions.query()` connects lazily.
 
 ## 10. Inputs come from parameters, not hardcoded payloads
 
@@ -331,7 +331,7 @@ not an API to impose on generated projects.
 
 This skill does NOT cover:
 
-- `ApiActions`/`DBActions` internals — dispatch/step plumbing, `test.info().attach()`
+- `ApiActions`/`DbActions` internals — dispatch/step plumbing, `test.info().attach()`
   nesting, redaction sets, console logging, pool management, adding new facade verbs →
   [utility-classes](../../utility-classes/SKILL.md)
 - Spec skeleton and hooks — where services are instantiated, `beforeEach` API seeding,
@@ -351,7 +351,7 @@ This skill does NOT cover:
 - [ ] Every endpoint/SQL string is a `readonly <operation>_serviceName` / `<operation>_query` field — no inline literals in method bodies
 - [ ] New SQL checked against `resources/Queries/` first; matching team queries adapted (one statement, `@param` placeholders, sample literals stripped, export artifacts cleaned) — never pasted raw, never bypassed
 - [ ] New API endpoints checked against `resources/apisCollections/` first; matching team requests adapted (path as the `_serviceName` field, base URL to config, sample payload as typed params, sample literals stripped) — never bypassed
-- [ ] Constructor wires `ApiActions` / `DBActions`; no raw context verb (`this.request.get`/`post`/`put`/`patch`/`delete`/`fetch`) or raw pool usage anywhere in the class
+- [ ] Constructor wires `ApiActions` / `DbActions`; no raw context verb (`this.request.get`/`post`/`put`/`patch`/`delete`/`fetch`) or raw pool usage anywhere in the class
 - [ ] Every facade field is referenced by a method — an unused `apiActions`/`dbActions` field means a bypass exists
 - [ ] Anatomy order: fields → constructor → (`Dbs` only) `close()` → `///// Actions` → `///// Validations`; no `Assertions` banner
 - [ ] Every action is one `allure.step` with a business title; no secrets in any title

@@ -7,7 +7,7 @@ operation schema, configured runtime, consumer paths and evidence verifier.
 Initial discovery supports SQL Server ordinary tables and exact-key SELECT
 lookups/verification. Existing PostgreSQL/MySQL execution remains available;
 automatic discovery for those engines and generated MySQL services are unsupported.
-This keeps discovery aligned with the established SQL Server `DBActions` service
+This keeps discovery aligned with the established SQL Server `DbActions` service
 path. No mutation recipes, SQL interception, new drivers or permissions are added.
 
 The alternative was a general SQL generator across all three engines. It adds

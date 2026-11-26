@@ -57,7 +57,7 @@ test('utility logging works with only the list reporter', {timeout: 60000}, t =>
     assert.equal(count('INFO', 'UI'), 4 * success);
     assert.equal(count('INFO', 'Expects'), 2 * success);
     assert.equal(count('INFO', 'ApiActions'), 2 * success);
-    assert.equal(count('INFO', 'DBActions'), 2 * success);
+    assert.equal(count('INFO', 'DbActions'), 2 * success);
     assert.equal(count('ERROR', 'UI'), 2);
     assert.equal(logs.filter(line => line === '[ERROR] [UI] fill failed').length, 1);
     assert.equal(logs.filter(line => line === '[ERROR] [UI] pressSequentially failed').length, 1);
@@ -65,7 +65,7 @@ test('utility logging works with only the list reporter', {timeout: 60000}, t =>
     assert.equal(count('ERROR', 'Expects'), 2);
     assert.equal(count('ERROR', 'ApiActions'), 1);
     assert.equal(count('WARN', 'ApiActions'), 2);
-    assert.equal(count('ERROR', 'DBActions'), 1);
-    assert(logs.some(line => /^\[ERROR\] \[DBActions\] CONNECT failed/.test(line)));
+    assert.equal(count('ERROR', 'DbActions'), 1);
+    assert(logs.some(line => /^\[ERROR\] \[DbActions\] CONNECT failed/.test(line)));
   }
 });

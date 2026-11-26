@@ -268,7 +268,7 @@ export const databases = {
 ```
 
 The `satisfies Record<string, DBConnectionConfig>` clause type-checks every entry
-against the facade contract in `src/utils/DBActions.ts` — keep it when adding databases.
+against the facade contract in `src/utils/DbActions.ts` — keep it when adding databases.
 The file's comment is explicit: credentials come only from environment variables (the
 gitignored `.env`, documented by `.env.example`, loaded by dotenv in
 `playwright.config.ts`) — never commit a literal credential. Secrets must also

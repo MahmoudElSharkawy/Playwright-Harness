@@ -4,7 +4,7 @@ import * as allure from 'allure-js-commons';
 
 /**
  * PDF document mechanics (utils family — a "PDF / document parsing" enabler). Wraps
- * pdf-parse v2's PDFParse class behind the same thin-facade shape as ApiActions/DBActions:
+ * pdf-parse v2's PDFParse class behind the same thin-facade shape as ApiActions/DbActions:
  * business classes hand in bytes (or a URL + request context) and get back plain
  * text/counts — no parser or transport types leak upward.
  */

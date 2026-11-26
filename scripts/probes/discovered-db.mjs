@@ -169,7 +169,7 @@ try {
   const base = join(packageRoot, 'harness-tests/fixtures/observed-api-consumer');
   for (const file of ['src/pages/OrderPage.ts', 'src/utils/Expects.ts', 'src/config/applications.ts', 'playwright.config.ts']) {mkdirSync(join(projectRoot, file, '..'), {recursive: true}); cpSync(join(base, file), join(projectRoot, file));}
   cpSync(join(packageRoot, 'harness-tests/fixtures/discovered-db-consumer'), projectRoot, {recursive: true});
-  cpSync(join(packageRoot, 'examples/src/utils/DBActions.ts'), join(projectRoot, 'src/utils/DBActions.ts'));
+  cpSync(join(packageRoot, 'examples/src/utils/DbActions.ts'), join(projectRoot, 'src/utils/DbActions.ts'));
   cpSync(join(packageRoot, 'examples/src/utils/Logger.ts'), join(projectRoot, 'src/utils/Logger.ts'));
   const servicePath = join(projectRoot, 'src/dbs/DbsOrders.ts'); writeFileSync(servicePath, readFileSync(servicePath, 'utf8').replace('__REVIEWED_LOOKUP__', reviewed.operation.definition.sql));
   linkExampleDependencies(projectRoot, packageRoot);

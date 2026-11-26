@@ -174,7 +174,7 @@ reuse in a later run; missing or changed evidence remains a separate visible gap
 Manual execution completes this work before freezing operation/check provenance;
 a missing operation discovered later returns to refinement. It may save knowledge
 but generates no POM code. Automation derives a normal `Dbs<Domain>` operation
-through the existing `DBActions` facade, promotes before generation freeze, and
+through the existing `DbActions` facade, promotes before generation freeze, and
 retains independent framework review and two fresh scoped green runs. Required
 seed/cleanup/restoration still needs an existing supported operation. Discovery
 summaries and library paths never change case verdicts or delivery readiness.

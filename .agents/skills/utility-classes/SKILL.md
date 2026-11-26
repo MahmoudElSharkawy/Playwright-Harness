@@ -1,6 +1,6 @@
 ---
 name: utility-classes
-description: "Use when writing, extending, or reviewing anything in utils/ — a technical facade like ApiActions/DBActions, report logging, Allure attachments, secret redaction, connection/pool handling, retries — the root-level globalSetup/globalTeardown lifecycle scripts (honorary utils for run hygiene and report generation) — or when deciding whether complex code (a loop, conditional, or try/catch) belongs in utils versus a business class."
+description: "Use when writing, extending, or reviewing anything in utils/ — a technical facade like ApiActions/DbActions, report logging, Allure attachments, secret redaction, connection/pool handling, retries — the root-level globalSetup/globalTeardown lifecycle scripts (honorary utils for run hygiene and report generation) — or when deciding whether complex code (a loop, conditional, or try/catch) belongs in utils versus a business class."
 ---
 
 # Utility Classes (`utils/` — the technical layer)
@@ -9,7 +9,7 @@ Resolve this skill to its real path before following references. Read the
 [package and consumer boundaries](../ROOTS.md); mutable state belongs to the consumer.
 
 `utils/` is the framework's only technically complex layer. It hosts facades
-(`ApiActions`, `DBActions`) that make every external interaction visible in the Allure
+(`ApiActions`, `DbActions`) that make every external interaction visible in the Allure
 report, redact selected credential headers/structured keys, and guarantee that reporting failures never alter a test's
 outcome. Business meaning never enters this layer. The root-level `global-setup.ts` /
 `global-teardown.ts` lifecycle scripts are honorary members — run hygiene only
@@ -21,12 +21,12 @@ outcome. Business meaning never enters this layer. The root-level `global-setup.
    contract: step-per-operation, attachment nesting, never-throw reporting, redaction,
    options resolution, lifecycle scripts, and how to extend or add a facade.
 
-The living canonical models are `src/utils/ApiActions.ts`, `src/utils/DBActions.ts`
+The living canonical models are `src/utils/ApiActions.ts`, `src/utils/DbActions.ts`
 and `src/utils/UiActions.ts`. Pattern-match new facades on them and use
 `src/utils/Logger.ts` for console output. `UiActions.ts` owns ordinary locator actions
 and bounded retries for controls that initialize asynchronously.
 Other examples include `PdfDocuments.ts` (an external-library facade — transport and parsing stay out
-of business/page classes, same shape as ApiActions/DBActions but wrapping a parsing
+of business/page classes, same shape as ApiActions/DbActions but wrapping a parsing
 library instead of a network/DB driver), and `IdentityNumbers.ts` (format-constrained
 synthetic-data generation — a checksum-valid value that isn't externally registry-checked
 and gets consumed permanently on use, so it's generated fresh per run instead of drawn

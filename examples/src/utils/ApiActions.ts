@@ -81,7 +81,7 @@ export class ApiActions {
   private readonly maxBodyLength: number;
   /**
    * The cached bearer-token fetch from `bearerTokenProvider` — the facade's only
-   * auth state, analogous to DBActions' lazy pool: storing the in-flight promise
+   * auth state, analogous to DbActions' lazy pool: storing the in-flight promise
    * makes the first fetch single-flight, and clearing the field invalidates the
    * cache (done on a fetch failure and on a 401 refresh).
    */

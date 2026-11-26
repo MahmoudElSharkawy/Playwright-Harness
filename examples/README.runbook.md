@@ -51,7 +51,7 @@ Consumed by the `utils/` facades and the root lifecycle scripts
 | `HARNESS_ALLURE_HISTORY` | Ordinary and scoped Allure reporters | `reports/allure-history` | Older HTML archive root under `reports/`; separate from current report and raw staging. |
 | `ALLURE_ATTACH_VIDEO` | Ordinary and scoped Allure reporters | off | Set to `true` to include video attachments in Allure; Playwright recording remains independent. |
 | `API_CONSOLE_LOGS` | `src/utils/ApiActions.ts` | off | Set to `true` for HTTP method, status and duration summaries. |
-| `DB_CONSOLE_LOGS` | `src/utils/DBActions.ts` | off | Set to `true` for DB operation, row count and duration summaries. |
+| `DB_CONSOLE_LOGS` | `src/utils/DbActions.ts` | off | Set to `true` for DB operation, row count and duration summaries. |
 | `EXPECT_CONSOLE_LOGS` | `src/utils/Expects.ts` | off | Set to `true` to log successful assertions. |
 | `UI_CONSOLE_LOGS` | `src/utils/UiActions.ts` | off | Set to `true` to log successful actions. |
 | `NO_COLOR` | `src/utils/Logger.ts` | unset | Set to `1` for plain severity labels. |

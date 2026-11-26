@@ -1,7 +1,7 @@
 # Utility Classes Playbook
 
 The contract for everything in `utils/`. Both existing files — `src/utils/ApiActions.ts`
-and `src/utils/DBActions.ts` — are **canonical**; there are no legacy variants in this
+and `src/utils/DbActions.ts` — are **canonical**; there are no legacy variants in this
 layer. Pattern-match on them. The root-level `global-setup.ts` / `global-teardown.ts`
 lifecycle scripts are honorary members of this layer — practices 14–17. (Legacy patterns
 you will meet upstream — public locators, `assert*` names, `/////////Assertions`
@@ -16,7 +16,7 @@ path, a table name, or an expected value — it belongs in `pages/`, `apis/`, or
 **Why:** the architecture (design-conventions §1, iron law 1) hinges on this split; one
 domain-aware helper in utils and the layering is gone.
 
-✅ `ApiActions.post(url, options)` and `DBActions.query(queryText, params)` — generic
+✅ `ApiActions.post(url, options)` and `DbActions.query(queryText, params)` — generic
 verbs, zero domain vocabulary (the verb shape is quoted in practice 13).
 
 ❌ `async createUser(name: string, email: string)` inside `ApiActions` — knows about
@@ -39,7 +39,7 @@ its own purpose: Playwright "only surfaces API request/response payloads in the 
 Viewer — never in the HTML/Allure reports … This wrapper fills that gap."
 
 ✅ `src/dbs/DbsUserManagement.ts` receives config, wires the facade, delegates everything:
-`constructor(dbConfig: DBConnectionConfig) { this.dbActions = new DBActions(dbConfig); }`
+`constructor(dbConfig: DBConnectionConfig) { this.dbActions = new DbActions(dbConfig); }`
 
 ❌ `this.request.fetch(url, …)` or `pool.request().query(…)` in a service class, page,
 or spec — it works, but leaves no step, no attachments, no redaction.
@@ -66,7 +66,7 @@ private async dispatch(method: string, url: string, options?: FetchOptions): Pro
 
 Utils steps use `test.step` from `@playwright/test`; business layers use `allure.step`
 from `allure-js-commons` — the business step wraps the facade's technical step. Compact
-long inputs for titles as `DBActions.stepTitle()` does (collapse whitespace, cap at 80).
+long inputs for titles as `DbActions.stepTitle()` does (collapse whitespace, cap at 80).
 
 ## 4. Attach report payloads with `test.info().attach()` from inside the step body
 
@@ -76,7 +76,7 @@ callback — never via the `step.attach()` handle.
 **Why:** allure-playwright nests `test.info().attach()` inside the current step;
 `step.attach()` lands outside the step in the Allure report (iron law 10).
 
-✅ `src/utils/DBActions.ts`:
+✅ `src/utils/DbActions.ts`:
 
 ```ts
 /** Attaches a payload as pretty-printed JSON to the current step (text/plain when truncated). */
@@ -157,7 +157,7 @@ gracefully (no step, no attachments — console logging still works) when absent
 throws outside a test, so the probe is the one place that exception is expected.
 
 ✅ Both facades implement the identical probe, `currentTestInfo()` in
-`src/utils/ApiActions.ts` and `src/utils/DBActions.ts`: `return test.info()` inside a
+`src/utils/ApiActions.ts` and `src/utils/DbActions.ts`: `return test.info()` inside a
 try/catch, `undefined` on throw — its JSDoc reads "Returns the active TestInfo, or
 undefined when not inside a running test (test.info() throws there)." Both `dispatch`
 and `shouldConsoleLog` branch on it.
@@ -176,7 +176,7 @@ default every knob (`maxBodyLength` 50 000, `redact` true).
 **Why:** callers get per-instance control, CI gets env-level control,
 `playwright.config.ts` projects get per-project control — no layer hardcodes anything.
 
-✅ `src/utils/DBActions.ts`:
+✅ `src/utils/DbActions.ts`:
 
 ```ts
 /** Resolves the console-echo flag: constructor option, then DB_CONSOLE_LOGS env var, then project metadata. */
@@ -202,7 +202,7 @@ create a generic utility just to relocate those few decisions. Reviewed public
 fixtures may own technical lifecycle handling through existing exceptions.
 
 **Why:** concentrating complexity in one reviewed, JSDoc'd layer keeps every other file
-readable as plain business prose. ✅ `DBActions.redactDeep()` (recursion, depth cap),
+readable as plain business prose. ✅ `DbActions.redactDeep()` (recursion, depth cap),
 `ApiActions.readBodySafely()` (nested try/catch). ❌ The same constructs in
 `src/pages/LoginPage.ts` or a spec file.
 
@@ -227,7 +227,7 @@ resource; create more instances for more databases.
 **Why:** tests must not pay for unused connections, parallel first-queries must not open
 duplicate pools, and teardown must be callable unconditionally from `afterAll`.
 
-✅ `DBActions.getPool()` — "Lazy singleton pool: returns the live pool, awaits an
+✅ `DbActions.getPool()` — "Lazy singleton pool: returns the live pool, awaits an
 in-flight connect, or starts one." It caches the in-flight promise in
 `this.connecting`, clearing it on failure so a later call can retry; `close()` drains
 both the live pool and any pending connect before closing, then resets state.
@@ -249,7 +249,7 @@ through a Playwright reporter, never a facade field.
 public and non-obvious private alike — including defaults, deviations, and driver quirks.
 
 **Why:** iron law 12 exempts utils from "self-describing code over comments" precisely
-because technical contracts (e.g. `DBActions`: "`GO` batch separators are client-side
+because technical contracts (e.g. `DbActions`: "`GO` batch separators are client-side
 syntax … not supported by the driver"; `trustServerCertificate` "deviates from the
 driver default") cannot be carried by a method name.
 
@@ -453,7 +453,7 @@ state, each JSDoc'd with its technical contract. Shipped examples, each a
 distinct shape worth pattern-matching:
 
 - **`PdfDocuments.ts`** — an external-library facade. Wraps a third-party parsing
-  library (`pdf-parse`) behind the same thin-facade shape as `ApiActions`/`DBActions`:
+  library (`pdf-parse`) behind the same thin-facade shape as `ApiActions`/`DbActions`:
   business classes hand in bytes and get back plain text/counts, and no parser type
   leaks upward (iron law 1).
 - **`IdentityNumbers.ts`** — format-constrained synthetic-data generation. Some fields

@@ -3,7 +3,7 @@ import { test, type APIRequestContext, type Locator } from '@playwright/test';
 import sql from 'mssql';
 import { LoginPage } from './src/pages/LoginPage';
 import { ApiActions } from './src/utils/ApiActions';
-import { DBActions } from './src/utils/DBActions';
+import { DbActions } from './src/utils/DbActions';
 import { expectToBe, expectToHaveMatchingCount, expectToHaveSecretValue } from './src/utils/Expects';
 import { UiActions } from './src/utils/UiActions';
 
@@ -78,9 +78,9 @@ test('DB summaries keep connection failures single and query output private', as
     query: async () => ({ recordset: [row], recordsets: [[row]], rowsAffected: [1] }),
   })) as unknown as typeof request;
   try {
-    assert.deepEqual((await new DBActions(config).query('select @value', { value: marker })).rows, [row]);
+    assert.deepEqual((await new DbActions(config).query('select @value', { value: marker })).rows, [row]);
     unavailable = true;
-    await assert.rejects(new DBActions(config).query('select 1'), error => error === failure);
+    await assert.rejects(new DbActions(config).query('select 1'), error => error === failure);
   } finally {
     prototype.connect = connect;
     prototype.request = request;

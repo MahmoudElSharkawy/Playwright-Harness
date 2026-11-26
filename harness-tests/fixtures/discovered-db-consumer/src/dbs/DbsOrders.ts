@@ -1,15 +1,15 @@
 import * as allure from 'allure-js-commons';
-import {DBActions, type DBConnectionConfig} from '../utils/DBActions';
+import {DbActions, type DBConnectionConfig} from '../utils/DbActions';
 import {expectToBe} from '../utils/Expects';
 
 export class DbsOrders {
-  private readonly dbActions: DBActions;
+  private readonly dbActions: DbActions;
   readonly createDraftOrder_query = 'INSERT INTO m8.DiscoveredOrders (Id,Owner,Status) OUTPUT INSERTED.Id VALUES (@id,@owner,@status)';
   readonly lookupOrder_query = '__REVIEWED_LOOKUP__';
   readonly deleteOrder_query = 'DELETE FROM m8.DiscoveredOrders WHERE Id=@id AND Owner=@owner';
 
   constructor(config: DBConnectionConfig) {
-    this.dbActions = new DBActions(config);
+    this.dbActions = new DbActions(config);
   }
 
   async close(): Promise<void> {

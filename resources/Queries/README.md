@@ -45,7 +45,7 @@ values, sometimes prose-annotated. Consumption paths:
    `DECLARE @Id` blocks) are recipes — derive one query per statement and
    let the test pass values between them.
 2. **Parameterize every value.** Hardcoded sample values become parameters: `@param`
-   placeholders for `Dbs<Domain>` `_query` fields (bound via `DBActions.query`),
+   placeholders for `Dbs<Domain>` `_query` fields (bound via `DbActions.query`),
    typed named parameters for native `defineDatabaseOperation` definitions.
 3. **Sample literals never leave the library.** Identity numbers, record ids, reference
    numbers, IBANs, and GUIDs in the snippets are point-in-time examples from someone's

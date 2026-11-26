@@ -7,6 +7,8 @@
 - Existing consumers can copy `Logger.ts` and `UiActions.ts`, merge the logging
   changes into their utilities, and migrate `UiControls` imports and page actions
   to a `UiActions` instance.
+- Rename `src/utils/DBActions.ts` to `src/utils/DbActions.ts` and update imports
+  and constructor calls to `DbActions`.
 
 ### Changes
 

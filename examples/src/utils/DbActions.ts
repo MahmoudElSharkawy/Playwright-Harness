@@ -99,7 +99,7 @@ const REDACTED_KEYS = new Set([
  * Note: `GO` batch separators are client-side syntax (SSMS/sqlcmd) and are not
  * supported by the driver — use `;`-separated statements instead.
  */
-export class DBActions {
+export class DbActions {
   private readonly maxBodyLength: number;
   private pool?: sql.ConnectionPool;
   private connecting?: Promise<sql.ConnectionPool>;
@@ -270,11 +270,11 @@ export class DBActions {
       if (entry.error) {
         // CONNECT owns the console error even when its failure also reaches a waiting query.
         if (entry.operation !== 'QUERY' || entry.error.phase !== 'connect') {
-          Logger.error('DBActions', `${entry.operation} failed (${entry.durationMs} ms)`);
+          Logger.error('DbActions', `${entry.operation} failed (${entry.durationMs} ms)`);
         }
       } else if (this.shouldConsoleLog()) {
         const outcome = entry.rowCount === null ? 'succeeded' : `returned ${entry.rowCount} rows`;
-        Logger.info('DBActions', `${entry.operation} ${outcome} (${entry.durationMs} ms)`);
+        Logger.info('DbActions', `${entry.operation} ${outcome} (${entry.durationMs} ms)`);
       }
 
       if (!attach) return;
@@ -322,7 +322,7 @@ export class DBActions {
         }
       }
     } catch {
-      Logger.warn('DBActions', `Reporting failed for ${entry.operation}`);
+      Logger.warn('DbActions', `Reporting failed for ${entry.operation}`);
     }
   }
 
