@@ -4,6 +4,9 @@
 
 ### Upgrade actions
 
+- Copy `examples/src/config/logging.ts` to `src/config/logging.ts` when updating
+  the four logging utilities. Set routine console output defaults there. (#170)
+
 - Existing consumers can copy `Logger.ts` and `UiActions.ts`, merge the logging
   changes into their utilities, and migrate `UiControls` imports and page actions
   to a `UiActions` instance.

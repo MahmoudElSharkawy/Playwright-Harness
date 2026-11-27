@@ -23,7 +23,7 @@ const nativeResults = suite => [
 test('simple domain cleanup reconciles owned attempts and preserves foreign records after failures', {timeout: 240000}, async t => {
   const f = fixture(t), root = f.roots.projectRoot, packageRoot = f.roots.packageRoot;
   cpSync(join(packageRoot, 'harness-tests/fixtures/disposable-consumer'), root, {recursive: true});
-  for (const file of ['src/utils/ApiActions.ts', 'src/utils/Expects.ts', 'src/utils/Logger.ts', 'src/config/reporting.ts']) {
+  for (const file of ['src/utils/ApiActions.ts', 'src/utils/Expects.ts', 'src/utils/Logger.ts', 'src/config/logging.ts', 'src/config/reporting.ts']) {
     mkdirSync(dirname(join(root, file)), {recursive: true});
     cpSync(join(packageRoot, 'examples', file), join(root, file));
   }

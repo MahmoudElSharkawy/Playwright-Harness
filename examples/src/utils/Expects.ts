@@ -1,4 +1,5 @@
 import { expect, type Locator, type Page } from '@playwright/test';
+import { infoEnabled, loggingDefaults } from '../config/logging.js';
 import { Logger } from './Logger.js';
 
 /**
@@ -69,7 +70,7 @@ function runAssertion(title: string, check: (title: string) => void): void {
     Logger.error('Expects', title);
     throw error;
   }
-  if (process.env.EXPECT_CONSOLE_LOGS === 'true') Logger.info('Expects', title);
+  if (infoEnabled(process.env.EXPECT_CONSOLE_LOGS, loggingDefaults.expects)) Logger.info('Expects', title);
 }
 
 async function runAsyncAssertion(title: string, check: (title: string) => Promise<void>): Promise<void> {
@@ -79,7 +80,7 @@ async function runAsyncAssertion(title: string, check: (title: string) => Promis
     Logger.error('Expects', title);
     throw error;
   }
-  if (process.env.EXPECT_CONSOLE_LOGS === 'true') Logger.info('Expects', title);
+  if (infoEnabled(process.env.EXPECT_CONSOLE_LOGS, loggingDefaults.expects)) Logger.info('Expects', title);
 }
 
 ///// Value assertions (synchronous — subject is an already-resolved value)

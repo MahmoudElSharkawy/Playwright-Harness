@@ -73,7 +73,9 @@ test('API summaries handle returned statuses, failures and reporting warnings', 
       };
     },
   } as unknown as APIRequestContext;
-  const api = new ApiActions(request, { bearerTokenProvider: async () => marker });
+  const api = new ApiActions(request, {
+    bearerTokenProvider: async () => marker, consoleLogs: test.info().project.metadata.fixtureConsoleOption,
+  });
   const url = 'https://example.test/resource?fixture=' + marker;
   assert.equal((await api.post(url, { data: { fixture: marker } })).status(), 404);
 
@@ -105,7 +107,8 @@ test('DB summaries keep connection failures single and query output private', as
     query: async () => ({ recordset: [row], recordsets: [[row]], rowsAffected: [1] }),
   })) as unknown as typeof request;
   try {
-    assert.deepEqual((await new DbActions(config).query('select @value', { value: marker })).rows, [row]);
+    const db = new DbActions(config, { consoleLogs: test.info().project.metadata.fixtureConsoleOption });
+    assert.deepEqual((await db.query('select @value', { value: marker })).rows, [row]);
     unavailable = true;
     await assert.rejects(new DbActions(config).query('select 1'), error => error === failure);
   } finally {

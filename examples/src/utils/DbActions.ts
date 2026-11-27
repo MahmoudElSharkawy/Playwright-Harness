@@ -1,5 +1,6 @@
 import { test, type TestInfo } from '@playwright/test';
 import * as sql from 'mssql';
+import { loggingDefaults } from '../config/logging.js';
 import { Logger } from './Logger.js';
 
 /** Connection settings for one SQL Server database. The password never appears in any log or attachment. */
@@ -29,7 +30,7 @@ export interface DBConnectionConfig {
 }
 
 export interface DBActionsOptions {
-  /** Log routine operation summaries. Defaults to DB_CONSOLE_LOGS=true env var, then project metadata `dbConsoleLogs`. */
+  /** Override routine operation logging for this instance. */
   consoleLogs?: boolean;
   /** Max characters of any attached payload before truncation. Default 50000. */
   maxBodyLength?: number;
@@ -388,11 +389,11 @@ export class DbActions {
     };
   }
 
-  /** Resolves the console-echo flag: constructor option, then DB_CONSOLE_LOGS env var, then project metadata. */
+  /** The constructor option, environment and project metadata can override the file default, in that order. */
   private shouldConsoleLog(): boolean {
     if (this.options.consoleLogs !== undefined) return this.options.consoleLogs;
     if (process.env.DB_CONSOLE_LOGS) return process.env.DB_CONSOLE_LOGS === 'true';
-    return Boolean(this.currentTestInfo()?.project.metadata?.dbConsoleLogs);
+    return Boolean(this.currentTestInfo()?.project.metadata?.dbConsoleLogs ?? loggingDefaults.db);
   }
 
   /** Common fields shared by every log entry. */

@@ -1,4 +1,5 @@
 import { test, type APIRequestContext, type APIResponse, type TestInfo } from '@playwright/test';
+import { loggingDefaults } from '../config/logging.js';
 import { Logger } from './Logger.js';
 
 type FetchOptions = NonNullable<Parameters<APIRequestContext['fetch']>[1]>;
@@ -24,7 +25,7 @@ interface ApiRequestLog {
 }
 
 export interface ApiActionsOptions {
-  /** Log routine HTTP summaries. Defaults to API_CONSOLE_LOGS=true env var, then project metadata `apiConsoleLogs`. */
+  /** Override routine HTTP logging for this instance. */
   consoleLogs?: boolean;
   /** Max characters of any attached body before truncation. Default 50000. */
   maxBodyLength?: number;
@@ -342,11 +343,11 @@ export class ApiActions {
     };
   }
 
-  /** Resolves the console-echo flag: constructor option, then API_CONSOLE_LOGS env var, then project metadata. */
+  /** The constructor option, environment and project metadata can override the file default, in that order. */
   private shouldConsoleLog(): boolean {
     if (this.options.consoleLogs !== undefined) return this.options.consoleLogs;
     if (process.env.API_CONSOLE_LOGS) return process.env.API_CONSOLE_LOGS === 'true';
-    return Boolean(this.currentTestInfo()?.project.metadata?.apiConsoleLogs);
+    return Boolean(this.currentTestInfo()?.project.metadata?.apiConsoleLogs ?? loggingDefaults.api);
   }
 
   /** Returns the active TestInfo, or undefined when not inside a running test (test.info() throws there). */

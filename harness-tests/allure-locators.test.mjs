@@ -56,6 +56,7 @@ test('all locator assertion wrappers retain their selector after the arrow in Al
   }});
   const source = readFileSync(sourcePath, 'utf8'), exported = [...source.matchAll(/export (?:async )?function (\w+)/g)].map(match => match[1]);
   const compiled = stripTypeScriptTypes(source).replace(/import\s*\{[^}]+\}\s*from\s*['"]@playwright\/test['"];?/, "const {expect}=require('@playwright/test');")
+    .replace("import { infoEnabled, loggingDefaults } from '../config/logging.js';", 'const loggingDefaults = {expects: false}, infoEnabled = () => false;')
     .replace("import { Logger } from './Logger.js';", 'const Logger = {info() {}, error() {}};')
     .replace(/\bexport /g, '') + '\nmodule.exports={' + exported.join(',') + '};';
   const memoryModule = new Module(sourcePath); memoryModule.filename = sourcePath; memoryModule.paths = Module._nodeModulePaths(dirname(sourcePath));

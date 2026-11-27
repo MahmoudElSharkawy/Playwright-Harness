@@ -290,7 +290,7 @@ if (process.env.HARNESS_ALLURE_LOCATOR_PROOF === '1') for (const fails of [false
         await test.info().attach('Synthetic locator attachment',{body:'unchanged',contentType:'text/plain'});
         ${fails ? "await checks.expectToHaveText('the message',message,'Wrong',{timeout:100});" : ''}
       });});`;
-    const files = Object.fromEntries(['src/utils/Expects.ts', 'src/utils/AllureReport.ts', 'src/utils/Logger.ts', 'src/config/reporting.ts', 'allurerc.json']
+    const files = Object.fromEntries(['src/utils/Expects.ts', 'src/utils/AllureReport.ts', 'src/utils/Logger.ts', 'src/config/logging.ts', 'src/config/reporting.ts', 'allurerc.json']
       .map(file => [file, readFileSync(join(packageRoot, 'examples', file), 'utf8')]));
     const f = await nativeFixture(t, body, '', false, {files, fixtures: '{page}', packageType: 'commonjs',
       imports: "import * as allure from 'allure-js-commons';import * as checks from '../src/utils/Expects';",

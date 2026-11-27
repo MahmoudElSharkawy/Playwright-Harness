@@ -179,16 +179,17 @@ default every knob (`maxBodyLength` 50 000, `redact` true).
 ✅ `src/utils/DbActions.ts`:
 
 ```ts
-/** Resolves the console-echo flag: constructor option, then DB_CONSOLE_LOGS env var, then project metadata. */
+/** The constructor option, environment and project metadata can override the file default, in that order. */
 private shouldConsoleLog(): boolean {
   if (this.options.consoleLogs !== undefined) return this.options.consoleLogs;
   if (process.env.DB_CONSOLE_LOGS) return process.env.DB_CONSOLE_LOGS === 'true';
-  return Boolean(this.currentTestInfo()?.project.metadata?.dbConsoleLogs);
+  return Boolean(this.currentTestInfo()?.project.metadata?.dbConsoleLogs ?? loggingDefaults.db);
 }
 ```
 
-Facade env toggles are opt-in: absent means off, and only the literal string `'true'`
-enables (`API_CONSOLE_LOGS`, `DB_CONSOLE_LOGS`). The documented opt-out
+Routine console output defaults to off in `src/config/logging.ts`. A consumer can edit
+those defaults or set the corresponding environment flag to `'true'` or `'false'` for a run.
+The documented opt-out
 `AUTO_ALLURE_OPEN` (practice 16) is the sanctioned exception — don't invent another
 toggle convention. True module constants in utils are `UPPER_SNAKE_CASE`
 (`REDACTED_HEADERS`, `TEXTUAL_CONTENT`) per design-conventions §2.

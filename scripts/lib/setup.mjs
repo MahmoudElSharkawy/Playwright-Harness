@@ -15,7 +15,7 @@ const posix = path => path.replaceAll('\\', '/');
 const readJsonFile = file => JSON.parse(readFileSync(file, 'utf8'));
 // The minimal starter: run configuration and the technical utils, no demo pages or tests.
 const STARTER_FILES = ['playwright.config.ts', 'global-setup.ts', 'allurerc.json', 'tsconfig.json',
-  'src/config/applications.ts', 'src/config/databases.ts', 'src/config/reporting.ts', 'src/config/targets.ts', 'src/config/timeouts.ts',
+  'src/config/applications.ts', 'src/config/databases.ts', 'src/config/logging.ts', 'src/config/reporting.ts', 'src/config/targets.ts', 'src/config/timeouts.ts',
   'src/utils/AllureReport.ts', 'src/utils/ApiActions.ts', 'src/utils/DbActions.ts', 'src/utils/Expects.ts',
   'src/utils/Logger.ts', 'src/utils/UiActions.ts'];
 const STARTER_DEPENDENCIES = ['@playwright/test', 'playwright', '@types/node', 'typescript', 'dotenv', 'allure', 'allure-playwright',

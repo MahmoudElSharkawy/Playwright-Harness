@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { expect, type BrowserContext, type Locator, type Page } from '@playwright/test';
+import { infoEnabled, loggingDefaults } from '../config/logging.js';
 import { Logger } from './Logger.js';
 
 const retryScope = new AsyncLocalStorage<boolean>();
@@ -302,7 +303,7 @@ export class UiActions {
       const result = await run();
       if (result === false) {
         Logger.warn('UI', `${action} exhausted its attempts`);
-      } else if (process.env.UI_CONSOLE_LOGS === 'true') {
+      } else if (infoEnabled(process.env.UI_CONSOLE_LOGS, loggingDefaults.ui)) {
         Logger.info('UI', `${action} succeeded`);
       }
       return result;

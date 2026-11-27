@@ -171,6 +171,7 @@ try {
   cpSync(join(packageRoot, 'harness-tests/fixtures/discovered-db-consumer'), projectRoot, {recursive: true});
   cpSync(join(packageRoot, 'examples/src/utils/DbActions.ts'), join(projectRoot, 'src/utils/DbActions.ts'));
   cpSync(join(packageRoot, 'examples/src/utils/Logger.ts'), join(projectRoot, 'src/utils/Logger.ts'));
+  cpSync(join(packageRoot, 'examples/src/config/logging.ts'), join(projectRoot, 'src/config/logging.ts'));
   const servicePath = join(projectRoot, 'src/dbs/DbsOrders.ts'); writeFileSync(servicePath, readFileSync(servicePath, 'utf8').replace('__REVIEWED_LOOKUP__', reviewed.operation.definition.sql));
   linkExampleDependencies(projectRoot, packageRoot);
   put('package.json', {name: 'discovered-db-proof', private: true, type: 'commonjs'});

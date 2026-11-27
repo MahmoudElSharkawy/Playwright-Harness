@@ -431,9 +431,10 @@ Playwright returns. It does not forward test-plan filtering/status overrides.
 Ordinary native scope stays with Playwright; generation adds mandatory verification.
 
 Run the consumer's own script or `npx playwright test`, optionally with a quoted spec
-and existing browser project. Set `API_CONSOLE_LOGS`, `DB_CONSOLE_LOGS`,
-`EXPECT_CONSOLE_LOGS` or `UI_CONSOLE_LOGS` to `true` for routine console output
-from the corresponding starter utility. Warnings and failures log by default.
+and existing browser project. Set routine console output defaults in
+`src/config/logging.ts`. For a single run, set `API_CONSOLE_LOGS`, `DB_CONSOLE_LOGS`,
+`EXPECT_CONSOLE_LOGS` or `UI_CONSOLE_LOGS` to `true` or `false`.
+Warnings and failures always log.
 CI sets AUTO_ALLURE_OPEN=false.
 
 ## Attachments, links and protection

@@ -230,6 +230,7 @@ test('restore on a fresh project removes what setup created instead of running n
  assert(result.starter.includes('src/utils/AllureReport.ts'));
  assert(result.starter.includes('src/utils/DbActions.ts'));
  assert(result.starter.includes('src/utils/Logger.ts'));
+ assert(result.starter.includes('src/config/logging.ts'));
  assert(result.starter.includes('src/utils/UiActions.ts'));
  const config = readFileSync(join(root,'playwright.config.ts'),'utf8');
  assert.equal((config.match(/\.\/src\/utils\/AllureReport\.ts/g) ?? []).length, 1);
