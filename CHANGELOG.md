@@ -4,6 +4,9 @@
 
 ### Upgrade actions
 
+- Copy `examples/src/config/logging.ts` to `src/config/logging.ts` when updating
+  the four logging utilities. Set routine console output defaults there. (#170)
+
 - Existing consumers can copy `Logger.ts` and `UiActions.ts`, merge the logging
   changes into their utilities, and migrate `UiControls` imports and page actions
   to a `UiActions` instance.
@@ -15,6 +18,9 @@
 - Add a shared console logger with colored severity labels and opt-in routine
   output for API, database, UI and assertion utilities. New starters use
   `UiActions` for clicks, typing and the former `UiControls` widget helpers. (#168)
+- Make console lines readable: `[UI]`, `[API]`, `[DB]` and `[Expect]` tags, sentence-case
+  action names, `Passed:`/`Failed:` assertion lines without the dangling `→`, and the
+  HTTP method and URL path (no query string) in API lines. (#170)
 
 ## 4.4.2 — Readable bug reports
 

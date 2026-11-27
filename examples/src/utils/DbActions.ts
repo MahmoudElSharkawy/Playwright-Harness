@@ -1,5 +1,6 @@
 import { test, type TestInfo } from '@playwright/test';
 import * as sql from 'mssql';
+import { loggingDefaults } from '../config/logging.js';
 import { Logger } from './Logger.js';
 
 /** Connection settings for one SQL Server database. The password never appears in any log or attachment. */
@@ -29,7 +30,7 @@ export interface DBConnectionConfig {
 }
 
 export interface DBActionsOptions {
-  /** Log routine operation summaries. Defaults to DB_CONSOLE_LOGS=true env var, then project metadata `dbConsoleLogs`. */
+  /** Override routine operation logging for this instance. */
   consoleLogs?: boolean;
   /** Max characters of any attached payload before truncation. Default 50000. */
   maxBodyLength?: number;
@@ -266,15 +267,17 @@ export class DbActions {
 
   /** Best-effort reporting — must never throw, so it can never mask the operation's own outcome. */
   private async report(entry: DbQueryLog, attach: boolean): Promise<void> {
+    const operation = entry.operation[0] + entry.operation.slice(1).toLowerCase();
+    const timing = this.config.name ? `(${this.config.name}, ${entry.durationMs} ms)` : `(${entry.durationMs} ms)`;
     try {
       if (entry.error) {
         // CONNECT owns the console error even when its failure also reaches a waiting query.
         if (entry.operation !== 'QUERY' || entry.error.phase !== 'connect') {
-          Logger.error('DbActions', `${entry.operation} failed (${entry.durationMs} ms)`);
+          Logger.error('DB', `${operation} failed ${timing}`);
         }
       } else if (this.shouldConsoleLog()) {
-        const outcome = entry.rowCount === null ? 'succeeded' : `returned ${entry.rowCount} rows`;
-        Logger.info('DbActions', `${entry.operation} ${outcome} (${entry.durationMs} ms)`);
+        const outcome = entry.rowCount === null ? 'succeeded' : `returned ${entry.rowCount} ${entry.rowCount === 1 ? 'row' : 'rows'}`;
+        Logger.info('DB', `${operation} ${outcome} ${timing}`);
       }
 
       if (!attach) return;
@@ -322,7 +325,7 @@ export class DbActions {
         }
       }
     } catch {
-      Logger.warn('DbActions', `Reporting failed for ${entry.operation}`);
+      Logger.warn('DB', `Could not attach ${operation} details to the report`);
     }
   }
 
@@ -388,11 +391,11 @@ export class DbActions {
     };
   }
 
-  /** Resolves the console-echo flag: constructor option, then DB_CONSOLE_LOGS env var, then project metadata. */
+  /** The constructor option, environment and project metadata can override the file default, in that order. */
   private shouldConsoleLog(): boolean {
     if (this.options.consoleLogs !== undefined) return this.options.consoleLogs;
     if (process.env.DB_CONSOLE_LOGS) return process.env.DB_CONSOLE_LOGS === 'true';
-    return Boolean(this.currentTestInfo()?.project.metadata?.dbConsoleLogs);
+    return Boolean(this.currentTestInfo()?.project.metadata?.dbConsoleLogs ?? loggingDefaults.db);
   }
 
   /** Common fields shared by every log entry. */

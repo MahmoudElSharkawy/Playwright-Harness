@@ -19,6 +19,7 @@ test('search-first POM preserves exact identities, observed scope and pagination
   const facade = join(root, 'src/utils/Expects.ts'); mkdirSync(dirname(facade), {recursive: true});
   cpSync(join(roots.packageRoot, 'examples/src/utils/Expects.ts'), facade);
   cpSync(join(roots.packageRoot, 'examples/src/utils/Logger.ts'), join(root, 'src/utils/Logger.ts'));
+  cpSync(join(roots.packageRoot, 'examples/src/config/logging.ts'), join(root, 'src/config/logging.ts'));
   writeFileSync(join(root, 'package.json'), '{"type":"module"}');
   const app = await listSearchFixture(); t.after(() => app.close());
   const cli = join(root, 'node_modules/@playwright/test/cli.js');

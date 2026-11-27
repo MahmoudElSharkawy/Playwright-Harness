@@ -56,7 +56,12 @@ Consumed by the `utils/` facades and the root lifecycle scripts
 | `UI_CONSOLE_LOGS` | `src/utils/UiActions.ts` | off | Set to `true` to log successful actions. |
 | `NO_COLOR` | `src/utils/Logger.ts` | unset | Set to `1` for plain severity labels. |
 
-Warnings and failures from these utilities are logged by default. Use `UiActions`
+Set team defaults in `src/config/logging.ts`. For example, set `loggingDefaults.ui`
+to `true` to log successful UI actions. In CI, set `UI_CONSOLE_LOGS=false` to turn
+them off for that run. Each flag overrides its matching file setting.
+For API and DB, the constructor's `consoleLogs` option takes priority over the
+environment flag, followed by project metadata (`apiConsoleLogs` or `dbConsoleLogs`)
+and then the file default. Warnings and failures always log. Use `UiActions`
 for page-object interactions you want logged. Its console lines omit entered values.
 
 PowerShell sets these as `$env:AUTO_ALLURE_OPEN='false'`; bash inline as
