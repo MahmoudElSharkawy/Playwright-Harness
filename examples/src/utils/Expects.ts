@@ -63,24 +63,31 @@ interface TextOptions extends RetryOptions {
   ignoreCase?: boolean;
 }
 
+/** Logs one assertion outcome. The trailing " →" only leads into Playwright's matcher message, so the console line drops it. */
+function logAssertion(title: string, passed: boolean): void {
+  const text = title.replace(/ →$/, '');
+  if (!passed) Logger.error('Expect', `Failed: ${text}`);
+  else if (infoEnabled(process.env.EXPECT_CONSOLE_LOGS, loggingDefaults.expects)) Logger.info('Expect', `Passed: ${text}`);
+}
+
 function runAssertion(title: string, check: (title: string) => void): void {
   try {
     check(title);
   } catch (error) {
-    Logger.error('Expects', title);
+    logAssertion(title, false);
     throw error;
   }
-  if (infoEnabled(process.env.EXPECT_CONSOLE_LOGS, loggingDefaults.expects)) Logger.info('Expects', title);
+  logAssertion(title, true);
 }
 
 async function runAsyncAssertion(title: string, check: (title: string) => Promise<void>): Promise<void> {
   try {
     await check(title);
   } catch (error) {
-    Logger.error('Expects', title);
+    logAssertion(title, false);
     throw error;
   }
-  if (infoEnabled(process.env.EXPECT_CONSOLE_LOGS, loggingDefaults.expects)) Logger.info('Expects', title);
+  logAssertion(title, true);
 }
 
 ///// Value assertions (synchronous — subject is an already-resolved value)

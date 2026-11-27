@@ -267,15 +267,17 @@ export class DbActions {
 
   /** Best-effort reporting — must never throw, so it can never mask the operation's own outcome. */
   private async report(entry: DbQueryLog, attach: boolean): Promise<void> {
+    const operation = entry.operation[0] + entry.operation.slice(1).toLowerCase();
+    const timing = this.config.name ? `(${this.config.name}, ${entry.durationMs} ms)` : `(${entry.durationMs} ms)`;
     try {
       if (entry.error) {
         // CONNECT owns the console error even when its failure also reaches a waiting query.
         if (entry.operation !== 'QUERY' || entry.error.phase !== 'connect') {
-          Logger.error('DbActions', `${entry.operation} failed (${entry.durationMs} ms)`);
+          Logger.error('DB', `${operation} failed ${timing}`);
         }
       } else if (this.shouldConsoleLog()) {
-        const outcome = entry.rowCount === null ? 'succeeded' : `returned ${entry.rowCount} rows`;
-        Logger.info('DbActions', `${entry.operation} ${outcome} (${entry.durationMs} ms)`);
+        const outcome = entry.rowCount === null ? 'succeeded' : `returned ${entry.rowCount} ${entry.rowCount === 1 ? 'row' : 'rows'}`;
+        Logger.info('DB', `${operation} ${outcome} ${timing}`);
       }
 
       if (!attach) return;
@@ -323,7 +325,7 @@ export class DbActions {
         }
       }
     } catch {
-      Logger.warn('DbActions', `Reporting failed for ${entry.operation}`);
+      Logger.warn('DB', `Could not attach ${operation} details to the report`);
     }
   }
 

@@ -107,7 +107,7 @@ surfaces after the report is written.
 
 ```ts
 } catch {
-  Logger.warn('ApiActions', `Reporting failed for ${entry.method}`);
+  Logger.warn('API', `Could not attach ${target} details to the report`);
 }
 // …and after reporting, execute() still surfaces the operation's own failure:
 if (failure) throw failure.cause;
@@ -126,7 +126,9 @@ Practice 15 extends this contract to process level in the lifecycle scripts.
 
 **Rule:** reuse the facade's selected credential-header and structured-key redaction
 before attaching. Keep console summaries to safe operation metadata such as HTTP
-status, row count and duration. Attachment redaction is depth-capped and does not sanitize arbitrary
+method, URL path (never the host or query string), status, row count and duration.
+Console `[source]` tags name the subsystem (`UI`, `API`, `DB`, `Expect`), not the class,
+and messages are sentence-case text, never raw method names. Attachment redaction is depth-capped and does not sanitize arbitrary
 strings, URL/query values, errors or native artifacts. `redact: false` is an explicit
 opt-out. The complete protection boundary is practice 20.
 

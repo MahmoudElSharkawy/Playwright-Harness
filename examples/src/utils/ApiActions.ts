@@ -144,7 +144,7 @@ export class ApiActions {
 
     let response = await run();
     if (response.status() === 401 && this.options.bearerTokenProvider && !this.hasExplicitAuthorization(options)) {
-      Logger.warn('ApiActions', 'Refreshing bearer token after HTTP 401');
+      Logger.warn('API', 'Refreshing bearer token after HTTP 401');
       this.bearerToken = undefined; // drop the stale token; the replay fetches a fresh one
       response = await run();
     }
@@ -163,7 +163,7 @@ export class ApiActions {
     if (!this.bearerToken) {
       this.bearerToken = Promise.resolve().then(() => provider()).catch((err) => {
         this.bearerToken = undefined;
-        Logger.error('ApiActions', 'Bearer token provider failed');
+        Logger.error('API', 'Bearer token provider failed');
         throw err;
       });
     }
@@ -223,11 +223,12 @@ export class ApiActions {
 
   /** Best-effort reporting — must never throw, so it can never mask the request's own outcome. */
   private async report(entry: ApiRequestLog, attach: boolean): Promise<void> {
+    const target = `${entry.method} ${this.logPath(entry.url)}`;
     try {
       if (entry.status === null) {
-        Logger.error('ApiActions', `${entry.method} failed (${entry.durationMs} ms)`);
+        Logger.error('API', `${target} failed (${entry.durationMs} ms)`);
       } else if (this.shouldConsoleLog()) {
-        Logger.info('ApiActions', `${entry.method} returned HTTP ${entry.status} (${entry.durationMs} ms)`);
+        Logger.info('API', `${target} returned HTTP ${entry.status} (${entry.durationMs} ms)`);
       }
 
       if (!attach) return;
@@ -253,7 +254,16 @@ export class ApiActions {
         });
       }
     } catch {
-      Logger.warn('ApiActions', `Reporting failed for ${entry.method}`);
+      Logger.warn('API', `Could not attach ${target} details to the report`);
+    }
+  }
+
+  /** URL path only (no host or query string), so console lines never carry query-string secrets. */
+  private logPath(url: string): string {
+    try {
+      return new URL(url, 'http://localhost').pathname;
+    } catch {
+      return '(invalid URL)';
     }
   }
 

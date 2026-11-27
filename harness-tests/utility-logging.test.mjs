@@ -59,36 +59,43 @@ test('utility logging works with only the list reporter', {timeout: 180000}, asy
     const count = (level, source) => logs.filter(line => line.startsWith(`[${level}] [${source}]`)).length;
     const ui = enabled.includes('UI');
     assert.equal(count('INFO', 'UI'), ui ? 6 : 0);
-    assert.equal(logs.filter(line => line === '[INFO] [UI] click succeeded').length, ui ? 2 : 0);
-    assert.equal(logs.filter(line => line === '[INFO] [UI] retryUntilSucceeded succeeded').length, ui ? 1 : 0);
-    for (const source of ['Expects', 'ApiActions', 'DbActions']) {
+    assert.equal(logs.filter(line => line === '[INFO] [UI] Click succeeded').length, ui ? 2 : 0);
+    assert.equal(logs.filter(line => line === '[INFO] [UI] Retry succeeded').length, ui ? 1 : 0);
+    for (const source of ['Expect', 'API', 'DB']) {
       assert.equal(count('INFO', source), enabled.includes(source) ? 2 : 0, source);
     }
     assert.equal(count('ERROR', 'UI'), 3);
-    assert.equal(logs.filter(line => line === '[ERROR] [UI] fill failed').length, 1);
-    assert.equal(logs.filter(line => line === '[ERROR] [UI] pressSequentially failed').length, 1);
-    assert.equal(logs.filter(line => line === '[ERROR] [UI] retryUntilSucceeded failed').length, 1);
+    assert.equal(logs.filter(line => line === '[ERROR] [UI] Fill failed').length, 1);
+    assert.equal(logs.filter(line => line === '[ERROR] [UI] Press sequentially failed').length, 1);
+    assert.equal(logs.filter(line => line === '[ERROR] [UI] Retry failed').length, 1);
     assert.equal(count('WARN', 'UI'), 1);
-    assert.equal(logs.filter(line => line === '[WARN] [UI] retryUntilSucceeded exhausted its attempts').length, 1);
-    assert.equal(count('ERROR', 'Expects'), 2);
-    assert.equal(count('ERROR', 'ApiActions'), 1);
-    assert.equal(count('WARN', 'ApiActions'), 2);
-    assert.equal(count('ERROR', 'DbActions'), 1);
-    assert(logs.some(line => /^\[ERROR\] \[DbActions\] CONNECT failed/.test(line)));
+    assert.equal(logs.filter(line => line === '[WARN] [UI] Retry exhausted its attempts').length, 1);
+    assert.equal(count('ERROR', 'Expect'), 2);
+    assert(logs.includes('[ERROR] [Expect] Failed: Expect the synchronous mismatch to be 2'));
+    assert(logs.includes('[ERROR] [Expect] Failed: Expect the empty field to have the confidential expected value'));
+    if (enabled.includes('Expect')) assert(logs.includes('[INFO] [Expect] Passed: Expect the synchronous result to be 1'));
+    assert.equal(count('ERROR', 'API'), 1);
+    assert(logs.some(line => /^\[ERROR\] \[API\] GET \/resource failed \(\d+ ms\)$/.test(line)));
+    if (enabled.includes('API')) assert(logs.some(line => /^\[INFO\] \[API\] POST \/resource returned HTTP 404 \(\d+ ms\)$/.test(line)));
+    assert.equal(count('WARN', 'API'), 2);
+    assert(logs.some(line => /^\[WARN\] \[API\] Could not attach GET \/resource details to the report$/.test(line)));
+    assert.equal(count('ERROR', 'DB'), 1);
+    assert(logs.some(line => /^\[ERROR\] \[DB\] Connect failed \(\d+ ms\)$/.test(line)));
+    if (enabled.includes('DB')) assert(logs.some(line => /^\[INFO\] \[DB\] Query returned 1 row \(\d+ ms\)$/.test(line)));
   });
 
   await check('shipped defaults');
   await check('enable one utility', {defaults: {ui: true}, enabled: ['UI']});
   await check('enable assertions, API and DB in the consumer config', {
-    defaults: {expects: true, api: true, db: true}, enabled: ['Expects', 'ApiActions', 'DbActions'],
+    defaults: {expects: true, api: true, db: true}, enabled: ['Expect', 'API', 'DB'],
   });
   await check('environment overrides file defaults and project metadata in both directions', {
     defaults: {ui: true}, metadata: {apiConsoleLogs: false, dbConsoleLogs: true},
     env: {UI_CONSOLE_LOGS: 'false', EXPECT_CONSOLE_LOGS: 'true', API_CONSOLE_LOGS: 'true', DB_CONSOLE_LOGS: 'false'},
-    enabled: ['Expects', 'ApiActions'],
+    enabled: ['Expect', 'API'],
   });
   await check('explicit project metadata overrides file defaults', {
-    defaults: {api: true}, metadata: {apiConsoleLogs: false, dbConsoleLogs: true}, enabled: ['DbActions'],
+    defaults: {api: true}, metadata: {apiConsoleLogs: false, dbConsoleLogs: true}, enabled: ['DB'],
   });
   await check('an explicit constructor option overrides the environment', {
     env: {API_CONSOLE_LOGS: 'true', DB_CONSOLE_LOGS: 'true'}, metadata: {fixtureConsoleOption: false},
