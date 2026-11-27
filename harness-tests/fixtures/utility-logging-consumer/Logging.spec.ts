@@ -95,6 +95,15 @@ test('API summaries handle returned statuses, failures and reporting warnings', 
 
   await rejectsWith('/new-line', new Error(`socket hang up\n${marker}`));
   await rejectsWith('/empty', new Error(`\r${marker}`));
+
+  const attachments: string[] = [];
+  info.attach = async name => { attachments.push(name); };
+  try {
+    await rejectsWith('/non-text', Object.assign(new Error(), { message: null }));
+  } finally {
+    info.attach = attach;
+  }
+  assert.deepEqual(attachments, ['Request details', 'Request error']);
 });
 
 test('DB summaries keep connection failures single and query output private', async () => {

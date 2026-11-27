@@ -76,10 +76,11 @@ test('utility logging works with only the list reporter', {timeout: 180000}, asy
     assert(logs.includes('[ERROR] [Expect] Failed: Expect the synchronous mismatch to be 2'));
     assert(logs.includes('[ERROR] [Expect] Failed: Expect the empty field to have the confidential expected value'));
     if (enabled.includes('Expect')) assert(logs.includes('[INFO] [Expect] Passed: Expect the synchronous result to be 1'));
-    assert.equal(count('ERROR', 'API'), 3);
+    assert.equal(count('ERROR', 'API'), 4);
     assert(logs.some(line => /^\[ERROR\] \[API\] GET \/resource failed: apiRequestContext\.fetch: connect ECONNREFUSED example\.test:443 \(\d+ ms\)$/.test(line)));
     assert(logs.some(line => /^\[ERROR\] \[API\] GET \/new-line failed: socket hang up \(\d+ ms\)$/.test(line)));
     assert(logs.some(line => /^\[ERROR\] \[API\] GET \/empty failed \(\d+ ms\)$/.test(line)));
+    assert(logs.some(line => /^\[ERROR\] \[API\] GET \/non-text failed \(\d+ ms\)$/.test(line)));
     if (enabled.includes('API')) assert(logs.some(line => /^\[INFO\] \[API\] POST \/resource returned HTTP 404 \(\d+ ms\)$/.test(line)));
     assert.equal(count('WARN', 'API'), 2);
     assert(logs.some(line => /^\[WARN\] \[API\] Could not attach GET \/resource details to the report$/.test(line)));
