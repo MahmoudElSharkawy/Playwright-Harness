@@ -9,32 +9,32 @@ const retryScope = new AsyncLocalStorage<boolean>();
 export class UiActions {
   /** Clicks a locator with the optional Playwright click settings. */
   click(locator: Locator, ...args: Parameters<Locator['click']>): ReturnType<Locator['click']> {
-    return this.perform('Click',() => locator.click(...args));
+    return this.perform('Click', () => locator.click(...args));
   }
 
   /** Fills a locator and keeps the field value out of the action log. */
   fill(locator: Locator, ...args: Parameters<Locator['fill']>): ReturnType<Locator['fill']> {
-    return this.perform('Fill',() => locator.fill(...args));
+    return this.perform('Fill', () => locator.fill(...args));
   }
 
   /** Types text as individual key events and keeps the text out of the action log. */
   pressSequentially(locator: Locator, ...args: Parameters<Locator['pressSequentially']>): ReturnType<Locator['pressSequentially']> {
-    return this.perform('Press sequentially',() => locator.pressSequentially(...args));
+    return this.perform('Press sequentially', () => locator.pressSequentially(...args));
   }
 
   /** Sends a key or key combination to a locator. */
   press(locator: Locator, ...args: Parameters<Locator['press']>): ReturnType<Locator['press']> {
-    return this.perform('Press',() => locator.press(...args));
+    return this.perform('Press', () => locator.press(...args));
   }
 
   /** Checks a checkbox or radio button using Playwright's check behavior. */
   check(locator: Locator, ...args: Parameters<Locator['check']>): ReturnType<Locator['check']> {
-    return this.perform('Check',() => locator.check(...args));
+    return this.perform('Check', () => locator.check(...args));
   }
 
   /** Selects options in a native select element and returns their values. */
   selectOption(locator: Locator, ...args: Parameters<Locator['selectOption']>): ReturnType<Locator['selectOption']> {
-    return this.perform('Select option',() => locator.selectOption(...args));
+    return this.perform('Select option', () => locator.selectOption(...args));
   }
 
   /**
@@ -46,7 +46,7 @@ export class UiActions {
    * the app bundle finishes well inside it, and only stalled trackers ever exhaust it.
    */
   async gotoInteractive(page: Page, url: string): Promise<void> {
-    await this.perform('Navigate',async () => {
+    await this.perform('Navigate', async () => {
       await page.goto(url, { waitUntil: 'domcontentloaded' });
       await page.waitForLoadState('load', { timeout: 15_000 }).catch(() => undefined);
     });
@@ -62,7 +62,7 @@ export class UiActions {
    * failure.
    */
   async selectReactOption(page: Page, optionSearch_input: Locator, value: string, settledDisplayText: string): Promise<void> {
-    await this.perform('Select React option',async () => {
+    await this.perform('Select React option', async () => {
       for (let attempt = 0; attempt < 4; attempt++) {
         await optionSearch_input.click();
         await optionSearch_input.fill(value);
@@ -87,7 +87,7 @@ export class UiActions {
    * state with full context.
    */
   async selectCustomRadioUntilEnabled(radio_input: Locator, gate_button: Locator): Promise<void> {
-    await this.perform('Select custom radio until enabled',async () => {
+    await this.perform('Select custom radio until enabled', async () => {
       for (let attempt = 0; attempt < 4; attempt++) {
         await radio_input.check({ force: true, timeout: 3_000 }).catch(async () => {
           await radio_input.click({ force: true });
@@ -112,7 +112,7 @@ export class UiActions {
    * click then reports the still-disabled button with full context.
    */
   async typeUntilEnabled(field: Locator, value: string, gate_button: Locator): Promise<void> {
-    await this.perform('Type until enabled',async () => {
+    await this.perform('Type until enabled', async () => {
       for (let attempt = 0; attempt < 5; attempt++) {
         await field.fill('');
         await field.pressSequentially(value, { delay: 50 });
@@ -133,7 +133,7 @@ export class UiActions {
    * reports the terminal state.
    */
   async clickUntilRevealed(toggle_button: Locator, revealed_target: Locator): Promise<void> {
-    await this.perform('Click until revealed',async () => {
+    await this.perform('Click until revealed', async () => {
       for (let attempt = 0; attempt < 5; attempt++) {
         await toggle_button.click();
         const shown = await expect(revealed_target, 'Probe whether the revealed control shows (non-asserting) →').toBeVisible({ timeout: 3_000 })
@@ -156,7 +156,7 @@ export class UiActions {
    * click then reports the still-disabled button with full context.
    */
   async keyOtpUntilVerifyEnabled(firstDigit_input: Locator, initGateDigit_input: Locator, otp: string, verify_button: Locator): Promise<void> {
-    await this.perform('Key OTP until verify enabled',async () => {
+    await this.perform('Key OTP until verify enabled', async () => {
       await expect(initGateDigit_input, 'Probe the OTP widget init (second box disabled) →').toBeDisabled({ timeout: 10_000 }).catch(() => undefined);
       for (let attempt = 0; attempt < 5; attempt++) {
         await firstDigit_input.pressSequentially(otp, { delay: 150 });
@@ -181,7 +181,7 @@ export class UiActions {
    * still-disabled gate with full context.
    */
   async keyFormattedUntilEnabled(field: Locator, value: string, gate_button: Locator): Promise<void> {
-    await this.perform('Key formatted value until enabled',async () => {
+    await this.perform('Key formatted value until enabled', async () => {
       for (let attempt = 0; attempt < 5; attempt++) {
         await field.click();
         await field.press('End'); // caret past the fixed prefix; the inline handler re-anchors it and strips non-digits
@@ -206,7 +206,7 @@ export class UiActions {
    * Nested UiActions calls share this helper's single outcome log.
    */
   async retryUntilSucceeded(trigger: () => Promise<void>, succeeded: () => Promise<boolean>, attempts = 3): Promise<void> {
-    await this.perform('Retry',() => retryScope.run(true, async () => {
+    await this.perform('Retry', () => retryScope.run(true, async () => {
       for (let attempt = 0; attempt < attempts; attempt++) {
         await trigger();
         if (await succeeded()) {
@@ -228,7 +228,7 @@ export class UiActions {
    * terminal state with full context.
    */
   async pressEnterUntilRevealed(field: Locator, revealed_target: Locator): Promise<void> {
-    await this.perform('Press Enter until revealed',async () => {
+    await this.perform('Press Enter until revealed', async () => {
       for (let attempt = 0; attempt < 5; attempt++) {
         await field.click().catch(() => undefined);
         await field.press('Enter').catch(() => undefined);
@@ -252,7 +252,7 @@ export class UiActions {
    * submit then reports the terminal state with full context.
    */
   async typeUntilValueSticks(field: Locator, value: string): Promise<void> {
-    await this.perform('Type until value sticks',async () => {
+    await this.perform('Type until value sticks', async () => {
       const expectedDigits = value.replace(/\D/g, '');
       for (let attempt = 0; attempt < 4; attempt++) {
         await field.click();
@@ -277,7 +277,7 @@ export class UiActions {
    * context teardown closes any stray twin.
    */
   async clickUntilPageOpens(context: BrowserContext, trigger_button: Locator): Promise<Page> {
-    return this.perform('Click until page opens',async () => {
+    return this.perform('Click until page opens', async () => {
       for (let attempt = 0; attempt < 3; attempt++) {
         const opened = context.waitForEvent('page', { timeout: 6_000 }).catch(() => undefined);
         await trigger_button.click();
