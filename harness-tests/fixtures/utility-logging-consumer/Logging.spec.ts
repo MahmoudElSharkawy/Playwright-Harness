@@ -79,7 +79,7 @@ test('API summaries handle returned statuses, failures and reporting warnings', 
   const url = 'https://example.test/resource?fixture=' + marker;
   assert.equal((await api.post(url, { data: { fixture: marker } })).status(), 404);
 
-  const failure = new Error(marker);
+  const failure = new Error(`apiRequestContext.fetch: connect ECONNREFUSED example.test:443\r\nCall log:\r\n  - → GET ${url}`);
   const failing = new ApiActions({ fetch: async () => { throw failure; } } as unknown as APIRequestContext);
   const info = test.info();
   const attach = info.attach;
@@ -89,16 +89,21 @@ test('API summaries handle returned statuses, failures and reporting warnings', 
   } finally {
     info.attach = attach;
   }
+
+  const emptyFirstLine = new Error(`\r${marker}`);
+  const missingReason = new ApiActions({ fetch: async () => { throw emptyFirstLine; } } as unknown as APIRequestContext);
+  await assert.rejects(missingReason.get('/empty'), error => error === emptyFirstLine);
 });
 
 test('DB summaries keep connection failures single and query output private', async () => {
   const config = { server: 'example.test', database: 'test', user: marker, password: marker };
   const prototype = sql.ConnectionPool.prototype;
   const { connect, request } = prototype;
-  const failure = new Error(marker);
-  let unavailable = false;
+  const failure = Object.assign(new Error(marker), { code: 'ESOCKET' });
+  const failureWithoutCode = new Error(marker);
+  let connectionFailure: Error | undefined;
   prototype.connect = (async function (this: sql.ConnectionPool) {
-    if (unavailable) throw failure;
+    if (connectionFailure) throw connectionFailure;
     return this;
   }) as typeof connect;
   const row = { item: marker };
@@ -109,8 +114,10 @@ test('DB summaries keep connection failures single and query output private', as
   try {
     const db = new DbActions(config, { consoleLogs: test.info().project.metadata.fixtureConsoleOption });
     assert.deepEqual((await db.query('select @value', { value: marker })).rows, [row]);
-    unavailable = true;
-    await assert.rejects(new DbActions(config).query('select 1'), error => error === failure);
+    connectionFailure = failure;
+    await assert.rejects(new DbActions({ ...config, name: '' }).query('select 1'), error => error === failure);
+    connectionFailure = failureWithoutCode;
+    await assert.rejects(new DbActions({ ...config, name: 'orders-db' }).query('select 1'), error => error === failureWithoutCode);
   } finally {
     prototype.connect = connect;
     prototype.request = request;

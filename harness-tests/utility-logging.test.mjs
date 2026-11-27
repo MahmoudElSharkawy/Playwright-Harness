@@ -53,9 +53,10 @@ test('utility logging works with only the list reporter', {timeout: 180000}, asy
     });
     const output = result.stdout + result.stderr;
     assert.equal(result.status, 0, String(result.error ?? '') + '\n' + output);
+    assert(!output.includes('private-fixture-value'), 'captured output contains the synthetic secret');
+    assert(!output.includes('Call log:'), 'captured output contains the API error continuation');
     const lines = stripVTControlCharacters(output).split(/\r?\n/);
     const logs = lines.filter(line => /^\[(INFO|WARN|ERROR)\] \[/.test(line));
-    assert(!logs.some(line => line.includes('private-fixture-value')));
     const count = (level, source) => logs.filter(line => line.startsWith(`[${level}] [${source}]`)).length;
     const ui = enabled.includes('UI');
     assert.equal(count('INFO', 'UI'), ui ? 6 : 0);
@@ -74,14 +75,16 @@ test('utility logging works with only the list reporter', {timeout: 180000}, asy
     assert(logs.includes('[ERROR] [Expect] Failed: Expect the synchronous mismatch to be 2'));
     assert(logs.includes('[ERROR] [Expect] Failed: Expect the empty field to have the confidential expected value'));
     if (enabled.includes('Expect')) assert(logs.includes('[INFO] [Expect] Passed: Expect the synchronous result to be 1'));
-    assert.equal(count('ERROR', 'API'), 1);
-    assert(logs.some(line => /^\[ERROR\] \[API\] GET \/resource failed \(\d+ ms\)$/.test(line)));
+    assert.equal(count('ERROR', 'API'), 2);
+    assert(logs.some(line => /^\[ERROR\] \[API\] GET \/resource failed: apiRequestContext\.fetch: connect ECONNREFUSED example\.test:443 \(\d+ ms\)$/.test(line)));
+    assert(logs.some(line => /^\[ERROR\] \[API\] GET \/empty failed \(\d+ ms\)$/.test(line)));
     if (enabled.includes('API')) assert(logs.some(line => /^\[INFO\] \[API\] POST \/resource returned HTTP 404 \(\d+ ms\)$/.test(line)));
     assert.equal(count('WARN', 'API'), 2);
     assert(logs.some(line => /^\[WARN\] \[API\] Could not attach GET \/resource details to the report$/.test(line)));
-    assert.equal(count('ERROR', 'DB'), 1);
-    assert(logs.some(line => /^\[ERROR\] \[DB\] Connect failed \(\d+ ms\)$/.test(line)));
-    if (enabled.includes('DB')) assert(logs.some(line => /^\[INFO\] \[DB\] Query returned 1 row \(\d+ ms\)$/.test(line)));
+    assert.equal(count('ERROR', 'DB'), 2);
+    assert(logs.some(line => /^\[ERROR\] \[DB\] Connect failed: ESOCKET \(test, \d+ ms\)$/.test(line)));
+    assert(logs.some(line => /^\[ERROR\] \[DB\] Connect failed \(orders-db, \d+ ms\)$/.test(line)));
+    if (enabled.includes('DB')) assert(logs.some(line => /^\[INFO\] \[DB\] Query returned 1 row \(test, \d+ ms\)$/.test(line)));
   });
 
   await check('shipped defaults');

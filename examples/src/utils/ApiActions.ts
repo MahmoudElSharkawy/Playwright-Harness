@@ -226,7 +226,8 @@ export class ApiActions {
     const target = `${entry.method} ${this.logPath(entry.url)}`;
     try {
       if (entry.status === null) {
-        Logger.error('API', `${target} failed (${entry.durationMs} ms)`);
+        const reason = entry.error?.message.split(/[\r\n]/, 1)[0];
+        Logger.error('API', `${target} failed${reason ? `: ${reason}` : ''} (${entry.durationMs} ms)`);
       } else if (this.shouldConsoleLog()) {
         Logger.info('API', `${target} returned HTTP ${entry.status} (${entry.durationMs} ms)`);
       }
@@ -258,7 +259,7 @@ export class ApiActions {
     }
   }
 
-  /** URL path only (no host or query string), so console lines never carry query-string secrets. */
+  /** Use the URL path as the request target, without the host or query string. */
   private logPath(url: string): string {
     try {
       return new URL(url, 'http://localhost').pathname;

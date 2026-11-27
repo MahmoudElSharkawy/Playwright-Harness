@@ -5,7 +5,7 @@ import { Logger } from './Logger.js';
 
 /** Connection settings for one SQL Server database. The password never appears in any log or attachment. */
 export interface DBConnectionConfig {
-  /** Optional display name used in step titles (e.g. 'ordersDb') to tell multiple DBs apart. */
+  /** Optional display name used in step titles and console summaries (e.g. 'ordersDb'). */
   name?: string;
   /** Host name or IP. 'HOST\\INSTANCE' also works (requires the SQL Browser service; leave `port` unset then). */
   server: string;
@@ -268,12 +268,14 @@ export class DbActions {
   /** Best-effort reporting — must never throw, so it can never mask the operation's own outcome. */
   private async report(entry: DbQueryLog, attach: boolean): Promise<void> {
     const operation = entry.operation[0] + entry.operation.slice(1).toLowerCase();
-    const timing = this.config.name ? `(${this.config.name}, ${entry.durationMs} ms)` : `(${entry.durationMs} ms)`;
+    const databaseLabel = this.config.name || entry.database;
+    const timing = databaseLabel ? `(${databaseLabel}, ${entry.durationMs} ms)` : `(${entry.durationMs} ms)`;
     try {
       if (entry.error) {
         // CONNECT owns the console error even when its failure also reaches a waiting query.
         if (entry.operation !== 'QUERY' || entry.error.phase !== 'connect') {
-          Logger.error('DB', `${operation} failed ${timing}`);
+          const code = entry.error.code ? `: ${entry.error.code}` : '';
+          Logger.error('DB', `${operation} failed${code} ${timing}`);
         }
       } else if (this.shouldConsoleLog()) {
         const outcome = entry.rowCount === null ? 'succeeded' : `returned ${entry.rowCount} ${entry.rowCount === 1 ? 'row' : 'rows'}`;
