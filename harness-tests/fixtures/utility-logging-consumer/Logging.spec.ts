@@ -79,20 +79,22 @@ test('API summaries handle returned statuses, failures and reporting warnings', 
   const url = 'https://example.test/resource?fixture=' + marker;
   assert.equal((await api.post(url, { data: { fixture: marker } })).status(), 404);
 
+  const rejectsWith = (target: string, cause: Error) => {
+    const failing = new ApiActions({ fetch: async () => { throw cause; } } as unknown as APIRequestContext);
+    return assert.rejects(failing.get(target), error => error === cause);
+  };
   const failure = new Error(`apiRequestContext.fetch: connect ECONNREFUSED example.test:443\r\nCall log:\r\n  - → GET ${url}`);
-  const failing = new ApiActions({ fetch: async () => { throw failure; } } as unknown as APIRequestContext);
   const info = test.info();
   const attach = info.attach;
   info.attach = async () => { throw new Error(marker); };
   try {
-    await assert.rejects(failing.get(url), error => error === failure);
+    await rejectsWith(url, failure);
   } finally {
     info.attach = attach;
   }
 
-  const emptyFirstLine = new Error(`\r${marker}`);
-  const missingReason = new ApiActions({ fetch: async () => { throw emptyFirstLine; } } as unknown as APIRequestContext);
-  await assert.rejects(missingReason.get('/empty'), error => error === emptyFirstLine);
+  await rejectsWith('/new-line', new Error(`socket hang up\n${marker}`));
+  await rejectsWith('/empty', new Error(`\r${marker}`));
 });
 
 test('DB summaries keep connection failures single and query output private', async () => {
@@ -112,8 +114,10 @@ test('DB summaries keep connection failures single and query output private', as
     query: async () => ({ recordset: [row], recordsets: [[row]], rowsAffected: [1] }),
   })) as unknown as typeof request;
   try {
-    const db = new DbActions(config, { consoleLogs: test.info().project.metadata.fixtureConsoleOption });
+    const options = { consoleLogs: test.info().project.metadata.fixtureConsoleOption };
+    const db = new DbActions(config, options);
     assert.deepEqual((await db.query('select @value', { value: marker })).rows, [row]);
+    await new DbActions({ ...config, name: 'orders-db' }, options).connect();
     connectionFailure = failure;
     await assert.rejects(new DbActions({ ...config, name: '' }).query('select 1'), error => error === failure);
     connectionFailure = failureWithoutCode;
