@@ -1,7 +1,7 @@
 # Utility Classes Playbook
 
 The contract for everything in `utils/`. Both existing files — `src/utils/ApiActions.ts`
-and `src/utils/DBActions.ts` — are **canonical**; there are no legacy variants in this
+and `src/utils/DbActions.ts` — are **canonical**; there are no legacy variants in this
 layer. Pattern-match on them. The root-level `global-setup.ts` / `global-teardown.ts`
 lifecycle scripts are honorary members of this layer — practices 14–17. (Legacy patterns
 you will meet upstream — public locators, `assert*` names, `/////////Assertions`
@@ -16,7 +16,7 @@ path, a table name, or an expected value — it belongs in `pages/`, `apis/`, or
 **Why:** the architecture (design-conventions §1, iron law 1) hinges on this split; one
 domain-aware helper in utils and the layering is gone.
 
-✅ `ApiActions.post(url, options)` and `DBActions.query(queryText, params)` — generic
+✅ `ApiActions.post(url, options)` and `DbActions.query(queryText, params)` — generic
 verbs, zero domain vocabulary (the verb shape is quoted in practice 13).
 
 ❌ `async createUser(name: string, email: string)` inside `ApiActions` — knows about
@@ -39,7 +39,7 @@ its own purpose: Playwright "only surfaces API request/response payloads in the 
 Viewer — never in the HTML/Allure reports … This wrapper fills that gap."
 
 ✅ `src/dbs/DbsUserManagement.ts` receives config, wires the facade, delegates everything:
-`constructor(dbConfig: DBConnectionConfig) { this.dbActions = new DBActions(dbConfig); }`
+`constructor(dbConfig: DBConnectionConfig) { this.dbActions = new DbActions(dbConfig); }`
 
 ❌ `this.request.fetch(url, …)` or `pool.request().query(…)` in a service class, page,
 or spec — it works, but leaves no step, no attachments, no redaction.
@@ -66,7 +66,7 @@ private async dispatch(method: string, url: string, options?: FetchOptions): Pro
 
 Utils steps use `test.step` from `@playwright/test`; business layers use `allure.step`
 from `allure-js-commons` — the business step wraps the facade's technical step. Compact
-long inputs for titles as `DBActions.stepTitle()` does (collapse whitespace, cap at 80).
+long inputs for titles as `DbActions.stepTitle()` does (collapse whitespace, cap at 80).
 
 ## 4. Attach report payloads with `test.info().attach()` from inside the step body
 
@@ -76,7 +76,7 @@ callback — never via the `step.attach()` handle.
 **Why:** allure-playwright nests `test.info().attach()` inside the current step;
 `step.attach()` lands outside the step in the Allure report (iron law 10).
 
-✅ `src/utils/DBActions.ts`:
+✅ `src/utils/DbActions.ts`:
 
 ```ts
 /** Attaches a payload as pretty-printed JSON to the current step (text/plain when truncated). */
@@ -97,7 +97,7 @@ never rename casually.
 
 ## 5. Report best-effort: never throw from reporting, never swallow the real failure
 
-**Rule:** wrap the reporting path in its own `try`/`catch` that only `console.warn`s;
+**Rule:** wrap the reporting path in its own `try`/`catch` that calls `Logger.warn`;
 the operation itself follows capture → report → rethrow, so the original failure always
 surfaces after the report is written.
 
@@ -106,11 +106,12 @@ surfaces after the report is written.
 ✅ Both halves, verbatim from `src/utils/ApiActions.ts`:
 
 ```ts
-} catch (reportErr) {
-  console.warn(`ApiActions: reporting failed for ${entry.method} ${entry.url}:`, reportErr);
+} catch {
+  Logger.warn('ApiActions', `Reporting failed for ${entry.method}`);
 }
 // …and after reporting, execute() still surfaces the operation's own failure:
-if (!response) throw failure ?? new Error(`${method} ${url} failed without a response`);
+if (failure) throw failure.cause;
+if (!response) throw new Error(`${method} ${url} failed without a response`);
 return response;
 ```
 
@@ -124,7 +125,8 @@ Practice 15 extends this contract to process level in the lifecycle scripts.
 ## 6. Redact secrets before anything leaves the facade
 
 **Rule:** reuse the facade's selected credential-header and structured-key redaction
-before attaching or console-logging. It is depth-capped and does not sanitize arbitrary
+before attaching. Keep console summaries to safe operation metadata such as HTTP
+status, row count and duration. Attachment redaction is depth-capped and does not sanitize arbitrary
 strings, URL/query values, errors or native artifacts. `redact: false` is an explicit
 opt-out. The complete protection boundary is practice 20.
 
@@ -155,7 +157,7 @@ gracefully (no step, no attachments — console logging still works) when absent
 throws outside a test, so the probe is the one place that exception is expected.
 
 ✅ Both facades implement the identical probe, `currentTestInfo()` in
-`src/utils/ApiActions.ts` and `src/utils/DBActions.ts`: `return test.info()` inside a
+`src/utils/ApiActions.ts` and `src/utils/DbActions.ts`: `return test.info()` inside a
 try/catch, `undefined` on throw — its JSDoc reads "Returns the active TestInfo, or
 undefined when not inside a running test (test.info() throws there)." Both `dispatch`
 and `shouldConsoleLog` branch on it.
@@ -174,7 +176,7 @@ default every knob (`maxBodyLength` 50 000, `redact` true).
 **Why:** callers get per-instance control, CI gets env-level control,
 `playwright.config.ts` projects get per-project control — no layer hardcodes anything.
 
-✅ `src/utils/DBActions.ts`:
+✅ `src/utils/DbActions.ts`:
 
 ```ts
 /** Resolves the console-echo flag: constructor option, then DB_CONSOLE_LOGS env var, then project metadata. */
@@ -200,13 +202,13 @@ create a generic utility just to relocate those few decisions. Reviewed public
 fixtures may own technical lifecycle handling through existing exceptions.
 
 **Why:** concentrating complexity in one reviewed, JSDoc'd layer keeps every other file
-readable as plain business prose. ✅ `DBActions.redactDeep()` (recursion, depth cap),
+readable as plain business prose. ✅ `DbActions.redactDeep()` (recursion, depth cap),
 `ApiActions.readBodySafely()` (nested try/catch). ❌ The same constructs in
 `src/pages/LoginPage.ts` or a spec file.
 
 ## 10. Bound every attached payload
 
-**Rule:** clip attachments and console bodies at `maxBodyLength` (append a
+**Rule:** clip attachments at `maxBodyLength` (append a
 `…[truncated N of M chars]` note, switch contentType to `text/plain`), summarize
 binaries instead of embedding them, and read response bodies exactly once.
 
@@ -225,7 +227,7 @@ resource; create more instances for more databases.
 **Why:** tests must not pay for unused connections, parallel first-queries must not open
 duplicate pools, and teardown must be callable unconditionally from `afterAll`.
 
-✅ `DBActions.getPool()` — "Lazy singleton pool: returns the live pool, awaits an
+✅ `DbActions.getPool()` — "Lazy singleton pool: returns the live pool, awaits an
 in-flight connect, or starts one." It caches the in-flight promise in
 `this.connecting`, clearing it on failure so a later call can retry; `close()` drains
 both the live pool and any pending connect before closing, then resets state.
@@ -247,7 +249,7 @@ through a Playwright reporter, never a facade field.
 public and non-obvious private alike — including defaults, deviations, and driver quirks.
 
 **Why:** iron law 12 exempts utils from "self-describing code over comments" precisely
-because technical contracts (e.g. `DBActions`: "`GO` batch separators are client-side
+because technical contracts (e.g. `DbActions`: "`GO` batch separators are client-side
 syntax … not supported by the driver"; `trustServerCertificate` "deviates from the
 driver default") cannot be carried by a method name.
 
@@ -395,7 +397,7 @@ wrappers:
 ```ts
 /** Asserts strict equality, titling the Allure step `Expect <subject> to be <expected>`. */
 export function expectToBe<T>(subject: string, actual: T, expected: T): void {
-  expect(actual, `Expect ${subject} to be ${fmt(expected)}`).toBe(expected);
+  runAssertion(`Expect ${subject} to be ${fmt(expected)}`, title => expect(actual, title).toBe(expected));
 }
 ```
 
@@ -415,6 +417,9 @@ Contract:
 - **Delegation only**: locator/page wrappers pass the `Locator`/`Page` straight to
   native `expect` with `{ timeout }`/options pass-through — web-first auto-retry
   untouched; never resolve a locator's value eagerly.
+- **Console outcome**: log one error after the matcher throws or rejects, then
+  rethrow that error. Enable success lines with `EXPECT_CONSOLE_LOGS=true`.
+  Keep synchronous matchers synchronous and log outside native retry callbacks.
 - **Extend by need** (iron law 11): one wrapper per matcher actually used in the repo;
   a new matcher gets its wrapper (with the grammar verb) when the first call site
   needs it. Special report grammars get intent-named wrappers
@@ -432,7 +437,14 @@ Contract:
   `dirs: pages/apis/dbs` — utils itself is out of scope, which also keeps the
   facade's own `expect` calls and non-asserting probe helpers legal).
 
-## 19. Lighter-weight function-export facades
+## 19. UI actions and lighter-weight facades
+
+Use `UiActions` in page objects for clicks, fills, sequential typing, key presses,
+checks and selections. Pass the page-owned locator and native Playwright options
+to the method. The facade logs the action name and outcome only. Successful actions
+log with `UI_CONSOLE_LOGS=true`, and failures log once before the original error
+propagates. The bounded widget helpers use the same class. They log a single outcome
+for the whole helper, with one warning if they exhaust their attempts and return.
 
 Not every technical concern needs the full `<Noun>Actions` contract (practice 13) —
 `Expects.ts`'s plain-function-export style (practice 18) is also canon for a narrower
@@ -440,15 +452,8 @@ class of facade: a handful of independent helpers with no shared connection/life
 state, each JSDoc'd with its technical contract. Shipped examples, each a
 distinct shape worth pattern-matching:
 
-- **`UiControls.ts`** — async-widget-race helpers. A third-party or framework-hydrated
-  control that initializes asynchronously can wipe or drop input typed before it
-  settles; each helper is a bounded retry loop that re-attempts the action until a gate
-  signal (a button becoming enabled, a target becoming visible, a value sticking)
-  confirms the widget actually settled, then falls through silently on exhaustion — the
-  caller's own next assertion reports the terminal failure with full context, so the
-  helper never swallows a real failure, only the noisy async-init race in front of it.
 - **`PdfDocuments.ts`** — an external-library facade. Wraps a third-party parsing
-  library (`pdf-parse`) behind the same thin-facade shape as `ApiActions`/`DBActions`:
+  library (`pdf-parse`) behind the same thin-facade shape as `ApiActions`/`DbActions`:
   business classes hand in bytes and get back plain text/counts, and no parser type
   leaks upward (iron law 1).
 - **`IdentityNumbers.ts`** — format-constrained synthetic-data generation. Some fields
@@ -496,7 +501,7 @@ sourcing of env config, secrets, and JSON test data →
 - [ ] Facade named `<Noun>Actions`, one per external technology; the only place the raw driver is touched
 - [ ] Every operation routed through a named `test.step` via `dispatch` with the in-test guard
 - [ ] Attachments via `test.info().attach()` inside the step body — never `step.attach()`; established attachment names preserved
-- [ ] Reporting try/catch only `console.warn`s; original failure rethrown after reporting (capture → report → rethrow)
+- [ ] Reporting catches use `Logger.warn` and the operation rethrows its original failure after reporting
 - [ ] Selected headers/structured keys redacted by default; practice 20's native artifact, URL and error limitations accurately documented; no private telemetry interception
 - [ ] Works (minus attachments) outside a running test — `test.info()` probed in try/catch, never assumed
 - [ ] Options resolve constructor → env var → project metadata, every knob defaulted; payloads clipped at `maxBodyLength`

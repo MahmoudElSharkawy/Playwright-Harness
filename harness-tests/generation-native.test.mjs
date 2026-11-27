@@ -178,7 +178,7 @@ for (const [status, body] of [['PASS', 'await expect(2).toBe(2);'], ['FAIL', 'aw
 });
 
 test('scoped Allure reuses the maintained class in an ESM consumer without generating normal HTML', async t => {
-  const files = Object.fromEntries(['src/utils/AllureReport.ts', 'src/config/reporting.ts']
+  const files = Object.fromEntries(['src/utils/AllureReport.ts', 'src/utils/Logger.ts', 'src/config/reporting.ts']
     .map(file => [file, readFileSync(join(packageRoot, 'examples', file), 'utf8')]));
   const f = await nativeFixture(t, undefined, '', false, {files});
   put(f.roots.projectRoot, 'allure-report/index.html', 'Existing normal report');
@@ -203,7 +203,7 @@ for (const body of ["await test.step.skip('Skipped check', async()=>{await expec
   const f = await nativeFixture(t, body), result = await verifyGeneration(f.roots, f.source.id);
   assert.equal(result.status, 'NEEDS_REVIEW'); assert.equal(result.failureClass, 'ASSERTION_COVERAGE');
 });
-const probeOptions = {imports: "import {probe} from '../src/utils/UiControls';", files: {'src/utils/UiControls.ts':
+const probeOptions = {imports: "import {probe} from '../src/utils/UiActions';", files: {'src/utils/UiActions.ts':
   "import {expect} from '@playwright/test';export async function probe(){try{await expect(2,'Probe whether a transient gate is ready').toBe(3);}catch{}}"}};
 test('a utility probe alone is not a business assertion', async t => {
   const f = await nativeFixture(t, 'await probe();', '', false, probeOptions), result = await verifyGeneration(f.roots, f.source.id);
@@ -290,7 +290,7 @@ if (process.env.HARNESS_ALLURE_LOCATOR_PROOF === '1') for (const fails of [false
         await test.info().attach('Synthetic locator attachment',{body:'unchanged',contentType:'text/plain'});
         ${fails ? "await checks.expectToHaveText('the message',message,'Wrong',{timeout:100});" : ''}
       });});`;
-    const files = Object.fromEntries(['src/utils/Expects.ts', 'src/utils/AllureReport.ts', 'src/config/reporting.ts', 'allurerc.json']
+    const files = Object.fromEntries(['src/utils/Expects.ts', 'src/utils/AllureReport.ts', 'src/utils/Logger.ts', 'src/config/reporting.ts', 'allurerc.json']
       .map(file => [file, readFileSync(join(packageRoot, 'examples', file), 'utf8')]));
     const f = await nativeFixture(t, body, '', false, {files, fixtures: '{page}', packageType: 'commonjs',
       imports: "import * as allure from 'allure-js-commons';import * as checks from '../src/utils/Expects';",

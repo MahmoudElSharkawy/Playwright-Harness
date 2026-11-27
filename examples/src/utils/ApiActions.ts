@@ -1,4 +1,5 @@
 import { test, type APIRequestContext, type APIResponse, type TestInfo } from '@playwright/test';
+import { Logger } from './Logger.js';
 
 type FetchOptions = NonNullable<Parameters<APIRequestContext['fetch']>[1]>;
 
@@ -23,14 +24,14 @@ interface ApiRequestLog {
 }
 
 export interface ApiActionsOptions {
-  /** Mirror each call to the console. Defaults to API_CONSOLE_LOGS=true env var, then project metadata `apiConsoleLogs`. */
+  /** Log routine HTTP summaries. Defaults to API_CONSOLE_LOGS=true env var, then project metadata `apiConsoleLogs`. */
   consoleLogs?: boolean;
   /** Max characters of any attached body before truncation. Default 50000. */
   maxBodyLength?: number;
-  /** Set false to disable redaction of credential headers/body keys in reports and console output. Default true. */
+  /** Set false to disable redaction of credential headers/body keys in report attachments. Default true. */
   redact?: boolean;
   /**
-   * Replace the ENTIRE response body with '***' in attachments and console output.
+   * Replace the ENTIRE response body with '***' in attachments.
    * For endpoints whose raw body IS a secret (e.g. a token endpoint returning a bare
    * JWT) — key-based redaction cannot see inside a raw string. Default false.
    */
@@ -80,7 +81,7 @@ export class ApiActions {
   private readonly maxBodyLength: number;
   /**
    * The cached bearer-token fetch from `bearerTokenProvider` — the facade's only
-   * auth state, analogous to DBActions' lazy pool: storing the in-flight promise
+   * auth state, analogous to DbActions' lazy pool: storing the in-flight promise
    * makes the first fetch single-flight, and clearing the field invalidates the
    * cache (done on a fetch failure and on a 401 refresh).
    */
@@ -142,6 +143,7 @@ export class ApiActions {
 
     let response = await run();
     if (response.status() === 401 && this.options.bearerTokenProvider && !this.hasExplicitAuthorization(options)) {
+      Logger.warn('ApiActions', 'Refreshing bearer token after HTTP 401');
       this.bearerToken = undefined; // drop the stale token; the replay fetches a fresh one
       response = await run();
     }
@@ -158,8 +160,9 @@ export class ApiActions {
     const provider = this.options.bearerTokenProvider;
     if (!provider || this.hasExplicitAuthorization(options)) return options;
     if (!this.bearerToken) {
-      this.bearerToken = provider().catch((err) => {
+      this.bearerToken = Promise.resolve().then(() => provider()).catch((err) => {
         this.bearerToken = undefined;
+        Logger.error('ApiActions', 'Bearer token provider failed');
         throw err;
       });
     }
@@ -177,12 +180,12 @@ export class ApiActions {
     const timestamp = new Date().toISOString();
     const start = Date.now();
     let response: APIResponse | undefined;
-    let failure: unknown;
+    let failure: { cause: unknown } | undefined;
 
     try {
       response = await this.request.fetch(url, { ...options, method });
     } catch (err) {
-      failure = err;
+      failure = { cause: err };
     }
     const durationMs = Date.now() - start;
 
@@ -203,22 +206,28 @@ export class ApiActions {
         : this.redactDeep(await this.readBodySafely(response));
     }
     if (failure) {
+      const { cause } = failure;
       entry.error = {
-        message: failure instanceof Error ? failure.message : String(failure),
-        stack: failure instanceof Error ? failure.stack : undefined,
+        message: cause instanceof Error ? cause.message : String(cause),
+        stack: cause instanceof Error ? cause.stack : undefined,
       };
     }
 
     await this.report(entry, attach);
 
-    if (!response) throw failure ?? new Error(`${method} ${url} failed without a response`);
+    if (failure) throw failure.cause;
+    if (!response) throw new Error(`${method} ${url} failed without a response`);
     return response;
   }
 
   /** Best-effort reporting — must never throw, so it can never mask the request's own outcome. */
   private async report(entry: ApiRequestLog, attach: boolean): Promise<void> {
     try {
-      if (this.shouldConsoleLog()) this.consoleLog(entry);
+      if (entry.status === null) {
+        Logger.error('ApiActions', `${entry.method} failed (${entry.durationMs} ms)`);
+      } else if (this.shouldConsoleLog()) {
+        Logger.info('ApiActions', `${entry.method} returned HTTP ${entry.status} (${entry.durationMs} ms)`);
+      }
 
       if (!attach) return;
       await this.attachJson('Request details', {
@@ -242,8 +251,8 @@ export class ApiActions {
           error: entry.error,
         });
       }
-    } catch (reportErr) {
-      console.warn(`ApiActions: reporting failed for ${entry.method} ${entry.url}:`, reportErr);
+    } catch {
+      Logger.warn('ApiActions', `Reporting failed for ${entry.method}`);
     }
   }
 
@@ -338,16 +347,6 @@ export class ApiActions {
     if (this.options.consoleLogs !== undefined) return this.options.consoleLogs;
     if (process.env.API_CONSOLE_LOGS) return process.env.API_CONSOLE_LOGS === 'true';
     return Boolean(this.currentTestInfo()?.project.metadata?.apiConsoleLogs);
-  }
-
-  /** Prints a compact, redacted summary of the call to the console. */
-  private consoleLog(entry: ApiRequestLog): void {
-    const outcome = entry.status !== null ? `${entry.status} ${entry.statusText ?? ''}`.trim() : `FAILED (${entry.error?.message})`;
-    console.log(`\n[API] ${entry.method} ${entry.url} → ${outcome} (${entry.durationMs}ms)`);
-    console.log('→ Headers:', this.safeStringify(entry.requestHeaders));
-    if (entry.requestBody !== undefined) console.log('→ Body:', this.clip(this.safeStringify(entry.requestBody)).text);
-    console.log('← Headers:', this.safeStringify(entry.responseHeaders));
-    if (entry.responseBody !== undefined) console.log('← Body:', this.clip(this.safeStringify(entry.responseBody)).text.slice(0, 500));
   }
 
   /** Returns the active TestInfo, or undefined when not inside a running test (test.info() throws there). */

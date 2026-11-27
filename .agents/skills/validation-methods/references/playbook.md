@@ -261,7 +261,7 @@ agree on what success means — ❌ (illustrative counterexample) `src/apis/Apis
 
 ## 9. DB validation shape: row counts via the class's parameterized query constant
 
-DB validations re-run the class's `<operation>_query` constant through the `DBActions`
+DB validations re-run the class's `<operation>_query` constant through the `DbActions`
 facade with `@param` binding and assert on the row count (or a column value). Never
 build SQL by string interpolation, and never touch the pool directly — those rules are
 owned by [service-classes](../../service-classes/SKILL.md).

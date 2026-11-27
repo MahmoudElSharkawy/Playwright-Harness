@@ -10,6 +10,7 @@ const reportPath = join(packageRoot, 'examples/src/utils/AllureReport.ts');
 const reportSource = stripTypeScriptTypes(readFileSync(reportPath, 'utf8'))
   .replace("import AllureReporter from 'allure-playwright';", "const AllureReporter = require('allure-playwright').default;")
   .replace("import { allureConfig } from '../config/reporting';", 'const allureConfig = {};')
+  .replace("import { Logger } from './Logger.js';", 'const Logger = {warn() {}};')
   .replace(/import (.+) from '(node:[^']+)';/g, (_, bindings, name) => `const ${bindings.replace('* as ', '')} = require('${name}');`)
   .replace('export default class', 'module.exports = class');
 const reportModule = new Module(reportPath); reportModule.filename = reportPath; reportModule.paths = Module._nodeModulePaths(dirname(reportPath));
@@ -55,6 +56,7 @@ test('all locator assertion wrappers retain their selector after the arrow in Al
   }});
   const source = readFileSync(sourcePath, 'utf8'), exported = [...source.matchAll(/export (?:async )?function (\w+)/g)].map(match => match[1]);
   const compiled = stripTypeScriptTypes(source).replace(/import\s*\{[^}]+\}\s*from\s*['"]@playwright\/test['"];?/, "const {expect}=require('@playwright/test');")
+    .replace("import { Logger } from './Logger.js';", 'const Logger = {info() {}, error() {}};')
     .replace(/\bexport /g, '') + '\nmodule.exports={' + exported.join(',') + '};';
   const memoryModule = new Module(sourcePath); memoryModule.filename = sourcePath; memoryModule.paths = Module._nodeModulePaths(dirname(sourcePath));
   memoryModule._compile(compiled, sourcePath);

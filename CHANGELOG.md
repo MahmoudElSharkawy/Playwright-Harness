@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+### Upgrade actions
+
+- Existing consumers can copy `Logger.ts` and `UiActions.ts`, merge the logging
+  changes into their utilities, and migrate `UiControls` imports and page actions
+  to a `UiActions` instance.
+- Rename `src/utils/DBActions.ts` to `src/utils/DbActions.ts` and update imports
+  and constructor calls to `DbActions`.
+
+### Changes
+
+- Add a shared console logger with colored severity labels and opt-in routine
+  output for API, database, UI and assertion utilities. New starters use
+  `UiActions` for clicks, typing and the former `UiControls` widget helpers. (#168)
+
 ## 4.4.2 — Readable bug reports
 
 ### Upgrade actions

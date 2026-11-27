@@ -18,6 +18,7 @@ test('search-first POM preserves exact identities, observed scope and pagination
   symlinkSync(join(roots.packageRoot, 'examples/node_modules'), join(root, 'node_modules'), process.platform === 'win32' ? 'junction' : 'dir');
   const facade = join(root, 'src/utils/Expects.ts'); mkdirSync(dirname(facade), {recursive: true});
   cpSync(join(roots.packageRoot, 'examples/src/utils/Expects.ts'), facade);
+  cpSync(join(roots.packageRoot, 'examples/src/utils/Logger.ts'), join(root, 'src/utils/Logger.ts'));
   writeFileSync(join(root, 'package.json'), '{"type":"module"}');
   const app = await listSearchFixture(); t.after(() => app.close());
   const cli = join(root, 'node_modules/@playwright/test/cli.js');

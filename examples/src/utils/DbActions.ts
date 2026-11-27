@@ -1,9 +1,10 @@
 import { test, type TestInfo } from '@playwright/test';
 import * as sql from 'mssql';
+import { Logger } from './Logger.js';
 
 /** Connection settings for one SQL Server database. The password never appears in any log or attachment. */
 export interface DBConnectionConfig {
-  /** Optional display name used in step titles and console lines (e.g. 'ordersDb') to tell multiple DBs apart. */
+  /** Optional display name used in step titles (e.g. 'ordersDb') to tell multiple DBs apart. */
   name?: string;
   /** Host name or IP. 'HOST\\INSTANCE' also works (requires the SQL Browser service; leave `port` unset then). */
   server: string;
@@ -28,11 +29,11 @@ export interface DBConnectionConfig {
 }
 
 export interface DBActionsOptions {
-  /** Mirror each query to the console. Defaults to DB_CONSOLE_LOGS=true env var, then project metadata `dbConsoleLogs`. */
+  /** Log routine operation summaries. Defaults to DB_CONSOLE_LOGS=true env var, then project metadata `dbConsoleLogs`. */
   consoleLogs?: boolean;
   /** Max characters of any attached payload before truncation. Default 50000. */
   maxBodyLength?: number;
-  /** Set false to disable redaction of credential-like param names / row keys in reports and console output. Default true. */
+  /** Set false to disable redaction of credential-like param names / row keys in report attachments. Default true. */
   redact?: boolean;
 }
 
@@ -98,7 +99,7 @@ const REDACTED_KEYS = new Set([
  * Note: `GO` batch separators are client-side syntax (SSMS/sqlcmd) and are not
  * supported by the driver — use `;`-separated statements instead.
  */
-export class DBActions {
+export class DbActions {
   private readonly maxBodyLength: number;
   private pool?: sql.ConnectionPool;
   private connecting?: Promise<sql.ConnectionPool>;
@@ -134,16 +135,16 @@ export class DBActions {
     return this.dispatch(`DB CLOSE ${this.label()} (${this.serverLabel()}/${this.config.database})`, async attach => {
       const timestamp = new Date().toISOString();
       const start = Date.now();
-      let failure: unknown;
+      let failure: { cause: unknown } | undefined;
       try {
         await pool.close();
       } catch (err) {
-        failure = err;
+        failure = { cause: err };
       }
       const entry = this.baseEntry('CLOSE', timestamp, Date.now() - start);
-      if (failure) entry.error = this.toErrorInfo(failure, 'close');
+      if (failure) entry.error = this.toErrorInfo(failure.cause, 'close');
       await this.report(entry, attach);
-      if (failure) throw failure;
+      if (failure) throw failure.cause;
     });
   }
 
@@ -159,7 +160,7 @@ export class DBActions {
     const timestamp = new Date().toISOString();
     const start = Date.now();
     let result: sql.IResult<T> | undefined;
-    let failure: unknown;
+    let failure: { cause: unknown } | undefined;
     let phase: 'connect' | 'query' = 'connect';
 
     try {
@@ -169,7 +170,7 @@ export class DBActions {
       this.bindParams(request, params);
       result = await request.query<T>(queryText);
     } catch (err) {
-      failure = err;
+      failure = { cause: err };
     }
     const durationMs = Date.now() - start;
 
@@ -184,11 +185,12 @@ export class DBActions {
         result.recordsets.length > 1 ? (result.recordsets as T[][]).map(rs => [...rs]) : [...(result.recordset ?? [])],
       );
     }
-    if (failure) entry.error = this.toErrorInfo(failure, phase);
+    if (failure) entry.error = this.toErrorInfo(failure.cause, phase);
 
     await this.report(entry, attach);
 
-    if (!result) throw failure ?? new Error(`DB query failed without a result: ${this.stepTitle(queryText)}`);
+    if (failure) throw failure.cause;
+    if (!result) throw new Error(`DB query failed without a result: ${this.stepTitle(queryText)}`);
     return {
       rows: [...(result.recordset ?? [])],
       recordsets: (result.recordsets as T[][]).map(rs => [...rs]),
@@ -214,17 +216,18 @@ export class DBActions {
       const timestamp = new Date().toISOString();
       const start = Date.now();
       let pool: sql.ConnectionPool | undefined;
-      let failure: unknown;
+      let failure: { cause: unknown } | undefined;
       try {
         pool = await new sql.ConnectionPool(this.toMssqlConfig()).connect();
       } catch (err) {
-        failure = err;
+        failure = { cause: err };
       }
       const entry = this.baseEntry('CONNECT', timestamp, Date.now() - start);
-      if (failure) entry.error = this.toErrorInfo(failure, 'connect');
+      if (failure) entry.error = this.toErrorInfo(failure.cause, 'connect');
       await this.report(entry, attach);
 
-      if (!pool) throw failure ?? new Error(`DB connect failed: ${this.serverLabel()}/${this.config.database}`);
+      if (failure) throw failure.cause;
+      if (!pool) throw new Error(`DB connect failed: ${this.serverLabel()}/${this.config.database}`);
       this.pool = pool;
       return pool;
     });
@@ -264,7 +267,15 @@ export class DBActions {
   /** Best-effort reporting — must never throw, so it can never mask the operation's own outcome. */
   private async report(entry: DbQueryLog, attach: boolean): Promise<void> {
     try {
-      if (this.shouldConsoleLog()) this.consoleLog(entry);
+      if (entry.error) {
+        // CONNECT owns the console error even when its failure also reaches a waiting query.
+        if (entry.operation !== 'QUERY' || entry.error.phase !== 'connect') {
+          Logger.error('DbActions', `${entry.operation} failed (${entry.durationMs} ms)`);
+        }
+      } else if (this.shouldConsoleLog()) {
+        const outcome = entry.rowCount === null ? 'succeeded' : `returned ${entry.rowCount} rows`;
+        Logger.info('DbActions', `${entry.operation} ${outcome} (${entry.durationMs} ms)`);
+      }
 
       if (!attach) return;
       if (entry.operation === 'QUERY') {
@@ -310,8 +321,8 @@ export class DBActions {
           await this.attachJson('Close error', { durationMs: entry.durationMs, error: entry.error });
         }
       }
-    } catch (reportErr) {
-      console.warn(`DBActions: reporting failed for ${entry.operation} on ${entry.db}:`, reportErr);
+    } catch {
+      Logger.warn('DbActions', `Reporting failed for ${entry.operation}`);
     }
   }
 
@@ -384,18 +395,6 @@ export class DBActions {
     return Boolean(this.currentTestInfo()?.project.metadata?.dbConsoleLogs);
   }
 
-  /** Prints a compact, redacted summary of the operation to the console. */
-  private consoleLog(entry: DbQueryLog): void {
-    const outcome = entry.error
-      ? `FAILED (${entry.error.message})`
-      : entry.operation === 'QUERY' ? `${entry.rowCount} rows` : 'OK';
-    const subject = entry.operation === 'QUERY' ? this.stepTitle(entry.sql ?? '') : `${entry.server}/${entry.database}`;
-    console.log(`\n[DB] ${entry.operation} ${subject} → ${outcome} (${entry.durationMs}ms) [${entry.db}]`);
-    if (entry.params !== undefined) console.log('→ Params:', this.safeStringify(entry.params));
-    if (entry.rowsAffected !== undefined) console.log('← RowsAffected:', this.safeStringify(entry.rowsAffected));
-    if (entry.rows !== undefined) console.log('← Rows:', this.clip(this.safeStringify(entry.rows)).text.slice(0, 500));
-  }
-
   /** Common fields shared by every log entry. */
   private baseEntry(operation: DbQueryLog['operation'], timestamp: string, durationMs: number): DbQueryLog {
     return {
@@ -418,7 +417,7 @@ export class DBActions {
     };
   }
 
-  /** Display label for steps/console: config.name when set, otherwise 'server:port/database'. */
+  /** Display label for steps: config.name when set, otherwise 'server:port/database'. */
   private label(asPrefix = false): string {
     const label = this.config.name ?? `${this.serverLabel()}/${this.config.database}`;
     return asPrefix ? (this.config.name ? `[${this.config.name}] ` : '') : label;

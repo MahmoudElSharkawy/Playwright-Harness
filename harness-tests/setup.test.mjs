@@ -228,6 +228,9 @@ test('restore on a fresh project removes what setup created instead of running n
  const root=project(t);archive(join(root,archiveName));
  const result=setup(root);assert.equal(result.status,'DONE');assert(result.starter.includes('playwright.config.ts'));
  assert(result.starter.includes('src/utils/AllureReport.ts'));
+ assert(result.starter.includes('src/utils/DbActions.ts'));
+ assert(result.starter.includes('src/utils/Logger.ts'));
+ assert(result.starter.includes('src/utils/UiActions.ts'));
  const config = readFileSync(join(root,'playwright.config.ts'),'utf8');
  assert.equal((config.match(/\.\/src\/utils\/AllureReport\.ts/g) ?? []).length, 1);
  assert(!config.includes("['allure-playwright'"));
@@ -298,7 +301,7 @@ test('the starter config reads destinations from .harness/targets.json, with per
  const root=project(t),cli=join(packageRoot,'examples/node_modules/@playwright/test/cli.js'),out=join(root,'config.json');
  for(const name of ['targets','databases','applications'])cpSync(join(packageRoot,`examples/src/config/${name}.ts`),join(root,`src/config/${name}.ts`));
  put(root,'package.json','{"type":"commonjs"}');symlinkSync(join(packageRoot,'examples/node_modules'),join(root,'node_modules'),process.platform==='win32'?'junction':'dir');
- // Type-only imports (DBConnectionConfig) are erased, so DBActions is not needed.
+ // Type-only imports (DBConnectionConfig) are erased, so DbActions is not needed.
  put(root,'config.spec.ts',["import {writeFileSync} from 'node:fs';","import {test} from '@playwright/test';","import {databases} from './src/config/databases';",
   "import {applications} from './src/config/applications';","writeFileSync(process.env.CONFIG_OUT ?? '', JSON.stringify({databases, applications}));","test('loads', () => {});",""].join('\n'));
  const load=environment=>{

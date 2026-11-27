@@ -131,7 +131,7 @@ test('reporter uses the terminal polling outcome but finds ordinary swallowed as
   assert.deepEqual(result.assertions, {passed: 1, failed: 1});
 });
 test('reporter excludes only explicitly titled utility probes', () => {
-  const result = reporterResult([expectStep({title: 'Probe gate', location: {file: 'C:\\consumer\\src\\utils\\UiControls.ts'}, error: {message: 'probe'}}),
+  const result = reporterResult([expectStep({title: 'Probe gate', location: {file: 'C:\\consumer\\src\\utils\\UiActions.ts'}, error: {message: 'probe'}}),
     expectStep({title: 'Probe gate', location: {file: '/consumer/src/pages/GatePage.ts'}}), expectStep({title: 'Probe gate'})]);
   assert.deepEqual(result.assertions, {passed: 2, failed: 0});
 });

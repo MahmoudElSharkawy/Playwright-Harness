@@ -3,18 +3,18 @@
 // demo of the rows-returning action shape (service-classes playbook, practice 6) — in a
 // real repo, build such a method only when a test needs it (reuse-before-create gate).
 import * as allure from 'allure-js-commons';
-import { DBActions, type DBConnectionConfig } from '../utils/DBActions';
+import { DbActions, type DBConnectionConfig } from '../utils/DbActions';
 import { expectToHaveLength } from '../utils/Expects';
 
 export class DbsUserManagement {
-  readonly dbActions: DBActions;
+  readonly dbActions: DbActions;
 
   // Queries — real projects derive these from the team query library
   // resources/Queries/ (2026-08-24 ruling); sample literals become @param placeholders.
   readonly selectUserByEmail_query = 'SELECT Id, Name, Email FROM Users WHERE Email = @email';
 
   constructor(dbConfig: DBConnectionConfig) {
-    this.dbActions = new DBActions(dbConfig);
+    this.dbActions = new DbActions(dbConfig);
   }
 
   /** Closes the underlying connection pool — call from afterAll. */

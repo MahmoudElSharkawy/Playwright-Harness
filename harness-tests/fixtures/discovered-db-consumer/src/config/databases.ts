@@ -1,4 +1,4 @@
-import {type DBConnectionConfig} from '../utils/DBActions';
+import {type DBConnectionConfig} from '../utils/DbActions';
 
 const target = JSON.parse(process.env.HARNESS_M8_TARGET!);
 const credential = JSON.parse(process.env.M8_DB_CREDENTIAL!);
