@@ -208,7 +208,7 @@ Action methods then consume it like any field:
 ```ts
 async clickViewProduct(productName: string) {
   await step(`Click View Product for ${productName}`, async () => {
-    await this.viewProduct_Button(productName).click();
+    await this.ui.click(this.viewProduct_Button(productName));
   })
 }
 ```

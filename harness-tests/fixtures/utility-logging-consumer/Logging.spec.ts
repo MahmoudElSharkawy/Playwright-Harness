@@ -17,7 +17,6 @@ test('page actions and assertions log their terminal outcomes', async ({ page })
   await new LoginPage(page).login(marker, marker);
   assert.equal(await page.locator('[data-qa="login-password"]').inputValue(), marker);
   await assert.rejects(ui.fill(page.locator('#missing'), marker, { timeout: 200 }), { name: 'TimeoutError' });
-  await ui.retryUntilSucceeded(async () => {}, async () => false, 2);
 
   assert.equal(expectToBe('the synchronous result', 1, 1), undefined);
   assert.throws(() => expectToBe('the synchronous mismatch', 1, 2), /the synchronous mismatch/);
@@ -31,6 +30,34 @@ test('page actions and assertions log their terminal outcomes', async ({ page })
   await ui.pressSequentially(page.locator('#empty'), marker);
   assert.equal(await page.locator('#empty').inputValue(), marker);
   await assert.rejects(ui.pressSequentially(page.locator('#missing'), marker, { timeout: 200 }), { name: 'TimeoutError' });
+});
+
+test('retried clicks log one outcome and keep concurrent actions visible', async ({ page }) => {
+  await page.setContent('<button id="retry">Retry</button><button id="independent">Independent</button>');
+  const ui = new UiActions();
+  const button = page.locator('#retry');
+  const probing = Promise.withResolvers<void>();
+  const probeResult = Promise.withResolvers<boolean>();
+  let attempts = 0;
+  const retry = ui.retryUntilSucceeded(() => ui.click(button), async () => {
+    attempts++;
+    probing.resolve();
+    return probeResult.promise;
+  }, 2);
+
+  await Promise.race([probing.promise, retry]);
+  try {
+    await ui.click(page.locator('#independent'));
+  } finally {
+    probeResult.resolve(false);
+  }
+  await retry;
+  assert.equal(attempts, 2);
+
+  await ui.retryUntilSucceeded(() => ui.click(button), async () => true);
+  await assert.rejects(ui.retryUntilSucceeded(
+    () => ui.click(page.locator('#missing'), { timeout: 200 }), async () => true,
+  ), { name: 'TimeoutError' });
 });
 
 test('API summaries handle returned statuses, failures and reporting warnings', async () => {

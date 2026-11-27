@@ -1,28 +1,37 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { expect, type BrowserContext, type Locator, type Page } from '@playwright/test';
 import { Logger } from './Logger.js';
 
+const retryScope = new AsyncLocalStorage<boolean>();
+
 /** Performs Playwright UI actions on caller-owned locators and logs their outcomes. */
 export class UiActions {
+  /** Clicks a locator with the optional Playwright click settings. */
   click(locator: Locator, ...args: Parameters<Locator['click']>): ReturnType<Locator['click']> {
     return this.perform('click', () => locator.click(...args));
   }
 
+  /** Fills a locator and keeps the field value out of the action log. */
   fill(locator: Locator, ...args: Parameters<Locator['fill']>): ReturnType<Locator['fill']> {
     return this.perform('fill', () => locator.fill(...args));
   }
 
+  /** Types text as individual key events and keeps the text out of the action log. */
   pressSequentially(locator: Locator, ...args: Parameters<Locator['pressSequentially']>): ReturnType<Locator['pressSequentially']> {
     return this.perform('pressSequentially', () => locator.pressSequentially(...args));
   }
 
+  /** Sends a key or key combination to a locator. */
   press(locator: Locator, ...args: Parameters<Locator['press']>): ReturnType<Locator['press']> {
     return this.perform('press', () => locator.press(...args));
   }
 
+  /** Checks a checkbox or radio button using Playwright's check behavior. */
   check(locator: Locator, ...args: Parameters<Locator['check']>): ReturnType<Locator['check']> {
     return this.perform('check', () => locator.check(...args));
   }
 
+  /** Selects options in a native select element and returns their values. */
   selectOption(locator: Locator, ...args: Parameters<Locator['selectOption']>): ReturnType<Locator['selectOption']> {
     return this.perform('selectOption', () => locator.selectOption(...args));
   }
@@ -193,9 +202,10 @@ export class UiActions {
    * that a re-trigger recovers — e.g. a gate hosted in an iframe that intermittently
    * loads a browser-error page; a fresh navigate + re-open clears it. If every attempt
    * fails, warns and returns so the caller's assertion can report the terminal state.
+   * Nested UiActions calls share this helper's single outcome log.
    */
   async retryUntilSucceeded(trigger: () => Promise<void>, succeeded: () => Promise<boolean>, attempts = 3): Promise<void> {
-    await this.perform('retryUntilSucceeded', async () => {
+    await this.perform('retryUntilSucceeded', () => retryScope.run(true, async () => {
       for (let attempt = 0; attempt < attempts; attempt++) {
         await trigger();
         if (await succeeded()) {
@@ -203,7 +213,7 @@ export class UiActions {
         }
       }
       return false;
-    });
+    }));
   }
 
   /**
@@ -283,8 +293,11 @@ export class UiActions {
     });
   }
 
-  /** Retry helpers return false when they hand control back after exhausting their attempts. */
+  /** Logs the outer action outcome. Retry helpers return false on exhaustion. */
   private async perform<T>(action: string, run: () => Promise<T>): Promise<T> {
+    if (retryScope.getStore()) {
+      return run();
+    }
     try {
       const result = await run();
       if (result === false) {
