@@ -20,7 +20,9 @@
   `UiActions` for clicks, typing and the former `UiControls` widget helpers. (#168)
 - Make console lines readable: `[UI]`, `[API]`, `[DB]` and `[Expect]` tags, sentence-case
   action names, `Passed:`/`Failed:` assertion lines without the dangling `→`, and the
-  HTTP method and URL path (no query string) in API lines. (#170)
+  HTTP method and URL path as the API request target. (#170)
+- Include the first line of an API error and the driver code for DB errors in
+  console output. DB summaries use the configured display name or database name. (#172)
 
 ## 4.4.2 — Readable bug reports
 

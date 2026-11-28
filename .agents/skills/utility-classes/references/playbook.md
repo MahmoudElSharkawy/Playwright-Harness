@@ -125,8 +125,12 @@ Practice 15 extends this contract to process level in the lifecycle scripts.
 ## 6. Redact secrets before anything leaves the facade
 
 **Rule:** reuse the facade's selected credential-header and structured-key redaction
-before attaching. Keep console summaries to safe operation metadata such as HTTP
-method, URL path (never the host or query string), status, row count and duration.
+before attaching. Console summaries use operation metadata such as HTTP method,
+URL path, status, row count and duration. The API request target is the method and
+path. API failure summaries also include the first line of the error message
+verbatim, which can contain sensitive text. DB summaries use the configured display
+name or database name. DB failure summaries include the driver code when available
+and omit the DB error message.
 Console `[source]` tags name the subsystem (`UI`, `API`, `DB`, `Expect`), not the class,
 and messages are sentence-case text, never raw method names. Attachment redaction is depth-capped and does not sanitize arbitrary
 strings, URL/query values, errors or native artifacts. `redact: false` is an explicit

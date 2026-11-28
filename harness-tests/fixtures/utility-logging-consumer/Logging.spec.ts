@@ -79,26 +79,42 @@ test('API summaries handle returned statuses, failures and reporting warnings', 
   const url = 'https://example.test/resource?fixture=' + marker;
   assert.equal((await api.post(url, { data: { fixture: marker } })).status(), 404);
 
-  const failure = new Error(marker);
-  const failing = new ApiActions({ fetch: async () => { throw failure; } } as unknown as APIRequestContext);
+  const rejectsWith = (target: string, cause: Error) => {
+    const failing = new ApiActions({ fetch: async () => { throw cause; } } as unknown as APIRequestContext);
+    return assert.rejects(failing.get(target), error => error === cause);
+  };
+  const failure = new Error(`apiRequestContext.fetch: connect ECONNREFUSED example.test:443\r\nCall log:\r\n  - → GET ${url}`);
   const info = test.info();
   const attach = info.attach;
   info.attach = async () => { throw new Error(marker); };
   try {
-    await assert.rejects(failing.get(url), error => error === failure);
+    await rejectsWith(url, failure);
   } finally {
     info.attach = attach;
   }
+
+  await rejectsWith('/new-line', new Error(`socket hang up\n${marker}`));
+  await rejectsWith('/empty', new Error(`\r${marker}`));
+
+  const attachments: string[] = [];
+  info.attach = async name => { attachments.push(name); };
+  try {
+    await rejectsWith('/non-text', Object.assign(new Error(), { message: null }));
+  } finally {
+    info.attach = attach;
+  }
+  assert.deepEqual(attachments, ['Request details', 'Request error']);
 });
 
 test('DB summaries keep connection failures single and query output private', async () => {
   const config = { server: 'example.test', database: 'test', user: marker, password: marker };
   const prototype = sql.ConnectionPool.prototype;
   const { connect, request } = prototype;
-  const failure = new Error(marker);
-  let unavailable = false;
+  const failure = Object.assign(new Error(marker), { code: 'ESOCKET' });
+  const failureWithoutCode = new Error(marker);
+  let connectionFailure: Error | undefined;
   prototype.connect = (async function (this: sql.ConnectionPool) {
-    if (unavailable) throw failure;
+    if (connectionFailure) throw connectionFailure;
     return this;
   }) as typeof connect;
   const row = { item: marker };
@@ -107,10 +123,14 @@ test('DB summaries keep connection failures single and query output private', as
     query: async () => ({ recordset: [row], recordsets: [[row]], rowsAffected: [1] }),
   })) as unknown as typeof request;
   try {
-    const db = new DbActions(config, { consoleLogs: test.info().project.metadata.fixtureConsoleOption });
+    const options = { consoleLogs: test.info().project.metadata.fixtureConsoleOption };
+    const db = new DbActions(config, options);
     assert.deepEqual((await db.query('select @value', { value: marker })).rows, [row]);
-    unavailable = true;
-    await assert.rejects(new DbActions(config).query('select 1'), error => error === failure);
+    await new DbActions({ ...config, name: 'orders-db' }, options).connect();
+    connectionFailure = failure;
+    await assert.rejects(new DbActions({ ...config, name: '' }).query('select 1'), error => error === failure);
+    connectionFailure = failureWithoutCode;
+    await assert.rejects(new DbActions({ ...config, name: 'orders-db' }).query('select 1'), error => error === failureWithoutCode);
   } finally {
     prototype.connect = connect;
     prototype.request = request;
