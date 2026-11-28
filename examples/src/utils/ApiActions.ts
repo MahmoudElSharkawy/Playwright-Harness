@@ -227,7 +227,10 @@ export class ApiActions {
     try {
       if (entry.status === null) {
         const message = entry.error?.message;
-        const reason = typeof message === 'string' ? message.split(/[\r\n]/, 1)[0] : undefined;
+        // Playwright wraps transport errors in message text. Emit only a recognized reason at the start.
+        const reason = typeof message === 'string'
+          ? /^(?:apiRequestContext\.\w+: )?(?:(?:connect|read|write|getaddrinfo) )?(ECONNREFUSED|ECONNRESET|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|socket hang up)(?=[ \t\r\n]|$)/.exec(message)?.[1]
+          : undefined;
         Logger.error('API', `${target} failed${reason ? `: ${reason}` : ''} (${entry.durationMs} ms)`);
       } else if (this.shouldConsoleLog()) {
         Logger.info('API', `${target} returned HTTP ${entry.status} (${entry.durationMs} ms)`);

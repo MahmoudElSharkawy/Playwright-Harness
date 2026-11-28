@@ -21,8 +21,9 @@
 - Make console lines readable: `[UI]`, `[API]`, `[DB]` and `[Expect]` tags, sentence-case
   action names, `Passed:`/`Failed:` assertion lines without the dangling `→`, and the
   HTTP method and URL path as the API request target. (#170)
-- Include the first line of an API error and the driver code for DB errors in
-  console output. DB summaries use the configured display name or database name. (#172)
+- Include recognized API transport reasons and DB driver codes in console output.
+  DB summaries use the configured display name or database name. (#172, #174)
+- Guide test generation and review to reuse existing consumer utilities before adding helpers. (#174)
 
 ## 4.4.2 — Readable bug reports
 

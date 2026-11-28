@@ -127,8 +127,8 @@ Practice 15 extends this contract to process level in the lifecycle scripts.
 **Rule:** reuse the facade's selected credential-header and structured-key redaction
 before attaching. Console summaries use operation metadata such as HTTP method,
 URL path, status, row count and duration. The API request target is the method and
-path. API failure summaries also include the first line of the error message
-verbatim, which can contain sensitive text. DB summaries use the configured display
+path. API failure summaries include a recognized transport reason when available.
+Keep free-form exception text in the existing diagnostic path. DB summaries use the configured display
 name or database name. DB failure summaries include the driver code when available
 and omit the DB error message.
 Console `[source]` tags name the subsystem (`UI`, `API`, `DB`, `Expect`), not the class,
@@ -261,6 +261,10 @@ syntax … not supported by the driver"; `trustServerCertificate` "deviates from
 driver default") cannot be carried by a method name.
 
 ## 13. Extend by pattern-matching the canonical facades
+
+Before creating a technical helper, search the consumer’s `src/utils/` and inspect
+its callers. Reuse a method that covers the operation. If a test needs additional
+behavior, extend the owning utility while preserving its existing callers.
 
 **New verb on an existing facade** — one-line delegation to `dispatch`, plus JSDoc:
 

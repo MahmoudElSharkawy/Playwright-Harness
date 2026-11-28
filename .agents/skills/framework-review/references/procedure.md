@@ -73,6 +73,7 @@ Apply §6, with these review procedures and additional harness checks:
   `dbs/` for an existing equivalent intent (case/suffix-tolerant, legacy `assert*`
   names included, parameterized actions count as coverage). A duplicate of an existing
   intent is a blocking finding (class: `duplicate-action-method`).
+- For new technical helpers, apply the [consumer utility reuse rule](../../utility-classes/references/playbook.md#13-extend-by-pattern-matching-the-canonical-facades) and check existing callers of any changed utility.
 - **Record-creating test data**: mutable inputs live in per-case `tc<id>` clusters
   (ids matching the tests' `allure.tms`), suffix-tolerant bases carry the TC id,
   and no two tests consume the same mutable key (class: `shared-case-data`) — the
