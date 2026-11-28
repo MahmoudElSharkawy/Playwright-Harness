@@ -251,6 +251,8 @@ count as coverage). Create a new method only when nothing covers the intent, via
 owning skill. The PR description lists the methods newly created per case; the
 independent framework-review re-checks every new method against the inventory.
 
+For technical helpers, apply the [consumer utility reuse rule](../../utility-classes/references/playbook.md#13-extend-by-pattern-matching-the-canonical-facades).
+
 1. `pom-architecture` — layer decisions; which pages/services exist vs. are new.
 2. `test-data` — `resources/testData/<Feature>TestJsonFile.json`: inputs and expected
    values from the ADO steps (copy expected strings EXACTLY as the app renders them,

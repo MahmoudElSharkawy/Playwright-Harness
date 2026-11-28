@@ -83,7 +83,7 @@ test('API summaries handle returned statuses, failures and reporting warnings', 
     const failing = new ApiActions({ fetch: async () => { throw cause; } } as unknown as APIRequestContext);
     return assert.rejects(failing.get(target), error => error === cause);
   };
-  const failure = new Error(`apiRequestContext.fetch: connect ECONNREFUSED example.test:443\r\nCall log:\r\n  - → GET ${url}`);
+  const failure = new Error(`apiRequestContext.fetch: connect ECONNREFUSED ${url}\r\nCall log:\r\n  - → GET ${url}`);
   const info = test.info();
   const attach = info.attach;
   info.attach = async () => { throw new Error(marker); };
@@ -94,6 +94,7 @@ test('API summaries handle returned statuses, failures and reporting warnings', 
   }
 
   await rejectsWith('/new-line', new Error(`socket hang up\n${marker}`));
+  await rejectsWith('/unknown', new Error(`apiRequestContext.fetch: request rejected ${url}\nconnect ECONNRESET`));
   await rejectsWith('/empty', new Error(`\r${marker}`));
 
   const attachments: string[] = [];
